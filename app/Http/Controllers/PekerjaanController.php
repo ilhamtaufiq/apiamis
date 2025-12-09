@@ -49,7 +49,13 @@ class PekerjaanController extends Controller
                 });
             }
             
-            $pekerjaan = $query->paginate(20);
+            // Support fetching all records for dropdown (per_page=-1)
+            if ($request->has('per_page') && $request->per_page == -1) {
+                return PekerjaanResource::collection($query->get());
+            }
+            
+            $perPage = $request->get('per_page', 20);
+            $pekerjaan = $query->paginate($perPage);
                 
             return PekerjaanResource::collection($pekerjaan);
     }
