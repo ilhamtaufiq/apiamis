@@ -20,6 +20,7 @@ use App\Http\Controllers\PermissionController;
 use App\Http\Controllers\KegiatanRoleController;
 use App\Http\Controllers\RoutePermissionController;
 use App\Http\Controllers\MenuPermissionController;
+use App\Http\Controllers\ProgressController;
 
 // Authentication Routes
 Route::post('auth/login', [AuthController::class, 'login']);
@@ -90,6 +91,10 @@ Route::apiResource('output', OutputController::class);
 // Custom penerima  
 Route::get('penerima/pekerjaan/{pekerjaanId}', [PenerimaController::class, 'byPekerjaan']);
 Route::get('penerima/pekerjaan/{pekerjaanId}/stats/komunal', [PenerimaController::class, 'komunalCount']);
+
+// Progress routes
+Route::get('progress/pekerjaan/{pekerjaanId}', [ProgressController::class, 'report']);
+Route::post('progress/pekerjaan/{pekerjaanId}', [ProgressController::class, 'store']);
 
 Route::get('/debug-data', function () {
     $kegiatan = \Illuminate\Support\Facades\DB::table('tbl_kegiatan')->limit(5)->get();
