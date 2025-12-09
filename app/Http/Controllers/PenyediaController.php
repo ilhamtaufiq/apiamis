@@ -11,9 +11,17 @@ class PenyediaController extends Controller
     /**
      * Display a listing of the resource.
      */
-    public function index()
+    public function index(Request $request)
     {
-        $penyedia = Penyedia::paginate(15);
+        $query = Penyedia::query();
+        
+        // Support fetching all records for dropdown (per_page=-1)
+        if ($request->has('per_page') && $request->per_page == -1) {
+            return PenyediaResource::collection($query->get());
+        }
+        
+        $perPage = $request->get('per_page', 15);
+        $penyedia = $query->paginate($perPage);
         return PenyediaResource::collection($penyedia);
     }
 
