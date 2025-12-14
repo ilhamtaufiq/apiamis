@@ -47,9 +47,10 @@ class CheckRoutePermission
             '/route-permissions/rules',
             '/route-permissions/user/accessible',
             '/dashboard/stats',
-            '/pekerjaan'
+            '/app-settings',
         ];
         
+        // Check exact match
         if (in_array($path, $whitelistedRoutes)) {
             return $next($request);
         }
