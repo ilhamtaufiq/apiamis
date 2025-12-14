@@ -21,9 +21,14 @@ use App\Http\Controllers\KegiatanRoleController;
 use App\Http\Controllers\RoutePermissionController;
 use App\Http\Controllers\MenuPermissionController;
 use App\Http\Controllers\ProgressController;
+use App\Http\Controllers\AppSettingController;
 
 // Authentication Routes
 Route::post('auth/login', [AuthController::class, 'login']);
+
+// App Settings (public read, authenticated write)
+Route::get('app-settings', [AppSettingController::class, 'index']);
+Route::post('app-settings', [AppSettingController::class, 'store'])->middleware('auth:sanctum');
 Route::middleware('auth:sanctum')->group(function () {
     Route::post('auth/logout', [AuthController::class, 'logout']);
     Route::get('auth/me', [AuthController::class, 'me']);
