@@ -1,5 +1,5 @@
 [phases.setup]
-nixPkgs = ["php82", "php82Packages.composer", "php82Extensions.pdo_mysql", "php82Extensions.mbstring", "php82Extensions.exif", "php82Extensions.gd", "php82Extensions.zip", "php82Extensions.bcmath"]
+nixPkgs = ["php83", "php83Packages.composer", "php83Extensions.pdo_mysql", "php83Extensions.mbstring", "php83Extensions.exif", "php83Extensions.gd", "php83Extensions.zip", "php83Extensions.bcmath"]
 
 [phases.install]
 cmds = ["composer install --optimize-autoloader --no-dev --no-interaction"]
