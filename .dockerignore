@@ -1,0 +1,36 @@
+# Dependencies
+/vendor
+/node_modules
+
+# Laravel specific
+.env
+.env.backup
+.env.production
+.phpunit.result.cache
+Homestead.json
+Homestead.yaml
+auth.json
+npm-debug.log
+yarn-error.log
+
+# IDE / Editor
+/.idea
+/.vscode
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Testing
+/coverage
+/.phpunit.cache
+
+# Build
+/public/hot
+/public/storage
+/storage/*.key
+
+# Docker
+docker-compose.override.yml

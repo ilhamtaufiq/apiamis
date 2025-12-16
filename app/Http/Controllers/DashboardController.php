@@ -192,6 +192,19 @@ class DashboardController extends Controller
                 ];
             });
 
+        // Output per komponen
+        $outputPerKomponen = (clone $outputQuery)
+            ->select('komponen as name', DB::raw('count(*) as value'))
+            ->groupBy('komponen')
+            ->orderBy('value', 'desc')
+            ->get()
+            ->map(function ($item) {
+                return [
+                    'name' => $item->name ?? 'N/A',
+                    'value' => $item->value
+                ];
+            });
+
         // Penerima statistics
         $penerimaQuery = \App\Models\Penerima::query()
             ->whereHas('pekerjaan.kegiatan', function ($q) use ($tahun) {
@@ -234,6 +247,7 @@ class DashboardController extends Controller
                 'nilaiKontrakPerPenyedia' => $nilaiKontrakPerPenyedia,
                 'totalOutput' => $totalOutput,
                 'outputPerSatuan' => $outputPerSatuan,
+                'outputPerKomponen' => $outputPerKomponen,
                 'totalPenerima' => $totalPenerima,
                 'totalJiwa' => $totalJiwa,
                 'penerimaKomunalVsIndividu' => $penerimaKomunalVsIndividu,
