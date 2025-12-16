@@ -1,3 +1,6 @@
+# Force PHP only, skip Node.js detection
+providers = ["php"]
+
 [phases.setup]
 nixPkgs = ["php83", "php83Packages.composer", "php83Extensions.pdo_mysql", "php83Extensions.mbstring", "php83Extensions.exif", "php83Extensions.gd", "php83Extensions.zip", "php83Extensions.bcmath"]
 
