@@ -69,7 +69,9 @@ class ProgressController extends Controller
                     'id' => $pekerjaan->id,
                     'nama' => $pekerjaan->nama_paket,
                     'pagu' => $pekerjaan->pagu,
-                    'lokasi' => ($pekerjaan->desa?->nama ?? '') . ', ' . ($pekerjaan->kecamatan?->nama ?? ''),
+                    'lokasi' => ($pekerjaan->desa?->n_desa ?? '') . ', ' . ($pekerjaan->kecamatan?->n_kec ?? ''),
+                    'desa_nama' => $pekerjaan->desa?->n_desa,
+                    'kecamatan_nama' => $pekerjaan->kecamatan?->n_kec,
                 ],
                 'kegiatan' => $kegiatan ? [
                     'nama_kegiatan' => $kegiatan->nama_kegiatan,

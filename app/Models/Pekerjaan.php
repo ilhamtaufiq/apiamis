@@ -114,4 +114,12 @@ class Pekerjaan extends Model
     {
         return $this->hasMany(Kontrak::class, 'id_pekerjaan');
     }
+
+    /**
+     * Relasi One-to-One dengan BeritaAcara
+     */
+    public function beritaAcara(): \Illuminate\Database\Eloquent\Relations\HasOne
+    {
+        return $this->hasOne(BeritaAcara::class, 'pekerjaan_id');
+    }
 }

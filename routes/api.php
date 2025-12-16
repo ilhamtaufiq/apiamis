@@ -22,6 +22,7 @@ use App\Http\Controllers\RoutePermissionController;
 use App\Http\Controllers\MenuPermissionController;
 use App\Http\Controllers\ProgressController;
 use App\Http\Controllers\AppSettingController;
+use App\Http\Controllers\BeritaAcaraController;
 
 // Authentication Routes
 Route::post('auth/login', [AuthController::class, 'login']);
@@ -100,6 +101,10 @@ Route::get('penerima/pekerjaan/{pekerjaanId}/stats/komunal', [PenerimaController
 // Progress routes
 Route::get('progress/pekerjaan/{pekerjaanId}', [ProgressController::class, 'report']);
 Route::post('progress/pekerjaan/{pekerjaanId}', [ProgressController::class, 'store']);
+
+// Berita Acara routes
+Route::get('berita-acara/pekerjaan/{pekerjaanId}', [BeritaAcaraController::class, 'show']);
+Route::post('berita-acara/pekerjaan/{pekerjaanId}', [BeritaAcaraController::class, 'storeOrUpdate']);
 
 Route::get('/debug-data', function () {
     $kegiatan = \Illuminate\Support\Facades\DB::table('tbl_kegiatan')->limit(5)->get();

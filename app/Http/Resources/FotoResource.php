@@ -18,6 +18,12 @@ class FotoResource extends JsonResource
             'validasi_koordinat' => $this->validasi_koordinat,
             'validasi_koordinat_message' => $this->validasi_koordinat_message,
             'foto_url' => $this->getFirstMediaUrl('foto/pekerjaan'),
+            'pekerjaan' => $this->whenLoaded('pekerjaan', function () {
+                return [
+                    'id' => $this->pekerjaan->id,
+                    'nama_paket' => $this->pekerjaan->nama_paket,
+                ];
+            }),
             'penerima' => $this->whenLoaded('penerima', function () {
                 return [
                     'id' => $this->penerima->id,
