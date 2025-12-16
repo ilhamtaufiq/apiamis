@@ -1,0 +1,8 @@
+# Dependencies
+/vendor
+/node_modules
+.git
+.env
+.env.*
+storage/*.key
+*.log
