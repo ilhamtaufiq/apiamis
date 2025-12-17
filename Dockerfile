@@ -24,9 +24,20 @@ COPY . .
 # Install dependencies
 RUN composer install --optimize-autoloader --no-dev --no-interaction
 
+# Create storage directories
+RUN mkdir -p storage/framework/{cache/data,sessions,views} \
+    && mkdir -p storage/logs \
+    && mkdir -p bootstrap/cache
+
+# Clear any cached files (artisan commands may fail during build without .env)
+RUN rm -rf bootstrap/cache/*.php \
+    && rm -rf storage/framework/cache/data/* \
+    && rm -rf storage/framework/sessions/* \
+    && rm -rf storage/framework/views/*
+
 # Set permissions
 RUN chown -R www-data:www-data /var/www/html \
-    && chmod -R 755 storage bootstrap/cache
+    && chmod -R 775 storage bootstrap/cache
 
 # Configure Apache document root
 RUN sed -i 's|/var/www/html|/var/www/html/public|g' /etc/apache2/sites-available/000-default.conf
