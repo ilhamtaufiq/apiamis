@@ -6,3 +6,10 @@
 .env.*
 storage/*.key
 *.log
+
+# Cached files (may contain hardcoded local paths)
+/bootstrap/cache/*.php
+/storage/framework/cache/*
+/storage/framework/sessions/*
+/storage/framework/views/*
+/storage/logs/*
