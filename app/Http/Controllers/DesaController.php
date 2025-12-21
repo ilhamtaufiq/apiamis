@@ -23,13 +23,18 @@ class DesaController extends Controller
     public function store(Request $request)
     {
         $validated = $request->validate([
-            'n_desa' => 'required|string|max:100',
+            'nama_desa' => 'required|string|max:100',
             'luas' => 'required|numeric',
             'jumlah_penduduk' => 'required|integer',
             'kecamatan_id' => 'required|exists:tbl_kecamatan,id'
         ]);
 
-        $desa = Desa::create($validated);
+        // Map nama_desa to n_desa for database
+        $data = $validated;
+        $data['n_desa'] = $data['nama_desa'];
+        unset($data['nama_desa']);
+
+        $desa = Desa::create($data);
         return new DesaResource($desa->load('kecamatan'));
     }
 
@@ -48,13 +53,20 @@ class DesaController extends Controller
     public function update(Request $request, Desa $desa)
     {
         $validated = $request->validate([
-            'n_desa' => 'nullable|string|max:100',
+            'nama_desa' => 'nullable|string|max:100',
             'luas' => 'nullable|numeric',
             'jumlah_penduduk' => 'nullable|integer',
             'kecamatan_id' => 'nullable|exists:tbl_kecamatan,id'
         ]);
 
-        $desa->update($validated);
+        // Map nama_desa to n_desa for database
+        $data = $validated;
+        if (isset($data['nama_desa'])) {
+            $data['n_desa'] = $data['nama_desa'];
+            unset($data['nama_desa']);
+        }
+
+        $desa->update($data);
         return new DesaResource($desa->load('kecamatan'));
     }
 
