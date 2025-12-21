@@ -259,11 +259,19 @@ class PekerjaanController extends Controller
      *      )
      * )
      */
-    public function byKecamatan($kecamatanId)
+    public function byKecamatan(Request $request, $kecamatanId)
     {
-        $pekerjaan = Pekerjaan::where('kecamatan_id', $kecamatanId)
-            ->with('kecamatan', 'desa', 'kegiatan')
-            ->paginate(20);
+        $query = Pekerjaan::where('kecamatan_id', $kecamatanId)
+            ->with('kecamatan', 'desa', 'kegiatan');
+
+        // Filter by tahun via kegiatan
+        if ($request->has('tahun') && $request->tahun) {
+            $query->whereHas('kegiatan', function ($q) use ($request) {
+                $q->where('tahun_anggaran', $request->tahun);
+            });
+        }
+
+        $pekerjaan = $query->paginate(20);
         return PekerjaanResource::collection($pekerjaan);
     }
 
@@ -350,12 +358,20 @@ class PekerjaanController extends Controller
      *      )
      * )
      */
-    public function byKecamatanDesa($kecamatanId, $desaId)
+    public function byKecamatanDesa(Request $request, $kecamatanId, $desaId)
     {
-        $pekerjaan = Pekerjaan::where('kecamatan_id', $kecamatanId)
+        $query = Pekerjaan::where('kecamatan_id', $kecamatanId)
             ->where('desa_id', $desaId)
-            ->with('kecamatan', 'desa', 'kegiatan')
-            ->paginate(20);
+            ->with('kecamatan', 'desa', 'kegiatan');
+
+        // Filter by tahun via kegiatan
+        if ($request->has('tahun') && $request->tahun) {
+            $query->whereHas('kegiatan', function ($q) use ($request) {
+                $q->where('tahun_anggaran', $request->tahun);
+            });
+        }
+
+        $pekerjaan = $query->paginate(20);
         return PekerjaanResource::collection($pekerjaan);
     }
 
