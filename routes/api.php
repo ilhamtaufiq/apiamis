@@ -27,6 +27,10 @@ use App\Http\Controllers\BeritaAcaraController;
 // Authentication Routes
 Route::post('auth/login', [AuthController::class, 'login']);
 
+// Google OAuth Routes
+Route::get('auth/google', [AuthController::class, 'redirectToGoogle']);
+Route::get('auth/google/callback', [AuthController::class, 'handleGoogleCallback']);
+
 // App Settings (public read, authenticated write)
 Route::get('app-settings', [AppSettingController::class, 'index']);
 Route::post('app-settings', [AppSettingController::class, 'store'])->middleware('auth:sanctum');
