@@ -7,9 +7,61 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\ValidationException;
 use App\Http\Resources\UserResource;
+use Laravel\Socialite\Facades\Socialite;
 
 class AuthController extends Controller
 {
+    /**
+     * Get Google OAuth redirect URL
+     * 
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function redirectToGoogle()
+    {
+        $url = Socialite::driver('google')->stateless()->redirect()->getTargetUrl();
+        return response()->json(['url' => $url]);
+    }
+
+    /**
+     * Handle Google OAuth callback
+     * 
+     * @param Request $request
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function handleGoogleCallback(Request $request)
+    {
+        // Get frontend URL from environment or use default
+        $frontendUrl = env('FRONTEND_URL', 'http://arumanis.test');
+        
+        try {
+            $googleUser = Socialite::driver('google')->stateless()->user();
+            
+            $user = User::updateOrCreate(
+                ['email' => $googleUser->getEmail()],
+                [
+                    'name' => $googleUser->getName(),
+                    'google_id' => $googleUser->getId(),
+                    'avatar' => $googleUser->getAvatar(),
+                    'email_verified_at' => now(),
+                ]
+            );
+            
+            // Assign default role to new users
+            if ($user->wasRecentlyCreated) {
+                $user->assignRole('user');
+            }
+            
+            $user->load('roles', 'permissions');
+            $token = $user->createToken('auth-token')->plainTextToken;
+            
+            // Redirect to frontend with token
+            return redirect()->away($frontendUrl . '/oauth-callback?token=' . $token);
+        } catch (\Exception $e) {
+            // Redirect to frontend with error
+            return redirect()->away($frontendUrl . '/oauth-callback?error=' . urlencode('Google authentication failed: ' . $e->getMessage()));
+        }
+    }
+
     /**
      * Handle user login
      * 
