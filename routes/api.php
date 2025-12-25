@@ -24,6 +24,7 @@ use App\Http\Controllers\ProgressController;
 use App\Http\Controllers\AppSettingController;
 use App\Http\Controllers\BeritaAcaraController;
 use App\Http\Controllers\UserPekerjaanController;
+use App\Http\Controllers\TiketController;
 
 // Authentication Routes
 Route::post('auth/login', [AuthController::class, 'login']);
@@ -108,6 +109,9 @@ Route::middleware('auth:sanctum')->group(function () {
 
     //Output
     Route::apiResource('output', OutputController::class);
+
+    // Tiket
+    Route::apiResource('tiket', TiketController::class);
 
     // Custom penerima  
     Route::get('penerima/pekerjaan/{pekerjaanId}', [PenerimaController::class, 'byPekerjaan']);
