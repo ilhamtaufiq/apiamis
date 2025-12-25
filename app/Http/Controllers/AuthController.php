@@ -46,19 +46,22 @@ class AuthController extends Controller
                 ]
             );
             
-            // Assign default role to new users
+            // Assign default role to new users safely
             if ($user->wasRecentlyCreated) {
-                $user->assignRole('user');
+                // Check if 'user' role exists before assigning to avoid crash
+                if (\Spatie\Permission\Models\Role::where('name', 'user')->exists()) {
+                    $user->assignRole('user');
+                }
             }
             
             $user->load('roles', 'permissions');
             $token = $user->createToken('auth-token')->plainTextToken;
             
             // Redirect to frontend with token
-            return redirect()->away($frontendUrl . '/oauth-callback?token=' . $token);
+            return redirect()->away(rtrim($frontendUrl, '/') . '/oauth-callback?token=' . $token);
         } catch (\Exception $e) {
             // Redirect to frontend with error
-            return redirect()->away($frontendUrl . '/oauth-callback?error=' . urlencode('Google authentication failed: ' . $e->getMessage()));
+            return redirect()->away(rtrim($frontendUrl, '/') . '/oauth-callback?error=' . urlencode('Google authentication failed: ' . $e->getMessage()));
         }
     }
 
