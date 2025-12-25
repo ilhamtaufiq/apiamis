@@ -49,4 +49,13 @@ class User extends Authenticatable
             'password' => 'hashed',
         ];
     }
+
+    /**
+     * Get pekerjaan assigned to this user (for pengawas lapangan)
+     */
+    public function assignedPekerjaan(): \Illuminate\Database\Eloquent\Relations\BelongsToMany
+    {
+        return $this->belongsToMany(Pekerjaan::class, 'user_pekerjaan', 'user_id', 'pekerjaan_id')
+            ->withTimestamps();
+    }
 }
