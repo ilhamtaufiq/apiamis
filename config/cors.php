@@ -28,6 +28,7 @@ return [
         'https://bun.test',
         'https://arumanis.ilham.wtf',
         'https://bun.ilham.wtf',
+        'https://apiamis.ilham.wtf',
     ],
 
     'allowed_origins_patterns' => [],
