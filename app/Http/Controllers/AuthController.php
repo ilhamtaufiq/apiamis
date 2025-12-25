@@ -48,9 +48,18 @@ class AuthController extends Controller
             
             // Assign default role to new users safely
             if ($user->wasRecentlyCreated) {
-                // Check if 'user' role exists before assigning to avoid crash
-                if (\Spatie\Permission\Models\Role::where('name', 'user')->exists()) {
-                    $user->assignRole('user');
+                try {
+                    // Try to find role with 'web' guard specifically
+                    $defaultRole = \Spatie\Permission\Models\Role::where('name', 'user')
+                        ->where('guard_name', 'web')
+                        ->first();
+                    
+                    if ($defaultRole) {
+                        $user->assignRole($defaultRole);
+                    }
+                } catch (\Exception $e) {
+                    // Log error but don't fail the entire login
+                    \Illuminate\Support\Facades\Log::warning('Failed to assign default role during Google OAuth: ' . $e->getMessage());
                 }
             }
             
