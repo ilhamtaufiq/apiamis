@@ -4,12 +4,15 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Pekerjaan extends Model
 {
     /**
      * Scope untuk filter berdasarkan role user
+     * - Admin: lihat semua
+     * - Pengawas/User lain: hanya lihat pekerjaan yang di-assign
      */
     public function scopeByUserRole($query)
     {
@@ -23,19 +26,26 @@ class Pekerjaan extends Model
             return $query; // Admin lihat semua
         }
         
-        // Ambil kegiatan_id yang diizinkan untuk semua role user
-        $allowedKegiatanIds = [];
+        // 1. Get manually assigned work IDs
+        $assignedPekerjaanIds = $user->assignedPekerjaan()->pluck('tbl_pekerjaan.id')->toArray();
         
-        foreach ($user->roles as $role) {
-            $kegiatanIds = KegiatanRole::where('role_id', $role->id)
-                ->pluck('kegiatan_id')
-                ->toArray();
-            $allowedKegiatanIds = array_merge($allowedKegiatanIds, $kegiatanIds);
-        }
+        // 2. Get activities assigned via role
+        $userRoleIds = $user->roles()->pluck('id')->toArray();
+        $kegiatanIds = \App\Models\KegiatanRole::whereIn('role_id', $userRoleIds)->pluck('kegiatan_id')->toArray();
         
-        $allowedKegiatanIds = array_unique($allowedKegiatanIds);
-        
-        return $query->whereIn('kegiatan_id', $allowedKegiatanIds);
+        return $query->where(function($q) use ($assignedPekerjaanIds, $kegiatanIds) {
+            $q->whereIn('id', $assignedPekerjaanIds)
+              ->orWhereIn('kegiatan_id', $kegiatanIds);
+        });
+    }
+
+    /**
+     * Users yang di-assign ke pekerjaan ini (pengawas lapangan)
+     */
+    public function assignedUsers(): BelongsToMany
+    {
+        return $this->belongsToMany(User::class, 'user_pekerjaan', 'pekerjaan_id', 'user_id')
+            ->withTimestamps();
     }
     protected $table = 'tbl_pekerjaan';
 

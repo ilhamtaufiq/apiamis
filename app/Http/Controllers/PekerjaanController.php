@@ -144,11 +144,18 @@ class PekerjaanController extends Controller
         
         // Check apakah user boleh akses pekerjaan ini
         if (!$user->hasRole('admin')) {
-            $userKegiatanIds = KegiatanRole::whereIn('role_id', $user->roles->pluck('id'))
-                ->pluck('kegiatan_id')
-                ->toArray();
+            // 1. Cek manual assignment
+            $hasManualAccess = $user->assignedPekerjaan()
+                ->where('tbl_pekerjaan.id', $pekerjaan->id)
+                ->exists();
                 
-            if (!in_array($pekerjaan->kegiatan_id, $userKegiatanIds)) {
+            // 2. Cek role assignment
+            $userRoleIds = $user->roles()->pluck('id')->toArray();
+            $hasRoleAccess = \App\Models\KegiatanRole::whereIn('role_id', $userRoleIds)
+                ->where('kegiatan_id', $pekerjaan->kegiatan_id)
+                ->exists();
+
+            if (!$hasManualAccess && !$hasRoleAccess) {
                 abort(403, 'Anda tidak memiliki akses untuk pekerjaan ini');
             }
         }

@@ -23,6 +23,7 @@ use App\Http\Controllers\MenuPermissionController;
 use App\Http\Controllers\ProgressController;
 use App\Http\Controllers\AppSettingController;
 use App\Http\Controllers\BeritaAcaraController;
+use App\Http\Controllers\UserPekerjaanController;
 
 // Authentication Routes
 Route::post('auth/login', [AuthController::class, 'login']);
@@ -48,11 +49,19 @@ Route::middleware('auth:sanctum')->group(function () {
     // Menu permissions - user menus
     Route::get('menu-permissions/user/menus', [MenuPermissionController::class, 'getUserMenus']);
     
-    // Manajemen kegiatan-role (hanya admin) 
+    // Manajemen kegiatan-role dan user-pekerjaan (hanya admin) 
     Route::middleware(['role:admin'])->group(function () {
         Route::get('kegiatan-role', [KegiatanRoleController::class, 'index']);
         Route::post('kegiatan-role', [KegiatanRoleController::class, 'store']);
         Route::delete('kegiatan-role/{kegiatanRoleId}', [KegiatanRoleController::class, 'destroy'])->where('kegiatanRoleId', '[0-9]+');
+        
+        // User-Pekerjaan Assignment
+        Route::get('user-pekerjaan', [UserPekerjaanController::class, 'index']);
+        Route::post('user-pekerjaan', [UserPekerjaanController::class, 'store']);
+        Route::delete('user-pekerjaan/{id}', [UserPekerjaanController::class, 'destroy']);
+        Route::get('user-pekerjaan/user/{userId}', [UserPekerjaanController::class, 'byUser']);
+        Route::get('user-pekerjaan/pekerjaan/{pekerjaanId}', [UserPekerjaanController::class, 'byPekerjaan']);
+        Route::get('user-pekerjaan/available-users', [UserPekerjaanController::class, 'availableUsers']);
     });
 
     Route::get('/user', function (Request $request) {

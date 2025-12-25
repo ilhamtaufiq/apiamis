@@ -28,6 +28,18 @@ class PekerjaanDetailResource extends JsonResource
             'kecamatan_id' => $this->kecamatan_id,
             'desa_id' => $this->desa_id,
             'kegiatan_id' => $this->kegiatan_id,
+            'assignment_sources' => (function() {
+                $user = auth()->user();
+                $sources = [];
+                if ($user && !$user->hasRole('admin')) {
+                    $isManual = \Illuminate\Support\Facades\DB::table('user_pekerjaan')->where('user_id', $user->id)->where('pekerjaan_id', $this->id)->exists();
+                    if ($isManual) $sources[] = 'manual';
+                    $userRoleIds = $user->roles()->pluck('id')->toArray();
+                    $isRole = \App\Models\KegiatanRole::whereIn('role_id', $userRoleIds)->where('kegiatan_id', $this->kegiatan_id)->exists();
+                    if ($isRole) $sources[] = 'role';
+                }
+                return $sources;
+            })(),
             'kecamatan' => new KecamatanResource($this->whenLoaded('kecamatan')),
             'desa' => new DesaResource($this->whenLoaded('desa')),
             'kegiatan' => new KegiatanResource($this->whenLoaded('kegiatan')),
