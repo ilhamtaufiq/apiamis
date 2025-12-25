@@ -10,6 +10,43 @@ use App\Models\RoutePermission;
 class CheckRoutePermission
 {
     /**
+     * Routes that are admin-only by default (if no specific rule exists in database)
+     * These routes will be denied for non-admin users unless explicitly allowed
+     * 
+     * NOTE: Do NOT include data-fetching routes here (e.g., /penyedia, /kegiatan, etc.)
+     * as they are needed by components to load dropdown data, etc.
+     * Only include routes that are truly for admin management pages.
+     */
+    private const ADMIN_ONLY_ROUTES = [
+        '/users',
+        '/roles',
+        '/permissions',
+        '/route-permissions',
+        '/menu-permissions',
+    ];
+
+    /**
+     * Check if a route is in the admin-only list
+     */
+    private function isAdminOnlyRoute(string $path): bool
+    {
+        // Check exact match first
+        if (in_array($path, self::ADMIN_ONLY_ROUTES)) {
+            return true;
+        }
+
+        // Check if the base path (first segment) is admin-only
+        // e.g., /kegiatan/123 should match /kegiatan
+        $segments = array_filter(explode('/', $path));
+        if (!empty($segments)) {
+            $basePath = '/' . reset($segments);
+            return in_array($basePath, self::ADMIN_ONLY_ROUTES);
+        }
+
+        return false;
+    }
+
+    /**
      * Handle an incoming request.
      *
      * @param  \Closure(\Illuminate\Http\Request): (\Symfony\Component\HttpFoundation\Response)  $next
@@ -58,24 +95,28 @@ class CheckRoutePermission
         // Find route permission for this path and method
         $routePermission = RoutePermission::findByRoute($path, $method);
 
-        // If no route permission exists, deny access (default deny for non-admin)
-        if (!$routePermission) {
+        // If a rule exists, check if user can access
+        if ($routePermission) {
+            if (!$routePermission->canAccess($user)) {
+                return response()->json([
+                    'message' => 'Akses ditolak. Anda tidak memiliki permission untuk mengakses route ini.',
+                    'required_roles' => $routePermission->allowed_roles,
+                    'your_roles' => $user->roles->pluck('name'),
+                ], 403);
+            }
+            return $next($request);
+        }
+
+        // No rule found - check if this is an admin-only route
+        if ($this->isAdminOnlyRoute($path)) {
             return response()->json([
-                'message' => 'Akses ditolak. Route ini tidak memiliki konfigurasi permission.',
+                'message' => 'Akses ditolak. Route ini hanya dapat diakses oleh admin.',
                 'route' => "$method $path",
                 'your_roles' => $user->roles->pluck('name'),
             ], 403);
         }
 
-        // Check if user can access this route
-        if (!$routePermission->canAccess($user)) {
-            return response()->json([
-                'message' => 'Akses ditolak. Anda tidak memiliki permission untuk mengakses route ini.',
-                'required_roles' => $routePermission->allowed_roles,
-                'your_roles' => $user->roles->pluck('name'),
-            ], 403);
-        }
-
+        // For non-admin-only routes without rules, allow access
         return $next($request);
     }
 }
