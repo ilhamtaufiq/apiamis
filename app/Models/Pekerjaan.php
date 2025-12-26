@@ -7,8 +7,11 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
+use App\Traits\NotifiesAdminsOnChanges;
+
 class Pekerjaan extends Model
 {
+    use NotifiesAdminsOnChanges;
     /**
      * Scope untuk filter berdasarkan role user
      * - Admin: lihat semua

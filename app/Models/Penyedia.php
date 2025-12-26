@@ -4,8 +4,11 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 
+use App\Traits\NotifiesAdminsOnChanges;
+
 class Penyedia extends Model
 {
+    use NotifiesAdminsOnChanges;
     protected $table = 'tbl_penyedia';
     
     protected $fillable = [

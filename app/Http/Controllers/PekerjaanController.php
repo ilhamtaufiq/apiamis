@@ -497,15 +497,16 @@ class PekerjaanController extends Controller
 
         try {
             $import = new PekerjaanImport;
-            Excel::import($import, $request->file('file'));
             
-            // Get failures from the first sheet (PekerjaanSheetImport)
-            // But since PekerjaanImport uses WithMultipleSheets, we might need a different way to collect failures
-            // if they are not bubbled up.
-            // Actually, failures() should contain all failures from all sheets.
+            // Disable events during bulk import to prevent notification flood
+            Pekerjaan::withoutEvents(function () use ($import, $request) {
+                Excel::import($import, $request->file('file'));
+            });
+            
             $failures = $import->failures();
             
             if ($failures->count() > 0) {
+                // ... existing error handling ...
                 $errorMessages = [];
                 foreach ($failures as $failure) {
                     $errorMessages[] = "Baris " . $failure->row() . ": " . implode(', ', $failure->errors());
@@ -513,9 +514,25 @@ class PekerjaanController extends Controller
                 
                 return response()->json([
                     'message' => 'Import selesai dengan beberapa error',
-                    'errors' => array_slice($errorMessages, 0, 10), // Limit to 10 errors
+                    'errors' => array_slice($errorMessages, 0, 10),
                     'error_count' => $failures->count()
                 ], 422);
+            }
+
+            // Send a single summary notification to admins
+            $user = auth()->user();
+            $userName = $user ? $user->name : 'System';
+            $admins = \App\Models\User::role('admin')->get();
+            $notification = new \App\Notifications\AppNotification(
+                "Import Pekerjaan Berhasil",
+                "Sejumlah data pekerjaan telah berhasil diimport oleh $userName.",
+                "/pekerjaan",
+                'success'
+            );
+            
+            foreach ($admins as $admin) {
+                if ($user && $admin->id === $user->id) continue;
+                $admin->notify($notification);
             }
 
             return response()->json(['message' => 'Data pekerjaan berhasil diimport'], 200);
