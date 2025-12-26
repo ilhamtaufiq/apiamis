@@ -6,7 +6,10 @@ use App\Models\Pekerjaan;
 use App\Models\KegiatanRole;
 use App\Http\Resources\PekerjaanResource;
 use App\Http\Resources\PekerjaanDetailResource;
+use App\Imports\PekerjaanImport;
+use App\Exports\PekerjaanTemplateExport;
 use Illuminate\Http\Request;
+use Maatwebsite\Excel\Facades\Excel;
 
 class PekerjaanController extends Controller
 {
@@ -458,5 +461,84 @@ class PekerjaanController extends Controller
             'foto' => FotoResource::collection($pekerjaan->foto),
             'berkas' => BerkasResource::collection($pekerjaan->berkas),
         ]);
+    }
+
+    /**
+     * @OA\Post(
+     *      path="/api/pekerjaan/import",
+     *      operationId="importPekerjaan",
+     *      tags={"Pekerjaan"},
+     *      summary="Import pekerjaan from excel",
+     *      security={{"bearerAuth":{}}},
+     *      @OA\RequestBody(
+     *          required=true,
+     *          @OA\MediaType(
+     *              mediaType="multipart/form-data",
+     *              @OA\Schema(
+     *                  @OA\Property(
+     *                      property="file",
+     *                      type="string",
+     *                      format="binary"
+     *                  )
+     *              )
+     *          )
+     *      ),
+     *      @OA\Response(
+     *          response=200,
+     *          description="Import successful"
+     *      )
+     * )
+     */
+    public function import(Request $request)
+    {
+        $request->validate([
+            'file' => 'required|mimes:xlsx,xls,csv'
+        ]);
+
+        try {
+            $import = new PekerjaanImport;
+            Excel::import($import, $request->file('file'));
+            
+            // Get failures from the first sheet (PekerjaanSheetImport)
+            // But since PekerjaanImport uses WithMultipleSheets, we might need a different way to collect failures
+            // if they are not bubbled up.
+            // Actually, failures() should contain all failures from all sheets.
+            $failures = $import->failures();
+            
+            if ($failures->count() > 0) {
+                $errorMessages = [];
+                foreach ($failures as $failure) {
+                    $errorMessages[] = "Baris " . $failure->row() . ": " . implode(', ', $failure->errors());
+                }
+                
+                return response()->json([
+                    'message' => 'Import selesai dengan beberapa error',
+                    'errors' => array_slice($errorMessages, 0, 10), // Limit to 10 errors
+                    'error_count' => $failures->count()
+                ], 422);
+            }
+
+            return response()->json(['message' => 'Data pekerjaan berhasil diimport'], 200);
+        } catch (\Exception $e) {
+            return response()->json(['message' => 'Gagal mengimport data: ' . $e->getMessage()], 500);
+        }
+    }
+
+    /**
+     * @OA\Get(
+     *      path="/api/pekerjaan/import/template",
+     *      operationId="downloadPekerjaanTemplate",
+     *      tags={"Pekerjaan"},
+     *      summary="Download excel template for import",
+     *      security={{"bearerAuth":{}}},
+     *      @OA\Response(
+     *          response=200,
+     *          description="Template file download"
+     *      )
+     * )
+     */
+    public function downloadTemplate()
+    {
+        return Excel::download(new PekerjaanTemplateExport, 'template_import_pekerjaan.xlsx');
     }
 }

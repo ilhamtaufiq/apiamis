@@ -101,6 +101,10 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('pekerjaan/kecamatan/{kecamatanId}/desa/{desaId}', [PekerjaanController::class, 'byKecamatanDesa']);
     Route::get('pekerjaan/stats/pagu-kecamatan/{kecamatanId}', [PekerjaanController::class, 'totalPaguByKecamatan']);
     Route::get('pekerjaan/stats/pagu-kegiatan/{kegiatanId}', [PekerjaanController::class, 'totalPaguByKegiatan']);
+    Route::post('pekerjaan/import', [PekerjaanController::class, 'import']);
+    Route::get('pekerjaan/import/template', [PekerjaanController::class, 'downloadTemplate']);
+
+
 
     // Custom routes - Kontrak
     Route::get('kontrak/pekerjaan/{pekerjaanId}', [KontrakController::class, 'byPekerjaan']);
