@@ -40,4 +40,11 @@ class Tiket extends Model implements HasMedia
     {
         return $this->belongsTo(Pekerjaan::class, 'pekerjaan_id');
     }
+    /**
+     * Get the comments for the ticket.
+     */
+    public function comments()
+    {
+        return $this->hasMany(TiketComment::class, 'tiket_id');
+    }
 }

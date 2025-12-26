@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Pekerjaan;
 use App\Models\User;
+use App\Notifications\AppNotification;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -51,6 +52,15 @@ class UserPekerjaanController extends Controller
         
         // Sync pekerjaan (this will add new ones and remove unselected)
         $user->assignedPekerjaan()->syncWithoutDetaching($request->pekerjaan_ids);
+
+        // Notify User
+        $pekerjaanNames = Pekerjaan::whereIn('id', $request->pekerjaan_ids)->pluck('nama_paket')->toArray();
+        $user->notify(new AppNotification(
+            'Penugasan Pekerjaan Baru',
+            'Anda telah di-assign ke ' . count($request->pekerjaan_ids) . ' pekerjaan baru: ' . implode(', ', $pekerjaanNames),
+            '/pekerjaan',
+            'info'
+        ));
 
         return response()->json([
             'status' => 'success',

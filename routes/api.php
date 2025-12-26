@@ -25,6 +25,7 @@ use App\Http\Controllers\AppSettingController;
 use App\Http\Controllers\BeritaAcaraController;
 use App\Http\Controllers\UserPekerjaanController;
 use App\Http\Controllers\TiketController;
+use App\Http\Controllers\TiketCommentController;
 
 // Authentication Routes
 Route::post('auth/login', [AuthController::class, 'login']);
@@ -116,6 +117,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // Tiket
     Route::apiResource('tiket', TiketController::class);
+    Route::post('tiket/{tiket}/comments', [TiketCommentController::class, 'store']);
 
     // Custom penerima  
     Route::get('penerima/pekerjaan/{pekerjaanId}', [PenerimaController::class, 'byPekerjaan']);
@@ -142,6 +144,12 @@ Route::middleware('auth:sanctum')->group(function () {
             'pekerjaan_relation_test' => $pekerjaanRelation
         ]);
     });
+
+    // Notifications
+    Route::get('/notifications', [\App\Http\Controllers\NotificationController::class, 'index']);
+    Route::post('/notifications/{id}/read', [\App\Http\Controllers\NotificationController::class, 'markAsRead']);
+    Route::post('/notifications/mark-all-read', [\App\Http\Controllers\NotificationController::class, 'markAllAsRead']);
+    Route::post('/notifications/broadcast', [\App\Http\Controllers\NotificationController::class, 'sendBroadcast'])->middleware('role:admin');
 
 });
 
