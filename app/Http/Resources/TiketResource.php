@@ -26,6 +26,7 @@ class TiketResource extends JsonResource
             'prioritas' => $this->prioritas,
             'status' => $this->status,
             'admin_notes' => $this->admin_notes,
+            'comments' => TiketCommentResource::collection($this->whenLoaded('comments')),
             'image_url' => $this->getFirstMediaUrl('attachment'),
             'created_at' => $this->created_at,
             'updated_at' => $this->updated_at,

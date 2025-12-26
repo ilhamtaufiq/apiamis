@@ -3,8 +3,11 @@
 namespace App\Http\Controllers;
 
 use App\Models\Tiket;
+use App\Models\User;
 use App\Http\Resources\TiketResource;
+use App\Notifications\AppNotification;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Validator;
 
 class TiketController extends Controller
@@ -15,7 +18,7 @@ class TiketController extends Controller
     public function index(Request $request)
     {
         $user = auth()->user();
-        $query = Tiket::with(['user', 'pekerjaan']);
+        $query = Tiket::with(['user', 'pekerjaan', 'comments.user']);
 
         // Jika bukan admin, hanya lihat tiket sendiri
         if (!$user->hasRole('admin')) {
@@ -75,6 +78,15 @@ class TiketController extends Controller
             $tiket->addMediaFromRequest('attachment')->toMediaCollection('attachment');
         }
 
+        // Notify Admins
+        $admins = User::role('admin')->get();
+        Notification::send($admins, new AppNotification(
+            'Tiket Baru: ' . $tiket->subjek,
+            'Tiket baru telah dibuat oleh ' . auth()->user()->name,
+            '/tiket?ticketId=' . $tiket->id,
+            'info'
+        ));
+
         return new TiketResource($tiket->load(['user', 'pekerjaan']));
     }
 
@@ -90,7 +102,7 @@ class TiketController extends Controller
             return response()->json(['message' => 'Unauthorized'], 403);
         }
 
-        return new TiketResource($tiket->load(['user', 'pekerjaan']));
+        return new TiketResource($tiket->load(['user', 'pekerjaan', 'comments.user']));
     }
 
     /**
@@ -135,7 +147,18 @@ class TiketController extends Controller
         }
 
         if ($isAdmin) {
+            $oldStatus = $tiket->status;
             $tiket->update($request->only(['status', 'admin_notes']));
+            
+            // Notify user if status changed
+            if ($oldStatus !== $tiket->status) {
+                $tiket->user->notify(new AppNotification(
+                    'Update Status Tiket',
+                    'Tiket Anda "' . $tiket->subjek . '" telah diubah statusnya menjadi ' . strtoupper($tiket->status),
+                    '/tiket?ticketId=' . $tiket->id,
+                    'success'
+                ));
+            }
         } else {
             $tiket->update($request->except(['attachment', '_method']));
             
