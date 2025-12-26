@@ -7,9 +7,11 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Spatie\MediaLibrary\HasMedia;
 use Spatie\MediaLibrary\InteractsWithMedia;
 
+use App\Traits\NotifiesAdminsOnChanges;
+
 class Berkas extends Model implements HasMedia
 {
-    use InteractsWithMedia;
+    use InteractsWithMedia, NotifiesAdminsOnChanges;
 
     protected $table = 'tbl_berkas';
 

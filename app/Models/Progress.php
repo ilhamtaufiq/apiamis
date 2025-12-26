@@ -5,9 +5,11 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
+use App\Traits\NotifiesAdminsOnChanges;
+
 class Progress extends Model
 {
-    use HasFactory;
+    use HasFactory, NotifiesAdminsOnChanges;
 
     protected $table = 'tbl_progress';
 

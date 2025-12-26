@@ -4,9 +4,13 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+
+use App\Traits\NotifiesAdminsOnChanges;
 
 class Kontrak extends Model
 {
+    use NotifiesAdminsOnChanges, HasFactory;
     protected $table = 'tbl_kontrak';
 
     protected $fillable = [
