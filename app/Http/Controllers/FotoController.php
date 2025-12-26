@@ -26,8 +26,15 @@ class FotoController extends Controller
             return FotoResource::collection($foto);
         }
 
-        // Paginate only when listing all photos
-        $foto = $query->paginate(20);
+        // Support for custom pagination or all results
+        $per_page = $request->get('per_page', 20);
+        
+        if ($per_page == -1) {
+            $foto = $query->get();
+        } else {
+            $foto = $query->paginate($per_page);
+        }
+        
         return FotoResource::collection($foto);
     }
 
