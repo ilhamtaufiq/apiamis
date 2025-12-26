@@ -133,4 +133,36 @@ class AuthController extends Controller
     {
         return new UserResource($request->user()->load('roles', 'permissions'));
     }
+
+    /**
+     * Impersonate a user (Admin only)
+     * 
+     * @param Request $request
+     * @param User $user
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function impersonate(Request $request, User $user)
+    {
+        // Safety check (already handled by middleware but good to have)
+        if (!$request->user()->hasRole('admin')) {
+            return response()->json(['message' => 'Unauthorized'], 403);
+        }
+
+        // Prevent self-impersonation to avoid confusion
+        if ($request->user()->id === $user->id) {
+            return response()->json(['message' => 'Cannot impersonate yourself'], 422);
+        }
+
+        // Load roles and permissions
+        $user->load('roles', 'permissions');
+
+        // Create token for the target user
+        $token = $user->createToken('impersonation-token')->plainTextToken;
+
+        return response()->json([
+            'user' => new UserResource($user),
+            'token' => $token,
+            'message' => "Now impersonating {$user->name}"
+        ]);
+    }
 }

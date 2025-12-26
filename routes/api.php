@@ -43,6 +43,7 @@ Route::middleware('auth:sanctum')->group(function () {
     });
     Route::post('auth/logout', [AuthController::class, 'logout']);
     Route::get('auth/me', [AuthController::class, 'me']);
+    Route::post('auth/impersonate/{user}', [AuthController::class, 'impersonate'])->middleware('role:admin');
 
     // Pekerjaan dengan role-based filtering
     Route::apiResource('pekerjaan', PekerjaanController::class);
