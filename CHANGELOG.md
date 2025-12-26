@@ -13,11 +13,16 @@ All notable changes to the APIAMIS project will be documented in this file.
   - Dynamic reference sheets for `Kecamatan`, `Desa`, and `Kegiatan`.
 - **User Authentication & OAuth**: Implemented robust authentication system including Google OAuth integration and Laravel Sanctum support.
 - **Route-Based Access Control (RBAC)**: Added `CheckRoutePermission` middleware to handle granular permissions for API routes.
+- **Calendar API**: Implemented backend support for the calendar feature.
+  - Created `Event` model and database migrations (`tbl_events`).
+  - Implemented `EventController` with standard RESTful CRUD actions.
+  - Added support for event categories, location, and description.
 - **New API Endpoints**:
   - `POST /api/pekerjaan/import` - Import pekerjaan from Excel.
   - `GET /api/pekerjaan/import/template` - Download import template.
   - `GET /api/auth/google` - Redirect to Google OAuth.
   - `GET /api/auth/google/callback` - Handle Google OAuth callback.
+  - `GET/POST/PUT/DELETE /api/events` - Calendar event management.
 
 ## [2025-12-25]
 
