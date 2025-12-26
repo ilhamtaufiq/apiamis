@@ -18,14 +18,16 @@ RUN curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local
 # Set working directory
 WORKDIR /var/www/html
 
-# Copy files
+# Optimize layer caching for dependencies
+COPY composer.json composer.lock ./
+RUN composer install --optimize-autoloader --no-dev --no-interaction --no-scripts
+
+# Copy the rest of the application
 COPY . .
 
-# Install dependencies
-RUN composer install --optimize-autoloader --no-dev --no-interaction
-
-# Create storage directories
-RUN mkdir -p storage/framework/{cache/data,sessions,views} \
+# Run scripts and create storage directories
+RUN composer install --optimize-autoloader --no-dev --no-interaction \
+    && mkdir -p storage/framework/{cache/data,sessions,views} \
     && mkdir -p storage/logs \
     && mkdir -p bootstrap/cache
 
