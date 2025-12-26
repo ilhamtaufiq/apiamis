@@ -26,6 +26,7 @@ use App\Http\Controllers\BeritaAcaraController;
 use App\Http\Controllers\UserPekerjaanController;
 use App\Http\Controllers\TiketController;
 use App\Http\Controllers\TiketCommentController;
+use App\Http\Controllers\EventController;
 
 // Authentication Routes
 Route::post('auth/login', [AuthController::class, 'login']);
@@ -152,6 +153,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/notifications/mark-all-read', [\App\Http\Controllers\NotificationController::class, 'markAllAsRead']);
     Route::post('/notifications/broadcast', [\App\Http\Controllers\NotificationController::class, 'sendBroadcast'])->middleware('role:admin');
 
+    // Calendar Events
+    Route::apiResource('events', EventController::class);
 });
 
 
