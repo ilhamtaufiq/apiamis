@@ -5,10 +5,11 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 
 use App\Traits\NotifiesAdminsOnChanges;
+use App\Traits\Auditable;
 
 class Kegiatan extends Model
 {
-    use NotifiesAdminsOnChanges;
+    use NotifiesAdminsOnChanges, Auditable;
     protected $table = 'tbl_kegiatan';
     
     protected $fillable = [

@@ -7,10 +7,11 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 
 use App\Traits\NotifiesAdminsOnChanges;
+use App\Traits\Auditable;
 
 class Kontrak extends Model
 {
-    use NotifiesAdminsOnChanges, HasFactory;
+    use NotifiesAdminsOnChanges, HasFactory, Auditable;
     protected $table = 'tbl_kontrak';
 
     protected $fillable = [

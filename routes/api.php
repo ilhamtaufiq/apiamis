@@ -27,6 +27,8 @@ use App\Http\Controllers\UserPekerjaanController;
 use App\Http\Controllers\TiketController;
 use App\Http\Controllers\TiketCommentController;
 use App\Http\Controllers\EventController;
+use App\Http\Controllers\DataQualityController;
+use App\Http\Controllers\AuditLogController;
 
 // Authentication Routes
 Route::post('auth/login', [AuthController::class, 'login']);
@@ -66,6 +68,13 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('user-pekerjaan/user/{userId}', [UserPekerjaanController::class, 'byUser']);
         Route::get('user-pekerjaan/pekerjaan/{pekerjaanId}', [UserPekerjaanController::class, 'byPekerjaan']);
         Route::get('user-pekerjaan/available-users', [UserPekerjaanController::class, 'availableUsers']);
+        
+        // Data Quality Diagnostic
+        Route::get('data-quality/stats', [DataQualityController::class, 'getStats']);
+
+        // Audit Logs
+        Route::get('audit-logs', [AuditLogController::class, 'index']);
+        Route::get('audit-logs/{auditLog}', [AuditLogController::class, 'show']);
     });
 
     Route::get('/user', function (Request $request) {
