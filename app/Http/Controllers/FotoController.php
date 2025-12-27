@@ -26,6 +26,14 @@ class FotoController extends Controller
             return FotoResource::collection($foto);
         }
 
+        if ($request->has('latest_only') && $request->latest_only) {
+            $query->whereIn('id', function ($q) {
+                $q->selectRaw('MAX(id)')
+                    ->from('tbl_foto')
+                    ->groupBy('pekerjaan_id');
+            });
+        }
+
         // Support for custom pagination or all results
         $per_page = $request->get('per_page', 20);
         

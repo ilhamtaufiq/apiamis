@@ -60,12 +60,14 @@ The API will be available at `http://localhost:8000` or `http://apiamis.test` if
 
 - **Auth**: `/api/auth/login`, `/api/auth/me`
 - **Resources**: `/api/pekerjaan`, `/api/kontrak`, `/api/kegiatan`, `/api/kecamatan`, `/api/desa`
+- **Map Optimized API**: `/api/foto?latest_only=1` (returns only the most recent photo per job)
 - **Documentation**: `/api/documentation` (Swagger UI)
 
 ## 📁 Features
 
 - **Role-Based Access**: Specialized roles for Admin and Pengawas.
 - **Media Management**: Automatic handling of photo uploads and document storage.
+- **Region Normalization**: Automated name normalization for Kecamatan and Desa (space-stripping) to ensure Map-GeoJSON consistency.
 - **Reporting**: Structured data for progress tracking and PDF/Excel exports.
 
 ## 📝 License
