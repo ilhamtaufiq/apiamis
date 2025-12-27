@@ -8,10 +8,11 @@ use Spatie\MediaLibrary\HasMedia;
 use Spatie\MediaLibrary\InteractsWithMedia;
 
 use App\Traits\NotifiesAdminsOnChanges;
+use App\Traits\Auditable;
 
 class Foto extends Model implements HasMedia
 {
-    use InteractsWithMedia, NotifiesAdminsOnChanges;
+    use InteractsWithMedia, NotifiesAdminsOnChanges, Auditable;
 
     protected $table = 'tbl_foto';
 
