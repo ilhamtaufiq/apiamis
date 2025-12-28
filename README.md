@@ -65,9 +65,10 @@ The API will be available at `http://localhost:8000` or `http://apiamis.test` if
 
 ## 📁 Features
 
-- **Role-Based Access**: Specialized roles for Admin and Pengawas.
-- **Media Management**: Automatic handling of photo uploads and document storage.
-- **Region Normalization**: Automated name normalization for Kecamatan and Desa (space-stripping) to ensure Map-GeoJSON consistency.
+- **Audit Logging System**: Automatic event capturing with a specialized Trait for tracking all data mutations (`Auditable`).
+- **Geo-Fencing Support**: Server-side infrastructure for validating photo coordinates against administrative boundaries.
+- **Media Management**: Automatic handling of photo uploads and document storage via Spatie MediaLibrary.
+- **Region Normalization**: Automated name normalization for Kecamatan and Desa to ensure Map-GeoJSON consistency.
 - **Reporting**: Structured data for progress tracking and PDF/Excel exports.
 
 ## 📝 License
