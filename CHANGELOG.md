@@ -2,6 +2,14 @@
 
 All notable changes to the APIAMIS project will be documented in this file.
 
+## [2025-12-28]
+
+### Added
+- **Audit Logging System**: Implemented `Auditable` trait to automatically capture `created`, `updated`, and `deleted` events across core models.
+- **Geo-Fencing Validation**: Added backend support for storing and retrieving photo coordinate validation results.
+- **Enhanced Photo API**: Updated `FotoController` to process and persist `validasi_koordinat` and `validasi_koordinat_message` metadata.
+- **User Profile Fields**: Added `nip` and `jabatan` to `User` model for enhanced reporting and identification.
+
 ## [2025-12-26]
 
 ### Added
