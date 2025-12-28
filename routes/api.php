@@ -29,6 +29,7 @@ use App\Http\Controllers\TiketCommentController;
 use App\Http\Controllers\EventController;
 use App\Http\Controllers\DataQualityController;
 use App\Http\Controllers\AuditLogController;
+use App\Http\Controllers\AnalyticsController;
 
 // Authentication Routes
 Route::post('auth/login', [AuthController::class, 'login']);
@@ -83,6 +84,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // Dashboard
     Route::get('dashboard/stats', [DashboardController::class, 'stats']);
+    Route::get('dashboard/analytics', [AnalyticsController::class, 'stats']);
 
     // API Resources
     Route::apiResource('kecamatan', KecamatanController::class);
