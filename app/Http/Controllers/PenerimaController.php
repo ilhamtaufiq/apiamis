@@ -36,7 +36,12 @@ class PenerimaController extends Controller
             $query->searchNama($request->search);
         }
 
-        $penerima = $query->paginate(20);
+        if ($request->filled('per_page') && $request->per_page == -1) {
+            $penerima = $query->latest()->get();
+            return PenerimaResource::collection($penerima);
+        }
+
+        $penerima = $query->latest()->paginate($request->input('per_page', 20));
 
         return PenerimaResource::collection($penerima);
     }
@@ -104,9 +109,19 @@ class PenerimaController extends Controller
      */
     public function byPekerjaan($pekerjaanId)
     {
-        $penerima = Penerima::where('pekerjaan_id', $pekerjaanId)
-            ->with('pekerjaan')
-            ->paginate(50);
+        $perPage = request()->input('per_page', 50);
+        
+        if ($perPage == -1) {
+            $penerima = Penerima::where('pekerjaan_id', $pekerjaanId)
+                ->with('pekerjaan')
+                ->latest()
+                ->get();
+        } else {
+            $penerima = Penerima::where('pekerjaan_id', $pekerjaanId)
+                ->with('pekerjaan')
+                ->latest()
+                ->paginate($perPage);
+        }
 
         return PenerimaResource::collection($penerima);
     }

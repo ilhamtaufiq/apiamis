@@ -1,12 +1,12 @@
 {
   "C:\\laragon\\www\\apiamis\\vite.config.js": "ba4996e1d8e73333d5c9195b824b4219",
-  "C:\\laragon\\www\\apiamis\\README.md": "aaa6539cba549aa7367ebfff603b21ea",
+  "C:\\laragon\\www\\apiamis\\README.md": "b45ff962d06463cdcb32edfe6160d5d1",
   "C:\\laragon\\www\\apiamis\\phpunit.xml": "89cddad3368d16ed88d2b874691acc51",
   "C:\\laragon\\www\\apiamis\\package.json": "eac03e278a610f918e4264dfc9cd3b18",
   "C:\\laragon\\www\\apiamis\\HORIZION.md": "522e7fbfa5224f91c86405795f7249a9",
   "C:\\laragon\\www\\apiamis\\docker-entrypoint.sh": "f956cd6ba8d18bd72b5b93f0ddc9b958",
   "C:\\laragon\\www\\apiamis\\CONTINUITY.md": "0e8fdd501ee0424e0896f3d6e18a03ce",
-  "C:\\laragon\\www\\apiamis\\CHANGELOG.md": "94f782df2ef02327760e7b4d59b52589",
+  "C:\\laragon\\www\\apiamis\\CHANGELOG.md": "ea0a86fdbf26776fd82eecc8db096c61",
   "C:\\laragon\\www\\apiamis\\tests\\TestCase.php": "7e567dc27e68d5b57bae16af07f68907",
   "C:\\laragon\\www\\apiamis\\storage\\tes-sync3.txt": "d41d8cd98f00b204e9800998ecf8427e",
   "C:\\laragon\\www\\apiamis\\composer.json": "743ceec44dba22402536ac339e5d6fde",
@@ -16,7 +16,7 @@
   "C:\\laragon\\www\\apiamis\\routes\\web.php": "7fafeeaefa35e8369db551ddc0b99679",
   "C:\\laragon\\www\\apiamis\\storage\\from-kambing1.txt": "d41d8cd98f00b204e9800998ecf8427e",
   "C:\\laragon\\www\\apiamis\\routes\\console.php": "3c6ce2e6d16444282b24a9aa63885563",
-  "C:\\laragon\\www\\apiamis\\routes\\api.php": "031dd1355834fc62793ddd9ea0144495",
+  "C:\\laragon\\www\\apiamis\\routes\\api.php": "0424f1e8b0755bed6c013bd90c5c3330",
   "C:\\laragon\\www\\apiamis\\public\\robots.txt": "b6216d61c03e6ce0c9aea6ca7808f7ca",
   "C:\\laragon\\www\\apiamis\\public\\index.php": "d8eda274115af5fd2aaa8230af329ef7",
   "C:\\laragon\\www\\apiamis\\docs\\README.md": "f5abd42846a3111ffd641f4d2fd36483",
@@ -169,5 +169,6 @@
   "C:\\laragon\\www\\apiamis\\app\\Traits\\Auditable.php": "394b7557574e407bb5ff025bc9cc7bd8",
   "C:\\laragon\\www\\apiamis\\app\\Models\\AuditLog.php": "ec1a13976534a2712d049208f4ed2e3f",
   "C:\\laragon\\www\\apiamis\\app\\Http\\Controllers\\DataQualityController.php": "e8b570b0927b98c48a1a749bb413e041",
-  "C:\\laragon\\www\\apiamis\\app\\Http\\Controllers\\AuditLogController.php": "3381385b57425bd28efa7ebe0f821298"
+  "C:\\laragon\\www\\apiamis\\app\\Http\\Controllers\\AuditLogController.php": "3381385b57425bd28efa7ebe0f821298",
+  "C:\\laragon\\www\\apiamis\\app\\Http\\Controllers\\AnalyticsController.php": "42770e6cbdbcba743bf91daf9341a38a"
 }
