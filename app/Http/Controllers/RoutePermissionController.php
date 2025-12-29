@@ -32,7 +32,11 @@ class RoutePermissionController extends Controller
             $query->where('is_active', $request->boolean('is_active'));
         }
 
-        return $query->orderBy('route_path')->paginate(15);
+        if ($request->filled('per_page') && $request->per_page == -1) {
+            return $query->orderBy('route_path')->get();
+        }
+
+        return $query->orderBy('route_path')->paginate($request->input('per_page', 15));
     }
 
     /**
