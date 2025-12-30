@@ -30,6 +30,7 @@ use App\Http\Controllers\EventController;
 use App\Http\Controllers\DataQualityController;
 use App\Http\Controllers\AuditLogController;
 use App\Http\Controllers\AnalyticsController;
+use App\Http\Controllers\SimulationNetworkController;
 
 // Authentication Routes
 Route::post('auth/login', [AuthController::class, 'login']);
@@ -166,6 +167,15 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // Calendar Events
     Route::apiResource('events', EventController::class);
+
+    // Simulation Networks
+    Route::apiResource('simulation-networks', SimulationNetworkController::class);
+    Route::get('simulation-networks/{id}/versions', [SimulationNetworkController::class, 'versions']);
+    Route::get('simulation-networks/{id}/versions/{version}', [SimulationNetworkController::class, 'showVersion']);
+    Route::post('simulation-networks/{id}/versions/{version}/restore', [SimulationNetworkController::class, 'restoreVersion']);
+    Route::post('simulation-networks/{id}/results', [SimulationNetworkController::class, 'saveResults']);
+    Route::post('simulation-networks/{id}/duplicate', [SimulationNetworkController::class, 'duplicate']);
+    Route::get('simulation-networks/pekerjaan/{pekerjaanId}', [SimulationNetworkController::class, 'byPekerjaan']);
 });
 
 
