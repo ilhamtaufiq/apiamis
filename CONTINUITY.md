@@ -1,11 +1,24 @@
-- Goal (incl. success criteria): Complete Dark Mode implementation and synchronize Horizion persona documentation.
-- Constraints/Assumptions: Standard Laravel/React architecture. Metadata/Persona must be strictly followed.
-- Key decisions: 
-    - Implemented Dark Mode using existing `ThemeProvider`.
-    - Synchronized `HORIZION.md` with full 4-D methodology definition.
+# Continuity Ledger
+
+- Goal: Bypass "tahun anggaran" (fiscal year) filter for works assigned to the user in the "Panel kontrol pengawasan infrastruktur" page.
+- Constraints/Assumptions:
+    - Non-admin users should see all their assigned works regardless of the selected year.
+    - Admin users should still be able to filter by year.
+    - Assignment can be manual (via `user_pekerjaan` table) or role-based (via `kegiatan_role` table).
+- Key decisions:
+    - Modified `PekerjaanController@index` to allow assigned works to bypass the year filter for non-admin users using `orWhereHas('assignedUsers', ...)`.
 - State:
-  - Done: Dark Mode Toggle, HORIZION.md sync, Penerima Pagination & Sorting, Route Permission Pagination Fix.
-  - Now: Ready for new tasks.
-  - Next: Awaiting user instructions.
-- Open questions (UNCONFIRMED if needed): None.
-- Working set (files/ids/commands): `HORIZION.md`, `CONTINUITY.md`, `header.tsx`, `theme-toggle.tsx`.
+  - Done:
+    - Researched frontend and backend code.
+    - Created implementation plan.
+    - Modified `PekerjaanController.php`.
+    - Verified logic.
+  - Now:
+    - Finalizing documentation and reporting completion.
+  - Next:
+    - Task complete.
+- Open questions (UNCONFIRMED):
+    - None.
+- Working set:
+    - `c:\laragon\www\apiamis\app\Http\Controllers\PekerjaanController.php`
+    - `c:\laragon\www\bun\src\features\user-pekerjaan\components\PengawasDashboard.tsx`

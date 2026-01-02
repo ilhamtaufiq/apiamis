@@ -38,9 +38,20 @@ class PekerjaanController extends Controller
             
             // Filter by tahun via kegiatan
             if ($request->has('tahun') && $request->tahun) {
-                $query->whereHas('kegiatan', function($q) use ($request) {
-                    $q->where('tahun_anggaran', $request->tahun);
-                });
+                $user = auth()->user();
+                if ($user && !$user->hasRole('admin')) {
+                    $query->where(function($q) use ($request, $user) {
+                        $q->whereHas('kegiatan', function($inner) use ($request) {
+                            $inner->where('tahun_anggaran', $request->tahun);
+                        })->orWhereHas('assignedUsers', function($inner) use ($user) {
+                            $inner->where('users.id', $user->id);
+                        });
+                    });
+                } else {
+                    $query->whereHas('kegiatan', function($q) use ($request) {
+                        $q->where('tahun_anggaran', $request->tahun);
+                    });
+                }
             }
             
             // Search functionality
