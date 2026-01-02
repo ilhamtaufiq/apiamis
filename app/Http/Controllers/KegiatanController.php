@@ -19,7 +19,11 @@ class KegiatanController extends Controller
             $query->where('tahun_anggaran', $request->tahun);
         }
 
-        $kegiatan = $query->paginate(15);
+        if ($request->has('per_page') && $request->per_page == -1) {
+            return KegiatanResource::collection($query->get());
+        }
+
+        $kegiatan = $query->paginate($request->get('per_page', 15));
         return KegiatanResource::collection($kegiatan);
     }
 

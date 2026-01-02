@@ -1,24 +1,26 @@
 # Continuity Ledger
 
-- Goal: Bypass "tahun anggaran" (fiscal year) filter for works assigned to the user in the "Panel kontrol pengawasan infrastruktur" page.
+- Goal: 
+    1. Bypass "tahun anggaran" filter for assigned works (DONE).
+    2. Add "Sub Kegiatan" column to Pekerjaan list page (DONE).
+    3. Add "Sub Kegiatan" filter to Pekerjaan list page (NOW).
 - Constraints/Assumptions:
-    - Non-admin users should see all their assigned works regardless of the selected year.
-    - Admin users should still be able to filter by year.
-    - Assignment can be manual (via `user_pekerjaan` table) or role-based (via `kegiatan_role` table).
+    - Backend unification in `index()` allows multi-filtering.
 - Key decisions:
-    - Modified `PekerjaanController@index` to allow assigned works to bypass the year filter for non-admin users using `orWhereHas('assignedUsers', ...)`.
+    - Modify `PekerjaanController@index` to support `kecamatan_id` and `kegiatan_id`.
+    - Unify `getPekerjaan` API helper to use `/pekerjaan` with query params.
 - State:
   - Done:
-    - Researched frontend and backend code.
-    - Created implementation plan.
-    - Modified `PekerjaanController.php`.
-    - Verified logic.
+    - First two tasks completed.
+    - Research for "Sub Kegiatan" filter completed.
+    - Implementation plan for filter created.
   - Now:
-    - Finalizing documentation and reporting completion.
+    - Awaiting user approval for the filter plan.
   - Next:
-    - Task complete.
+    - Apply backend and frontend changes.
 - Open questions (UNCONFIRMED):
     - None.
 - Working set:
     - `c:\laragon\www\apiamis\app\Http\Controllers\PekerjaanController.php`
-    - `c:\laragon\www\bun\src\features\user-pekerjaan\components\PengawasDashboard.tsx`
+    - `c:\laragon\www\bun\src\features\pekerjaan\api\pekerjaan.ts`
+    - `c:\laragon\www\bun\src\features\pekerjaan\components\PekerjaanList.tsx`

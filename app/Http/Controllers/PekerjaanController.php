@@ -53,6 +53,15 @@ class PekerjaanController extends Controller
                     });
                 }
             }
+
+            // Filter multi
+            if ($request->has('kecamatan_id') && !empty($request->kecamatan_id)) {
+                $query->where('kecamatan_id', $request->kecamatan_id);
+            }
+
+            if ($request->has('kegiatan_id') && !empty($request->kegiatan_id)) {
+                $query->where('kegiatan_id', $request->kegiatan_id);
+            }
             
             // Search functionality
             if ($request->has('search') && !empty($request->search)) {
