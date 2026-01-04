@@ -33,7 +33,7 @@ class PekerjaanController extends Controller
                 return response()->json(['message' => 'Unauthorized'], 401);
             }
 
-            $query = Pekerjaan::with(['kecamatan', 'desa', 'kegiatan'])
+            $query = Pekerjaan::with(['kecamatan', 'desa', 'kegiatan', 'tags'])
                 ->byUserRole();  // Aman karena sudah check auth
             
             // Filter by tahun via kegiatan
@@ -61,6 +61,13 @@ class PekerjaanController extends Controller
 
             if ($request->has('kegiatan_id') && !empty($request->kegiatan_id)) {
                 $query->where('kegiatan_id', $request->kegiatan_id);
+            }
+
+            // Filter by tag
+            if ($request->has('tag_id') && !empty($request->tag_id)) {
+                $query->whereHas('tags', function($q) use ($request) {
+                    $q->where('tbl_tags.id', $request->tag_id);
+                });
             }
             
             // Search functionality
@@ -134,7 +141,13 @@ class PekerjaanController extends Controller
         ]);
 
         $pekerjaan = Pekerjaan::create($validated);
-        $pekerjaan->load('kecamatan', 'desa', 'kegiatan');
+        
+        // Sync tags if provided
+        if ($request->has('tag_ids')) {
+            $pekerjaan->tags()->sync($request->tag_ids);
+        }
+        
+        $pekerjaan->load('kecamatan', 'desa', 'kegiatan', 'tags');
         return new PekerjaanDetailResource($pekerjaan);
     }
    /**
@@ -185,7 +198,7 @@ class PekerjaanController extends Controller
         
         $pekerjaan->load([
             'kecamatan', 'desa', 'kegiatan', 
-            'foto', 'berkas', 'output', 'penerima', 'kontrak'
+            'foto', 'berkas', 'output', 'penerima', 'kontrak', 'tags'
         ]);
         
         return new PekerjaanDetailResource($pekerjaan);
@@ -235,7 +248,13 @@ class PekerjaanController extends Controller
         ]);
 
         $pekerjaan->update($validated);
-        $pekerjaan->load('kecamatan', 'desa', 'kegiatan');
+        
+        // Sync tags if provided
+        if ($request->has('tag_ids')) {
+            $pekerjaan->tags()->sync($request->tag_ids);
+        }
+        
+        $pekerjaan->load('kecamatan', 'desa', 'kegiatan', 'tags');
         return new PekerjaanDetailResource($pekerjaan);
     }
 

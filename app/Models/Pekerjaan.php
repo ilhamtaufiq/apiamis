@@ -136,4 +136,23 @@ class Pekerjaan extends Model
     {
         return $this->hasOne(BeritaAcara::class, 'pekerjaan_id');
     }
+
+    /**
+     * Relasi Many-to-Many dengan Tags
+     */
+    public function tags(): BelongsToMany
+    {
+        return $this->belongsToMany(Tag::class, 'pekerjaan_tag', 'pekerjaan_id', 'tag_id')
+            ->withTimestamps();
+    }
+
+    /**
+     * Relasi Many-to-Many dengan ChecklistItems
+     */
+    public function checklistItems(): BelongsToMany
+    {
+        return $this->belongsToMany(ChecklistItem::class, 'pekerjaan_checklist', 'pekerjaan_id', 'checklist_item_id')
+            ->withPivot(['is_checked', 'checked_at', 'checked_by', 'notes'])
+            ->withTimestamps();
+    }
 }

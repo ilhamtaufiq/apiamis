@@ -12,6 +12,7 @@ use App\Http\Resources\BerkasResource;
 use App\Http\Resources\KontrakResource;
 use App\Http\Resources\OutputResource;
 use App\Http\Resources\PenerimaResource;
+use App\Http\Resources\TagResource;
 
 class PekerjaanDetailResource extends JsonResource
 {
@@ -50,6 +51,7 @@ class PekerjaanDetailResource extends JsonResource
             'kontrak' => KontrakResource::collection($this->whenLoaded('kontrak')),
             'output' => OutputResource::collection($this->whenLoaded('output')),
             'penerima' => PenerimaResource::collection($this->whenLoaded('penerima')),
+            'tags' => TagResource::collection($this->whenLoaded('tags')),
 
             'created_at' => $this->created_at?->toIso8601String(),
             'updated_at' => $this->updated_at?->toIso8601String(),

@@ -7,6 +7,7 @@ use Illuminate\Http\Resources\Json\JsonResource;
 use App\Http\Resources\KecamatanResource;
 use App\Http\Resources\DesaResource;
 use App\Http\Resources\KegiatanResource;
+use App\Http\Resources\TagResource;
 
 class PekerjaanResource extends JsonResource
 {
@@ -46,6 +47,7 @@ class PekerjaanResource extends JsonResource
             'kecamatan' => new KecamatanResource($this->whenLoaded('kecamatan')),
             'desa' => new DesaResource($this->whenLoaded('desa')),
             'kegiatan' => new KegiatanResource($this->whenLoaded('kegiatan')),
+            'tags' => TagResource::collection($this->whenLoaded('tags')),
             'created_at' => $this->created_at?->toIso8601String(),
             'updated_at' => $this->updated_at?->toIso8601String(),
         ];

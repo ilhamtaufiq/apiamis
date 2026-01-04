@@ -20,6 +20,8 @@ class UserController extends Controller
             'name' => 'required|string|max:255',
             'email' => 'required|email|unique:users,email',
             'password' => 'required|string|min:6',
+            'nip' => 'nullable|string|max:50',
+            'jabatan' => 'nullable|string|max:255',
             'roles' => 'sometimes|array',
             'permissions' => 'sometimes|array',
         ]);
@@ -28,6 +30,8 @@ class UserController extends Controller
             'name' => $validated['name'],
             'email' => $validated['email'],
             'password' => bcrypt($validated['password']),
+            'nip' => $validated['nip'] ?? null,
+            'jabatan' => $validated['jabatan'] ?? null,
         ]);
 
         if (isset($validated['roles'])) {
@@ -52,6 +56,8 @@ class UserController extends Controller
             'name' => 'sometimes|string|max:255',
             'email' => 'sometimes|email|unique:users,email,' . $user->id,
             'password' => 'nullable|string|min:6',
+            'nip' => 'nullable|string|max:50',
+            'jabatan' => 'nullable|string|max:255',
             'roles' => 'sometimes|array',
             'permissions' => 'sometimes|array',
         ]);
@@ -59,6 +65,8 @@ class UserController extends Controller
         if (isset($validated['name'])) $user->name = $validated['name'];
         if (isset($validated['email'])) $user->email = $validated['email'];
         if (!empty($validated['password'])) $user->password = bcrypt($validated['password']);
+        if (array_key_exists('nip', $validated)) $user->nip = $validated['nip'];
+        if (array_key_exists('jabatan', $validated)) $user->jabatan = $validated['jabatan'];
         $user->save();
 
         if (isset($validated['roles'])) {

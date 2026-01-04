@@ -31,6 +31,9 @@ use App\Http\Controllers\DataQualityController;
 use App\Http\Controllers\AuditLogController;
 use App\Http\Controllers\AnalyticsController;
 use App\Http\Controllers\SimulationNetworkController;
+use App\Http\Controllers\TagController;
+use App\Http\Controllers\ChecklistItemController;
+use App\Http\Controllers\PekerjaanChecklistController;
 
 // Authentication Routes
 Route::post('auth/login', [AuthController::class, 'login']);
@@ -105,6 +108,16 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('route-permissions/user/accessible', [RoutePermissionController::class, 'accessible']);
     Route::apiResource('route-permissions', RoutePermissionController::class);
     Route::apiResource('menu-permissions', MenuPermissionController::class);
+    Route::apiResource('tags', TagController::class);
+    
+    // Checklist Items (column management)
+    Route::apiResource('checklist-items', ChecklistItemController::class);
+    Route::post('checklist-items/reorder', [ChecklistItemController::class, 'reorder']);
+    
+    // Pekerjaan Checklist
+    Route::get('pekerjaan-checklist', [PekerjaanChecklistController::class, 'index']);
+    Route::post('pekerjaan-checklist/toggle', [PekerjaanChecklistController::class, 'toggle']);
+    
     // Custom routes
     Route::get('desa/kecamatan/{kecamatanId}', [DesaController::class, 'byKecamatan']);
     Route::get('kegiatan/tahun/{tahun}', [KegiatanController::class, 'byTahun']);
