@@ -88,7 +88,7 @@
   "C:\\laragon\\www\\apiamis\\bootstrap\\cache\\packages.php": "9e80b88572c191bd9cb51f135102c716",
   "C:\\laragon\\www\\apiamis\\app\\Providers\\AppServiceProvider.php": "c0094f35cad6bba7636002a62186dae4",
   "C:\\laragon\\www\\apiamis\\app\\Notifications\\AppNotification.php": "531212e53284ece5f239653de23074ad",
-  "C:\\laragon\\www\\apiamis\\app\\Models\\User.php": "e6b6184bff46d01d787d3b96a903d619",
+  "C:\\laragon\\www\\apiamis\\app\\Models\\User.php": "7ac99afbe54a3730d8d56edb0bc26f89",
   "C:\\laragon\\www\\apiamis\\app\\Models\\TiketComment.php": "c3124eb47db4df96aef0465667472535",
   "C:\\laragon\\www\\apiamis\\app\\Models\\Tiket.php": "4a0449db05c4f2933f04ba21c40c70c1",
   "C:\\laragon\\www\\apiamis\\app\\Models\\RoutePermission.php": "060d7829cee05a690d1e7b817b6cd32a",
@@ -127,7 +127,7 @@
   "C:\\laragon\\www\\apiamis\\app\\Http\\Resources\\KontrakDetailResource.php": "d318ee56d6554001b08c834ffac1925e",
   "C:\\laragon\\www\\apiamis\\app\\Http\\Resources\\KecamatanDetailResource.php": "3d81f2e8b49e3ae5b745982ec7b339bb",
   "C:\\laragon\\www\\apiamis\\app\\Http\\Resources\\KegiatanResource.php": "b90430ab23d10e234c883017b4c2ae94",
-  "C:\\laragon\\www\\apiamis\\app\\Http\\Resources\\BerkasResource.php": "dd97d2279f1508ca73e37c23937785d9",
+  "C:\\laragon\\www\\apiamis\\app\\Http\\Resources\\BerkasResource.php": "5fceb458cff66bd100616ec20a2afc98",
   "C:\\laragon\\www\\apiamis\\app\\Http\\Resources\\KecamatanResource.php": "45eb99c2a626083c2c3bf1bb766775cf",
   "C:\\laragon\\www\\apiamis\\app\\Http\\Resources\\FotoResource.php": "6c70ed2133de478ed99dbad0c34d0eed",
   "C:\\laragon\\www\\apiamis\\app\\Http\\Resources\\DesaResource.php": "dcc289ae6a922ed2a2182f311c518ec2",
@@ -137,7 +137,7 @@
   "C:\\laragon\\www\\apiamis\\app\\Http\\Controllers\\UserPekerjaanController.php": "8ee64b37d4bf52aa7cebc005fe954984",
   "C:\\laragon\\www\\apiamis\\app\\Http\\Middleware\\CheckRoutePermission.php": "a48632f6d490d98d851b667ae3ed9971",
   "C:\\laragon\\www\\apiamis\\app\\Http\\Controllers\\TiketController.php": "686a5a5dbdeae84817ec957cf6a2cc95",
-  "C:\\laragon\\www\\apiamis\\app\\Http\\Controllers\\UserController.php": "deb9be0e31a4f3c47843b788dd89a527",
+  "C:\\laragon\\www\\apiamis\\app\\Http\\Controllers\\UserController.php": "a48ade418964b632c839b9f6d06a7dcf",
   "C:\\laragon\\www\\apiamis\\app\\Http\\Controllers\\TiketCommentController.php": "9784118075fd8f44665f3b9ea66d1af4",
   "C:\\laragon\\www\\apiamis\\app\\Http\\Controllers\\RoutePermissionController.php": "7ac12bc904ec4e2519f398cca8d07740",
   "C:\\laragon\\www\\apiamis\\app\\Http\\Controllers\\RoleController.php": "197a90f0ed0ae066d11ac0d98fa6b734",
@@ -185,5 +185,6 @@
   "C:\\laragon\\www\\apiamis\\app\\Http\\Resources\\ChecklistItemResource.php": "22a435d4b422ce2f29fadd3d097dc7be",
   "C:\\laragon\\www\\apiamis\\app\\Http\\Controllers\\TagController.php": "6c407a2cc6d16aeb50864a7745d7ca09",
   "C:\\laragon\\www\\apiamis\\app\\Http\\Controllers\\PekerjaanChecklistController.php": "856e1d2551eeadb4287ba4bc969bf7fd",
-  "C:\\laragon\\www\\apiamis\\app\\Http\\Controllers\\ChecklistItemController.php": "c9c05c6cba2f96feb7d349cc60c95625"
+  "C:\\laragon\\www\\apiamis\\app\\Http\\Controllers\\ChecklistItemController.php": "c9c05c6cba2f96feb7d349cc60c95625",
+  "C:\\laragon\\www\\apiamis\\database\\migrations\\2026_01_04_000001_add_nip_jabatan_to_users_table.php": "b39ae5ef332cda31a79c3a6579ff460b"
 }
