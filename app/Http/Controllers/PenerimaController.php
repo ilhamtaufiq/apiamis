@@ -36,12 +36,14 @@ class PenerimaController extends Controller
             $query->searchNama($request->search);
         }
 
-        if ($request->filled('per_page') && $request->per_page == -1) {
+        $per_page = $request->get('per_page', 20);
+
+        if ($per_page == -1) {
             $penerima = $query->latest()->get();
             return PenerimaResource::collection($penerima);
         }
 
-        $penerima = $query->latest()->paginate($request->input('per_page', 20));
+        $penerima = $query->latest()->paginate($per_page);
 
         return PenerimaResource::collection($penerima);
     }

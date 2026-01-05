@@ -20,9 +20,21 @@ class OutputController extends Controller
 
         if ($request->has('pekerjaan_id')) {
             $query->where('pekerjaan_id', $request->pekerjaan_id);
+            
+            // If pekerjaan_id is provided, check if per_page is -1 to get all
+            if ($request->get('per_page') == -1) {
+                return OutputResource::collection($query->get());
+            }
         }
 
-        $output = $query->paginate(20);
+        $per_page = $request->get('per_page', 20);
+        
+        if ($per_page == -1) {
+            $output = $query->get();
+        } else {
+            $output = $query->paginate($per_page);
+        }
+
         return OutputResource::collection($output);
     }
 
