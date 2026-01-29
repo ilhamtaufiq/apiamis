@@ -33,7 +33,7 @@ class PekerjaanController extends Controller
                 return response()->json(['message' => 'Unauthorized'], 401);
             }
 
-            $query = Pekerjaan::with(['kecamatan', 'desa', 'kegiatan', 'tags'])
+            $query = Pekerjaan::with(['kecamatan', 'desa', 'kegiatan', 'tags', 'pengawas', 'pendamping'])
                 ->byUserRole();  // Aman karena sudah check auth
             
             // Filter by tahun via kegiatan
@@ -137,7 +137,9 @@ class PekerjaanController extends Controller
             'kecamatan_id' => 'required|integer|exists:tbl_kecamatan,id',
             'desa_id' => 'required|integer|exists:tbl_desa,id',
             'kegiatan_id' => 'nullable|integer|exists:tbl_kegiatan,id',
-            'pagu' => 'required|numeric|min:0'
+            'pagu' => 'required|numeric|min:0',
+            'pengawas_id' => 'nullable|integer|exists:pengawas,id',
+            'pendamping_id' => 'nullable|integer|exists:pengawas,id'
         ]);
 
         $pekerjaan = Pekerjaan::create($validated);
@@ -147,7 +149,7 @@ class PekerjaanController extends Controller
             $pekerjaan->tags()->sync($request->tag_ids);
         }
         
-        $pekerjaan->load('kecamatan', 'desa', 'kegiatan', 'tags');
+        $pekerjaan->load('kecamatan', 'desa', 'kegiatan', 'tags', 'pengawas', 'pendamping');
         return new PekerjaanDetailResource($pekerjaan);
     }
    /**
@@ -198,7 +200,7 @@ class PekerjaanController extends Controller
         
         $pekerjaan->load([
             'kecamatan', 'desa', 'kegiatan', 
-            'foto', 'berkas', 'output', 'penerima', 'kontrak', 'tags'
+            'foto', 'berkas', 'output', 'penerima', 'kontrak', 'tags', 'pengawas', 'pendamping'
         ]);
         
         return new PekerjaanDetailResource($pekerjaan);
@@ -244,7 +246,9 @@ class PekerjaanController extends Controller
             'kecamatan_id' => 'nullable|integer|exists:tbl_kecamatan,id',
             'desa_id' => 'nullable|integer|exists:tbl_desa,id',
             'kegiatan_id' => 'nullable|integer|exists:tbl_kegiatan,id',
-            'pagu' => 'nullable|numeric|min:0'
+            'pagu' => 'nullable|numeric|min:0',
+            'pengawas_id' => 'nullable|integer|exists:pengawas,id',
+            'pendamping_id' => 'nullable|integer|exists:pengawas,id'
         ]);
 
         $pekerjaan->update($validated);
@@ -254,7 +258,7 @@ class PekerjaanController extends Controller
             $pekerjaan->tags()->sync($request->tag_ids);
         }
         
-        $pekerjaan->load('kecamatan', 'desa', 'kegiatan', 'tags');
+        $pekerjaan->load('kecamatan', 'desa', 'kegiatan', 'tags', 'pengawas', 'pendamping');
         return new PekerjaanDetailResource($pekerjaan);
     }
 
@@ -311,7 +315,7 @@ class PekerjaanController extends Controller
     public function byKecamatan(Request $request, $kecamatanId)
     {
         $query = Pekerjaan::where('kecamatan_id', $kecamatanId)
-            ->with('kecamatan', 'desa', 'kegiatan');
+            ->with('kecamatan', 'desa', 'kegiatan', 'pengawas', 'pendamping');
 
         // Filter by tahun via kegiatan
         if ($request->has('tahun') && $request->tahun) {
@@ -347,7 +351,7 @@ class PekerjaanController extends Controller
     public function byDesa($desaId)
     {
         $pekerjaan = Pekerjaan::where('desa_id', $desaId)
-            ->with('kecamatan', 'desa', 'kegiatan')
+            ->with('kecamatan', 'desa', 'kegiatan', 'pengawas', 'pendamping')
             ->paginate(20);
         return PekerjaanResource::collection($pekerjaan);
     }
@@ -375,7 +379,7 @@ class PekerjaanController extends Controller
     public function byKegiatan($kegiatanId)
     {
         $pekerjaan = Pekerjaan::where('kegiatan_id', $kegiatanId)
-            ->with('kecamatan', 'desa', 'kegiatan')
+            ->with('kecamatan', 'desa', 'kegiatan', 'pengawas', 'pendamping')
             ->paginate(20);
         return PekerjaanResource::collection($pekerjaan);
     }
@@ -411,7 +415,7 @@ class PekerjaanController extends Controller
     {
         $query = Pekerjaan::where('kecamatan_id', $kecamatanId)
             ->where('desa_id', $desaId)
-            ->with('kecamatan', 'desa', 'kegiatan');
+            ->with('kecamatan', 'desa', 'kegiatan', 'pengawas', 'pendamping');
 
         // Filter by tahun via kegiatan
         if ($request->has('tahun') && $request->tahun) {

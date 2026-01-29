@@ -34,6 +34,7 @@ use App\Http\Controllers\SimulationNetworkController;
 use App\Http\Controllers\TagController;
 use App\Http\Controllers\ChecklistItemController;
 use App\Http\Controllers\PekerjaanChecklistController;
+use App\Http\Controllers\Api\PengawasController;
 
 // Authentication Routes
 Route::post('auth/login', [AuthController::class, 'login']);
@@ -109,6 +110,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::apiResource('route-permissions', RoutePermissionController::class);
     Route::apiResource('menu-permissions', MenuPermissionController::class);
     Route::apiResource('tags', TagController::class);
+    Route::apiResource('pengawas', PengawasController::class);
     
     // Checklist Items (column management)
     Route::apiResource('checklist-items', ChecklistItemController::class);

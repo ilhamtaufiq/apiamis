@@ -59,14 +59,18 @@ class Pekerjaan extends Model
         'kecamatan_id',
         'desa_id',
         'kegiatan_id',
-        'pagu'
+        'pagu',
+        'pengawas_id',
+        'pendamping_id'
     ];
 
     protected $casts = [
         'pagu' => 'float',
         'kecamatan_id' => 'integer',
         'desa_id' => 'integer',
-        'kegiatan_id' => 'integer'
+        'kegiatan_id' => 'integer',
+        'pengawas_id' => 'integer',
+        'pendamping_id' => 'integer'
     ];
 
     /**
@@ -154,5 +158,21 @@ class Pekerjaan extends Model
         return $this->belongsToMany(ChecklistItem::class, 'pekerjaan_checklist', 'pekerjaan_id', 'checklist_item_id')
             ->withPivot(['is_checked', 'checked_at', 'checked_by', 'notes'])
             ->withTimestamps();
+    }
+
+    /**
+     * Relasi ke Pengawas (Utama)
+     */
+    public function pengawas(): BelongsTo
+    {
+        return $this->belongsTo(Pengawas::class, 'pengawas_id');
+    }
+
+    /**
+     * Relasi ke Pendamping
+     */
+    public function pendamping(): BelongsTo
+    {
+        return $this->belongsTo(Pengawas::class, 'pendamping_id');
     }
 }

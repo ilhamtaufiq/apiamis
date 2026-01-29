@@ -29,6 +29,8 @@ class PekerjaanDetailResource extends JsonResource
             'kecamatan_id' => $this->kecamatan_id,
             'desa_id' => $this->desa_id,
             'kegiatan_id' => $this->kegiatan_id,
+            'pengawas_id' => $this->pengawas_id,
+            'pendamping_id' => $this->pendamping_id,
             'assignment_sources' => (function() {
                 $user = auth()->user();
                 $sources = [];
@@ -44,6 +46,8 @@ class PekerjaanDetailResource extends JsonResource
             'kecamatan' => new KecamatanResource($this->whenLoaded('kecamatan')),
             'desa' => new DesaResource($this->whenLoaded('desa')),
             'kegiatan' => new KegiatanResource($this->whenLoaded('kegiatan')),
+            'pengawas' => new PengawasResource($this->whenLoaded('pengawas')),
+            'pendamping' => new PengawasResource($this->whenLoaded('pendamping')),
 
             // Tambahkan relasi baru foto dan berkas
             'foto' => FotoResource::collection($this->whenLoaded('foto')),
