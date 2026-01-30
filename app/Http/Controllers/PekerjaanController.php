@@ -69,6 +69,11 @@ class PekerjaanController extends Controller
                     $q->where('tbl_tags.id', $request->tag_id);
                 });
             }
+
+            // Filter by pengawas
+            if ($request->has('pengawas_id') && !empty($request->pengawas_id)) {
+                $query->where('pengawas_id', $request->pengawas_id);
+            }
             
             // Search functionality
             if ($request->has('search') && !empty($request->search)) {
