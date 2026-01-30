@@ -14,7 +14,7 @@ class PengawasController extends Controller
     public function index()
     {
         return PengawasResource::collection(
-            Pengawas::with(['pekerjaanAsPengawas', 'pekerjaanAsPendamping'])->get()
+            Pengawas::with(['pekerjaanAsPengawas'])->get()
         );
     }
 

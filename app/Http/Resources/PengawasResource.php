@@ -14,14 +14,14 @@ class PengawasResource extends JsonResource
      */
     public function toArray(Request $request): array
     {
-        // Combine pekerjaan where this person is pengawas or pendamping
-        $allPekerjaan = $this->pekerjaanAsPengawas->merge($this->pekerjaanAsPendamping);
+        // Only count pekerjaan where this person is the main pengawas
+        $pekerjaan = $this->pekerjaanAsPengawas;
         
         // Count unique kecamatan
-        $jumlahLokasi = $allPekerjaan->pluck('kecamatan_id')->unique()->filter()->count();
+        $jumlahLokasi = $pekerjaan->pluck('kecamatan_id')->unique()->filter()->count();
         
         // Sum pagu
-        $totalPagu = $allPekerjaan->sum('pagu');
+        $totalPagu = $pekerjaan->sum('pagu');
 
         return [
             'id' => $this->id,
