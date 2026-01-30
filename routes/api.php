@@ -110,6 +110,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::apiResource('route-permissions', RoutePermissionController::class);
     Route::apiResource('menu-permissions', MenuPermissionController::class);
     Route::apiResource('tags', TagController::class);
+    Route::get('pengawas/statistics', [PengawasController::class, 'statistics']);
     Route::apiResource('pengawas', PengawasController::class);
     
     // Checklist Items (column management)

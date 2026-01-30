@@ -192,5 +192,5 @@
   "C:\\laragon\\www\\apiamis\\database\\migrations\\2026_01_29_010917_create_pengawas_table.php": "518d320e40ecf374fd16cc09fd6862c2",
   "C:\\laragon\\www\\apiamis\\app\\Models\\Pengawas.php": "1b4b23ccbf5a4cae5a8d2d01560318cf",
   "C:\\laragon\\www\\apiamis\\app\\Http\\Resources\\PengawasResource.php": "ca70767f83f228bcee2c7bc8ad8660d5",
-  "C:\\laragon\\www\\apiamis\\app\\Http\\Controllers\\Api\\PengawasController.php": "04e51e4e4728a4988fd117d5596529cf"
+  "C:\\laragon\\www\\apiamis\\app\\Http\\Controllers\\Api\\PengawasController.php": "830572169542626e4953c2c92b922686"
 }
