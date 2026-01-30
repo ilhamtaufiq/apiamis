@@ -17,8 +17,8 @@ class PengawasResource extends JsonResource
         // Only count pekerjaan where this person is the main pengawas
         $pekerjaan = $this->pekerjaanAsPengawas;
         
-        // Count unique kecamatan
-        $jumlahLokasi = $pekerjaan->pluck('kecamatan_id')->unique()->filter()->count();
+        // Count total pekerjaan (paket pekerjaan)
+        $jumlahLokasi = $pekerjaan->count();
         
         // Sum pagu
         $totalPagu = $pekerjaan->sum('pagu');
