@@ -3,7 +3,8 @@
 - Goal: 
     1. Bypass "tahun anggaran" filter for assigned works (DONE).
     2. Add "Sub Kegiatan" column to Pekerjaan list page (DONE).
-    3. Add "Sub Kegiatan" filter to Pekerjaan list page (NOW).
+    3. Add "Sub Kegiatan" filter to Pekerjaan list page (DONE).
+    4. Implement Output photo checklist (0%, 25%, 50%, 75%, 100%) for communal/optional recipients (DONE).
 - Constraints/Assumptions:
     - Backend unification in `index()` allows multi-filtering.
 - Key decisions:
@@ -14,8 +15,8 @@
     - First two tasks completed.
     - Research for "Sub Kegiatan" filter completed.
     - Implementation plan for filter created.
-  - Now:
-    - Awaiting user approval for the filter plan.
+    - Implementation of "Sub Kegiatan" filter completed.
+    - Implementation of Foto checklist for all outputs completed.
   - Next:
     - Apply backend and frontend changes.
 - Open questions (UNCONFIRMED):
@@ -24,3 +25,5 @@
     - `c:\laragon\www\apiamis\app\Http\Controllers\PekerjaanController.php`
     - `c:\laragon\www\bun\src\features\pekerjaan\api\pekerjaan.ts`
     - `c:\laragon\www\bun\src\features\pekerjaan\components\PekerjaanList.tsx`
+    - `c:\laragon\www\bun\src\features\pekerjaan\components\FotoTabContent.tsx`
+    - `c:\laragon\www\bun\src\features\pekerjaan\components\EmbeddedOutputForm.tsx`
