@@ -175,4 +175,9 @@ class Pekerjaan extends Model
     {
         return $this->belongsTo(Pengawas::class, 'pendamping_id');
     }
+
+    public function draft(): \Illuminate\Database\Eloquent\Relations\HasOne
+    {
+        return $this->hasOne(DraftPekerjaan::class, 'pekerjaan_id');
+    }
 }

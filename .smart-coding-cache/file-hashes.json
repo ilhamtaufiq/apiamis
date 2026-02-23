@@ -5,7 +5,7 @@
   "C:\\laragon\\www\\apiamis\\package.json": "eac03e278a610f918e4264dfc9cd3b18",
   "C:\\laragon\\www\\apiamis\\HORIZION.md": "522e7fbfa5224f91c86405795f7249a9",
   "C:\\laragon\\www\\apiamis\\docker-entrypoint.sh": "f956cd6ba8d18bd72b5b93f0ddc9b958",
-  "C:\\laragon\\www\\apiamis\\CONTINUITY.md": "fa8f3846c207708f61c13f5f866a37af",
+  "C:\\laragon\\www\\apiamis\\CONTINUITY.md": "77593d91a52d398b066bbc82b4829116",
   "C:\\laragon\\www\\apiamis\\CHANGELOG.md": "ea0a86fdbf26776fd82eecc8db096c61",
   "C:\\laragon\\www\\apiamis\\tests\\TestCase.php": "7e567dc27e68d5b57bae16af07f68907",
   "C:\\laragon\\www\\apiamis\\storage\\tes-sync3.txt": "d41d8cd98f00b204e9800998ecf8427e",
@@ -16,7 +16,7 @@
   "C:\\laragon\\www\\apiamis\\routes\\web.php": "7fafeeaefa35e8369db551ddc0b99679",
   "C:\\laragon\\www\\apiamis\\storage\\from-kambing1.txt": "d41d8cd98f00b204e9800998ecf8427e",
   "C:\\laragon\\www\\apiamis\\routes\\console.php": "3c6ce2e6d16444282b24a9aa63885563",
-  "C:\\laragon\\www\\apiamis\\routes\\api.php": "5315b38ac8e717d61b554febe637176d",
+  "C:\\laragon\\www\\apiamis\\routes\\api.php": "4faa2b68872e425d758228c81c8ad454",
   "C:\\laragon\\www\\apiamis\\public\\robots.txt": "b6216d61c03e6ce0c9aea6ca7808f7ca",
   "C:\\laragon\\www\\apiamis\\public\\index.php": "d8eda274115af5fd2aaa8230af329ef7",
   "C:\\laragon\\www\\apiamis\\docs\\README.md": "f5abd42846a3111ffd641f4d2fd36483",
@@ -192,5 +192,8 @@
   "C:\\laragon\\www\\apiamis\\database\\migrations\\2026_01_29_010917_create_pengawas_table.php": "518d320e40ecf374fd16cc09fd6862c2",
   "C:\\laragon\\www\\apiamis\\app\\Models\\Pengawas.php": "08d14fd9fccc469a6a22c74e21b781c1",
   "C:\\laragon\\www\\apiamis\\app\\Http\\Resources\\PengawasResource.php": "4aa2d392106fc57c504145ac8b06fd2e",
-  "C:\\laragon\\www\\apiamis\\app\\Http\\Controllers\\Api\\PengawasController.php": "18e91c000bfe3fd21d06e1f838509082"
+  "C:\\laragon\\www\\apiamis\\app\\Http\\Controllers\\Api\\PengawasController.php": "18e91c000bfe3fd21d06e1f838509082",
+  "C:\\laragon\\www\\apiamis\\database\\migrations\\2026_02_23_064702_create_draft_pekerjaan_table.php": "086755826d9e3f0448c25a2204bbfecc",
+  "C:\\laragon\\www\\apiamis\\app\\Models\\DraftPekerjaan.php": "6e292e03337fb0c15af6eaf9a755b2e6",
+  "C:\\laragon\\www\\apiamis\\app\\Http\\Controllers\\DraftPekerjaanController.php": "f43a6fd05c199fb8c3cd73cb5b911551"
 }

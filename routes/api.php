@@ -35,6 +35,7 @@ use App\Http\Controllers\TagController;
 use App\Http\Controllers\ChecklistItemController;
 use App\Http\Controllers\PekerjaanChecklistController;
 use App\Http\Controllers\Api\PengawasController;
+use App\Http\Controllers\DraftPekerjaanController;
 
 // Authentication Routes
 Route::post('auth/login', [AuthController::class, 'login']);
@@ -112,6 +113,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::apiResource('tags', TagController::class);
     Route::get('pengawas/statistics', [PengawasController::class, 'statistics']);
     Route::apiResource('pengawas', PengawasController::class);
+    Route::apiResource('draft-pekerjaan', DraftPekerjaanController::class);
     
     // Checklist Items (column management)
     Route::apiResource('checklist-items', ChecklistItemController::class);
