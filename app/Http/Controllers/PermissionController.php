@@ -25,7 +25,10 @@ class PermissionController extends Controller
             'name' => 'required|string|unique:permissions,name',
         ]);
 
-        $permission = Permission::create(['name' => $validated['name']]);
+        $permission = Permission::firstOrCreate([
+            'name' => $validated['name'],
+            'guard_name' => 'web'
+        ]);
 
         return response()->json($permission, 201);
     }

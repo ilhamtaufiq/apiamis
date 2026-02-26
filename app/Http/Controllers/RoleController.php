@@ -26,7 +26,10 @@ class RoleController extends Controller
             'permissions' => 'sometimes|array',
         ]);
 
-        $role = Role::create(['name' => $validated['name']]);
+        $role = Role::firstOrCreate([
+            'name' => $validated['name'],
+            'guard_name' => 'web'
+        ]);
 
         if (isset($validated['permissions'])) {
             $role->syncPermissions($validated['permissions']);

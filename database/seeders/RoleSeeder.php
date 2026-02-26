@@ -14,12 +14,21 @@ class RoleSeeder extends Seeder
     public function run(): void
     {
         // Create default roles
-        $roles = ['user', 'operator'];
+        $roles = ['admin', 'tfl'];
         
         foreach ($roles as $roleName) {
             Role::firstOrCreate(['name' => $roleName]);
         }
         
+        // Assign admin role to specific user
+        $adminUser = \App\Models\User::where('email', 'ilhamtaufiq@gmail.com')->first();
+        if ($adminUser) {
+            $adminUser->syncRoles(['admin']);
+            $this->command->info('Assigned admin role to ilhamtaufiq@gmail.com');
+        } else {
+            $this->command->warn('User ilhamtaufiq@gmail.com not found for role assignment');
+        }
+
         $this->command->info('Default roles created: ' . implode(', ', $roles));
     }
 }

@@ -9,6 +9,13 @@ use Illuminate\Http\Request;
 
 class BeritaAcaraController extends Controller
 {
+    protected $baService;
+
+    public function __construct(\App\Services\BeritaAcaraService $baService)
+    {
+        $this->baService = $baService;
+    }
+
     /**
      * Get berita acara by pekerjaan ID
      */
@@ -22,6 +29,24 @@ class BeritaAcaraController extends Controller
         );
 
         return new BeritaAcaraResource($beritaAcara);
+    }
+
+    /**
+     * Generate next document number
+     */
+    public function generateNumber(Request $request)
+    {
+        $validated = $request->validate([
+            'type' => 'required|string|in:ba_lpp,stp_a,stp_b,ba_php,ba_stp',
+            'year' => 'nullable|integer'
+        ]);
+
+        $nomor = $this->baService->generateNextNumber(
+            $validated['type'], 
+            $validated['year'] ?? null
+        );
+
+        return response()->json(['nomor' => $nomor]);
     }
 
     /**

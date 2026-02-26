@@ -95,7 +95,7 @@
   "C:\\laragon\\www\\apiamis\\app\\Models\\Progress.php": "f69a706d0ff0a695f417e5780fc63c4a",
   "C:\\laragon\\www\\apiamis\\app\\Models\\Penyedia.php": "f25d6e7f63bed16364b709d2b2bced14",
   "C:\\laragon\\www\\apiamis\\app\\Models\\Penerima.php": "35d768612895b1b56c44198f92167e0a",
-  "C:\\laragon\\www\\apiamis\\app\\Models\\Pekerjaan.php": "fdac1657ab4f9b68eea9c4ba99f75141",
+  "C:\\laragon\\www\\apiamis\\app\\Models\\Pekerjaan.php": "434360f966e2cd16279a4144858f31b2",
   "C:\\laragon\\www\\apiamis\\app\\Models\\Output.php": "94f413695d4b7cd6aa2b7b9e826d9084",
   "C:\\laragon\\www\\apiamis\\app\\Models\\MenuPermission.php": "5f7f742d00417673d91d87290a33563e",
   "C:\\laragon\\www\\apiamis\\app\\Models\\Kontrak.php": "dca8f278cb714056ff5a3ea9ab61f60d",
@@ -120,7 +120,7 @@
   "C:\\laragon\\www\\apiamis\\docs\\todo\\0auth\\implementation_plan_0auth.md": "019ca6ecb47526c22359b00624b1a20e",
   "C:\\laragon\\www\\apiamis\\app\\Http\\Resources\\PenyediaResource.php": "988d0012caf5a9b8f934eed2d10595f8",
   "C:\\laragon\\www\\apiamis\\app\\Http\\Resources\\PenerimaResource.php": "55157bc9cab16f61e62a2721c08cb350",
-  "C:\\laragon\\www\\apiamis\\app\\Http\\Resources\\PekerjaanResource.php": "70af114b17abf52149aa5c700bf5d87b",
+  "C:\\laragon\\www\\apiamis\\app\\Http\\Resources\\PekerjaanResource.php": "1f2f9e710d17ee3935c6d15ce0cb5980",
   "C:\\laragon\\www\\apiamis\\app\\Http\\Resources\\OutputResource.php": "98b38b3dc62a1f3cee16e869be024512",
   "C:\\laragon\\www\\apiamis\\app\\Http\\Resources\\KontrakResource.php": "7035fd99082c51298403435fd2b9e06e",
   "C:\\laragon\\www\\apiamis\\app\\Http\\Resources\\PekerjaanDetailResource.php": "0eb2496a6425b4115f6a0bd20c551a5a",
@@ -194,6 +194,9 @@
   "C:\\laragon\\www\\apiamis\\app\\Http\\Resources\\PengawasResource.php": "4aa2d392106fc57c504145ac8b06fd2e",
   "C:\\laragon\\www\\apiamis\\app\\Http\\Controllers\\Api\\PengawasController.php": "18e91c000bfe3fd21d06e1f838509082",
   "C:\\laragon\\www\\apiamis\\database\\migrations\\2026_02_23_064702_create_draft_pekerjaan_table.php": "086755826d9e3f0448c25a2204bbfecc",
-  "C:\\laragon\\www\\apiamis\\app\\Models\\DraftPekerjaan.php": "6e292e03337fb0c15af6eaf9a755b2e6",
-  "C:\\laragon\\www\\apiamis\\app\\Http\\Controllers\\DraftPekerjaanController.php": "f43a6fd05c199fb8c3cd73cb5b911551"
+  "C:\\laragon\\www\\apiamis\\app\\Models\\DraftPekerjaan.php": "02c7d86df3a7efc8df4a0230d826531e",
+  "C:\\laragon\\www\\apiamis\\app\\Http\\Controllers\\DraftPekerjaanController.php": "eb1308a340f9883701d90d43c5703290",
+  "C:\\laragon\\www\\apiamis\\database\\migrations\\2026_02_23_144730_add_rup_paket_to_draft_pekerjaan_table.php": "da6b3128ecd97f47dec9bc302b9ad698",
+  "C:\\laragon\\www\\apiamis\\database\\migrations\\2026_02_23_144146_add_penyedia_id_to_draft_pekerjaan_table.php": "b1355836b5ea4aba76f4cf09cd57d5b7",
+  "C:\\laragon\\www\\apiamis\\app\\Http\\Resources\\DraftPekerjaanResource.php": "34563f099a54738f02bd8b4ef5dac6e4"
 }
