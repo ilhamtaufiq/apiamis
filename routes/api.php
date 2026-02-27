@@ -55,6 +55,17 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('auth/me', [AuthController::class, 'me']);
     Route::post('auth/impersonate/{user}', [AuthController::class, 'impersonate'])->middleware('role:admin');
 
+    // Custom routes - Pekerjaan
+    Route::get('pekerjaan/document-register', [PekerjaanController::class, 'documentRegister']);
+    Route::get('pekerjaan/kecamatan/{kecamatanId}', [PekerjaanController::class, 'byKecamatan']);
+    Route::get('pekerjaan/desa/{desaId}', [PekerjaanController::class, 'byDesa']);
+    Route::get('pekerjaan/kegiatan/{kegiatanId}', [PekerjaanController::class, 'byKegiatan']);
+    Route::get('pekerjaan/kecamatan/{kecamatanId}/desa/{desaId}', [PekerjaanController::class, 'byKecamatanDesa']);
+    Route::get('pekerjaan/stats/pagu-kecamatan/{kecamatanId}', [PekerjaanController::class, 'totalPaguByKecamatan']);
+    Route::get('pekerjaan/stats/pagu-kegiatan/{kegiatanId}', [PekerjaanController::class, 'totalPaguByKegiatan']);
+    Route::post('pekerjaan/import', [PekerjaanController::class, 'import']);
+    Route::get('pekerjaan/import/template', [PekerjaanController::class, 'downloadTemplate']);
+
     // Pekerjaan dengan role-based filtering
     Route::apiResource('pekerjaan', PekerjaanController::class);
     Route::get('pekerjaan/{pekerjaan}/media', [PekerjaanController::class, 'media']);
@@ -97,6 +108,12 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::apiResource('desa', DesaController::class);
     Route::apiResource('penyedia', PenyediaController::class);
     Route::apiResource('kegiatan', KegiatanController::class);
+    // Custom routes - Kontrak
+    Route::get('kontrak/generate-number', [KontrakController::class, 'generateNumber']);
+    Route::get('kontrak/pekerjaan/{pekerjaanId}', [KontrakController::class, 'byPekerjaan']);
+    Route::get('kontrak/kegiatan/{kegiatanId}', [KontrakController::class, 'byKegiatan']);
+    Route::get('kontrak/penyedia/{penyediaId}', [KontrakController::class, 'byPenyedia']);
+
     Route::apiResource('kontrak', KontrakController::class);
     Route::apiResource('penerima', PenerimaController::class);
     Route::apiResource('berkas', BerkasController::class)->parameters(['berkas' => 'berkas']);
@@ -127,22 +144,6 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('desa/kecamatan/{kecamatanId}', [DesaController::class, 'byKecamatan']);
     Route::get('kegiatan/tahun/{tahun}', [KegiatanController::class, 'byTahun']);
 
-    // Custom routes - Pekerjaan
-    Route::get('pekerjaan/kecamatan/{kecamatanId}', [PekerjaanController::class, 'byKecamatan']);
-    Route::get('pekerjaan/desa/{desaId}', [PekerjaanController::class, 'byDesa']);
-    Route::get('pekerjaan/kegiatan/{kegiatanId}', [PekerjaanController::class, 'byKegiatan']);
-    Route::get('pekerjaan/kecamatan/{kecamatanId}/desa/{desaId}', [PekerjaanController::class, 'byKecamatanDesa']);
-    Route::get('pekerjaan/stats/pagu-kecamatan/{kecamatanId}', [PekerjaanController::class, 'totalPaguByKecamatan']);
-    Route::get('pekerjaan/stats/pagu-kegiatan/{kegiatanId}', [PekerjaanController::class, 'totalPaguByKegiatan']);
-    Route::post('pekerjaan/import', [PekerjaanController::class, 'import']);
-    Route::get('pekerjaan/import/template', [PekerjaanController::class, 'downloadTemplate']);
-
-
-
-    // Custom routes - Kontrak
-    Route::get('kontrak/pekerjaan/{pekerjaanId}', [KontrakController::class, 'byPekerjaan']);
-    Route::get('kontrak/kegiatan/{kegiatanId}', [KontrakController::class, 'byKegiatan']);
-    Route::get('kontrak/penyedia/{penyediaId}', [KontrakController::class, 'byPenyedia']);
 
     //Output
     Route::apiResource('output', OutputController::class);

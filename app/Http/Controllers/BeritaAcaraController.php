@@ -38,12 +38,14 @@ class BeritaAcaraController extends Controller
     {
         $validated = $request->validate([
             'type' => 'required|string|in:ba_lpp,stp_a,stp_b,ba_php,ba_stp',
-            'year' => 'nullable|integer'
+            'year' => 'nullable|integer',
+            'pekerjaan_id' => 'nullable|integer|exists:tbl_pekerjaan,id'
         ]);
 
         $nomor = $this->baService->generateNextNumber(
             $validated['type'], 
-            $validated['year'] ?? null
+            $validated['year'] ?? null,
+            $validated['pekerjaan_id'] ?? null
         );
 
         return response()->json(['nomor' => $nomor]);

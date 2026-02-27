@@ -13,20 +13,6 @@ use Maatwebsite\Excel\Facades\Excel;
 
 class PekerjaanController extends Controller
 {
-    /**
-     * @OA\Get(
-     *      path="/api/pekerjaan",
-     *      operationId="getPekerjaanByRole",
-     *      tags={"Pekerjaan"},
-     *      summary="Get pekerjaan berdasarkan role user",
-     *      description="Otomatis filter pekerjaan berdasarkan kegiatan yang diizinkan untuk role user",
-     *      security={{"bearerAuth":{}}},
-     *      @OA\Response(
-     *          response=200,
-     *          description="Pekerjaan yang diizinkan untuk role user"
-     *      )
-     * )
-     */
     public function index(Request $request)
     {
         if (!auth()->check()) {
@@ -606,4 +592,52 @@ class PekerjaanController extends Controller
     {
         return Excel::download(new PekerjaanTemplateExport, 'template_import_pekerjaan.xlsx');
     }
+
+    /**
+     * Get register of all document numbers for monitoring
+     */
+    public function documentRegister(Request $request)
+    {
+        try {
+            $query = Pekerjaan::with(['kontrak.penyedia', 'beritaAcara', 'kegiatan'])
+                ->byUserRole();
+
+            if ($request->has('tahun') && $request->tahun) {
+                 $query->whereHas('kegiatan', function($q) use ($request) {
+                     $q->where('tahun_anggaran', $request->tahun);
+                 });
+            }
+
+            if ($request->has('search') && !empty($request->search)) {
+                $searchTerm = $request->search;
+                $query->where(function($q) use ($searchTerm) {
+                    $q->where('nama_paket', 'LIKE', '%' . $searchTerm . '%');
+                });
+            }
+
+            $perPage = (int) $request->get('per_page', 20);
+            
+            if ($perPage === -1) {
+                $data = $query->get();
+                return response()->json([
+                    'data' => $data,
+                    'meta' => [
+                        'total' => $data->count(),
+                    ]
+                ]);
+            }
+
+            $data = $query->paginate($perPage);
+            return response()->json($data);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'error' => 'Server Error',
+                'message' => $e->getMessage(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine()
+            ], 500);
+        }
+    }
 }
+

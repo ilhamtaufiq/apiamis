@@ -9,6 +9,35 @@ use Illuminate\Http\Request;
 
 class KontrakController extends Controller
 {
+    protected $docService;
+
+    public function __construct(\App\Services\BeritaAcaraService $docService)
+    {
+        $this->docService = $docService;
+    }
+
+    /**
+     * Generate next document number for contract related docs
+     */
+    public function generateNumber(Request $request)
+    {
+        $validated = $request->validate([
+            'type' => 'required|string|in:sppbj,spk,spmk',
+            'year' => 'nullable|integer',
+            'pekerjaan_id' => 'required|integer|exists:tbl_pekerjaan,id',
+            'kontrak_id' => 'nullable|integer'
+        ]);
+
+        $nomor = $this->docService->generateNextNumber(
+            $validated['type'], 
+            $validated['year'] ?? null,
+            $validated['pekerjaan_id'],
+            $validated['kontrak_id'] ?? null
+        );
+
+        return response()->json(['nomor' => $nomor]);
+    }
+
     public function index(Request $request)
     {
         $query = Kontrak::with('kegiatan', 'pekerjaan', 'penyedia');
