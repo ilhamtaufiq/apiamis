@@ -14,7 +14,7 @@ class BeritaAcaraService
      * @param int|null $year
      * @return string
      */
-    public function generateNextNumber(string $docType, ?int $year = null, ?int $pekerjaanId = null, ?int $kontrakId = null): string
+    public function generateNextNumber(string $docType, ?int $year = null, ?int $pekerjaanId = null, ?int $kontrakId = null, bool $saveToDb = true): string
     {
         // If year is not provided, try to resolve it from pekerjaanId
         if (!$year && $pekerjaanId) {
@@ -40,10 +40,17 @@ class BeritaAcaraService
                 ]);
             }
 
-            // Increment counter
-            $sequence->increment('last_number');
-            $n = str_pad($sequence->last_number, 2, '0', STR_PAD_LEFT);
-            $n3 = str_pad($sequence->last_number, 3, '0', STR_PAD_LEFT);
+            if ($saveToDb) {
+                // Increment counter permanently
+                $sequence->increment('last_number');
+                $nextNumber = $sequence->last_number;
+            } else {
+                // Just peek at the next number
+                $nextNumber = $sequence->last_number + 1;
+            }
+
+            $n = str_pad($nextNumber, 2, '0', STR_PAD_LEFT);
+            $n3 = str_pad($nextNumber, 3, '0', STR_PAD_LEFT);
 
             // Handle Kontrak ID for templates
             if (!$kontrakId && $pekerjaanId) {

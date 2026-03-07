@@ -9,11 +9,13 @@ use Illuminate\Http\Request;
 
 class KontrakController extends Controller
 {
-    protected $docService;
+    protected $baService;
+    protected $exportService;
 
-    public function __construct(\App\Services\BeritaAcaraService $docService)
+    public function __construct(\App\Services\BeritaAcaraService $baService, \App\Services\DocumentExportService $exportService)
     {
-        $this->docService = $docService;
+        $this->baService = $baService;
+        $this->exportService = $exportService;
     }
 
     /**
@@ -28,11 +30,12 @@ class KontrakController extends Controller
             'kontrak_id' => 'nullable|integer'
         ]);
 
-        $nomor = $this->docService->generateNextNumber(
+        $nomor = $this->baService->generateNextNumber(
             $validated['type'], 
             $validated['year'] ?? null,
             $validated['pekerjaan_id'],
-            $validated['kontrak_id'] ?? null
+            $validated['kontrak_id'] ?? null,
+            false // <--- NEVER SAVE DURING GENERATE PREVIEW
         );
 
         return response()->json(['nomor' => $nomor]);
@@ -89,6 +92,13 @@ class KontrakController extends Controller
         ]);
 
         $kontrak = Kontrak::create($validated);
+        
+        // Permanently commit the next sequence number now that it's successfully saved
+        $year = $request->tgl_sppbj 
+            ? date('Y', strtotime($request->tgl_sppbj)) 
+            : ($request->tgl_spk ? date('Y', strtotime($request->tgl_spk)) : date('Y'));
+        \App\Models\DocumentSequence::where('year', $year)->increment('last_number');
+        
         $kontrak->load('kegiatan', 'pekerjaan', 'penyedia');
         return new KontrakDetailResource($kontrak);
     }
@@ -148,5 +158,32 @@ class KontrakController extends Controller
     {
         $kontrak = Kontrak::where('id_penyedia', $penyediaId)->with('kegiatan', 'pekerjaan', 'penyedia')->paginate(20);
         return KontrakResource::collection($kontrak);
+    }
+
+    /**
+     * Export contract document
+     */
+    public function export(Request $request, $id)
+    {
+        // Try finding by direct contract ID first
+        $kontrak = Kontrak::find($id);
+        
+        // If not found, try finding by pekerjaan_id
+        if (!$kontrak) {
+             $kontrak = Kontrak::where('id_pekerjaan', $id)->latest()->first();
+        }
+
+        if (!$kontrak) {
+            return response()->json(['message' => 'Kontrak not found'], 404);
+        }
+
+        $pekerjaan = $kontrak->pekerjaan;
+        
+        try {
+            $path = $this->exportService->exportKontrak($pekerjaan);
+            return response()->download($path)->deleteFileAfterSend(true);
+        } catch (\Exception $e) {
+            return response()->json(['message' => 'Export failed: ' . $e->getMessage()], 500);
+        }
     }
 }

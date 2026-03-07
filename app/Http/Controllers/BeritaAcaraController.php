@@ -45,7 +45,9 @@ class BeritaAcaraController extends Controller
         $nomor = $this->baService->generateNextNumber(
             $validated['type'], 
             $validated['year'] ?? null,
-            $validated['pekerjaan_id'] ?? null
+            $validated['pekerjaan_id'] ?? null,
+            null,
+            false // <--- NEVER SAVE DURING GENERATE PREVIEW
         );
 
         return response()->json(['nomor' => $nomor]);
@@ -73,6 +75,11 @@ class BeritaAcaraController extends Controller
             'data.ba_stp.*.nomor' => 'required|string',
             'data.ba_stp.*.tanggal' => 'required|date',
         ]);
+
+        $beritaAcara = BeritaAcara::where('pekerjaan_id', $pekerjaanId)->first();
+        if (!$beritaAcara) {
+            \App\Models\DocumentSequence::where('year', date('Y'))->increment('last_number');
+        }
 
         $beritaAcara = BeritaAcara::updateOrCreate(
             ['pekerjaan_id' => $pekerjaanId],

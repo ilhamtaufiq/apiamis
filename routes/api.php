@@ -113,6 +113,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('kontrak/pekerjaan/{pekerjaanId}', [KontrakController::class, 'byPekerjaan']);
     Route::get('kontrak/kegiatan/{kegiatanId}', [KontrakController::class, 'byKegiatan']);
     Route::get('kontrak/penyedia/{penyediaId}', [KontrakController::class, 'byPenyedia']);
+    Route::get('kontrak/{id}/export', [KontrakController::class, 'export']);
 
     Route::apiResource('kontrak', KontrakController::class);
     Route::apiResource('penerima', PenerimaController::class);
