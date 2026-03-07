@@ -162,6 +162,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('progress/pekerjaan/{pekerjaanId}', [ProgressController::class, 'store']);
 
     // Berita Acara routes
+    Route::get('berita-acara/sequence', [BeritaAcaraController::class, 'getSequence']);
+    Route::post('berita-acara/sequence', [BeritaAcaraController::class, 'updateSequence']);
     Route::get('berita-acara/generate-number', [BeritaAcaraController::class, 'generateNumber']);
     Route::get('berita-acara/pekerjaan/{pekerjaanId}', [BeritaAcaraController::class, 'show']);
     Route::post('berita-acara/pekerjaan/{pekerjaanId}', [BeritaAcaraController::class, 'storeOrUpdate']);

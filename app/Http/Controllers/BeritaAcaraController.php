@@ -16,6 +16,31 @@ class BeritaAcaraController extends Controller
         $this->baService = $baService;
     }
 
+    public function getSequence(Request $request)
+    {
+        $year = $request->query('year', date('Y'));
+        $sequence = \App\Models\DocumentSequence::firstOrCreate(
+            ['year' => $year],
+            ['last_number' => 0]
+        );
+        return response()->json($sequence);
+    }
+
+    public function updateSequence(Request $request)
+    {
+        $validated = $request->validate([
+            'year' => 'required|integer',
+            'last_number' => 'required|integer|min:0'
+        ]);
+
+        $sequence = \App\Models\DocumentSequence::updateOrCreate(
+            ['year' => $validated['year']],
+            ['last_number' => $validated['last_number']]
+        );
+
+        return response()->json($sequence);
+    }
+
     /**
      * Get berita acara by pekerjaan ID
      */

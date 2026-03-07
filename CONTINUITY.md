@@ -25,6 +25,7 @@
     - Reverted all systems to HTTP mode (local dev).
     - Fixed Role/Permission guard mismatch and assigned admin role.
     - Updated `generateNumber` to preview numbers without saving to DB; counter now increments upon contract save.
+    - Added UI to RegisterDokumen to edit and manually update the document sequence `last_number` for each year.
     - Implemented Word Mail Merge feature using `PHPOffice/PHPWord`.
     - Created `DocumentExportService` for template processing.
     - Added "Export Word" button in `BeritaAcaraTabContent` UI.
