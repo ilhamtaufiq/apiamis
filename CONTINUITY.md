@@ -31,9 +31,9 @@
     - Added "Export Word" button in `BeritaAcaraTabContent` UI.
     - Added "Hapus" (delete) function in `RegisterDokumen.tsx` to delete Pekerjaan and its penomoran directly from the register.
   - Now:
-    - Feature implemented and ready for testing.
+    - Fixed "Undefined variable $saveToDb" in `BeritaAcaraService.php`.
   - Next:
-    - Verify with user if the placeholders mapping matches their expectations.
+    - Verify with user if the missing variable issue is resolved and everything functions as expected.
 - Open questions (UNCONFIRMED):
     - None.
 - Working set:

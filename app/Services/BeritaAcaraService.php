@@ -27,7 +27,7 @@ class BeritaAcaraService
         // Default to current year if still null
         $year = $year ?? (int) date('Y');
 
-        return DB::transaction(function () use ($docType, $year, $pekerjaanId, $kontrakId) {
+        return DB::transaction(function () use ($docType, $year, $pekerjaanId, $kontrakId, $saveToDb) {
             // Get or create sequence for the year and lock it
             $sequence = DocumentSequence::where('year', $year)
                 ->lockForUpdate()

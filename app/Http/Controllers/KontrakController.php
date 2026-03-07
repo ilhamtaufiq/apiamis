@@ -178,9 +178,10 @@ class KontrakController extends Controller
         }
 
         $pekerjaan = $kontrak->pekerjaan;
+        $format = $request->query('format', 'docx');
         
         try {
-            $path = $this->exportService->exportKontrak($pekerjaan);
+            $path = $this->exportService->exportKontrak($pekerjaan, null, $format);
             return response()->download($path)->deleteFileAfterSend(true);
         } catch (\Exception $e) {
             return response()->json(['message' => 'Export failed: ' . $e->getMessage()], 500);

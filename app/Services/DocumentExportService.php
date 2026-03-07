@@ -13,7 +13,7 @@ class DocumentExportService
     /**
      * Export Kontrak to Word
      */
-    public function exportKontrak(Pekerjaan $pekerjaan, string $templatePath = null)
+    public function exportKontrak(Pekerjaan $pekerjaan, string $templatePath = null, string $format = 'docx')
     {
         $templatePath = $templatePath ?: base_path('Template_Kontrak.docx');
 
@@ -60,6 +60,17 @@ class DocumentExportService
             'alamat_penyedia' => $penyedia ? $penyedia->alamat : '-',
             'bank' => $penyedia ? $penyedia->bank : '-',
             'norek' => $penyedia ? $penyedia->norek : '-',
+            'no_akta' => $penyedia ? $penyedia->no_akta : '-',
+            'notaris' => $penyedia ? $penyedia->notaris : '-',
+            'tanggal_akta' => $penyedia && $penyedia->tanggal_akta ? $penyedia->tanggal_akta->translatedFormat('d F Y') : '-',
+            
+            // Waktu & Masa Pelaksanaan
+            'masa_hari' => $kontrak && $kontrak->tgl_spmk && $kontrak->tgl_selesai 
+                ? (int) $kontrak->tgl_spmk->diffInDays($kontrak->tgl_selesai) + 1 
+                : '-',
+            'masa_hari_terbilang' => $kontrak && $kontrak->tgl_spmk && $kontrak->tgl_selesai 
+                ? $this->terbilang((int) $kontrak->tgl_spmk->diffInDays($kontrak->tgl_selesai) + 1) 
+                : '-',
         ];
 
         // Apply to template
@@ -76,6 +87,29 @@ class DocumentExportService
         }
 
         $templateProcessor->saveAs($tempPath);
+
+        if ($format === 'pdf') {
+            try {
+                \PhpOffice\PhpWord\Settings::setPdfRendererName(\PhpOffice\PhpWord\Settings::PDF_RENDERER_DOMPDF);
+                \PhpOffice\PhpWord\Settings::setPdfRendererPath(base_path('vendor/dompdf/dompdf'));
+                
+                $phpWord = \PhpOffice\PhpWord\IOFactory::load($tempPath);
+                
+                $pdfFileName = 'Kontrak_' . Str::slug($pekerjaan->nama_paket) . '.pdf';
+                $pdfPath = storage_path('app/public/temp/' . $pdfFileName);
+                
+                $pdfWriter = \PhpOffice\PhpWord\IOFactory::createWriter($phpWord, 'PDF');
+                $pdfWriter->save($pdfPath);
+                
+                if (file_exists($tempPath)) {
+                    unlink($tempPath);
+                }
+                
+                return $pdfPath;
+            } catch (\Exception $e) {
+                throw new \Exception("Gagal konversi ke PDF: " . $e->getMessage());
+            }
+        }
 
         return $tempPath;
     }
