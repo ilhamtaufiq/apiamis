@@ -15,6 +15,16 @@ class PenyediaController extends Controller
     {
         $query = Penyedia::query();
         
+        if ($request->filled('search')) {
+            $search = $request->search;
+            $query->where(function($q) use ($search) {
+                $q->where('nama', 'like', "%{$search}%")
+                  ->orWhere('direktur', 'like', "%{$search}%")
+                  ->orWhere('alamat', 'like', "%{$search}%")
+                  ->orWhere('notaris', 'like', "%{$search}%");
+            });
+        }
+
         // Support fetching all records for dropdown (per_page=-1)
         if ($request->has('per_page') && $request->per_page == -1) {
             return PenyediaResource::collection($query->get());
@@ -38,10 +48,22 @@ class PenyediaController extends Controller
             'tanggal_akta' => 'required|date',
             'alamat' => 'required|string|max:255',
             'bank' => 'nullable|string|max:255',
-            'norek' => 'nullable|string|max:255'
+            'norek' => 'nullable|string|max:255',
+            'dokumen' => 'nullable|array',
+            'dokumen.*' => 'nullable|file|max:51200',
         ]);
 
         $penyedia = Penyedia::create($validated);
+
+        if ($request->hasFile('dokumen')) {
+            foreach ($request->file('dokumen') as $file) {
+                $penyedia->addMedia($file)
+                    ->usingFileName(\Illuminate\Support\Str::uuid() . '.' . $file->getClientOriginalExtension())
+                    ->toMediaCollection('penyedia/dokumen');
+            }
+        }
+
+        $penyedia->load('media');
         return new PenyediaResource($penyedia);
     }
 
@@ -59,17 +81,35 @@ class PenyediaController extends Controller
     public function update(Request $request, Penyedia $penyedia)
     {
         $validated = $request->validate([
-            'nama' => 'nullable|string|max:255',
-            'direktur' => 'nullable|string|max:255',
-            'no_akta' => 'nullable|string|max:255',
-            'notaris' => 'nullable|string|max:255',
-            'tanggal_akta' => 'nullable|date',
-            'alamat' => 'nullable|string|max:255',
+            'nama' => 'required|string|max:255',
+            'direktur' => 'required|string|max:255',
+            'no_akta' => 'required|string|max:255',
+            'notaris' => 'required|string|max:255',
+            'tanggal_akta' => 'required|date',
+            'alamat' => 'required|string|max:255',
             'bank' => 'nullable|string|max:255',
-            'norek' => 'nullable|string|max:255'
+            'norek' => 'nullable|string|max:255',
+            'dokumen' => 'nullable|array',
+            'dokumen.*' => 'nullable|file|max:51200',
+            'delete_dokumen' => 'nullable|array',
+            'delete_dokumen.*' => 'nullable|integer',
         ]);
 
         $penyedia->update($validated);
+
+        if ($request->hasFile('dokumen')) {
+            foreach ($request->file('dokumen') as $file) {
+                $penyedia->addMedia($file)
+                    ->usingFileName(\Illuminate\Support\Str::uuid() . '.' . $file->getClientOriginalExtension())
+                    ->toMediaCollection('penyedia/dokumen');
+            }
+        }
+
+        if ($request->filled('delete_dokumen')) {
+            $penyedia->media()->whereIn('id', $request->input('delete_dokumen'))->delete();
+        }
+
+        $penyedia->load('media');
         return new PenyediaResource($penyedia);
     }
 

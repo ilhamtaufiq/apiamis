@@ -32,7 +32,7 @@ class BerkasController extends Controller
         $validated = $request->validate([
             'pekerjaan_id' => 'required|exists:tbl_pekerjaan,id',
             'jenis_dokumen' => 'required|string|max:255',
-            'file' => 'required|file|max:10240', // max 10MB
+            'file' => 'required|file|max:51200', // max 50MB
         ]);
 
         $berkas = Berkas::create([
@@ -62,7 +62,7 @@ class BerkasController extends Controller
         $validated = $request->validate([
             'pekerjaan_id' => 'nullable|exists:tbl_pekerjaan,id',
             'jenis_dokumen' => 'nullable|string|max:255',
-            'file' => 'nullable|file|max:10240',
+            'file' => 'nullable|file|max:51200', // max 50MB
         ]);
 
         $berkas->update($validated);

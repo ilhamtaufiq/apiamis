@@ -22,6 +22,15 @@ class PenyediaResource extends JsonResource
             'alamat' => $this->alamat,
             'bank' => $this->bank,
             'norek' => $this->norek,
+            'dokumen' => $this->getMedia('penyedia/dokumen')->map(function ($media) {
+                return [
+                    'id' => $media->id,
+                    'url' => $media->getUrl(),
+                    'name' => $media->file_name,
+                    'mime_type' => $media->mime_type,
+                    'size' => $media->size,
+                ];
+            }),
             'created_at' => $this->created_at?->toIso8601String(),
             'updated_at' => $this->updated_at?->toIso8601String(),
         ];
