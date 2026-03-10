@@ -20,5 +20,9 @@
     "version": "0.1.0",
     "dependencies": {
         "@ilhamtaufiq/rab-analyzer": "^1.0.0"
+    },
+    "optionalDependencies": {
+        "@rollup/rollup-linux-x64-gnu": "*",
+        "@esbuild/linux-x64": "*"
     }
 }
