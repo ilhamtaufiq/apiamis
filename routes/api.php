@@ -36,6 +36,8 @@ use App\Http\Controllers\ChecklistItemController;
 use App\Http\Controllers\PekerjaanChecklistController;
 use App\Http\Controllers\Api\PengawasController;
 use App\Http\Controllers\DraftPekerjaanController;
+use App\Http\Controllers\RABAnalyzerController;
+
 
 // Authentication Routes
 Route::post('auth/login', [AuthController::class, 'login']);
@@ -199,6 +201,10 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('simulation-networks/{id}/results', [SimulationNetworkController::class, 'saveResults']);
     Route::post('simulation-networks/{id}/duplicate', [SimulationNetworkController::class, 'duplicate']);
     Route::get('simulation-networks/pekerjaan/{pekerjaanId}', [SimulationNetworkController::class, 'byPekerjaan']);
+    
+    // RAB Analyzer
+    Route::post('analyze-rab', [RABAnalyzerController::class, 'analyze']);
 });
+
 
 

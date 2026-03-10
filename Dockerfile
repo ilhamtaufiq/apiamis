@@ -8,6 +8,10 @@ RUN apt-get update && apt-get install -y \
     git curl zip unzip \
     libpng-dev libjpeg-dev libfreetype6-dev \
     libonig-dev libxml2-dev libzip-dev \
+    python3 python3-pip python3-venv \
+    gnupg \
+    && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+    && apt-get install -y nodejs \
     && docker-php-ext-configure gd --with-freetype --with-jpeg \
     && docker-php-ext-install pdo_mysql mbstring exif pcntl bcmath gd zip \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
@@ -31,6 +35,8 @@ COPY . .
 
 # Run scripts and create storage directories
 RUN composer install --optimize-autoloader --no-dev --no-interaction \
+    && npm install \
+    && npm run build \
     && mkdir -p storage/framework/{cache/data,sessions,views} \
     && mkdir -p storage/logs \
     && mkdir -p bootstrap/cache

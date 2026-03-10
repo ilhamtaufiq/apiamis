@@ -1,0 +1,163 @@
+<?php
+
+namespace App\Http\Controllers;
+
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Process;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\Log;
+
+class RABAnalyzerController extends Controller
+{
+    public function analyze(Request $request)
+    {
+        $request->validate([
+            'file' => 'required_without:berkas_id|file|mimes:pdf,xlsx,xls',
+            'berkas_id' => 'required_without:file|integer|exists:tbl_berkas,id',
+        ]);
+
+        try {
+            if ($request->has('berkas_id')) {
+                $berkas = \App\Models\Berkas::findOrFail($request->berkas_id);
+                $media = $berkas->getFirstMedia('berkas/dokumen');
+                if (!$media) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Berkas tidak memiliki file fisik.'
+                    ], 404);
+                }
+                $fullPath = $media->getPath();
+                $isTemp = false;
+            } else {
+                $file = $request->file('file');
+                $originalName = $file->getClientOriginalName();
+                $filename = time() . '_' . $originalName;
+                
+                // Store in 'local' disk (storage/app/private as per config)
+                $path = $file->storeAs('temp-rab', $filename, 'local');
+                $fullPath = \Illuminate\Support\Facades\Storage::disk('local')->path($path);
+                $isTemp = true;
+            }
+
+            if (!file_exists($fullPath)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'File tidak ditemukan di server: ' . $fullPath
+                ], 404);
+            }
+
+            if (!Storage::disk('local')->exists('temp-rab')) {
+                Storage::disk('local')->makeDirectory('temp-rab');
+            }
+
+            // Run Node.js script
+            $scriptsPath = base_path('scripts/analyze-rab.js');
+            $result = Process::run("node \"$scriptsPath\" \"$fullPath\"");
+
+            if ($result->failed()) {
+                Log::error('RAB Analysis failed', [
+                    'error' => $result->errorOutput(),
+                    'output' => $result->output()
+                ]);
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Gagal menganalisis file: ' . $result->errorOutput()
+                ], 500);
+            }
+
+            $csvOutput = trim($result->output());
+            
+            // Sometimes output contains other logs, let's take the last line which should be the path
+            $lines = explode("\n", $csvOutput);
+            $csvPath = trim(end($lines));
+
+            if (!file_exists($csvPath)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Output CSV tidak ditemukan.'
+                ], 500);
+            }
+
+            // Parse CSV
+            $analysis = $this->parseRabCsv($csvPath);
+
+            // Cleanup
+            if ($isTemp) {
+                @unlink($fullPath);
+            }
+            @unlink($csvPath);
+
+            return response()->json([
+                'success' => true,
+                'data' => $analysis
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error('RAB Analysis exception: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Terjadi kesalahan sistem: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    private function parseRabCsv($path)
+    {
+        $items = [];
+        $documentTotal = 0;
+        $handle = fopen($path, "r");
+        
+        // Skip header
+        fgetcsv($handle);
+        
+        while (($data = fgetcsv($handle)) !== FALSE) {
+            if (count($data) < 7) continue;
+            
+            $no = trim($data[0] ?? '');
+            $item = trim($data[1] ?? '');
+            
+            if ($no === 'METADATA' && $item === 'GRAND_TOTAL') {
+                $documentTotal = $this->cleanNumber($data[6] ?? 0);
+                continue;
+            }
+
+            $satuan = trim($data[2] ?? '');
+            $vol = $this->cleanNumber($data[3] ?? 0);
+            $harga = $this->cleanNumber($data[4] ?? 0);
+            $total = $this->cleanNumber($data[6] ?? 0);
+
+            $isHeader = ($vol == 0 && $harga == 0 && $total == 0);
+            $type = $isHeader ? 'header' : 'item';
+
+            $items[] = [
+                'type' => $type,
+                'no' => $no,
+                'item' => $item,
+                'satuan' => $satuan,
+                'vol' => $vol,
+                'harga' => $harga,
+                'pajak' => '11%',
+                'total' => $total
+            ];
+        }
+        fclose($handle);
+
+        $extractedTotal = array_sum(array_column(array_filter($items, fn($i) => $i['type'] === 'item'), 'total'));
+
+        return [
+            'items' => $items,
+            'extractedTotal' => $extractedTotal,
+            'documentTotal' => $documentTotal,
+            'difference' => abs($extractedTotal - $documentTotal)
+        ];
+    }
+
+    private function cleanNumber($val)
+    {
+        if (is_numeric($val)) return (float)$val;
+        // Remove thousands separators and replace comma with dot
+        $val = str_replace('.', '', $val);
+        $val = str_replace(',', '.', $val);
+        return (float)filter_var($val, FILTER_SANITIZE_NUMBER_FLOAT, FILTER_FLAG_ALLOW_FRACTION);
+    }
+}
