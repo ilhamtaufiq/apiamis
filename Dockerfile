@@ -33,13 +33,15 @@ WORKDIR /var/www/html
 COPY composer.json composer.lock ./
 RUN composer install --optimize-autoloader --no-dev --no-interaction --no-scripts
 
+# Cache npm dependencies
+COPY package.json package-lock.json ./
+RUN npm install
+
 # Copy the rest of the application
 COPY . .
 
-# Final dependency installation and build
-RUN composer install --optimize-autoloader --no-dev --no-interaction --no-scripts \
-    && npm install \
-    && npm run build \
+# Final build
+RUN npm run build \
     && mkdir -p storage/framework/{cache/data,sessions,views} \
     && mkdir -p storage/logs \
     && mkdir -p bootstrap/cache
