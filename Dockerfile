@@ -3,18 +3,21 @@ FROM php:8.3-apache
 # Enable Apache rewrite
 RUN a2enmod rewrite
 
-# Install dependencies
+# Install system dependencies
 RUN apt-get update && apt-get install -y \
     git curl zip unzip \
     libpng-dev libjpeg-dev libfreetype6-dev \
-    libonig-dev libxml2-dev libzip-dev \
-    python3 python3-pip python3-venv \
+    libonig-dev libxml2-dev libzip-dev libicu-dev \
+    python3 python3-pip python3-venv build-essential \
     gnupg \
     && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
     && apt-get install -y nodejs \
     && docker-php-ext-configure gd --with-freetype --with-jpeg \
-    && docker-php-ext-install pdo_mysql mbstring exif pcntl bcmath gd zip \
+    && docker-php-ext-install pdo_mysql mbstring exif pcntl bcmath gd zip intl \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
+
+# Install Python requirements for RAB analyzer globally for system-wide access
+RUN pip3 install --no-cache-dir pandas pdfplumber openpyxl --break-system-packages
 
 # Set PHP configuration for file uploads
 RUN echo "upload_max_filesize = 50M" > /usr/local/etc/php/conf.d/uploads.ini \
@@ -33,8 +36,8 @@ RUN composer install --optimize-autoloader --no-dev --no-interaction --no-script
 # Copy the rest of the application
 COPY . .
 
-# Run scripts and create storage directories
-RUN composer install --optimize-autoloader --no-dev --no-interaction \
+# Final dependency installation and build
+RUN composer install --optimize-autoloader --no-dev --no-interaction --no-scripts \
     && npm install \
     && npm run build \
     && mkdir -p storage/framework/{cache/data,sessions,views} \
