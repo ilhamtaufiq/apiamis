@@ -30,10 +30,11 @@
     - Created `DocumentExportService` for template processing.
     - Added "Export Word" button in `BeritaAcaraTabContent` UI.
     - Added "Hapus" (delete) function in `RegisterDokumen.tsx` to delete Pekerjaan and its penomoran directly from the register.
+    - Removed `bun.lock` and standardized `apiamis` to use `npm` only (preventing lockfile inconsistency).
   - Now:
-    - Fixed "Undefined variable $saveToDb" in `BeritaAcaraService.php`.
+    - Verifying if user wants to standardize the `bun` project (frontend) as well.
   - Next:
-    - Verify with user if the missing variable issue is resolved and everything functions as expected.
+    - Monitor for any other package manager inconsistencies.
 - Open questions (UNCONFIRMED):
     - None.
 - Working set:
