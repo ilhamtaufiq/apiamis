@@ -31,6 +31,8 @@
     - Added "Export Word" button in `BeritaAcaraTabContent` UI.
     - Added "Hapus" (delete) function in `RegisterDokumen.tsx` to delete Pekerjaan and its penomoran directly from the register.
     - Fixed Vite/Rollup deployment error in Docker by adding necessary Linux binaries to `optionalDependencies` and optimizing `Dockerfile` layers.
+    - Fixed RAB Analyzer UI: solved file upload pop-up blockage, added full drag-and-drop support.
+    - Improved RAB Backend: enhanced `cleanNumber` for international formats, added `summary` row detection to prevent double-counting, and added troubleshooting logs.
   - Now:
     - Ready for re-deployment.
   - Next:
@@ -42,4 +44,6 @@
     - `c:\laragon\www\apiamis\app\Http\Controllers\KontrakController.php`
     - `c:\laragon\www\bun\src\features\pekerjaan\components\BeritaAcaraTabContent.tsx`
     - `c:\laragon\www\bun\src\features\pekerjaan\components\RegisterDokumen.tsx`
+    - `c:\laragon\www\bun\src\features\rab-analyzer\components\RabAnalyzer.tsx`
+    - `c:\laragon\www\apiamis\app\Http\Controllers\RABAnalyzerController.php`
 

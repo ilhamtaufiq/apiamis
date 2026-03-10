@@ -79,7 +79,12 @@ class RABAnalyzerController extends Controller
             }
 
             // Parse CSV
+            Log::info('RAB Analysis raw output: ' . $csvOutput);
             $analysis = $this->parseRabCsv($csvPath);
+            Log::info('RAB Analysis result metadata', [
+                'extractedTotal' => $analysis['extractedTotal'],
+                'documentTotal' => $analysis['documentTotal']
+            ]);
 
             // Cleanup
             if ($isTemp) {
@@ -126,8 +131,13 @@ class RABAnalyzerController extends Controller
             $harga = $this->cleanNumber($data[4] ?? 0);
             $total = $this->cleanNumber($data[6] ?? 0);
 
+            $itemLower = strtolower($item);
+            $isSummary = str_contains($itemLower, 'total') || str_contains($itemLower, 'jumlah') || str_contains($itemLower, 'grand total');
             $isHeader = ($vol == 0 && $harga == 0 && $total == 0);
-            $type = $isHeader ? 'header' : 'item';
+            
+            $type = 'item';
+            if ($isSummary) $type = 'summary';
+            elseif ($isHeader) $type = 'header';
 
             $items[] = [
                 'type' => $type,
@@ -155,9 +165,45 @@ class RABAnalyzerController extends Controller
     private function cleanNumber($val)
     {
         if (is_numeric($val)) return (float)$val;
-        // Remove thousands separators and replace comma with dot
-        $val = str_replace('.', '', $val);
-        $val = str_replace(',', '.', $val);
-        return (float)filter_var($val, FILTER_SANITIZE_NUMBER_FLOAT, FILTER_FLAG_ALLOW_FRACTION);
+        if (!$val) return 0;
+
+        // Remove whitespace and currency symbols
+        $val = trim($val);
+        $val = preg_replace('/[^\d.,\-]/', '', $val);
+
+        // Detect format: 1.234,56 (ID) vs 1,234.56 (EN)
+        $dotPos = strrpos($val, '.');
+        $commaPos = strrpos($val, ',');
+
+        if ($dotPos !== false && $commaPos !== false) {
+            if ($dotPos < $commaPos) {
+                // ID format: 1.234,56
+                $val = str_replace('.', '', $val);
+                $val = str_replace(',', '.', $val);
+            } else {
+                // EN format: 1,234.56
+                $val = str_replace(',', '', $val);
+            }
+        } elseif ($commaPos !== false) {
+            // Only comma: 1,234 or 1234,56
+            // If it's the last character or followed by exactly 2 digits, it might be decimal
+            // But let's check if there are other commas
+            if (substr_count($val, ',') > 1) {
+                // Thousands
+                $val = str_replace(',', '', $val);
+            } else {
+                // Probably decimal (ID)
+                $val = str_replace(',', '.', $val);
+            }
+        } elseif ($dotPos !== false) {
+            // Only dot: 1.234 or 1234.56
+            if (substr_count($val, '.') > 1) {
+                // Thousands
+                $val = str_replace('.', '', $val);
+            }
+            // else: standard float or thousands, keep as is for float
+        }
+
+        return (float)$val;
     }
 }

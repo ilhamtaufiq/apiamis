@@ -22,11 +22,11 @@
         "@ilhamtaufiq/rab-analyzer": "^1.0.0"
     },
     "optionalDependencies": {
-        "@rollup/rollup-linux-x64-gnu": "*",
         "@esbuild/linux-x64": "*",
-        "lightningcss-linux-x64-gnu": "*",
-        "lightningcss-linux-x64-musl": "*",
+        "@rollup/rollup-linux-x64-gnu": "*",
         "@tailwindcss/oxide-linux-x64-gnu": "*",
-        "@tailwindcss/oxide-linux-x64-musl": "*"
+        "@tailwindcss/oxide-linux-x64-musl": "*",
+        "lightningcss-linux-x64-gnu": "*",
+        "lightningcss-linux-x64-musl": "*"
     }
 }
