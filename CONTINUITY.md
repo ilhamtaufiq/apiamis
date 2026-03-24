@@ -33,10 +33,11 @@
     - Fixed Vite/Rollup deployment error in Docker by adding necessary Linux binaries to `optionalDependencies` and optimizing `Dockerfile` layers.
     - Fixed RAB Analyzer UI: solved file upload pop-up blockage, added full drag-and-drop support.
     - Improved RAB Backend: enhanced `cleanNumber` for international formats, added `summary` row detection to prevent double-counting, and added troubleshooting logs.
+    - Verified `@ilhamtaufiq/rab-analyzer` version: Latest is `1.1.0`, local is `1.0.0`.
   - Now:
-    - Ready for re-deployment.
+    - Informing user about the version discrepancy.
   - Next:
-    - Monitor for any other package manager inconsistencies.
+    - Update `@ilhamtaufiq/rab-analyzer` to `1.1.0` if requested.
 - Open questions (UNCONFIRMED):
     - None.
 - Working set:

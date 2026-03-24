@@ -41,7 +41,7 @@ cp .env.example .env
 VITE_API_URL=http://apiamis.test/api
 
 # Production
-# VITE_API_URL=https://apiamis.ilham.wtf/api
+# VITE_API_URL=https://apiamis.cianjur.space/api
 ```
 
 ---
@@ -199,7 +199,7 @@ docker build -t arumanis-frontend .
 docker run -d \
   --name arumanis \
   -p 80:80 \
-  -e VITE_API_URL=https://apiamis.ilham.wtf/api \
+  -e VITE_API_URL=https://apiamis.cianjur.space/api \
   arumanis-frontend
 ```
 

@@ -128,7 +128,7 @@ return [
     'allowed_origins' => [
         'http://arumanis.test',
         'http://localhost:5173',
-        'https://arumanis.ilham.wtf'
+        'https://arumanis.cianjur.space'
     ],
     'allowed_origins_patterns' => [],
     'allowed_headers' => ['*'],

@@ -4,7 +4,7 @@
 
 Base URL:
 - **Development**: `http://apiamis.test/api`
-- **Production**: `https://apiamis.ilham.wtf/api`
+- **Production**: `https://apiamis.cianjur.space/api`
 
 ---
 

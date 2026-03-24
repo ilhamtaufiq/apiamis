@@ -15,13 +15,13 @@ Implement Google OAuth authentication and user registration for APIAMIS backend.
 > 5. Create OAuth 2.0 Client ID (Web application)
 > 6. Add authorized redirect URIs:
 >    - Development: `http://apiamis.test/api/auth/google/callback`
->    - Production: `https://apiamis.ilham.wtf/api/auth/google/callback`
+>    - Production: `https://apiamis.cianjur.space/api/auth/google/callback`
 
 > [!CAUTION]
 > **New Users Role Assignment**
 > New users registered via Google OAuth will be assigned a default role. Please confirm:
 > - What role should new Google OAuth users receive? (e.g., `user`, `viewer`, or no role)
-> - Should there be email domain restrictions? (e.g., only `@ilham.wtf` emails)
+> - Should there be email domain restrictions? (e.g., only `@cianjur.space` emails)
 
 ---
 

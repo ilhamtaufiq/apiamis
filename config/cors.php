@@ -28,9 +28,9 @@ return [
         'https://arumanis.test',
         'http://bun.test',
         'https://bun.test',
-        'https://arumanis.ilham.wtf',
-        'https://bun.ilham.wtf',
-        'https://apiamis.ilham.wtf',
+        'https://arumanis.cianjur.space',
+        'https://bun.cianjur.space',
+        'https://apiamis.cianjur.space',
     ],
 
     'allowed_origins_patterns' => [],

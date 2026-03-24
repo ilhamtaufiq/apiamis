@@ -11410,7 +11410,7 @@ DELETE FROM `users`;
 INSERT INTO `users` (`id`, `google_id`, `name`, `email`, `avatar`, `email_verified_at`, `password`, `remember_token`, `created_at`, `updated_at`) VALUES
 	(5, NULL, 'Ilham', 'ilhamtaufiq@gmail.com', NULL, NULL, '$2y$12$QssJm6s/.A1Q2B2il4PHz.femPlcqGrZ8eP9wri0hRjdboQwsa4Dm', NULL, '2025-12-05 00:30:49', '2025-12-05 00:30:49'),
 	(6, NULL, 'TFL', 'bidangams@gmail.com', NULL, NULL, '$2y$12$EPbnGtwsUuYpMK65DlUhi.4TEpr4FWUbiU1b7pCBSzG/IhgFUabL6', NULL, '2025-12-05 01:31:08', '2025-12-05 01:31:08'),
-	(7, NULL, 'John Doe', 'oui@ilham.wtf', NULL, NULL, '$2y$12$ji3dvGA8CkKkZVdSevwzkeWy7xxI3N6janrnFzJUuyQmvfH5.fGMq', NULL, '2025-12-25 01:13:30', '2025-12-25 01:13:30');
+	(7, NULL, 'John Doe', 'oui@cianjur.space', NULL, NULL, '$2y$12$ji3dvGA8CkKkZVdSevwzkeWy7xxI3N6janrnFzJUuyQmvfH5.fGMq', NULL, '2025-12-25 01:13:30', '2025-12-25 01:13:30');
 
 -- membuang struktur untuk table apiamis.user_pekerjaan
 CREATE TABLE IF NOT EXISTS `user_pekerjaan` (
