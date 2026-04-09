@@ -14,7 +14,21 @@ use Illuminate\Support\Facades\Validator;
 class TiketCommentController extends Controller
 {
     /**
-     * Store a newly created resource in storage.
+     * @OA\Post(
+     *     path="/api/tiket/{tiket}/comments",
+     *     summary="Add comment to a ticket",
+     *     tags={"Support Tickets"},
+     *     security={{"bearerAuth":{}}, {"apiKeyAuth":{}}},
+     *     @OA\Parameter(name="tiket", in="path", required=true, @OA\Schema(type="integer")),
+     *     @OA\RequestBody(
+     *         required=true,
+     *         @OA\JsonContent(
+     *             required={"message"},
+     *             @OA\Property(property="message", type="string")
+     *         )
+     *     ),
+     *     @OA\Response(response=201, description="Comment added")
+     * )
      */
     public function store(Request $request, Tiket $tiket)
     {

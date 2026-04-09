@@ -18,7 +18,9 @@ class AuthController extends Controller
      */
     public function redirectToGoogle()
     {
-        $url = Socialite::driver('google')->stateless()->redirect()->getTargetUrl();
+        /** @var \Laravel\Socialite\Two\AbstractProvider $driver */
+        $driver = Socialite::driver('google');
+        $url = $driver->stateless()->redirect()->getTargetUrl();
         return response()->json(['url' => $url]);
     }
 
@@ -26,7 +28,7 @@ class AuthController extends Controller
      * Handle Google OAuth callback
      * 
      * @param Request $request
-     * @return \Illuminate\Http\JsonResponse
+     * @return \Illuminate\Http\RedirectResponse
      */
     public function handleGoogleCallback(Request $request)
     {
@@ -34,7 +36,9 @@ class AuthController extends Controller
         $frontendUrl = env('FRONTEND_URL', 'http://arumanis.test');
         
         try {
-            $googleUser = Socialite::driver('google')->stateless()->user();
+            /** @var \Laravel\Socialite\Two\AbstractProvider $driver */
+            $driver = Socialite::driver('google');
+            $googleUser = $driver->stateless()->user();
             
             $user = User::updateOrCreate(
                 ['email' => $googleUser->getEmail()],
@@ -75,10 +79,29 @@ class AuthController extends Controller
     }
 
     /**
-     * Handle user login
-     * 
-     * @param Request $request
-     * @return \Illuminate\Http\JsonResponse
+     * @OA\Post(
+     *     path="/api/auth/login",
+     *     summary="User login",
+     *     description="Authenticate user with email and password to receive a Bearer token",
+     *     tags={"Authentication"},
+     *     @OA\RequestBody(
+     *         required=true,
+     *         @OA\JsonContent(
+     *             required={"email", "password"},
+     *             @OA\Property(property="email", type="string", format="email", example="admin@example.com"),
+     *             @OA\Property(property="password", type="string", format="password", example="password")
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=200,
+     *         description="Login successful",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="user", type="object"),
+     *             @OA\Property(property="token", type="string", example="1|abc123yourtoken")
+     *         )
+     *     ),
+     *     @OA\Response(response=422, description="Validation error")
+     * )
      */
     public function login(Request $request)
     {
@@ -108,10 +131,21 @@ class AuthController extends Controller
     }
 
     /**
-     * Handle user logout
-     * 
-     * @param Request $request
-     * @return \Illuminate\Http\JsonResponse
+     * @OA\Post(
+     *     path="/api/auth/logout",
+     *     summary="User logout",
+     *     description="Revoke current authenticated user's token",
+     *     tags={"Authentication"},
+     *     security={{"bearerAuth":{}}},
+     *     @OA\Response(
+     *         response=200,
+     *         description="Logged out successfully",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="message", type="string", example="Logged out successfully")
+     *         )
+     *     ),
+     *     @OA\Response(response=401, description="Unauthenticated")
+     * )
      */
     public function logout(Request $request)
     {
@@ -124,10 +158,18 @@ class AuthController extends Controller
     }
 
     /**
-     * Get authenticated user
-     * 
-     * @param Request $request
-     * @return UserResource
+     * @OA\Get(
+     *     path="/api/auth/me",
+     *     summary="Get authenticated user detail",
+     *     description="Returns detailed information about the currently authenticated user including roles and permissions",
+     *     tags={"Authentication"},
+     *     security={{"bearerAuth":{}}},
+     *     @OA\Response(
+     *         response=200,
+     *         description="User profile retrieved successfully"
+     *     ),
+     *     @OA\Response(response=401, description="Unauthenticated")
+     * )
      */
     public function me(Request $request)
     {
@@ -135,11 +177,31 @@ class AuthController extends Controller
     }
 
     /**
-     * Impersonate a user (Admin only)
-     * 
-     * @param Request $request
-     * @param User $user
-     * @return \Illuminate\Http\JsonResponse
+     * @OA\Post(
+     *     path="/api/auth/impersonate/{user}",
+     *     summary="Impersonate a user (Admin only)",
+     *     description="Generate a session token for another user to act on their behalf",
+     *     tags={"Authentication"},
+     *     security={{"bearerAuth":{}}},
+     *     @OA\Parameter(
+     *         name="user",
+     *         in="path",
+     *         required=true,
+     *         description="ID of the user to impersonate",
+     *         @OA\Schema(type="integer")
+     *     ),
+     *     @OA\Response(
+     *         response=200,
+     *         description="Impersonation token created",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="user", type="object"),
+     *             @OA\Property(property="token", type="string"),
+     *             @OA\Property(property="message", type="string")
+     *         )
+     *     ),
+     *     @OA\Response(response=403, description="Forbidden/Unauthorized"),
+     *     @OA\Response(response=422, description="Cannot impersonate yourself")
+     * )
      */
     public function impersonate(Request $request, User $user)
     {

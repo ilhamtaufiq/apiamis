@@ -9,7 +9,13 @@ use Illuminate\Http\Request;
 class DashboardController extends Controller
 {
     /**
-     * Get dashboard statistics
+     * @OA\Get(
+     *     path="/api/dashboard/stats",
+     *     summary="Get dashboard statistics",
+     *     tags={"Dashboard"},
+     *     @OA\Parameter(name="tahun", in="query", required=false, @OA\Schema(type="integer")),
+     *     @OA\Response(response=200, description="Successful operation")
+     * )
      */
     public function stats(Request $request)
     {

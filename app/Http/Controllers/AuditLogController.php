@@ -8,10 +8,16 @@ use Illuminate\Http\Request;
 class AuditLogController extends Controller
 {
     /**
-     * Display a listing of the audit logs.
-     *
-     * @param  \Illuminate\Http\Request  $request
-     * @return \Illuminate\Http\Response
+     * @OA\Get(
+     *     path="/api/audit-logs",
+     *     summary="List all audit logs",
+     *     tags={"Audit Logs"},
+     *     security={{"bearerAuth":{}}, {"apiKeyAuth":{}}},
+     *     @OA\Parameter(name="type", in="query", required=false, @OA\Schema(type="string")),
+     *     @OA\Parameter(name="event", in="query", required=false, @OA\Schema(type="string")),
+     *     @OA\Parameter(name="user_id", in="query", required=false, @OA\Schema(type="integer")),
+     *     @OA\Response(response=200, description="Successful operation")
+     * )
      */
     public function index(Request $request)
     {
@@ -48,12 +54,16 @@ class AuditLogController extends Controller
     }
 
     /**
-     * Display the specified audit log.
-     *
-     * @param  \App\Models\AuditLog  $auditLog
-     * @return \Illuminate\Http\Response
+     * @OA\Get(
+     *     path="/api/audit-logs/{id}",
+     *     summary="Get audit log detail",
+     *     tags={"Audit Logs"},
+     *     security={{"bearerAuth":{}}, {"apiKeyAuth":{}}},
+     *     @OA\Parameter(name="id", in="path", required=true, @OA\Schema(type="integer")),
+     *     @OA\Response(response=200, description="Successful operation")
+     * )
      */
-    public function show(AuditLog $auditLog)
+    public function show(AuditLog $auditLog): \Illuminate\Http\JsonResponse
     {
         return response()->json([
             'success' => true,

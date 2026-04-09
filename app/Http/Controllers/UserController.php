@@ -9,11 +9,38 @@ use Spatie\Permission\Models\Permission;
 
 class UserController extends Controller
 {
+    /**
+     * @OA\Get(
+     *     path="/api/users",
+     *     summary="List all users",
+     *     tags={"User Management"},
+     *     security={{"bearerAuth":{}}},
+     *     @OA\Response(response=200, description="Successful operation")
+     * )
+     */
     public function index()
     {
         return User::with('roles', 'permissions')->paginate(15);
     }
 
+    /**
+     * @OA\Post(
+     *     path="/api/users",
+     *     summary="Create new user",
+     *     tags={"User Management"},
+     *     security={{"bearerAuth":{}}},
+     *     @OA\RequestBody(
+     *         required=true,
+     *         @OA\JsonContent(
+     *             required={"name", "email", "password"},
+     *             @OA\Property(property="name", type="string"),
+     *             @OA\Property(property="email", type="string", format="email"),
+     *             @OA\Property(property="password", type="string", minLength=6)
+     *         )
+     *     ),
+     *     @OA\Response(response=201, description="User created")
+     * )
+     */
     public function store(Request $request)
     {
         $validated = $request->validate([
@@ -45,11 +72,31 @@ class UserController extends Controller
         return response()->json($user->load('roles', 'permissions'), 201);
     }
 
+    /**
+     * @OA\Get(
+     *     path="/api/users/{id}",
+     *     summary="Get user detail",
+     *     tags={"User Management"},
+     *     security={{"bearerAuth":{}}},
+     *     @OA\Parameter(name="id", in="path", required=true, @OA\Schema(type="integer")),
+     *     @OA\Response(response=200, description="Successful operation")
+     * )
+     */
     public function show(User $user)
     {
         return $user->load('roles', 'permissions');
     }
 
+    /**
+     * @OA\Put(
+     *     path="/api/users/{id}",
+     *     summary="Update user",
+     *     tags={"User Management"},
+     *     security={{"bearerAuth":{}}},
+     *     @OA\Parameter(name="id", in="path", required=true, @OA\Schema(type="integer")),
+     *     @OA\Response(response=200, description="User updated")
+     * )
+     */
     public function update(Request $request, User $user)
     {
         $validated = $request->validate([
@@ -80,6 +127,16 @@ class UserController extends Controller
         return response()->json($user->load('roles', 'permissions'));
     }
 
+    /**
+     * @OA\Delete(
+     *     path="/api/users/{id}",
+     *     summary="Delete user",
+     *     tags={"User Management"},
+     *     security={{"bearerAuth":{}}},
+     *     @OA\Parameter(name="id", in="path", required=true, @OA\Schema(type="integer")),
+     *     @OA\Response(response=200, description="User deleted")
+     * )
+     */
     public function destroy(User $user)
     {
         $user->delete();

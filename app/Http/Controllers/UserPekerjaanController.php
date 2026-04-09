@@ -11,7 +11,12 @@ use Illuminate\Support\Facades\DB;
 class UserPekerjaanController extends Controller
 {
     /**
-     * List semua assignments
+     * @OA\Get(
+     *     path="/api/user-pekerjaan",
+     *     summary="List all user-pekerjaan assignments",
+     *     tags={"Access Control (User-Pekerjaan Assignment)"},
+     *     @OA\Response(response=200, description="Successful operation")
+     * )
      */
     public function index()
     {
@@ -38,7 +43,21 @@ class UserPekerjaanController extends Controller
     }
 
     /**
-     * Assign user ke pekerjaan
+     * @OA\Post(
+     *     path="/api/user-pekerjaan",
+     *     summary="Assign user to multiple pekerjaan",
+     *     tags={"Access Control (User-Pekerjaan Assignment)"},
+     *     security={{"bearerAuth":{}}, {"apiKeyAuth":{}}},
+     *     @OA\RequestBody(
+     *         required=true,
+     *         @OA\JsonContent(
+     *             required={"user_id", "pekerjaan_ids"},
+     *             @OA\Property(property="user_id", type="integer"),
+     *             @OA\Property(property="pekerjaan_ids", type="array", @OA\Items(type="integer"))
+     *         )
+     *     ),
+     *     @OA\Response(response=201, description="Assigned")
+     * )
      */
     public function store(Request $request)
     {
@@ -69,7 +88,14 @@ class UserPekerjaanController extends Controller
     }
 
     /**
-     * Remove assignment
+     * @OA\Delete(
+     *     path="/api/user-pekerjaan/{id}",
+     *     summary="Remove assignment",
+     *     tags={"Access Control (User-Pekerjaan Assignment)"},
+     *     security={{"bearerAuth":{}}, {"apiKeyAuth":{}}},
+     *     @OA\Parameter(name="id", in="path", required=true, @OA\Schema(type="integer")),
+     *     @OA\Response(response=200, description="Deleted")
+     * )
      */
     public function destroy($id)
     {
@@ -89,7 +115,13 @@ class UserPekerjaanController extends Controller
     }
 
     /**
-     * Get pekerjaan assigned ke user tertentu
+     * @OA\Get(
+     *     path="/api/user-pekerjaan/user/{userId}",
+     *     summary="Get assignments by user",
+     *     tags={"Access Control (User-Pekerjaan Assignment)"},
+     *     @OA\Parameter(name="userId", in="path", required=true, @OA\Schema(type="integer")),
+     *     @OA\Response(response=200, description="Successful operation")
+     * )
      */
     public function byUser($userId)
     {
@@ -110,7 +142,13 @@ class UserPekerjaanController extends Controller
     }
 
     /**
-     * Get users assigned ke pekerjaan tertentu
+     * @OA\Get(
+     *     path="/api/user-pekerjaan/pekerjaan/{pekerjaanId}",
+     *     summary="Get assignments by pekerjaan",
+     *     tags={"Access Control (User-Pekerjaan Assignment)"},
+     *     @OA\Parameter(name="pekerjaanId", in="path", required=true, @OA\Schema(type="integer")),
+     *     @OA\Response(response=200, description="Successful operation")
+     * )
      */
     public function byPekerjaan($pekerjaanId)
     {
@@ -131,7 +169,12 @@ class UserPekerjaanController extends Controller
     }
 
     /**
-     * Get list users yang bisa di-assign (non-admin)
+     * @OA\Get(
+     *     path="/api/user-pekerjaan/available-users",
+     *     summary="Get users available for assignment (non-admin)",
+     *     tags={"Access Control (User-Pekerjaan Assignment)"},
+     *     @OA\Response(response=200, description="Successful operation")
+     * )
      */
     public function availableUsers()
     {

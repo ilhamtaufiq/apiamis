@@ -10,7 +10,13 @@ use Illuminate\Support\Str;
 class TagController extends Controller
 {
     /**
-     * Display a listing of tags.
+     * @OA\Get(
+     *     path="/api/tags",
+     *     summary="List all tags",
+     *     tags={"Metadata (Tags)"},
+     *     @OA\Parameter(name="search", in="query", required=false, @OA\Schema(type="string")),
+     *     @OA\Response(response=200, description="Successful operation")
+     * )
      */
     public function index(Request $request)
     {
@@ -28,7 +34,21 @@ class TagController extends Controller
     }
 
     /**
-     * Store a newly created tag.
+     * @OA\Post(
+     *     path="/api/tags",
+     *     summary="Create new tag",
+     *     tags={"Metadata (Tags)"},
+     *     security={{"bearerAuth":{}}, {"apiKeyAuth":{}}},
+     *     @OA\RequestBody(
+     *         required=true,
+     *         @OA\JsonContent(
+     *             required={"name"},
+     *             @OA\Property(property="name", type="string"),
+     *             @OA\Property(property="color", type="string", description="HEX color code e.g. #FF5733")
+     *         )
+     *     ),
+     *     @OA\Response(response=201, description="Created")
+     * )
      */
     public function store(Request $request)
     {
@@ -45,7 +65,13 @@ class TagController extends Controller
     }
 
     /**
-     * Display the specified tag.
+     * @OA\Get(
+     *     path="/api/tags/{id}",
+     *     summary="Get tag detail",
+     *     tags={"Metadata (Tags)"},
+     *     @OA\Parameter(name="id", in="path", required=true, @OA\Schema(type="integer")),
+     *     @OA\Response(response=200, description="Successful operation")
+     * )
      */
     public function show(Tag $tag)
     {
@@ -53,7 +79,14 @@ class TagController extends Controller
     }
 
     /**
-     * Update the specified tag.
+     * @OA\Put(
+     *     path="/api/tags/{id}",
+     *     summary="Update tag",
+     *     tags={"Metadata (Tags)"},
+     *     security={{"bearerAuth":{}}, {"apiKeyAuth":{}}},
+     *     @OA\Parameter(name="id", in="path", required=true, @OA\Schema(type="integer")),
+     *     @OA\Response(response=200, description="Updated")
+     * )
      */
     public function update(Request $request, Tag $tag)
     {
@@ -72,7 +105,14 @@ class TagController extends Controller
     }
 
     /**
-     * Remove the specified tag.
+     * @OA\Delete(
+     *     path="/api/tags/{id}",
+     *     summary="Delete tag",
+     *     tags={"Metadata (Tags)"},
+     *     security={{"bearerAuth":{}}, {"apiKeyAuth":{}}},
+     *     @OA\Parameter(name="id", in="path", required=true, @OA\Schema(type="integer")),
+     *     @OA\Response(response=200, description="Deleted")
+     * )
      */
     public function destroy(Tag $tag)
     {

@@ -9,7 +9,13 @@ use Illuminate\Http\Request;
 class PenyediaController extends Controller
 {
     /**
-     * Display a listing of the resource.
+     * @OA\Get(
+     *     path="/api/penyedia",
+     *     summary="List all penyedia",
+     *     tags={"Penyedia"},
+     *     @OA\Parameter(name="search", in="query", required=false, @OA\Schema(type="string")),
+     *     @OA\Response(response=200, description="Successful operation")
+     * )
      */
     public function index(Request $request)
     {
@@ -36,7 +42,30 @@ class PenyediaController extends Controller
     }
 
     /**
-     * Store a newly created resource in storage.
+     * @OA\Post(
+     *     path="/api/penyedia",
+     *     summary="Create new penyedia",
+     *     tags={"Penyedia"},
+     *     security={{"bearerAuth":{}}},
+     *     @OA\RequestBody(
+     *         required=true,
+     *         @OA\MediaType(
+     *             mediaType="multipart/form-data",
+     *             @OA\Schema(
+     *                 required={"nama", "direktur", "no_akta", "notaris", "tanggal_akta", "alamat"},
+     *                 @OA\Property(property="nama", type="string"),
+     *                 @OA\Property(property="direktur", type="string"),
+     *                 @OA\Property(property="no_akta", type="string"),
+     *                 @OA\Property(property="notaris", type="string"),
+     *                 @OA\Property(property="tanggal_akta", type="string", format="date"),
+     *                 @OA\Property(property="alamat", type="string"),
+     *                 @OA\Property(property="bank", type="string"),
+     *                 @OA\Property(property="norek", type="string")
+     *             )
+     *         )
+     *     ),
+     *     @OA\Response(response=201, description="Penyedia created")
+     * )
      */
     public function store(Request $request)
     {
@@ -68,7 +97,13 @@ class PenyediaController extends Controller
     }
 
     /**
-     * Display the specified resource.
+     * @OA\Get(
+     *     path="/api/penyedia/{id}",
+     *     summary="Get penyedia detail",
+     *     tags={"Penyedia"},
+     *     @OA\Parameter(name="id", in="path", required=true, @OA\Schema(type="integer")),
+     *     @OA\Response(response=200, description="Successful operation")
+     * )
      */
     public function show(Penyedia $penyedia)
     {
@@ -76,7 +111,15 @@ class PenyediaController extends Controller
     }
 
     /**
-     * Update the specified resource in storage.
+     * @OA\Post(
+     *     path="/api/penyedia/{id}",
+     *     summary="Update penyedia",
+     *     description="Uses POST with _method=PUT for multipart/form-data support",
+     *     tags={"Penyedia"},
+     *     security={{"bearerAuth":{}}},
+     *     @OA\Parameter(name="id", in="path", required=true, @OA\Schema(type="integer")),
+     *     @OA\Response(response=200, description="Penyedia updated")
+     * )
      */
     public function update(Request $request, Penyedia $penyedia)
     {
@@ -114,7 +157,14 @@ class PenyediaController extends Controller
     }
 
     /**
-     * Remove the specified resource from storage.
+     * @OA\Delete(
+     *     path="/api/penyedia/{id}",
+     *     summary="Delete penyedia",
+     *     tags={"Penyedia"},
+     *     security={{"bearerAuth":{}}},
+     *     @OA\Parameter(name="id", in="path", required=true, @OA\Schema(type="integer")),
+     *     @OA\Response(response=200, description="Penyedia deleted")
+     * )
      */
     public function destroy(Penyedia $penyedia)
     {

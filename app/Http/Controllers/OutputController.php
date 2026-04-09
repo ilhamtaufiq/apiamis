@@ -8,6 +8,16 @@ use Illuminate\Http\Request;
 
 class OutputController extends Controller
 {
+    /**
+     * @OA\Get(
+     *     path="/api/output",
+     *     summary="List all output",
+     *     tags={"Output"},
+     *     @OA\Parameter(name="tahun", in="query", required=false, @OA\Schema(type="integer")),
+     *     @OA\Parameter(name="pekerjaan_id", in="query", required=false, @OA\Schema(type="integer")),
+     *     @OA\Response(response=200, description="Successful operation")
+     * )
+     */
     public function index(Request $request)
     {
         $query = Output::with('pekerjaan');
@@ -38,6 +48,25 @@ class OutputController extends Controller
         return OutputResource::collection($output);
     }
 
+    /**
+     * @OA\Post(
+     *     path="/api/output",
+     *     summary="Create new output",
+     *     tags={"Output"},
+     *     security={{"bearerAuth":{}}},
+     *     @OA\RequestBody(
+     *         required=true,
+     *         @OA\JsonContent(
+     *             required={"pekerjaan_id", "komponen", "satuan", "volume"},
+     *             @OA\Property(property="pekerjaan_id", type="integer"),
+     *             @OA\Property(property="komponen", type="string"),
+     *             @OA\Property(property="satuan", type="string"),
+     *             @OA\Property(property="volume", type="number")
+     *         )
+     *     ),
+     *     @OA\Response(response=201, description="Output created")
+     * )
+     */
     public function store(Request $request)
     {
         $validated = $request->validate([
@@ -53,12 +82,31 @@ class OutputController extends Controller
         return new OutputResource($output);
     }
 
+    /**
+     * @OA\Get(
+     *     path="/api/output/{id}",
+     *     summary="Get output detail",
+     *     tags={"Output"},
+     *     @OA\Parameter(name="id", in="path", required=true, @OA\Schema(type="integer")),
+     *     @OA\Response(response=200, description="Successful operation")
+     * )
+     */
     public function show(Output $output)
     {
         $output->load('pekerjaan');
         return new OutputResource($output);
     }
 
+    /**
+     * @OA\Put(
+     *     path="/api/output/{id}",
+     *     summary="Update output",
+     *     tags={"Output"},
+     *     security={{"bearerAuth":{}}},
+     *     @OA\Parameter(name="id", in="path", required=true, @OA\Schema(type="integer")),
+     *     @OA\Response(response=200, description="Updated")
+     * )
+     */
     public function update(Request $request, Output $output)
     {
         $validated = $request->validate([
@@ -74,6 +122,16 @@ class OutputController extends Controller
         return new OutputResource($output);
     }
 
+    /**
+     * @OA\Delete(
+     *     path="/api/output/{id}",
+     *     summary="Delete output",
+     *     tags={"Output"},
+     *     security={{"bearerAuth":{}}},
+     *     @OA\Parameter(name="id", in="path", required=true, @OA\Schema(type="integer")),
+     *     @OA\Response(response=200, description="Deleted")
+     * )
+     */
     public function destroy(Output $output)
     {
         $output->delete();

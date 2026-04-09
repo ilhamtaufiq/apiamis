@@ -10,7 +10,13 @@ use Illuminate\Http\JsonResponse;
 class ProgressController extends Controller
 {
     /**
-     * Get progress report for a pekerjaan
+     * @OA\Get(
+     *     path="/api/progress/{pekerjaanId}",
+     *     summary="Get progress report for a pekerjaan",
+     *     tags={"Progress"},
+     *     @OA\Parameter(name="pekerjaanId", in="path", required=true, @OA\Schema(type="integer")),
+     *     @OA\Response(response=200, description="Successful operation")
+     * )
      */
     public function report(int $pekerjaanId): JsonResponse
     {
@@ -103,7 +109,21 @@ class ProgressController extends Controller
     }
 
     /**
-     * Store full progress report
+     * @OA\Post(
+     *     path="/api/progress/{pekerjaanId}",
+     *     summary="Store full progress report",
+     *     tags={"Progress"},
+     *     security={{"bearerAuth":{}}},
+     *     @OA\Parameter(name="pekerjaanId", in="path", required=true, @OA\Schema(type="integer")),
+     *     @OA\RequestBody(
+     *         required=true,
+     *         @OA\JsonContent(
+     *             @OA\Property(property="items", type="array", @OA\Items(type="object")),
+     *             @OA\Property(property="week_count", type="integer", example=4)
+     *         )
+     *     ),
+     *     @OA\Response(response=200, description="Progress saved")
+     * )
      */
     public function store(Request $request, int $pekerjaanId): JsonResponse
     {

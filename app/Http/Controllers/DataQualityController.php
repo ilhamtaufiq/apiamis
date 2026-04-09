@@ -11,7 +11,15 @@ use Illuminate\Support\Facades\DB;
 class DataQualityController extends Controller
 {
     /**
-     * Get data quality statistics for administrators.
+     * @OA\Get(
+     *     path="/api/data-quality/stats",
+     *     summary="Get data quality statistics",
+     *     description="Identifies missing coordinates, photos, and contracts",
+     *     tags={"Data Quality"},
+     *     security={{"bearerAuth":{}}, {"apiKeyAuth":{}}},
+     *     @OA\Parameter(name="tahun", in="query", required=false, @OA\Schema(type="integer")),
+     *     @OA\Response(response=200, description="Successful operation")
+     * )
      */
     public function getStats(Request $request)
     {

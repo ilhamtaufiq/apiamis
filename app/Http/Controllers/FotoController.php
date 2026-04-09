@@ -9,6 +9,17 @@ use Illuminate\Support\Str;
 
 class FotoController extends Controller
 {
+    /**
+     * @OA\Get(
+     *     path="/api/foto",
+     *     summary="List all foto",
+     *     tags={"Media Management (Foto)"},
+     *     @OA\Parameter(name="tahun", in="query", required=false, @OA\Schema(type="integer")),
+     *     @OA\Parameter(name="pekerjaan_id", in="query", required=false, @OA\Schema(type="integer")),
+     *     @OA\Parameter(name="latest_only", in="query", required=false, @OA\Schema(type="boolean")),
+     *     @OA\Response(response=200, description="Successful operation")
+     * )
+     */
     public function index(Request $request)
     {
         $query = Foto::with(['pekerjaan', 'penerima', 'komponen']);
@@ -46,6 +57,30 @@ class FotoController extends Controller
         return FotoResource::collection($foto);
     }
 
+    /**
+     * @OA\Post(
+     *     path="/api/foto",
+     *     summary="Upload new foto",
+     *     tags={"Media Management (Foto)"},
+     *     security={{"bearerAuth":{}}},
+     *     @OA\RequestBody(
+     *         required=true,
+     *         @OA\MediaType(
+     *             mediaType="multipart/form-data",
+     *             @OA\Schema(
+     *                 required={"pekerjaan_id", "komponen_id", "keterangan", "koordinat", "file"},
+     *                 @OA\Property(property="pekerjaan_id", type="integer"),
+     *                 @OA\Property(property="komponen_id", type="integer"),
+     *                 @OA\Property(property="penerima_id", type="integer"),
+     *                 @OA\Property(property="keterangan", type="string", enum={"0%","25%","50%","75%","100%"}),
+     *                 @OA\Property(property="koordinat", type="string"),
+     *                 @OA\Property(property="file", type="string", format="binary")
+     *             )
+     *         )
+     *     ),
+     *     @OA\Response(response=201, description="Foto uploaded")
+     * )
+     */
     public function store(Request $request)
     {
         $validated = $request->validate([
@@ -71,12 +106,32 @@ class FotoController extends Controller
         return new FotoResource($foto);
     }
 
+    /**
+     * @OA\Get(
+     *     path="/api/foto/{id}",
+     *     summary="Get foto detail",
+     *     tags={"Media Management (Foto)"},
+     *     @OA\Parameter(name="id", in="path", required=true, @OA\Schema(type="integer")),
+     *     @OA\Response(response=200, description="Successful operation")
+     * )
+     */
     public function show(Foto $foto)
     {
         $foto->load(['pekerjaan', 'penerima', 'komponen']);
         return new FotoResource($foto);
     }
 
+    /**
+     * @OA\Post(
+     *     path="/api/foto/{id}",
+     *     summary="Update foto",
+     *     description="Uses POST with _method=PUT for multipart/form-data support",
+     *     tags={"Media Management (Foto)"},
+     *     security={{"bearerAuth":{}}},
+     *     @OA\Parameter(name="id", in="path", required=true, @OA\Schema(type="integer")),
+     *     @OA\Response(response=200, description="Updated")
+     * )
+     */
     public function update(Request $request, Foto $foto)
     {
         $validated = $request->validate([
@@ -103,6 +158,16 @@ class FotoController extends Controller
         return new FotoResource($foto);
     }
 
+    /**
+     * @OA\Delete(
+     *     path="/api/foto/{id}",
+     *     summary="Delete foto",
+     *     tags={"Media Management (Foto)"},
+     *     security={{"bearerAuth":{}}},
+     *     @OA\Parameter(name="id", in="path", required=true, @OA\Schema(type="integer")),
+     *     @OA\Response(response=200, description="Deleted")
+     * )
+     */
     public function destroy(Foto $foto)
     {
         // Delete all media files from storage

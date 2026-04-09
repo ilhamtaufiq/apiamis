@@ -10,7 +10,13 @@ use Illuminate\Support\Facades\Auth;
 class EventController extends Controller
 {
     /**
-     * Display a listing of the resource.
+     * @OA\Get(
+     *     path="/api/events",
+     *     summary="List all events for current user",
+     *     tags={"Calendar Events"},
+     *     security={{"bearerAuth":{}}, {"apiKeyAuth":{}}},
+     *     @OA\Response(response=200, description="Successful operation")
+     * )
      */
     public function index()
     {
@@ -19,7 +25,26 @@ class EventController extends Controller
     }
 
     /**
-     * Store a newly created resource in storage.
+     * @OA\Post(
+     *     path="/api/events",
+     *     summary="Create new event",
+     *     tags={"Calendar Events"},
+     *     security={{"bearerAuth":{}}, {"apiKeyAuth":{}}},
+     *     @OA\RequestBody(
+     *         required=true,
+     *         @OA\JsonContent(
+     *             required={"title", "start", "end"},
+     *             @OA\Property(property="title", type="string"),
+     *             @OA\Property(property="start", type="string", format="date-time"),
+     *             @OA\Property(property="end", type="string", format="date-time"),
+     *             @OA\Property(property="is_allday", type="boolean"),
+     *             @OA\Property(property="category", type="string", enum={"event","task","milestone","holiday"}),
+     *             @OA\Property(property="location", type="string"),
+     *             @OA\Property(property="description", type="string")
+     *         )
+     *     ),
+     *     @OA\Response(response=201, description="Event created")
+     * )
      */
     public function store(Request $request)
     {
@@ -42,7 +67,14 @@ class EventController extends Controller
     }
 
     /**
-     * Display the specified resource.
+     * @OA\Get(
+     *     path="/api/events/{id}",
+     *     summary="Get event detail",
+     *     tags={"Calendar Events"},
+     *     security={{"bearerAuth":{}}, {"apiKeyAuth":{}}},
+     *     @OA\Parameter(name="id", in="path", required=true, @OA\Schema(type="integer")),
+     *     @OA\Response(response=200, description="Successful operation")
+     * )
      */
     public function show(Event $event)
     {
@@ -53,7 +85,14 @@ class EventController extends Controller
     }
 
     /**
-     * Update the specified resource in storage.
+     * @OA\Put(
+     *     path="/api/events/{id}",
+     *     summary="Update event",
+     *     tags={"Calendar Events"},
+     *     security={{"bearerAuth":{}}, {"apiKeyAuth":{}}},
+     *     @OA\Parameter(name="id", in="path", required=true, @OA\Schema(type="integer")),
+     *     @OA\Response(response=200, description="Updated")
+     * )
      */
     public function update(Request $request, Event $event)
     {
@@ -80,7 +119,14 @@ class EventController extends Controller
     }
 
     /**
-     * Remove the specified resource from storage.
+     * @OA\Delete(
+     *     path="/api/events/{id}",
+     *     summary="Delete event",
+     *     tags={"Calendar Events"},
+     *     security={{"bearerAuth":{}}, {"apiKeyAuth":{}}},
+     *     @OA\Parameter(name="id", in="path", required=true, @OA\Schema(type="integer")),
+     *     @OA\Response(response=200, description="Deleted")
+     * )
      */
     public function destroy(Event $event)
     {

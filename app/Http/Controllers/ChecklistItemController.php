@@ -9,7 +9,12 @@ use Illuminate\Http\Request;
 class ChecklistItemController extends Controller
 {
     /**
-     * Display a listing of checklist items.
+     * @OA\Get(
+     *     path="/api/checklist-items",
+     *     summary="List all checklist items",
+     *     tags={"Checklist Management"},
+     *     @OA\Response(response=200, description="Successful operation")
+     * )
      */
     public function index()
     {
@@ -18,7 +23,21 @@ class ChecklistItemController extends Controller
     }
 
     /**
-     * Store a newly created checklist item.
+     * @OA\Post(
+     *     path="/api/checklist-items",
+     *     summary="Create new checklist item",
+     *     tags={"Checklist Management"},
+     *     security={{"bearerAuth":{}}, {"apiKeyAuth":{}}},
+     *     @OA\RequestBody(
+     *         required=true,
+     *         @OA\JsonContent(
+     *             required={"name"},
+     *             @OA\Property(property="name", type="string"),
+     *             @OA\Property(property="description", type="string")
+     *         )
+     *     ),
+     *     @OA\Response(response=201, description="Created")
+     * )
      */
     public function store(Request $request)
     {
@@ -37,7 +56,13 @@ class ChecklistItemController extends Controller
     }
 
     /**
-     * Display the specified checklist item.
+     * @OA\Get(
+     *     path="/api/checklist-items/{id}",
+     *     summary="Get checklist item detail",
+     *     tags={"Checklist Management"},
+     *     @OA\Parameter(name="id", in="path", required=true, @OA\Schema(type="integer")),
+     *     @OA\Response(response=200, description="Successful operation")
+     * )
      */
     public function show(ChecklistItem $checklistItem)
     {
@@ -45,7 +70,14 @@ class ChecklistItemController extends Controller
     }
 
     /**
-     * Update the specified checklist item.
+     * @OA\Put(
+     *     path="/api/checklist-items/{id}",
+     *     summary="Update checklist item",
+     *     tags={"Checklist Management"},
+     *     security={{"bearerAuth":{}}, {"apiKeyAuth":{}}},
+     *     @OA\Parameter(name="id", in="path", required=true, @OA\Schema(type="integer")),
+     *     @OA\Response(response=200, description="Updated")
+     * )
      */
     public function update(Request $request, ChecklistItem $checklistItem)
     {
@@ -61,7 +93,14 @@ class ChecklistItemController extends Controller
     }
 
     /**
-     * Remove the specified checklist item.
+     * @OA\Delete(
+     *     path="/api/checklist-items/{id}",
+     *     summary="Delete checklist item",
+     *     tags={"Checklist Management"},
+     *     security={{"bearerAuth":{}}, {"apiKeyAuth":{}}},
+     *     @OA\Parameter(name="id", in="path", required=true, @OA\Schema(type="integer")),
+     *     @OA\Response(response=200, description="Deleted")
+     * )
      */
     public function destroy(ChecklistItem $checklistItem)
     {
@@ -71,7 +110,22 @@ class ChecklistItemController extends Controller
     }
 
     /**
-     * Reorder checklist items.
+     * @OA\Post(
+     *     path="/api/checklist-items/reorder",
+     *     summary="Reorder checklist items",
+     *     tags={"Checklist Management"},
+     *     security={{"bearerAuth":{}}, {"apiKeyAuth":{}}},
+     *     @OA\RequestBody(
+     *         required=true,
+     *         @OA\JsonContent(
+     *             @OA\Property(property="items", type="array", @OA\Items(
+     *                 @OA\Property(property="id", type="integer"),
+     *                 @OA\Property(property="sort_order", type="integer")
+     *             ))
+     *         )
+     *     ),
+     *     @OA\Response(response=200, description="Reorder success")
+     * )
      */
     public function reorder(Request $request)
     {

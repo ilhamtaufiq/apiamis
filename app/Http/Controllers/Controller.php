@@ -25,6 +25,14 @@ use Illuminate\Routing\Controller as BaseController;
  *      description="Enter token in format: Bearer <token>"
  * )
  *
+ * @OA\SecurityScheme(
+ *      type="apiKey",
+ *      in="header",
+ *      securityScheme="apiKeyAuth",
+ *      name="X-API-KEY",
+ *      description="Use your personal API Key in the X-API-KEY header"
+ * )
+ *
  * @OA\Server(
  *      url=L5_SWAGGER_CONST_HOST,
  *      description="API Server"

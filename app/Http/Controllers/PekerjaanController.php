@@ -6,6 +6,8 @@ use App\Models\Pekerjaan;
 use App\Models\KegiatanRole;
 use App\Http\Resources\PekerjaanResource;
 use App\Http\Resources\PekerjaanDetailResource;
+use App\Http\Resources\FotoResource;
+use App\Http\Resources\BerkasResource;
 use App\Imports\PekerjaanImport;
 use App\Exports\PekerjaanTemplateExport;
 use Illuminate\Http\Request;
@@ -13,6 +15,37 @@ use Maatwebsite\Excel\Facades\Excel;
 
 class PekerjaanController extends Controller
 {
+    /**
+     * @OA\Get(
+     *     path="/api/pekerjaan",
+     *     summary="List all pekerjaan",
+     *     description="Returns paginated list of pekerjaan based on user role and filters",
+     *     tags={"Pekerjaan"},
+     *     security={{"bearerAuth":{}}},
+     *     @OA\Parameter(
+     *         name="tahun",
+     *         in="query",
+     *         description="Filter by year",
+     *         required=false,
+     *         @OA\Schema(type="string")
+     *     ),
+     *     @OA\Parameter(
+     *         name="kecamatan_id",
+     *         in="query",
+     *         description="Filter by kecamatan ID",
+     *         required=false,
+     *         @OA\Schema(type="integer")
+     *     ),
+     *     @OA\Parameter(
+     *         name="search",
+     *         in="query",
+     *         description="Search by name or code",
+     *         required=false,
+     *         @OA\Schema(type="string")
+     *     ),
+     *     @OA\Response(response=200, description="Successful operation")
+     * )
+     */
     public function index(Request $request)
     {
         if (!auth()->check()) {
@@ -180,7 +213,7 @@ class PekerjaanController extends Controller
                 
             // 2. Cek role assignment
             $userRoleIds = $user->roles()->pluck('id')->toArray();
-            $hasRoleAccess = \App\Models\KegiatanRole::whereIn('role_id', $userRoleIds)
+            $hasRoleAccess = KegiatanRole::whereIn('role_id', $userRoleIds)
                 ->where('kegiatan_id', $pekerjaan->kegiatan_id)
                 ->exists();
 

@@ -8,7 +8,14 @@ use Illuminate\Http\Request;
 class RoutePermissionController extends Controller
 {
     /**
-     * Display a listing of route permissions.
+     * @OA\Get(
+     *     path="/api/route-permissions",
+     *     summary="List all route permissions",
+     *     tags={"Access Control (Route)"},
+     *     @OA\Parameter(name="search", in="query", required=false, @OA\Schema(type="string")),
+     *     @OA\Parameter(name="method", in="query", required=false, @OA\Schema(type="string")),
+     *     @OA\Response(response=200, description="Successful operation")
+     * )
      */
     public function index(Request $request)
     {
@@ -40,7 +47,22 @@ class RoutePermissionController extends Controller
     }
 
     /**
-     * Store a newly created route permission.
+     * @OA\Post(
+     *     path="/api/route-permissions",
+     *     summary="Create new route permission",
+     *     tags={"Access Control (Route)"},
+     *     security={{"bearerAuth":{}}, {"apiKeyAuth":{}}},
+     *     @OA\RequestBody(
+     *         required=true,
+     *         @OA\JsonContent(
+     *             required={"route_path", "route_method", "allowed_roles"},
+     *             @OA\Property(property="route_path", type="string"),
+     *             @OA\Property(property="route_method", type="string", enum={"GET","POST","PUT","PATCH","DELETE"}),
+     *             @OA\Property(property="allowed_roles", type="array", @OA\Items(type="string"))
+     *         )
+     *     ),
+     *     @OA\Response(response=201, description="Created")
+     * )
      */
     public function store(Request $request)
     {
@@ -70,7 +92,13 @@ class RoutePermissionController extends Controller
     }
 
     /**
-     * Display the specified route permission.
+     * @OA\Get(
+     *     path="/api/route-permissions/{id}",
+     *     summary="Get route permission detail",
+     *     tags={"Access Control (Route)"},
+     *     @OA\Parameter(name="id", in="path", required=true, @OA\Schema(type="integer")),
+     *     @OA\Response(response=200, description="Successful operation")
+     * )
      */
     public function show(RoutePermission $routePermission)
     {
@@ -78,7 +106,14 @@ class RoutePermissionController extends Controller
     }
 
     /**
-     * Update the specified route permission.
+     * @OA\Put(
+     *     path="/api/route-permissions/{id}",
+     *     summary="Update route permission",
+     *     tags={"Access Control (Route)"},
+     *     security={{"bearerAuth":{}}, {"apiKeyAuth":{}}},
+     *     @OA\Parameter(name="id", in="path", required=true, @OA\Schema(type="integer")),
+     *     @OA\Response(response=200, description="Updated")
+     * )
      */
     public function update(Request $request, RoutePermission $routePermission)
     {
@@ -97,7 +132,14 @@ class RoutePermissionController extends Controller
     }
 
     /**
-     * Remove the specified route permission.
+     * @OA\Delete(
+     *     path="/api/route-permissions/{id}",
+     *     summary="Delete route permission",
+     *     tags={"Access Control (Route)"},
+     *     security={{"bearerAuth":{}}, {"apiKeyAuth":{}}},
+     *     @OA\Parameter(name="id", in="path", required=true, @OA\Schema(type="integer")),
+     *     @OA\Response(response=200, description="Deleted")
+     * )
      */
     public function destroy(RoutePermission $routePermission)
     {
@@ -106,7 +148,21 @@ class RoutePermissionController extends Controller
     }
 
     /**
-     * Check if current user can access a specific route
+     * @OA\Post(
+     *     path="/api/route-permissions/check",
+     *     summary="Check access for a route",
+     *     tags={"Access Control (Route)"},
+     *     security={{"bearerAuth":{}}, {"apiKeyAuth":{}}},
+     *     @OA\RequestBody(
+     *         required=true,
+     *         @OA\JsonContent(
+     *             required={"route_path"},
+     *             @OA\Property(property="route_path", type="string"),
+     *             @OA\Property(property="route_method", type="string")
+     *         )
+     *     ),
+     *     @OA\Response(response=200, description="Check result")
+     * )
      */
     public function check(Request $request)
     {
@@ -138,7 +194,13 @@ class RoutePermissionController extends Controller
     }
 
     /**
-     * Get all routes that current user can access
+     * @OA\Get(
+     *     path="/api/route-permissions/accessible",
+     *     summary="Get all accessible routes for current user",
+     *     tags={"Access Control (Route)"},
+     *     security={{"bearerAuth":{}}, {"apiKeyAuth":{}}},
+     *     @OA\Response(response=200, description="Successful operation")
+     * )
      */
     public function accessible(Request $request)
     {
@@ -161,7 +223,12 @@ class RoutePermissionController extends Controller
         return response()->json($accessibleRoutes);
     }
     /**
-     * Get all active route permission rules for frontend validation
+     * @OA\Get(
+     *     path="/api/route-permissions/rules",
+     *     summary="Get all active route permission rules",
+     *     tags={"Access Control (Route)"},
+     *     @OA\Response(response=200, description="Successful operation")
+     * )
      */
     public function rules()
     {

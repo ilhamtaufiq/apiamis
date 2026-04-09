@@ -10,7 +10,15 @@ use Illuminate\Http\Request;
 class KecamatanController extends Controller
 {
     /**
-     * Display a listing of the resource (index).
+     * @OA\Get(
+     *     path="/api/kecamatan",
+     *     summary="List all kecamatan",
+     *     tags={"Kecamatan"},
+     *     @OA\Response(
+     *         response=200,
+     *         description="Successful operation"
+     *     )
+     * )
      */
     public function index()
     {
@@ -19,7 +27,21 @@ class KecamatanController extends Controller
     }
 
     /**
-     * Store a newly created resource in storage.
+     * @OA\Post(
+     *     path="/api/kecamatan",
+     *     summary="Create new kecamatan",
+     *     tags={"Kecamatan"},
+     *     security={{"bearerAuth":{}}},
+     *     @OA\RequestBody(
+     *         required=true,
+     *         @OA\JsonContent(
+     *             required={"n_kec"},
+     *             @OA\Property(property="n_kec", type="string", example="Cianjur")
+     *         )
+     *     ),
+     *     @OA\Response(response=201, description="Kecamatan created"),
+     *     @OA\Response(response=422, description="Validation error")
+     * )
      */
     public function store(Request $request)
     {
@@ -32,7 +54,19 @@ class KecamatanController extends Controller
     }
 
     /**
-     * Display the specified resource (show).
+     * @OA\Get(
+     *     path="/api/kecamatan/{id}",
+     *     summary="Get kecamatan detail",
+     *     tags={"Kecamatan"},
+     *     @OA\Parameter(
+     *         name="id",
+     *         in="path",
+     *         required=true,
+     *         @OA\Schema(type="integer")
+     *     ),
+     *     @OA\Response(response=200, description="Successful operation"),
+     *     @OA\Response(response=404, description="Kecamatan not found")
+     * )
      */
     public function show(Kecamatan $kecamatan)
     {
@@ -41,7 +75,26 @@ class KecamatanController extends Controller
     }
 
     /**
-     * Update the specified resource in storage.
+     * @OA\Put(
+     *     path="/api/kecamatan/{id}",
+     *     summary="Update kecamatan",
+     *     tags={"Kecamatan"},
+     *     security={{"bearerAuth":{}}},
+     *     @OA\Parameter(
+     *         name="id",
+     *         in="path",
+     *         required=true,
+     *         @OA\Schema(type="integer")
+     *     ),
+     *     @OA\RequestBody(
+     *         required=true,
+     *         @OA\JsonContent(
+     *             @OA\Property(property="n_kec", type="string", example="Cianjur Town")
+     *         )
+     *     ),
+     *     @OA\Response(response=200, description="Kecamatan updated"),
+     *     @OA\Response(response=404, description="Kecamatan not found")
+     * )
      */
     public function update(Request $request, Kecamatan $kecamatan)
     {
@@ -54,7 +107,20 @@ class KecamatanController extends Controller
     }
 
     /**
-     * Remove the specified resource from storage.
+     * @OA\Delete(
+     *     path="/api/kecamatan/{id}",
+     *     summary="Delete kecamatan",
+     *     tags={"Kecamatan"},
+     *     security={{"bearerAuth":{}}},
+     *     @OA\Parameter(
+     *         name="id",
+     *         in="path",
+     *         required=true,
+     *         @OA\Schema(type="integer")
+     *     ),
+     *     @OA\Response(response=200, description="Kecamatan deleted"),
+     *     @OA\Response(response=404, description="Kecamatan not found")
+     * )
      */
     public function destroy(Kecamatan $kecamatan)
     {

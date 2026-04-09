@@ -42,7 +42,13 @@ class BeritaAcaraController extends Controller
     }
 
     /**
-     * Get berita acara by pekerjaan ID
+     * @OA\Get(
+     *     path="/api/berita-acara/{pekerjaanId}",
+     *     summary="Get berita acara by pekerjaan ID",
+     *     tags={"Berita Acara"},
+     *     @OA\Parameter(name="pekerjaanId", in="path", required=true, @OA\Schema(type="integer")),
+     *     @OA\Response(response=200, description="Successful operation")
+     * )
      */
     public function show($pekerjaanId)
     {
@@ -57,7 +63,14 @@ class BeritaAcaraController extends Controller
     }
 
     /**
-     * Generate next document number
+     * @OA\Get(
+     *     path="/api/berita-acara/generate-number",
+     *     summary="Generate next document number",
+     *     tags={"Berita Acara"},
+     *     @OA\Parameter(name="type", in="query", required=true, @OA\Schema(type="string", enum={"ba_lpp","stp_a","stp_b","ba_php","ba_stp"})),
+     *     @OA\Parameter(name="pekerjaan_id", in="query", @OA\Schema(type="integer")),
+     *     @OA\Response(response=200, description="Number generated")
+     * )
      */
     public function generateNumber(Request $request)
     {
@@ -79,7 +92,18 @@ class BeritaAcaraController extends Controller
     }
 
     /**
-     * Store or update berita acara for a pekerjaan
+     * @OA\Post(
+     *     path="/api/berita-acara/{pekerjaanId}",
+     *     summary="Store or update berita acara",
+     *     tags={"Berita Acara"},
+     *     security={{"bearerAuth":{}}},
+     *     @OA\Parameter(name="pekerjaanId", in="path", required=true, @OA\Schema(type="integer")),
+     *     @OA\RequestBody(
+     *         required=true,
+     *         @OA\JsonContent(@OA\Property(property="data", type="object"))
+     *     ),
+     *     @OA\Response(response=200, description="Saved")
+     * )
      */
     public function storeOrUpdate(Request $request, $pekerjaanId)
     {

@@ -9,7 +9,16 @@ use Illuminate\Http\Request;
 class PenerimaController extends Controller
 {
     /**
-     * Display a listing of the resource.
+     * @OA\Get(
+     *     path="/api/penerima",
+     *     summary="List all penerima",
+     *     tags={"Penerima"},
+     *     @OA\Parameter(name="tahun", in="query", required=false, @OA\Schema(type="integer")),
+     *     @OA\Parameter(name="pekerjaan_id", in="query", required=false, @OA\Schema(type="integer")),
+     *     @OA\Parameter(name="komunal", in="query", required=false, @OA\Schema(type="boolean")),
+     *     @OA\Parameter(name="search", in="query", required=false, @OA\Schema(type="string")),
+     *     @OA\Response(response=200, description="Successful operation")
+     * )
      */
     public function index(Request $request)
     {
@@ -49,7 +58,24 @@ class PenerimaController extends Controller
     }
 
     /**
-     * Store a newly created resource in storage.
+     * @OA\Post(
+     *     path="/api/penerima",
+     *     summary="Create new penerima",
+     *     tags={"Penerima"},
+     *     security={{"bearerAuth":{}}},
+     *     @OA\RequestBody(
+     *         required=true,
+     *         @OA\JsonContent(
+     *             required={"pekerjaan_id", "nama"},
+     *             @OA\Property(property="pekerjaan_id", type="integer"),
+     *             @OA\Property(property="nama", type="string"),
+     *             @OA\Property(property="jumlah_jiwa", type="integer"),
+     *             @OA\Property(property="nik", type="string"),
+     *             @OA\Property(property="is_komunal", type="boolean")
+     *         )
+     *     ),
+     *     @OA\Response(response=201, description="Penerima created")
+     * )
      */
     public function store(Request $request)
     {
@@ -69,7 +95,13 @@ class PenerimaController extends Controller
     }
 
     /**
-     * Display the specified resource.
+     * @OA\Get(
+     *     path="/api/penerima/{id}",
+     *     summary="Get penerima detail",
+     *     tags={"Penerima"},
+     *     @OA\Parameter(name="id", in="path", required=true, @OA\Schema(type="integer")),
+     *     @OA\Response(response=200, description="Successful operation")
+     * )
      */
     public function show(Penerima $penerima)
     {
@@ -78,7 +110,14 @@ class PenerimaController extends Controller
     }
 
     /**
-     * Update the specified resource in storage.
+     * @OA\Put(
+     *     path="/api/penerima/{id}",
+     *     summary="Update penerima",
+     *     tags={"Penerima"},
+     *     security={{"bearerAuth":{}}},
+     *     @OA\Parameter(name="id", in="path", required=true, @OA\Schema(type="integer")),
+     *     @OA\Response(response=200, description="Penerima updated")
+     * )
      */
     public function update(Request $request, Penerima $penerima)
     {
@@ -98,7 +137,14 @@ class PenerimaController extends Controller
     }
 
     /**
-     * Remove the specified resource from storage.
+     * @OA\Delete(
+     *     path="/api/penerima/{id}",
+     *     summary="Delete penerima",
+     *     tags={"Penerima"},
+     *     security={{"bearerAuth":{}}},
+     *     @OA\Parameter(name="id", in="path", required=true, @OA\Schema(type="integer")),
+     *     @OA\Response(response=200, description="Penerima deleted")
+     * )
      */
     public function destroy(Penerima $penerima)
     {
@@ -107,7 +153,13 @@ class PenerimaController extends Controller
     }
 
     /**
-     * Get penerima by pekerjaan
+     * @OA\Get(
+     *     path="/api/penerima/pekerjaan/{pekerjaanId}",
+     *     summary="Get penerima by pekerjaan ID",
+     *     tags={"Penerima"},
+     *     @OA\Parameter(name="pekerjaanId", in="path", required=true, @OA\Schema(type="integer")),
+     *     @OA\Response(response=200, description="Successful operation")
+     * )
      */
     public function byPekerjaan($pekerjaanId)
     {
@@ -129,7 +181,13 @@ class PenerimaController extends Controller
     }
 
     /**
-     * Get komunal penerima count by pekerjaan
+     * @OA\Get(
+     *     path="/api/penerima/pekerjaan/{pekerjaanId}/count",
+     *     summary="Get komunal penerima count",
+     *     tags={"Penerima"},
+     *     @OA\Parameter(name="pekerjaanId", in="path", required=true, @OA\Schema(type="integer")),
+     *     @OA\Response(response=200, description="Successful operation")
+     * )
      */
     public function komunalCount($pekerjaanId)
     {

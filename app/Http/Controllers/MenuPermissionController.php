@@ -9,7 +9,13 @@ use Illuminate\Http\Request;
 class MenuPermissionController extends Controller
 {
     /**
-     * Display a listing of the resource.
+     * @OA\Get(
+     *     path="/api/menu-permissions",
+     *     summary="List all menu permissions",
+     *     tags={"Access Control (Menu)"},
+     *     @OA\Parameter(name="search", in="query", required=false, @OA\Schema(type="string")),
+     *     @OA\Response(response=200, description="Successful operation")
+     * )
      */
     public function index(Request $request)
     {
@@ -32,7 +38,22 @@ class MenuPermissionController extends Controller
     }
 
     /**
-     * Store a newly created resource in storage.
+     * @OA\Post(
+     *     path="/api/menu-permissions",
+     *     summary="Create new menu permission",
+     *     tags={"Access Control (Menu)"},
+     *     security={{"bearerAuth":{}}, {"apiKeyAuth":{}}},
+     *     @OA\RequestBody(
+     *         required=true,
+     *         @OA\JsonContent(
+     *             required={"menu_key", "menu_label"},
+     *             @OA\Property(property="menu_key", type="string"),
+     *             @OA\Property(property="menu_label", type="string"),
+     *             @OA\Property(property="allowed_roles", type="array", @OA\Items(type="string"))
+     *         )
+     *     ),
+     *     @OA\Response(response=201, description="Created")
+     * )
      */
     public function store(Request $request)
     {
@@ -50,7 +71,13 @@ class MenuPermissionController extends Controller
     }
 
     /**
-     * Display the specified resource.
+     * @OA\Get(
+     *     path="/api/menu-permissions/{id}",
+     *     summary="Get menu permission detail",
+     *     tags={"Access Control (Menu)"},
+     *     @OA\Parameter(name="id", in="path", required=true, @OA\Schema(type="integer")),
+     *     @OA\Response(response=200, description="Successful operation")
+     * )
      */
     public function show(MenuPermission $menuPermission)
     {
@@ -58,7 +85,14 @@ class MenuPermissionController extends Controller
     }
 
     /**
-     * Update the specified resource in storage.
+     * @OA\Put(
+     *     path="/api/menu-permissions/{id}",
+     *     summary="Update menu permission",
+     *     tags={"Access Control (Menu)"},
+     *     security={{"bearerAuth":{}}, {"apiKeyAuth":{}}},
+     *     @OA\Parameter(name="id", in="path", required=true, @OA\Schema(type="integer")),
+     *     @OA\Response(response=200, description="Updated")
+     * )
      */
     public function update(Request $request, MenuPermission $menuPermission)
     {
@@ -76,7 +110,14 @@ class MenuPermissionController extends Controller
     }
 
     /**
-     * Remove the specified resource from storage.
+     * @OA\Delete(
+     *     path="/api/menu-permissions/{id}",
+     *     summary="Delete menu permission",
+     *     tags={"Access Control (Menu)"},
+     *     security={{"bearerAuth":{}}, {"apiKeyAuth":{}}},
+     *     @OA\Parameter(name="id", in="path", required=true, @OA\Schema(type="integer")),
+     *     @OA\Response(response=200, description="Deleted")
+     * )
      */
     public function destroy(MenuPermission $menuPermission)
     {
@@ -85,7 +126,13 @@ class MenuPermissionController extends Controller
     }
 
     /**
-     * Get allowed menus for the current authenticated user
+     * @OA\Get(
+     *     path="/api/user-menus",
+     *     summary="Get allowed menus for current user",
+     *     tags={"Access Control (Menu)"},
+     *     security={{"bearerAuth":{}}, {"apiKeyAuth":{}}},
+     *     @OA\Response(response=200, description="Successful operation")
+     * )
      */
     public function getUserMenus(Request $request)
     {

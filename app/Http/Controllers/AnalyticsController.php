@@ -12,7 +12,15 @@ use Illuminate\Http\JsonResponse;
 class AnalyticsController extends Controller
 {
     /**
-     * Get analytics statistics
+     * @OA\Get(
+     *     path="/api/analytics/stats",
+     *     summary="Get analytics charts and statistics data",
+     *     tags={"Analytics"},
+     *     security={{"bearerAuth":{}}, {"apiKeyAuth":{}}},
+     *     @OA\Parameter(name="tahun", in="query", required=false, @OA\Schema(type="integer")),
+     *     @OA\Parameter(name="kecamatan_ids", in="query", required=false, @OA\Schema(type="string"), description="Comma separated IDs"),
+     *     @OA\Response(response=200, description="Successful operation")
+     * )
      */
     public function stats(Request $request): JsonResponse
     {

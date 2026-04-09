@@ -11,7 +11,16 @@ use Illuminate\Support\Facades\DB;
 class SimulationNetworkController extends Controller
 {
     /**
-     * List all networks accessible by the user
+     * @OA\Get(
+     *     path="/api/simulation-networks",
+     *     summary="List all simulation networks",
+     *     tags={"Simulation Network"},
+     *     security={{"bearerAuth":{}}, {"apiKeyAuth":{}}},
+     *     @OA\Parameter(name="pekerjaan_id", in="query", required=false, @OA\Schema(type="integer")),
+     *     @OA\Parameter(name="owned_only", in="query", required=false, @OA\Schema(type="boolean")),
+     *     @OA\Parameter(name="search", in="query", required=false, @OA\Schema(type="string")),
+     *     @OA\Response(response=200, description="Successful operation")
+     * )
      */
     public function index(Request $request): JsonResponse
     {
@@ -56,7 +65,23 @@ class SimulationNetworkController extends Controller
     }
 
     /**
-     * Store a new network
+     * @OA\Post(
+     *     path="/api/simulation-networks",
+     *     summary="Create new simulation network",
+     *     tags={"Simulation Network"},
+     *     security={{"bearerAuth":{}}, {"apiKeyAuth":{}}},
+     *     @OA\RequestBody(
+     *         required=true,
+     *         @OA\JsonContent(
+     *             required={"name", "network_data"},
+     *             @OA\Property(property="name", type="string"),
+     *             @OA\Property(property="description", type="string"),
+     *             @OA\Property(property="pekerjaan_id", type="integer"),
+     *             @OA\Property(property="network_data", type="object")
+     *         )
+     *     ),
+     *     @OA\Response(response=201, description="Created")
+     * )
      */
     public function store(Request $request): JsonResponse
     {
@@ -96,7 +121,14 @@ class SimulationNetworkController extends Controller
     }
 
     /**
-     * Show a specific network
+     * @OA\Get(
+     *     path="/api/simulation-networks/{id}",
+     *     summary="Get network detail",
+     *     tags={"Simulation Network"},
+     *     security={{"bearerAuth":{}}, {"apiKeyAuth":{}}},
+     *     @OA\Parameter(name="id", in="path", required=true, @OA\Schema(type="integer")),
+     *     @OA\Response(response=200, description="Successful operation")
+     * )
      */
     public function show(Request $request, int $id): JsonResponse
     {
@@ -121,7 +153,14 @@ class SimulationNetworkController extends Controller
     }
 
     /**
-     * Update a network
+     * @OA\Put(
+     *     path="/api/simulation-networks/{id}",
+     *     summary="Update simulation network",
+     *     tags={"Simulation Network"},
+     *     security={{"bearerAuth":{}}, {"apiKeyAuth":{}}},
+     *     @OA\Parameter(name="id", in="path", required=true, @OA\Schema(type="integer")),
+     *     @OA\Response(response=200, description="Updated")
+     * )
      */
     public function update(Request $request, int $id): JsonResponse
     {
@@ -172,7 +211,14 @@ class SimulationNetworkController extends Controller
     }
 
     /**
-     * Delete a network
+     * @OA\Delete(
+     *     path="/api/simulation-networks/{id}",
+     *     summary="Delete simulation network",
+     *     tags={"Simulation Network"},
+     *     security={{"bearerAuth":{}}, {"apiKeyAuth":{}}},
+     *     @OA\Parameter(name="id", in="path", required=true, @OA\Schema(type="integer")),
+     *     @OA\Response(response=200, description="Deleted")
+     * )
      */
     public function destroy(Request $request, int $id): JsonResponse
     {
@@ -195,7 +241,14 @@ class SimulationNetworkController extends Controller
     }
 
     /**
-     * Get version history for a network
+     * @OA\Get(
+     *     path="/api/simulation-networks/{id}/versions",
+     *     summary="Get network version history",
+     *     tags={"Simulation Network"},
+     *     security={{"bearerAuth":{}}, {"apiKeyAuth":{}}},
+     *     @OA\Parameter(name="id", in="path", required=true, @OA\Schema(type="integer")),
+     *     @OA\Response(response=200, description="Successful operation")
+     * )
      */
     public function versions(Request $request, int $id): JsonResponse
     {
@@ -220,7 +273,15 @@ class SimulationNetworkController extends Controller
     }
 
     /**
-     * Get a specific version's data
+     * @OA\Get(
+     *     path="/api/simulation-networks/{id}/versions/{version}",
+     *     summary="Get network version detail",
+     *     tags={"Simulation Network"},
+     *     security={{"bearerAuth":{}}, {"apiKeyAuth":{}}},
+     *     @OA\Parameter(name="id", in="path", required=true, @OA\Schema(type="integer")),
+     *     @OA\Parameter(name="version", in="path", required=true, @OA\Schema(type="integer")),
+     *     @OA\Response(response=200, description="Successful operation")
+     * )
      */
     public function showVersion(Request $request, int $id, int $version): JsonResponse
     {
@@ -245,7 +306,15 @@ class SimulationNetworkController extends Controller
     }
 
     /**
-     * Restore to a specific version
+     * @OA\Post(
+     *     path="/api/simulation-networks/{id}/restore/{version}",
+     *     summary="Restore to specific version",
+     *     tags={"Simulation Network"},
+     *     security={{"bearerAuth":{}}, {"apiKeyAuth":{}}},
+     *     @OA\Parameter(name="id", in="path", required=true, @OA\Schema(type="integer")),
+     *     @OA\Parameter(name="version", in="path", required=true, @OA\Schema(type="integer")),
+     *     @OA\Response(response=200, description="Restored")
+     * )
      */
     public function restoreVersion(Request $request, int $id, int $version): JsonResponse
     {
@@ -278,7 +347,20 @@ class SimulationNetworkController extends Controller
     }
 
     /**
-     * Save simulation results
+     * @OA\Post(
+     *     path="/api/simulation-networks/{id}/results",
+     *     summary="Save simulation results",
+     *     tags={"Simulation Network"},
+     *     security={{"bearerAuth":{}}, {"apiKeyAuth":{}}},
+     *     @OA\Parameter(name="id", in="path", required=true, @OA\Schema(type="integer")),
+     *     @OA\RequestBody(
+     *         required=true,
+     *         @OA\JsonContent(
+     *             @OA\Property(property="results", type="object")
+     *         )
+     *     ),
+     *     @OA\Response(response=200, description="Results saved")
+     * )
      */
     public function saveResults(Request $request, int $id): JsonResponse
     {
@@ -307,7 +389,19 @@ class SimulationNetworkController extends Controller
     }
 
     /**
-     * Duplicate a network
+     * @OA\Post(
+     *     path="/api/simulation-networks/{id}/duplicate",
+     *     summary="Duplicate a network",
+     *     tags={"Simulation Network"},
+     *     security={{"bearerAuth":{}}, {"apiKeyAuth":{}}},
+     *     @OA\Parameter(name="id", in="path", required=true, @OA\Schema(type="integer")),
+     *     @OA\RequestBody(
+     *         @OA\JsonContent(
+     *             @OA\Property(property="name", type="string")
+     *         )
+     *     ),
+     *     @OA\Response(response=201, description="Duplicated")
+     * )
      */
     public function duplicate(Request $request, int $id): JsonResponse
     {
@@ -344,7 +438,14 @@ class SimulationNetworkController extends Controller
     }
 
     /**
-     * Get networks linked to a specific pekerjaan
+     * @OA\Get(
+     *     path="/api/pekerjaan/{pekerjaanId}/simulation-networks",
+     *     summary="Get networks linked to pekerjaan",
+     *     tags={"Simulation Network"},
+     *     security={{"bearerAuth":{}}, {"apiKeyAuth":{}}},
+     *     @OA\Parameter(name="pekerjaanId", in="path", required=true, @OA\Schema(type="integer")),
+     *     @OA\Response(response=200, description="Successful operation")
+     * )
      */
     public function byPekerjaan(Request $request, int $pekerjaanId): JsonResponse
     {

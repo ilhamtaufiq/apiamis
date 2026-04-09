@@ -11,7 +11,14 @@ use Illuminate\Support\Facades\Validator;
 class NotificationController extends Controller
 {
     /**
-     * Display a listing of notifications.
+     * @OA\Get(
+     *     path="/api/notifications",
+     *     summary="List user notifications",
+     *     tags={"Notifications"},
+     *     security={{"bearerAuth":{}}},
+     *     @OA\Parameter(name="unread_only", in="query", required=false, @OA\Schema(type="boolean")),
+     *     @OA\Response(response=200, description="Successful operation")
+     * )
      */
     public function index(Request $request)
     {
@@ -32,7 +39,14 @@ class NotificationController extends Controller
     }
 
     /**
-     * Mark a notification as read.
+     * @OA\Post(
+     *     path="/api/notifications/{id}/read",
+     *     summary="Mark notification as read",
+     *     tags={"Notifications"},
+     *     security={{"bearerAuth":{}}},
+     *     @OA\Parameter(name="id", in="path", required=true, @OA\Schema(type="string")),
+     *     @OA\Response(response=200, description="Successful operation")
+     * )
      */
     public function markAsRead($id)
     {
@@ -43,7 +57,13 @@ class NotificationController extends Controller
     }
 
     /**
-     * Mark all notifications as read.
+     * @OA\Post(
+     *     path="/api/notifications/read-all",
+     *     summary="Mark all notifications as read",
+     *     tags={"Notifications"},
+     *     security={{"bearerAuth":{}}},
+     *     @OA\Response(response=200, description="Successful operation")
+     * )
      */
     public function markAllAsRead()
     {
@@ -53,7 +73,25 @@ class NotificationController extends Controller
     }
 
     /**
-     * Send a broadcast notification to users.
+     * @OA\Post(
+     *     path="/api/notifications/broadcast",
+     *     summary="Send broadcast notification",
+     *     tags={"Notifications (Admin Only)"},
+     *     security={{"bearerAuth":{}}},
+     *     @OA\RequestBody(
+     *         required=true,
+     *         @OA\JsonContent(
+     *             required={"title", "message", "type"},
+     *             @OA\Property(property="title", type="string"),
+     *             @OA\Property(property="message", type="string"),
+     *             @OA\Property(property="type", type="string", enum={"all", "single", "multiple"}),
+     *             @OA\Property(property="user_ids", type="array", @OA\Items(type="integer")),
+     *             @OA\Property(property="notification_type", type="string", enum={"info", "success", "warning", "error"}),
+     *             @OA\Property(property="url", type="string")
+     *         )
+     *     ),
+     *     @OA\Response(response=200, description="Broadcast success")
+     * )
      */
     public function sendBroadcast(Request $request)
     {

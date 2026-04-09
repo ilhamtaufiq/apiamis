@@ -10,7 +10,16 @@ use Illuminate\Support\Facades\DB;
 class PekerjaanChecklistController extends Controller
 {
     /**
-     * Get all pekerjaan with checklist status.
+     * @OA\Get(
+     *     path="/api/pekerjaan-checklist",
+     *     summary="List all pekerjaan with checklist status matrix",
+     *     tags={"Checklist Management"},
+     *     security={{"bearerAuth":{}}, {"apiKeyAuth":{}}},
+     *     @OA\Parameter(name="tahun", in="query", required=false, @OA\Schema(type="integer")),
+     *     @OA\Parameter(name="kegiatan_id", in="query", required=false, @OA\Schema(type="integer")),
+     *     @OA\Parameter(name="search", in="query", required=false, @OA\Schema(type="string")),
+     *     @OA\Response(response=200, description="Successful operation")
+     * )
      */
     public function index(Request $request)
     {
@@ -83,7 +92,23 @@ class PekerjaanChecklistController extends Controller
     }
 
     /**
-     * Toggle checklist status.
+     * @OA\Post(
+     *     path="/api/pekerjaan-checklist/toggle",
+     *     summary="Toggle or update a checklist item for a pekerjaan",
+     *     tags={"Checklist Management"},
+     *     security={{"bearerAuth":{}}, {"apiKeyAuth":{}}},
+     *     @OA\RequestBody(
+     *         required=true,
+     *         @OA\JsonContent(
+     *             required={"pekerjaan_id", "checklist_item_id", "is_checked"},
+     *             @OA\Property(property="pekerjaan_id", type="integer"),
+     *             @OA\Property(property="checklist_item_id", type="integer"),
+     *             @OA\Property(property="is_checked", type="boolean"),
+     *             @OA\Property(property="notes", type="string")
+     *         )
+     *     ),
+     *     @OA\Response(response=200, description="Updated")
+     * )
      */
     public function toggle(Request $request)
     {

@@ -9,7 +9,19 @@ use Illuminate\Http\Request;
 class KegiatanController extends Controller
 {
     /**
-     * Display a listing of the resource.
+     * @OA\Get(
+     *     path="/api/kegiatan",
+     *     summary="List all kegiatan",
+     *     tags={"Kegiatan"},
+     *     @OA\Parameter(
+     *         name="tahun",
+     *         in="query",
+     *         description="Filter by year",
+     *         required=false,
+     *         @OA\Schema(type="string")
+     *     ),
+     *     @OA\Response(response=200, description="Successful operation")
+     * )
      */
     public function index(Request $request)
     {
@@ -28,7 +40,22 @@ class KegiatanController extends Controller
     }
 
     /**
-     * Store a newly created resource in storage.
+     * @OA\Post(
+     *     path="/api/kegiatan",
+     *     summary="Create new kegiatan",
+     *     tags={"Kegiatan"},
+     *     security={{"bearerAuth":{}}},
+     *     @OA\RequestBody(
+     *         required=true,
+     *         @OA\JsonContent(
+     *             @OA\Property(property="nama_program", type="string"),
+     *             @OA\Property(property="nama_kegiatan", type="string"),
+     *             @OA\Property(property="tahun_anggaran", type="string", example="2024"),
+     *             @OA\Property(property="pagu", type="number")
+     *         )
+     *     ),
+     *     @OA\Response(response=201, description="Kegiatan created")
+     * )
      */
     public function store(Request $request)
     {
@@ -47,7 +74,18 @@ class KegiatanController extends Controller
     }
 
     /**
-     * Display the specified resource.
+     * @OA\Get(
+     *     path="/api/kegiatan/{id}",
+     *     summary="Get kegiatan detail",
+     *     tags={"Kegiatan"},
+     *     @OA\Parameter(
+     *         name="id",
+     *         in="path",
+     *         required=true,
+     *         @OA\Schema(type="integer")
+     *     ),
+     *     @OA\Response(response=200, description="Successful operation")
+     * )
      */
     public function show(Kegiatan $kegiatan)
     {
@@ -55,7 +93,25 @@ class KegiatanController extends Controller
     }
 
     /**
-     * Update the specified resource in storage.
+     * @OA\Put(
+     *     path="/api/kegiatan/{id}",
+     *     summary="Update kegiatan",
+     *     tags={"Kegiatan"},
+     *     security={{"bearerAuth":{}}},
+     *     @OA\Parameter(
+     *         name="id",
+     *         in="path",
+     *         required=true,
+     *         @OA\Schema(type="integer")
+     *     ),
+     *     @OA\RequestBody(
+     *         required=true,
+     *         @OA\JsonContent(
+     *             @OA\Property(property="nama_program", type="string")
+     *         )
+     *     ),
+     *     @OA\Response(response=200, description="Kegiatan updated")
+     * )
      */
     public function update(Request $request, Kegiatan $kegiatan)
     {
@@ -74,7 +130,19 @@ class KegiatanController extends Controller
     }
 
     /**
-     * Remove the specified resource from storage.
+     * @OA\Delete(
+     *     path="/api/kegiatan/{id}",
+     *     summary="Delete kegiatan",
+     *     tags={"Kegiatan"},
+     *     security={{"bearerAuth":{}}},
+     *     @OA\Parameter(
+     *         name="id",
+     *         in="path",
+     *         required=true,
+     *         @OA\Schema(type="integer")
+     *     ),
+     *     @OA\Response(response=200, description="Kegiatan deleted")
+     * )
      */
     public function destroy(Kegiatan $kegiatan)
     {
@@ -83,7 +151,18 @@ class KegiatanController extends Controller
     }
 
     /**
-     * Filter kegiatan by tahun anggaran
+     * @OA\Get(
+     *     path="/api/kegiatan/tahun/{tahun}",
+     *     summary="Filter kegiatan by year",
+     *     tags={"Kegiatan"},
+     *     @OA\Parameter(
+     *         name="tahun",
+     *         in="path",
+     *         required=true,
+     *         @OA\Schema(type="string")
+     *     ),
+     *     @OA\Response(response=200, description="Successful operation")
+     * )
      */
     public function byTahun($tahun)
     {

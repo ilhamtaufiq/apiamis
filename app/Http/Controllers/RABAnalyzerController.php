@@ -9,6 +9,26 @@ use Illuminate\Support\Facades\Log;
 
 class RABAnalyzerController extends Controller
 {
+    /**
+     * @OA\Post(
+     *     path="/api/rab/analyze",
+     *     summary="Analyze RAB document (PDF/Excel)",
+     *     description="Upload a file or provide berkas_id to analyze RAB structure using Node.js script",
+     *     tags={"RAB Analysis"},
+     *     security={{"bearerAuth":{}}, {"apiKeyAuth":{}}},
+     *     @OA\RequestBody(
+     *         required=true,
+     *         @OA\MediaType(
+     *             mediaType="multipart/form-data",
+     *             @OA\Schema(
+     *                 @OA\Property(property="file", type="string", format="binary"),
+     *                 @OA\Property(property="berkas_id", type="integer")
+     *             )
+     *         )
+     *     ),
+     *     @OA\Response(response=200, description="Analysis result")
+     * )
+     */
     public function analyze(Request $request)
     {
         $request->validate([

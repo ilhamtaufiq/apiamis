@@ -13,7 +13,15 @@ use Illuminate\Support\Facades\Validator;
 class TiketController extends Controller
 {
     /**
-     * Display a listing of the resource.
+     * @OA\Get(
+     *     path="/api/tiket",
+     *     summary="List all tickets",
+     *     tags={"Ticketing"},
+     *     security={{"bearerAuth":{}}},
+     *     @OA\Parameter(name="status", in="query", required=false, @OA\Schema(type="string", enum={"open","pending","closed"})),
+     *     @OA\Parameter(name="kategori", in="query", required=false, @OA\Schema(type="string", enum={"bug","request","other"})),
+     *     @OA\Response(response=200, description="Successful operation")
+     * )
      */
     public function index(Request $request)
     {
@@ -47,7 +55,28 @@ class TiketController extends Controller
     }
 
     /**
-     * Store a newly created resource in storage.
+     * @OA\Post(
+     *     path="/api/tiket",
+     *     summary="Create new ticket",
+     *     tags={"Ticketing"},
+     *     security={{"bearerAuth":{}}},
+     *     @OA\RequestBody(
+     *         required=true,
+     *         @OA\MediaType(
+     *             mediaType="multipart/form-data",
+     *             @OA\Schema(
+     *                 required={"subjek", "deskripsi", "kategori", "prioritas"},
+     *                 @OA\Property(property="subjek", type="string"),
+     *                 @OA\Property(property="deskripsi", type="string"),
+     *                 @OA\Property(property="kategori", type="string", enum={"bug","request","other"}),
+     *                 @OA\Property(property="prioritas", type="string", enum={"low","medium","high"}),
+     *                 @OA\Property(property="pekerjaan_id", type="integer"),
+     *                 @OA\Property(property="attachment", type="string", format="binary")
+     *             )
+     *         )
+     *     ),
+     *     @OA\Response(response=201, description="Ticket created")
+     * )
      */
     public function store(Request $request)
     {
@@ -91,7 +120,14 @@ class TiketController extends Controller
     }
 
     /**
-     * Display the specified resource.
+     * @OA\Get(
+     *     path="/api/tiket/{id}",
+     *     summary="Get ticket detail",
+     *     tags={"Ticketing"},
+     *     security={{"bearerAuth":{}}},
+     *     @OA\Parameter(name="id", in="path", required=true, @OA\Schema(type="integer")),
+     *     @OA\Response(response=200, description="Successful operation")
+     * )
      */
     public function show(Tiket $tiket)
     {
@@ -106,7 +142,15 @@ class TiketController extends Controller
     }
 
     /**
-     * Update the specified resource in storage.
+     * @OA\Post(
+     *     path="/api/tiket/{id}",
+     *     summary="Update ticket",
+     *     description="Uses POST with _method=PUT for multipart/form-data support",
+     *     tags={"Ticketing"},
+     *     security={{"bearerAuth":{}}},
+     *     @OA\Parameter(name="id", in="path", required=true, @OA\Schema(type="integer")),
+     *     @OA\Response(response=200, description="Updated")
+     * )
      */
     public function update(Request $request, Tiket $tiket)
     {
@@ -172,7 +216,14 @@ class TiketController extends Controller
     }
 
     /**
-     * Remove the specified resource from storage.
+     * @OA\Delete(
+     *     path="/api/tiket/{id}",
+     *     summary="Delete ticket",
+     *     tags={"Ticketing"},
+     *     security={{"bearerAuth":{}}},
+     *     @OA\Parameter(name="id", in="path", required=true, @OA\Schema(type="integer")),
+     *     @OA\Response(response=200, description="Deleted")
+     * )
      */
     public function destroy(Tiket $tiket)
     {

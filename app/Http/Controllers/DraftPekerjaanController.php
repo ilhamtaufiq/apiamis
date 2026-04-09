@@ -9,6 +9,16 @@ use App\Models\DraftPekerjaan;
 
 class DraftPekerjaanController extends Controller
 {
+    /**
+     * @OA\Get(
+     *     path="/api/draft-pekerjaan",
+     *     summary="List all draft pekerjaan",
+     *     tags={"Draft Pekerjaan"},
+     *     @OA\Parameter(name="tahun", in="query", required=false, @OA\Schema(type="integer")),
+     *     @OA\Parameter(name="search", in="query", required=false, @OA\Schema(type="string")),
+     *     @OA\Response(response=200, description="Successful operation")
+     * )
+     */
     public function index(Request $request)
     {
         $query = \App\Models\Pekerjaan::with(['kecamatan', 'desa', 'draft.penyedia', 'kegiatan'])
@@ -31,6 +41,26 @@ class DraftPekerjaanController extends Controller
         return PekerjaanResource::collection($query->paginate($request->per_page ?? 10));
     }
 
+    /**
+     * @OA\Post(
+     *     path="/api/draft-pekerjaan",
+     *     summary="Create or update draft pekerjaan",
+     *     tags={"Draft Pekerjaan"},
+     *     security={{"bearerAuth":{}}, {"apiKeyAuth":{}}},
+     *     @OA\RequestBody(
+     *         required=true,
+     *         @OA\JsonContent(
+     *             required={"pekerjaan_id"},
+     *             @OA\Property(property="pekerjaan_id", type="integer"),
+     *             @OA\Property(property="penyedia_id", type="integer"),
+     *             @OA\Property(property="nama_pelaksana", type="string"),
+     *             @OA\Property(property="kode_rup", type="string"),
+     *             @OA\Property(property="kode_paket", type="string")
+     *         )
+     *     ),
+     *     @OA\Response(response=200, description="Draft saved")
+     * )
+     */
     public function store(Request $request)
     {
         $validated = $request->validate([
@@ -55,12 +85,31 @@ class DraftPekerjaanController extends Controller
         return new DraftPekerjaanResource($draft->load('pekerjaan', 'penyedia'));
     }
 
+    /**
+     * @OA\Get(
+     *     path="/api/draft-pekerjaan/{id}",
+     *     summary="Get draft detail",
+     *     tags={"Draft Pekerjaan"},
+     *     @OA\Parameter(name="id", in="path", required=true, @OA\Schema(type="integer")),
+     *     @OA\Response(response=200, description="Successful operation")
+     * )
+     */
     public function show($id)
     {
         $draft = DraftPekerjaan::with(['pekerjaan', 'penyedia'])->findOrFail($id);
         return new DraftPekerjaanResource($draft);
     }
 
+    /**
+     * @OA\Put(
+     *     path="/api/draft-pekerjaan/{id}",
+     *     summary="Update draft",
+     *     tags={"Draft Pekerjaan"},
+     *     security={{"bearerAuth":{}}, {"apiKeyAuth":{}}},
+     *     @OA\Parameter(name="id", in="path", required=true, @OA\Schema(type="integer")),
+     *     @OA\Response(response=200, description="Updated")
+     * )
+     */
     public function update(Request $request, $id)
     {
         $draft = DraftPekerjaan::findOrFail($id);
@@ -78,6 +127,16 @@ class DraftPekerjaanController extends Controller
         return new DraftPekerjaanResource($draft->load('pekerjaan', 'penyedia'));
     }
 
+    /**
+     * @OA\Delete(
+     *     path="/api/draft-pekerjaan/{id}",
+     *     summary="Delete draft",
+     *     tags={"Draft Pekerjaan"},
+     *     security={{"bearerAuth":{}}, {"apiKeyAuth":{}}},
+     *     @OA\Parameter(name="id", in="path", required=true, @OA\Schema(type="integer")),
+     *     @OA\Response(response=200, description="Deleted")
+     * )
+     */
     public function destroy($id)
     {
         $draft = \App\Models\DraftPekerjaan::findOrFail($id);

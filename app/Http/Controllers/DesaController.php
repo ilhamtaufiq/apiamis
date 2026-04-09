@@ -9,7 +9,12 @@ use Illuminate\Http\Request;
 class DesaController extends Controller
 {
     /**
-     * Display a listing of the resource.
+     * @OA\Get(
+     *     path="/api/desa",
+     *     summary="List all desa",
+     *     tags={"Desa"},
+     *     @OA\Response(response=200, description="Successful operation")
+     * )
      */
     public function index()
     {
@@ -18,7 +23,21 @@ class DesaController extends Controller
     }
 
     /**
-     * Store a newly created resource in storage.
+     * @OA\Post(
+     *     path="/api/desa",
+     *     summary="Create new desa",
+     *     tags={"Desa"},
+     *     security={{"bearerAuth":{}}},
+     *     @OA\RequestBody(
+     *         required=true,
+     *         @OA\JsonContent(
+     *             required={"nama_desa","kecamatan_id"},
+     *             @OA\Property(property="nama_desa", type="string", example="Argapura"),
+     *             @OA\Property(property="kecamatan_id", type="integer", example=1)
+     *         )
+     *     ),
+     *     @OA\Response(response=201, description="Desa created")
+     * )
      */
     public function store(Request $request)
     {
@@ -39,7 +58,18 @@ class DesaController extends Controller
     }
 
     /**
-     * Display the specified resource.
+     * @OA\Get(
+     *     path="/api/desa/{id}",
+     *     summary="Get desa detail",
+     *     tags={"Desa"},
+     *     @OA\Parameter(
+     *         name="id",
+     *         in="path",
+     *         required=true,
+     *         @OA\Schema(type="integer")
+     *     ),
+     *     @OA\Response(response=200, description="Successful operation")
+     * )
      */
     public function show(Desa $desa)
     {
@@ -48,7 +78,25 @@ class DesaController extends Controller
     }
 
     /**
-     * Update the specified resource in storage.
+     * @OA\Put(
+     *     path="/api/desa/{id}",
+     *     summary="Update desa",
+     *     tags={"Desa"},
+     *     security={{"bearerAuth":{}}},
+     *     @OA\Parameter(
+     *         name="id",
+     *         in="path",
+     *         required=true,
+     *         @OA\Schema(type="integer")
+     *     ),
+     *     @OA\RequestBody(
+     *         required=true,
+     *         @OA\JsonContent(
+     *             @OA\Property(property="nama_desa", type="string")
+     *         )
+     *     ),
+     *     @OA\Response(response=200, description="Desa updated")
+     * )
      */
     public function update(Request $request, Desa $desa)
     {
@@ -71,7 +119,19 @@ class DesaController extends Controller
     }
 
     /**
-     * Remove the specified resource from storage.
+     * @OA\Delete(
+     *     path="/api/desa/{id}",
+     *     summary="Delete desa",
+     *     tags={"Desa"},
+     *     security={{"bearerAuth":{}}},
+     *     @OA\Parameter(
+     *         name="id",
+     *         in="path",
+     *         required=true,
+     *         @OA\Schema(type="integer")
+     *     ),
+     *     @OA\Response(response=200, description="Desa deleted")
+     * )
      */
     public function destroy(Desa $desa)
     {
@@ -80,7 +140,18 @@ class DesaController extends Controller
     }
 
     /**
-     * Get desa by kecamatan
+     * @OA\Get(
+     *     path="/api/desa/kecamatan/{kecamatanId}",
+     *     summary="Get desa by kecamatan ID",
+     *     tags={"Desa"},
+     *     @OA\Parameter(
+     *         name="kecamatanId",
+     *         in="path",
+     *         required=true,
+     *         @OA\Schema(type="integer")
+     *     ),
+     *     @OA\Response(response=200, description="Successful operation")
+     * )
      */
     public function byKecamatan($kecamatanId)
     {

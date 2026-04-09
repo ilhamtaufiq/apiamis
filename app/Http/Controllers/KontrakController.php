@@ -19,7 +19,14 @@ class KontrakController extends Controller
     }
 
     /**
-     * Generate next document number for contract related docs
+     * @OA\Get(
+     *     path="/api/kontrak/generate-number",
+     *     summary="Generate next document number (Preview)",
+     *     tags={"Kontrak"},
+     *     @OA\Parameter(name="type", in="query", required=true, @OA\Schema(type="string", enum={"sppbj", "spk", "spmk"})),
+     *     @OA\Parameter(name="pekerjaan_id", in="query", required=true, @OA\Schema(type="integer")),
+     *     @OA\Response(response=200, description="Number generated")
+     * )
      */
     public function generateNumber(Request $request)
     {
@@ -41,6 +48,14 @@ class KontrakController extends Controller
         return response()->json(['nomor' => $nomor]);
     }
 
+    /**
+     * @OA\Get(
+     *     path="/api/kontrak",
+     *     summary="List all kontrak",
+     *     tags={"Kontrak"},
+     *     @OA\Response(response=200, description="Successful operation")
+     * )
+     */
     public function index(Request $request)
     {
         $query = Kontrak::with('kegiatan', 'pekerjaan', 'penyedia');
@@ -71,6 +86,22 @@ class KontrakController extends Controller
         return KontrakResource::collection($kontrak);
     }
 
+    /**
+     * @OA\Post(
+     *     path="/api/kontrak",
+     *     summary="Create new kontrak",
+     *     tags={"Kontrak"},
+     *     @OA\RequestBody(
+     *         required=true,
+     *         @OA\JsonContent(
+     *             required={"id_pekerjaan", "id_penyedia"},
+     *             @OA\Property(property="id_pekerjaan", type="integer"),
+     *             @OA\Property(property="id_penyedia", type="integer")
+     *         )
+     *     ),
+     *     @OA\Response(response=201, description="Kontrak created")
+     * )
+     */
     public function store(Request $request)
     {
         $validated = $request->validate([
@@ -103,12 +134,30 @@ class KontrakController extends Controller
         return new KontrakDetailResource($kontrak);
     }
 
+    /**
+     * @OA\Get(
+     *     path="/api/kontrak/{id}",
+     *     summary="Get kontrak detail",
+     *     tags={"Kontrak"},
+     *     @OA\Parameter(name="id", in="path", required=true, @OA\Schema(type="integer")),
+     *     @OA\Response(response=200, description="Successful operation")
+     * )
+     */
     public function show(Kontrak $kontrak)
     {
         $kontrak->load('kegiatan', 'pekerjaan', 'penyedia');
         return new KontrakDetailResource($kontrak);
     }
 
+    /**
+     * @OA\Put(
+     *     path="/api/kontrak/{id}",
+     *     summary="Update kontrak",
+     *     tags={"Kontrak"},
+     *     @OA\Parameter(name="id", in="path", required=true, @OA\Schema(type="integer")),
+     *     @OA\Response(response=200, description="Kontrak updated")
+     * )
+     */
     public function update(Request $request, Kontrak $kontrak)
     {
         $validated = $request->validate([
@@ -134,6 +183,15 @@ class KontrakController extends Controller
         return new KontrakDetailResource($kontrak);
     }
 
+    /**
+     * @OA\Delete(
+     *     path="/api/kontrak/{id}",
+     *     summary="Delete kontrak",
+     *     tags={"Kontrak"},
+     *     @OA\Parameter(name="id", in="path", required=true, @OA\Schema(type="integer")),
+     *     @OA\Response(response=200, description="Kontrak deleted")
+     * )
+     */
     public function destroy(Kontrak $kontrak)
     {
         $kontrak->delete();
@@ -161,7 +219,14 @@ class KontrakController extends Controller
     }
 
     /**
-     * Export contract document
+     * @OA\Get(
+     *     path="/api/kontrak/{id}/export",
+     *     summary="Export contract in Word/PDF",
+     *     tags={"Kontrak"},
+     *     @OA\Parameter(name="id", in="path", required=true, @OA\Schema(type="integer")),
+     *     @OA\Parameter(name="format", in="query", @OA\Schema(type="string", enum={"docx", "pdf"})),
+     *     @OA\Response(response=200, description="File download")
+     * )
      */
     public function export(Request $request, $id)
     {
