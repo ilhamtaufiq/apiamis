@@ -55,7 +55,7 @@ class RABAnalyzerController extends Controller
                 
                 // Store in 'local' disk (storage/app/private as per config)
                 $path = $file->storeAs('temp-rab', $filename, 'local');
-                $fullPath = \Illuminate\Support\Facades\Storage::disk('local')->path($path);
+                $fullPath = Storage::disk('local')->path($path);
                 $isTemp = true;
             }
 

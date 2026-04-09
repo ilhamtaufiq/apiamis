@@ -139,7 +139,7 @@ class DraftPekerjaanController extends Controller
      */
     public function destroy($id)
     {
-        $draft = \App\Models\DraftPekerjaan::findOrFail($id);
+        $draft = DraftPekerjaan::findOrFail($id);
         $draft->delete();
 
         return response()->json(null, 204);

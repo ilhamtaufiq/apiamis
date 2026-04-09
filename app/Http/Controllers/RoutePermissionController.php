@@ -30,8 +30,8 @@ class RoutePermissionController extends Controller
         }
 
         // Filter by method if provided
-        if ($request->has('method') && $request->method) {
-            $query->where('route_method', strtoupper($request->method));
+        if ($request->has('method') && $request->input('method')) {
+            $query->where('route_method', strtoupper($request->input('method')));
         }
 
         // Filter by active status

@@ -54,7 +54,7 @@ class SimulationNetworkController extends Controller
 
         // Add stats to each network
         $networks->getCollection()->transform(function ($network) {
-            $network->stats = $network->stats;
+            $network->setAttribute('stats', $network->stats);
             return $network;
         });
 
@@ -143,7 +143,7 @@ class SimulationNetworkController extends Controller
             ], 403);
         }
 
-        $network->stats = $network->stats;
+        $network->setAttribute('stats', $network->stats);
         $network->can_edit = $network->canEdit($request->user());
 
         return response()->json([
@@ -201,7 +201,7 @@ class SimulationNetworkController extends Controller
         });
 
         $network->load(['user:id,name', 'pekerjaan:id,nama_paket']);
-        $network->stats = $network->stats;
+        $network->setAttribute('stats', $network->stats);
 
         return response()->json([
             'success' => true,
@@ -337,7 +337,7 @@ class SimulationNetworkController extends Controller
         }
 
         $network->load(['user:id,name', 'pekerjaan:id,nama_paket']);
-        $network->stats = $network->stats;
+        $network->setAttribute('stats', $network->stats);
 
         return response()->json([
             'success' => true,
@@ -428,7 +428,7 @@ class SimulationNetworkController extends Controller
         ]);
 
         $newNetwork->load(['user:id,name', 'pekerjaan:id,nama_paket']);
-        $newNetwork->stats = $newNetwork->stats;
+        $newNetwork->setAttribute('stats', $newNetwork->stats);
 
         return response()->json([
             'success' => true,
@@ -457,7 +457,7 @@ class SimulationNetworkController extends Controller
             ->get();
 
         $networks->transform(function ($network) use ($user) {
-            $network->stats = $network->stats;
+            $network->setAttribute('stats', $network->stats);
             $network->can_edit = $network->canEdit($user);
             return $network;
         });
