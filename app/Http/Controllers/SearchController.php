@@ -9,6 +9,10 @@ use App\Models\Penyedia;
 use App\Models\Kegiatan;
 use App\Models\Desa;
 use App\Models\User;
+use App\Models\Foto;
+use App\Models\Penerima;
+use App\Models\Output;
+use App\Models\Progress;
 
 class SearchController extends Controller
 {
@@ -133,6 +137,73 @@ class SearchController extends Controller
                 ];
             });
         $results = array_merge($results, $desa->toArray());
+
+        // 6. Search Dokumentasi (Foto)
+        $dokumentasi = Foto::where('keterangan', 'like', "%{$query}%")
+            ->with('pekerjaan') // For referencing parent pekerjaan
+            ->limit(5)
+            ->get()
+            ->map(function ($item) {
+                return [
+                    'id' => $item->id,
+                    'type' => 'Dokumentasi',
+                    'title' => 'Dokumentasi: ' . ($item->keterangan ?? 'Tanpa Keterangan'),
+                    'subtitle' => 'Pekerjaan: ' . ($item->pekerjaan->nama_paket ?? ''),
+                    'url' => "/pekerjaan/{$item->pekerjaan_id}" // Generally points back to project
+                ];
+            });
+        $results = array_merge($results, $dokumentasi->toArray());
+
+        // 7. Search Penerima Manfaat
+        $penerima = Penerima::where('nama', 'like', "%{$query}%")
+            ->orWhere('nik', 'like', "%{$query}%")
+            ->orWhere('alamat', 'like', "%{$query}%")
+            ->with('pekerjaan')
+            ->limit(5)
+            ->get()
+            ->map(function ($item) {
+                return [
+                    'id' => $item->id,
+                    'type' => 'Penerima Manfaat',
+                    'title' => 'Penerima: ' . $item->nama,
+                    'subtitle' => 'Alamat: ' . ($item->alamat ?? '') . ' | Pekerjaan: ' . ($item->pekerjaan->nama_paket ?? ''),
+                    'url' => "/pekerjaan/{$item->pekerjaan_id}" 
+                ];
+            });
+        $results = array_merge($results, $penerima->toArray());
+
+        // 8. Search Output
+        $output = Output::where('komponen', 'like', "%{$query}%")
+            ->orWhere('satuan', 'like', "%{$query}%")
+            ->with('pekerjaan')
+            ->limit(5)
+            ->get()
+            ->map(function ($item) {
+                return [
+                    'id' => $item->id,
+                    'type' => 'Output',
+                    'title' => 'Output: ' . $item->komponen,
+                    'subtitle' => 'Volume: ' . $item->volume . ' ' . $item->satuan . ' | Pekerjaan: ' . ($item->pekerjaan->nama_paket ?? ''),
+                    'url' => "/pekerjaan/{$item->pekerjaan_id}"
+                ];
+            });
+        $results = array_merge($results, $output->toArray());
+
+        // 9. Search Progress
+        $progress = Progress::where('content', 'like', "%{$query}%") // assumes content column can be queried directly if JSON cast allows LIKE or it contains string matches
+            ->with('pekerjaan')
+            ->limit(5)
+            ->get()
+            ->map(function ($item) {
+                return [
+                    'id' => $item->id,
+                    'type' => 'Progress',
+                    'title' => 'Progress Log Entry',
+                    'subtitle' => 'Pekerjaan: ' . ($item->pekerjaan->nama_paket ?? ''),
+                    'url' => "/pekerjaan/{$item->pekerjaan_id}"
+                ];
+            });
+        $results = array_merge($results, $progress->toArray());
 
         return response()->json([
             'success' => true,
