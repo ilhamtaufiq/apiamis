@@ -21,7 +21,7 @@ class PekerjaanController extends Controller
      *     summary="List all pekerjaan",
      *     description="Returns paginated list of pekerjaan based on user role and filters",
      *     tags={"Pekerjaan"},
-     *     security={{"bearerAuth":{}}},
+     *     security={{"bearerAuth":{}}, {"apiKeyAuth":{}}},
      *     @OA\Parameter(
      *         name="tahun",
      *         in="query",
@@ -182,7 +182,7 @@ class PekerjaanController extends Controller
      *      operationId="getPekerjaanDetailByRole",
      *      tags={"Pekerjaan"},
      *      summary="Get detail pekerjaan (hanya jika diizinkan role)",
-     *      security={{"bearerAuth":{}}},
+
      *      @OA\Parameter(
      *          name="id",
      *          in="path",
@@ -536,7 +536,7 @@ class PekerjaanController extends Controller
      *      operationId="importPekerjaan",
      *      tags={"Pekerjaan"},
      *      summary="Import pekerjaan from excel",
-     *      security={{"bearerAuth":{}}},
+
      *      @OA\RequestBody(
      *          required=true,
      *          @OA\MediaType(
@@ -614,7 +614,7 @@ class PekerjaanController extends Controller
      *      operationId="downloadPekerjaanTemplate",
      *      tags={"Pekerjaan"},
      *      summary="Download excel template for import",
-     *      security={{"bearerAuth":{}}},
+
      *      @OA\Response(
      *          response=200,
      *          description="Template file download"

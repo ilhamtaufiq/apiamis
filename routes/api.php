@@ -105,6 +105,9 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('dashboard/stats', [DashboardController::class, 'stats']);
     Route::get('dashboard/analytics', [AnalyticsController::class, 'stats']);
 
+    // Global Search
+    Route::get('search', [\App\Http\Controllers\SearchController::class, 'index']);
+
     // API Resources
     Route::apiResource('kecamatan', KecamatanController::class);
     Route::apiResource('desa', DesaController::class);
