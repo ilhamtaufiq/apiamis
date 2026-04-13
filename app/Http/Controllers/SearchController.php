@@ -131,7 +131,7 @@ class SearchController extends Controller
         $results = array_merge($results, $desa->toArray());
 
         // 6. Search Dokumentasi (Foto)
-        $dokumentasi = Foto::whereRaw("MATCH(keterangan) AGAINST(? IN BOOLEAN MODE)", [$query])
+        $dokumentasi = Foto::where('keterangan', 'like', "%{$query}%")
             ->with('pekerjaan') 
             ->limit(5)
             ->get()

@@ -20,7 +20,7 @@ class MiniMaxService
      */
     public function chat(array $messages, array $options = [])
     {
-        $model = $options['model'] ?? 'minimax-abab6.5-chat';
+        $model = $options['model'] ?? 'MiniMax-M2.7';
         $payload = [
             'model' => $model,
             'messages' => $messages,
@@ -31,7 +31,7 @@ class MiniMaxService
             $payload['tools'] = $options['tools'];
             $payload['tool_choice'] = $options['tool_choice'] ?? 'auto';
         }
-        
+
         try {
             $response = Http::withHeaders([
                 'Authorization' => 'Bearer ' . $this->apiKey,
