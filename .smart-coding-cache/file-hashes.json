@@ -16,7 +16,7 @@
   "C:\\laragon\\www\\apiamis\\routes\\web.php": "7fafeeaefa35e8369db551ddc0b99679",
   "C:\\laragon\\www\\apiamis\\storage\\from-kambing1.txt": "d41d8cd98f00b204e9800998ecf8427e",
   "C:\\laragon\\www\\apiamis\\routes\\console.php": "3c6ce2e6d16444282b24a9aa63885563",
-  "C:\\laragon\\www\\apiamis\\routes\\api.php": "4ef110a4f802fd89629878ff96da1239",
+  "C:\\laragon\\www\\apiamis\\routes\\api.php": "b6e39e70e338f791bf7f55d571679c07",
   "C:\\laragon\\www\\apiamis\\public\\robots.txt": "b6216d61c03e6ce0c9aea6ca7808f7ca",
   "C:\\laragon\\www\\apiamis\\public\\index.php": "d8eda274115af5fd2aaa8230af329ef7",
   "C:\\laragon\\www\\apiamis\\docs\\README.md": "f5abd42846a3111ffd641f4d2fd36483",
@@ -213,5 +213,6 @@
   "C:\\laragon\\www\\apiamis\\package-lock.json": "96c7cf590f397639eb4baeb0f034b648",
   "C:\\laragon\\www\\apiamis\\scripts\\analyze-rab.js": "6a684230afe76b25f9ccc709205a04e5",
   "C:\\laragon\\www\\apiamis\\app\\Http\\Controllers\\RABAnalyzerController.php": "e2afdf76d1e348cbd9844941290ff351",
-  "C:\\laragon\\www\\apiamis\\storage\\framework\\views\\98a8aaf64a6c99934453e662aa77535a.php": "8eb38a6621548e3868714d8dbb5729f8"
+  "C:\\laragon\\www\\apiamis\\storage\\framework\\views\\98a8aaf64a6c99934453e662aa77535a.php": "8eb38a6621548e3868714d8dbb5729f8",
+  "C:\\laragon\\www\\apiamis\\app\\Http\\Controllers\\SearchController.php": "fe1836358bafa2ead62158c155c74062"
 }

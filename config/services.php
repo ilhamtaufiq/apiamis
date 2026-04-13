@@ -41,4 +41,8 @@ return [
         'redirect' => env('GOOGLE_REDIRECT_URI'),
     ],
 
+    'minimax' => [
+        'api_key' => env('VITE_MINIMAX_API_KEY'),
+    ],
+
 ];
