@@ -54,10 +54,7 @@ class SearchController extends Controller
 
         // 1. Search Pekerjaan
         $pekerjaan = Pekerjaan::byUserRole()
-            ->where(function($q) use ($query) {
-                $q->where('nama_paket', 'like', "%{$query}%")
-                  ->orWhere('kode_rekening', 'like', "%{$query}%");
-            })
+            ->whereRaw("MATCH(nama_paket, kode_rekening) AGAINST(? IN BOOLEAN MODE)", [$query])
             ->with(['desa', 'kecamatan'])
             ->limit(10)
             ->get()
@@ -73,9 +70,7 @@ class SearchController extends Controller
         $results = array_merge($results, $pekerjaan->toArray());
 
         // 2. Search Kontrak
-        $kontrak = Kontrak::where('spk', 'like', "%{$query}%")
-            ->orWhere('spmk', 'like', "%{$query}%")
-            ->orWhere('kode_paket', 'like', "%{$query}%")
+        $kontrak = Kontrak::whereRaw("MATCH(spk, spmk, kode_paket) AGAINST(? IN BOOLEAN MODE)", [$query])
             ->limit(5)
             ->get()
             ->map(function ($item) {
@@ -90,8 +85,7 @@ class SearchController extends Controller
         $results = array_merge($results, $kontrak->toArray());
 
         // 3. Search Penyedia
-        $penyedia = Penyedia::where('nama', 'like', "%{$query}%")
-            ->orWhere('direktur', 'like', "%{$query}%")
+        $penyedia = Penyedia::whereRaw("MATCH(nama, direktur) AGAINST(? IN BOOLEAN MODE)", [$query])
             ->limit(5)
             ->get()
             ->map(function ($item) {
@@ -106,9 +100,7 @@ class SearchController extends Controller
         $results = array_merge($results, $penyedia->toArray());
 
         // 4. Search Kegiatan
-        $kegiatan = Kegiatan::where('nama_kegiatan', 'like', "%{$query}%")
-            ->orWhere('nama_sub_kegiatan', 'like', "%{$query}%")
-            ->orWhere('nama_program', 'like', "%{$query}%")
+        $kegiatan = Kegiatan::whereRaw("MATCH(nama_kegiatan, nama_sub_kegiatan, nama_program) AGAINST(? IN BOOLEAN MODE)", [$query])
             ->limit(5)
             ->get()
             ->map(function ($item) {
@@ -123,7 +115,7 @@ class SearchController extends Controller
         $results = array_merge($results, $kegiatan->toArray());
 
         // 5. Search Desa
-        $desa = Desa::where('n_desa', 'like', "%{$query}%")
+        $desa = Desa::whereRaw("MATCH(n_desa) AGAINST(? IN BOOLEAN MODE)", [$query])
             ->with('kecamatan')
             ->limit(5)
             ->get()
@@ -132,15 +124,15 @@ class SearchController extends Controller
                     'id' => $item->id,
                     'type' => 'Desa',
                     'title' => 'Desa ' . $item->n_desa,
-                    'subtitle' => 'Kec. ' . ($item->kecamatan->nama_kecamatan ?? ''),
+                    'subtitle' => 'Kec. ' . ($item->kecamatan->n_kec ?? ''),
                     'url' => "/desa/{$item->id}"
                 ];
             });
         $results = array_merge($results, $desa->toArray());
 
         // 6. Search Dokumentasi (Foto)
-        $dokumentasi = Foto::where('keterangan', 'like', "%{$query}%")
-            ->with('pekerjaan') // For referencing parent pekerjaan
+        $dokumentasi = Foto::whereRaw("MATCH(keterangan) AGAINST(? IN BOOLEAN MODE)", [$query])
+            ->with('pekerjaan') 
             ->limit(5)
             ->get()
             ->map(function ($item) {
@@ -155,9 +147,7 @@ class SearchController extends Controller
         $results = array_merge($results, $dokumentasi->toArray());
 
         // 7. Search Penerima Manfaat
-        $penerima = Penerima::where('nama', 'like', "%{$query}%")
-            ->orWhere('nik', 'like', "%{$query}%")
-            ->orWhere('alamat', 'like', "%{$query}%")
+        $penerima = Penerima::whereRaw("MATCH(nama, nik, alamat) AGAINST(? IN BOOLEAN MODE)", [$query])
             ->with('pekerjaan')
             ->limit(5)
             ->get()
@@ -173,8 +163,7 @@ class SearchController extends Controller
         $results = array_merge($results, $penerima->toArray());
 
         // 8. Search Output
-        $output = Output::where('komponen', 'like', "%{$query}%")
-            ->orWhere('satuan', 'like', "%{$query}%")
+        $output = Output::whereRaw("MATCH(komponen, satuan) AGAINST(? IN BOOLEAN MODE)", [$query])
             ->with('pekerjaan')
             ->limit(5)
             ->get()

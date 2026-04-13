@@ -186,15 +186,15 @@ class ChatController extends Controller
 
         // 1. Search Pekerjaan with its relations
         $pekerjaan = Pekerjaan::with(['kecamatan', 'desa', 'kontrak.penyedia', 'kegiatan'])
-            ->where('nama_paket', 'like', "%{$query}%")
-            ->orWhereHas('kecamatan', function($q) use ($query) { $q->where('nama_kecamatan', 'like', "%{$query}%"); })
-            ->orWhereHas('desa', function($q) use ($query) { $q->where('n_desa', 'like', "%{$query}%"); })
+            ->whereRaw("MATCH(nama_paket, kode_rekening) AGAINST(? IN BOOLEAN MODE)", [$query])
+            ->orWhereHas('kecamatan', function($q) use ($query) { $q->whereRaw("MATCH(n_kec) AGAINST(? IN BOOLEAN MODE)", [$query]); })
+            ->orWhereHas('desa', function($q) use ($query) { $q->whereRaw("MATCH(n_desa) AGAINST(? IN BOOLEAN MODE)", [$query]); })
             ->limit(5)->get();
 
         if ($pekerjaan->count() > 0) {
             $context .= "### DATA PEKERJAAN & RELASI:\n";
             foreach ($pekerjaan as $p) {
-                $loc = ($p->desa->n_desa ?? '-') . ", " . ($p->kecamatan->nama_kecamatan ?? '-');
+                $loc = ($p->desa->n_desa ?? '-') . ", " . ($p->kecamatan->n_kec ?? '-');
                 $context .= "- Paket: [{$p->id}] {$p->nama_paket}\n";
                 $context .= "  * Pagu: Rp " . number_format($p->pagu, 0, ',', '.') . "\n";
                 $context .= "  * Lokasi: {$loc}\n";
@@ -213,8 +213,7 @@ class ChatController extends Controller
         // 2. Search Penyedia/Kontraktor directly if mentioned
         if (str_contains($queryLower, 'kontraktor') || str_contains($queryLower, 'penyedia') || $pekerjaan->count() < 2) {
             $penyedia = Penyedia::with(['kontrak.pekerjaan'])
-                ->where('nama', 'like', "%{$query}%")
-                ->orWhere('direktur', 'like', "%{$query}%")
+                ->whereRaw("MATCH(nama, direktur) AGAINST(? IN BOOLEAN MODE)", [$query])
                 ->limit(3)->get();
 
             if ($penyedia->count() > 0) {
