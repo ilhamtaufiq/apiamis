@@ -11,7 +11,7 @@ class RABAnalyzerController extends Controller
 {
     /**
      * @OA\Post(
-     *     path="/api/rab/analyze",
+     *     path="/api/analyze-rab",
      *     summary="Analyze RAB document (PDF/Excel)",
      *     description="Upload a file or provide berkas_id to analyze RAB structure using Node.js script",
      *     tags={"RAB Analysis"},

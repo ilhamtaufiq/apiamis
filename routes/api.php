@@ -205,6 +205,9 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('simulation-networks/{id}/duplicate', [SimulationNetworkController::class, 'duplicate']);
     Route::get('simulation-networks/pekerjaan/{pekerjaanId}', [SimulationNetworkController::class, 'byPekerjaan']);
     
+    // RAB Analysis
+    Route::post('analyze-rab', [RABAnalyzerController::class, 'analyze']);
+
     // Chat AI (MiniMax)
     Route::post('chat', [\App\Http\Controllers\ChatController::class, 'chat']);
 });

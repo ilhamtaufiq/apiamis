@@ -22,6 +22,7 @@
     - Added OpenAPI annotations to `ChecklistItemController`, `DataQualityController`, `DraftPekerjaanController`, `EventController`, `KegiatanRoleController`, `MenuPermissionController`, `PekerjaanChecklistController`, `PermissionController`, `RoleController`, `RoutePermissionController`, `TagController`, `TiketCommentController`, `UserPekerjaanController`, `SimulationNetworkController`, `RABAnalyzerController`.
     - Integrated `apiKeyAuth` into global Swagger configuration and specific endpoints.
     - Successfully regenerated API documentation via `php artisan l5-swagger:generate`.
+    - Fixed missing `api/analyze-rab` route in `api.php`.
   - Now:
     - Submitting finalized API documentation and security updates.
     - Implementing MiniMaxService and ChatController for AI Chat.
