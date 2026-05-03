@@ -20,7 +20,8 @@ class UserController extends Controller
      */
     public function index()
     {
-        return User::with('roles', 'permissions')->paginate(15);
+        $users = User::with('roles', 'permissions')->paginate(15);
+        return \App\Http\Resources\UserResource::collection($users);
     }
 
     /**
@@ -69,7 +70,7 @@ class UserController extends Controller
             $user->syncPermissions($validated['permissions']);
         }
 
-        return response()->json($user->load('roles', 'permissions'), 201);
+        return response()->json(new \App\Http\Resources\UserResource($user->load('roles', 'permissions')), 201);
     }
 
     /**
@@ -84,7 +85,7 @@ class UserController extends Controller
      */
     public function show(User $user)
     {
-        return $user->load('roles', 'permissions');
+        return new \App\Http\Resources\UserResource($user->load('roles', 'permissions'));
     }
 
     /**
@@ -124,7 +125,7 @@ class UserController extends Controller
             $user->syncPermissions($validated['permissions']);
         }
 
-        return response()->json($user->load('roles', 'permissions'));
+        return response()->json(new \App\Http\Resources\UserResource($user->load('roles', 'permissions')));
     }
 
     /**

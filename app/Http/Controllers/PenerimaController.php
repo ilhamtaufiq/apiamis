@@ -201,5 +201,26 @@ class PenerimaController extends Controller
             'non_komunal_count' => $total - $komunal,
         ]);
     }
+    public function summary(Request $request)
+    {
+        $query = Penerima::query();
+
+        if ($request->has('tahun') && $request->tahun) {
+            $query->whereHas('pekerjaan.kegiatan', function($q) use ($request) {
+                $q->where('tahun_anggaran', $request->tahun);
+            });
+        }
+
+        $total = (clone $query)->count();
+        $komunal = (clone $query)->komunal(true)->count();
+        $totalJiwa = (clone $query)->sum('jumlah_jiwa');
+
+        return response()->json([
+            'total_penerima' => $total,
+            'komunal_count' => $komunal,
+            'individu_count' => $total - $komunal,
+            'total_jiwa' => $totalJiwa,
+        ]);
+    }
 }
     

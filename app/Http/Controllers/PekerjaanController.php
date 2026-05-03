@@ -56,21 +56,10 @@ class PekerjaanController extends Controller
                 ->byUserRole();  // Aman karena sudah check auth
             
             // Filter by tahun via kegiatan
-            if ($request->has('tahun') && $request->tahun) {
-                $user = auth()->user();
-                if ($user && !$user->hasRole('admin')) {
-                    $query->where(function($q) use ($request, $user) {
-                        $q->whereHas('kegiatan', function($inner) use ($request) {
-                            $inner->where('tahun_anggaran', $request->tahun);
-                        })->orWhereHas('assignedUsers', function($inner) use ($user) {
-                            $inner->where('users.id', $user->id);
-                        });
-                    });
-                } else {
-                    $query->whereHas('kegiatan', function($q) use ($request) {
-                        $q->where('tahun_anggaran', $request->tahun);
-                    });
-                }
+            if ($request->has('tahun') && !empty($request->tahun)) {
+                $query->whereHas('kegiatan', function($q) use ($request) {
+                    $q->where('tahun_anggaran', $request->tahun);
+                });
             }
 
             // Filter multi
@@ -206,25 +195,19 @@ class PekerjaanController extends Controller
         
         // Check apakah user boleh akses pekerjaan ini
         if (!$user->hasRole('admin')) {
-            // 1. Cek manual assignment
-            $hasManualAccess = $user->assignedPekerjaan()
-                ->where('tbl_pekerjaan.id', $pekerjaan->id)
-                ->exists();
-                
-            // 2. Cek role assignment
-            $userRoleIds = $user->roles()->pluck('id')->toArray();
-            $hasRoleAccess = KegiatanRole::whereIn('role_id', $userRoleIds)
-                ->where('kegiatan_id', $pekerjaan->kegiatan_id)
+            $hasAccess = Pekerjaan::where('tbl_pekerjaan.id', $pekerjaan->id)
+                ->byUserRole()
                 ->exists();
 
-            if (!$hasManualAccess && !$hasRoleAccess) {
+            if (!$hasAccess) {
                 abort(403, 'Anda tidak memiliki akses untuk pekerjaan ini');
             }
         }
         
         $pekerjaan->load([
             'kecamatan', 'desa', 'kegiatan', 
-            'foto', 'berkas', 'output', 'penerima', 'kontrak', 'tags', 'pengawas', 'pendamping'
+            'foto', 'berkas', 'output', 'penerima', 'kontrak.penyedia', 'tags', 'pengawas', 'pendamping',
+            'progress', 'beritaAcara'
         ]);
         
         return new PekerjaanDetailResource($pekerjaan);

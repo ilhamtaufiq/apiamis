@@ -20,19 +20,30 @@ class PekerjaanResource extends JsonResource
         $sources = [];
         
         if ($user && !$user->hasRole('admin')) {
-            // Check manual assignment
-            $isManual = \Illuminate\Support\Facades\DB::table('user_pekerjaan')
-                ->where('user_id', $user->id)
-                ->where('pekerjaan_id', $this->id)
-                ->exists();
-            if ($isManual) $sources[] = 'manual';
+            static $assignedIds = null;
+            static $roleKegiatanIds = null;
+
+            if ($assignedIds === null) {
+                $assignedIds = \Illuminate\Support\Facades\DB::table('user_pekerjaan')
+                    ->where('user_id', $user->id)
+                    ->pluck('pekerjaan_id')
+                    ->toArray();
+            }
+
+            if ($roleKegiatanIds === null) {
+                $userRoleIds = $user->roles()->pluck('id')->toArray();
+                $roleKegiatanIds = \App\Models\KegiatanRole::whereIn('role_id', $userRoleIds)
+                    ->pluck('kegiatan_id')
+                    ->toArray();
+            }
+
+            if (in_array($this->id, $assignedIds)) $sources[] = 'manual';
+            if (in_array($this->kegiatan_id, $roleKegiatanIds)) $sources[] = 'role';
             
-            // Check role assignment
-            $userRoleIds = $user->roles()->pluck('id')->toArray();
-            $isRole = \App\Models\KegiatanRole::whereIn('role_id', $userRoleIds)
-                ->where('kegiatan_id', $this->kegiatan_id)
-                ->exists();
-            if ($isRole) $sources[] = 'role';
+            if ($user->nip) {
+                if ($this->pengawas_id && $this->pengawas && $this->pengawas->nip === $user->nip) $sources[] = 'pengawas';
+                if ($this->pendamping_id && $this->pendamping && $this->pendamping->nip === $user->nip) $sources[] = 'pendamping';
+            }
         }
 
         return [

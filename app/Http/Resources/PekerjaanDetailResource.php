@@ -13,6 +13,8 @@ use App\Http\Resources\KontrakResource;
 use App\Http\Resources\OutputResource;
 use App\Http\Resources\PenerimaResource;
 use App\Http\Resources\TagResource;
+use App\Http\Resources\ProgressResource;
+use App\Http\Resources\BeritaAcaraResource;
 
 class PekerjaanDetailResource extends JsonResource
 {
@@ -35,11 +37,25 @@ class PekerjaanDetailResource extends JsonResource
                 $user = auth()->user();
                 $sources = [];
                 if ($user && !$user->hasRole('admin')) {
-                    $isManual = \Illuminate\Support\Facades\DB::table('user_pekerjaan')->where('user_id', $user->id)->where('pekerjaan_id', $this->id)->exists();
-                    if ($isManual) $sources[] = 'manual';
-                    $userRoleIds = $user->roles()->pluck('id')->toArray();
-                    $isRole = \App\Models\KegiatanRole::whereIn('role_id', $userRoleIds)->where('kegiatan_id', $this->kegiatan_id)->exists();
-                    if ($isRole) $sources[] = 'role';
+                    static $assignedIds = null;
+                    static $roleKegiatanIds = null;
+
+                    if ($assignedIds === null) {
+                        $assignedIds = \Illuminate\Support\Facades\DB::table('user_pekerjaan')
+                            ->where('user_id', $user->id)
+                            ->pluck('pekerjaan_id')
+                            ->toArray();
+                    }
+
+                    if ($roleKegiatanIds === null) {
+                        $userRoleIds = $user->roles()->pluck('id')->toArray();
+                        $roleKegiatanIds = \App\Models\KegiatanRole::whereIn('role_id', $userRoleIds)
+                            ->pluck('kegiatan_id')
+                            ->toArray();
+                    }
+
+                    if (in_array($this->id, $assignedIds)) $sources[] = 'manual';
+                    if (in_array($this->kegiatan_id, $roleKegiatanIds)) $sources[] = 'role';
                 }
                 return $sources;
             })(),
@@ -56,6 +72,8 @@ class PekerjaanDetailResource extends JsonResource
             'output' => OutputResource::collection($this->whenLoaded('output')),
             'penerima' => PenerimaResource::collection($this->whenLoaded('penerima')),
             'tags' => TagResource::collection($this->whenLoaded('tags')),
+            'progress' => new ProgressResource($this->whenLoaded('progress')),
+            'berita_acara' => new BeritaAcaraResource($this->whenLoaded('beritaAcara')),
 
             'created_at' => $this->created_at?->toIso8601String(),
             'updated_at' => $this->updated_at?->toIso8601String(),

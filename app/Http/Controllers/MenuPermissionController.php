@@ -4,6 +4,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\MenuPermission;
+use App\Http\Resources\MenuPermissionResource;
 use Illuminate\Http\Request;
 
 class MenuPermissionController extends Controller
@@ -34,7 +35,7 @@ class MenuPermissionController extends Controller
             $query->where('is_active', $request->is_active);
         }
 
-        return $query->orderBy('menu_label')->paginate(15);
+        return MenuPermissionResource::collection($query->orderBy('menu_label')->paginate(15));
     }
 
     /**
@@ -67,7 +68,7 @@ class MenuPermissionController extends Controller
 
         $menuPermission = MenuPermission::create($validated);
 
-        return response()->json($menuPermission, 201);
+        return response()->json(new MenuPermissionResource($menuPermission), 201);
     }
 
     /**
@@ -81,7 +82,7 @@ class MenuPermissionController extends Controller
      */
     public function show(MenuPermission $menuPermission)
     {
-        return $menuPermission;
+        return new MenuPermissionResource($menuPermission);
     }
 
     /**
@@ -106,7 +107,7 @@ class MenuPermissionController extends Controller
 
         $menuPermission->update($validated);
 
-        return response()->json($menuPermission);
+        return response()->json(new MenuPermissionResource($menuPermission));
     }
 
     /**

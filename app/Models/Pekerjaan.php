@@ -23,23 +23,40 @@ class Pekerjaan extends Model
         $user = auth()->user();
         
         if (!$user) {
-            return $query->whereRaw('1=0'); // No access
+            return $query->whereRaw('1=0');
         }
         
         if ($user->hasRole('admin')) {
-            return $query; // Admin lihat semua
+            return $query;
         }
         
-        // 1. Get manually assigned work IDs
-        $assignedPekerjaanIds = $user->assignedPekerjaan()->pluck('tbl_pekerjaan.id')->toArray();
-        
-        // 2. Get activities assigned via role
-        $userRoleIds = $user->roles()->pluck('id')->toArray();
-        $kegiatanIds = \App\Models\KegiatanRole::whereIn('role_id', $userRoleIds)->pluck('kegiatan_id')->toArray();
-        
-        return $query->where(function($q) use ($assignedPekerjaanIds, $kegiatanIds) {
-            $q->whereIn('id', $assignedPekerjaanIds)
-              ->orWhereIn('kegiatan_id', $kegiatanIds);
+        return $query->where(function($q) use ($user) {
+            $tableName = $this->getTable();
+
+            // 1. Manually assigned via user_pekerjaan table
+            $q->whereIn("$tableName.id", function($sub) use ($user) {
+                $sub->select('pekerjaan_id')
+                    ->from('user_pekerjaan')
+                    ->where('user_id', $user->id);
+            })
+            // 2. Assigned via kegiatan role (department/sector access)
+            ->orWhereIn("$tableName.kegiatan_id", function($sub) use ($user) {
+                $userRoleIds = $user->roles()->pluck('id')->toArray();
+                $sub->select('kegiatan_id')
+                    ->from('kegiatan_role')
+                    ->whereIn('role_id', $userRoleIds);
+            });
+
+            // 3. Automatically assigned if user's NIP matches the Pengawas/Pendamping master data
+            if ($user->nip) {
+                $q->orWhere(function($sub) use ($user) {
+                    $sub->whereHas('pengawas', function($p) use ($user) {
+                        $p->where('nip', $user->nip);
+                    })->orWhereHas('pendamping', function($p) use ($user) {
+                        $p->where('nip', $user->nip);
+                    });
+                });
+            }
         });
     }
 
@@ -131,6 +148,14 @@ class Pekerjaan extends Model
     public function kontrak(): HasMany
     {
         return $this->hasMany(Kontrak::class, 'id_pekerjaan');
+    }
+
+    /**
+     * Relasi One-to-One dengan Progress
+     */
+    public function progress(): \Illuminate\Database\Eloquent\Relations\HasOne
+    {
+        return $this->hasOne(Progress::class, 'pekerjaan_id');
     }
 
     /**

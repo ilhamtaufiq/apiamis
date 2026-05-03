@@ -1,38 +1,30 @@
-# Continuity Ledger
+# Goal (incl. success criteria):
+Enabling Non-Admin Pekerjaan Access. Success is when non-admin users (Pengawas/Pendamping) can see and manage their assigned projects with a premium UI.
 
-- Goal: 
-    1. Implement automatic sequence generation for "Berita Acara" and "Kontrak" (SPPBJ, SPK, SPMK) numbers.
-    2. Revert to HTTP for local development (Frontend & Backend).
-    3. Implement Word Mail Merge (DocX Template) for "Berita Acara" and "Kontrak" documents.
-    4. Complete OpenAPI (Swagger) documentation for all controllers.
-    5. Implement API Key authentication as an alternative to Bearer Token.
-    6. Implement AI Chat backend integration with MiniMax.
-- Constraints/Assumptions:
-    - Swagger uses L5-Swagger (OpenAPI 3.0).
-    - API Key header: `X-API-KEY`.
-    - Key stored in `APP_API_KEY` in `.env`.
-- Key decisions:
-    - Defined `apiKeyAuth` security scheme in global OpenAPI configuration.
-    - Added `@OA` annotations to almost all controllers.
-    - Updated security in relevant endpoints to support both `bearerAuth` and `apiKeyAuth`.
-- State:
-  - Done:
-    - [BA/Kontrak numbering implementation...]
-    - [Word Mail Merge implementation...]
-    - Added OpenAPI annotations to `ChecklistItemController`, `DataQualityController`, `DraftPekerjaanController`, `EventController`, `KegiatanRoleController`, `MenuPermissionController`, `PekerjaanChecklistController`, `PermissionController`, `RoleController`, `RoutePermissionController`, `TagController`, `TiketCommentController`, `UserPekerjaanController`, `SimulationNetworkController`, `RABAnalyzerController`.
-    - Integrated `apiKeyAuth` into global Swagger configuration and specific endpoints.
-    - Successfully regenerated API documentation via `php artisan l5-swagger:generate`.
-    - Fixed missing `api/analyze-rab` route in `api.php`.
-    - Improved RAB Analyzer core (rab_analyzer.py) to support "RAB MCK.xlsx" format by enhancing header keyword detection (e.g., "Item Pekerjaan", "Jumlah Harga Satuan").
+# Constraints/Assumptions:
+- Users have NIP in the `users` table.
+- `pengawas` and `pendamping` tables use NIP for correlation.
+- Manual assignments are stored in `user_pekerjaan` table.
+
+# Key decisions:
+- Use `scopeByUserRole` in `Pekerjaan` model to centralize authorization.
+- Use `whereIn` instead of `whereExists` for subqueries in the scope for better performance and readability.
+- Standardize non-admin UI to follow a "Premium Bento Grid" aesthetic.
+
+# State:
+  - Done: 
+    - Debugged and fixed SQL error in `Pekerjaan::scopeByUserRole` (table name mismatch).
+    - Verified assigned data appearing for non-admins (Count: 2 for test user).
+    - Redesigned `pekerjaan.index.tsx` for non-admins to match dashboard aesthetic.
   - Now:
-    - Submitting finalized API documentation and security updates.
-    - Implementing MiniMaxService and ChatController for AI Chat.
+    - Final verification.
   - Next:
-    - Testing AI Chat with live database context.
-    - Verification of API Key authentication on live endpoints if requested.
-- Open questions (UNCONFIRMED):
-    - None.
-- Working set:
-    - `c:\laragon\www\apiamis\app\Http\Controllers\Controller.php` (Security Scheme)
-    - `All Controllers in app/Http/Controllers` (OpenAPI Annotations)
+    - Phase 2 complete. Moving to Phase 3 (AI & Advanced Features).
 
+# Open questions (UNCONFIRMED if needed):
+- None.
+
+# Working set (files/ids/commands):
+- App\Models\Pekerjaan.php
+- c:\laragon\www\arumanis\src\routes\pekerjaan.index.tsx
+- c:\laragon\www\arumanis\src\routes\user.dashboard.tsx

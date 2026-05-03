@@ -10,6 +10,7 @@ class DocumentSequence extends Model
 
     protected $fillable = [
         'year',
+        'type',
         'last_number'
     ];
 }

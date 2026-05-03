@@ -47,17 +47,17 @@ class PekerjaanChecklistController extends Controller
             $query->where('nama_paket', 'LIKE', '%' . $request->search . '%');
         }
 
-        $pekerjaan = $query->orderBy('id')->get();
+        $pekerjaan = $query->orderBy('id')->paginate($request->per_page ?? 15);
 
         // Get all checklist data for these pekerjaan
-        $pekerjaanIds = $pekerjaan->pluck('id')->toArray();
+        $pekerjaanIds = collect($pekerjaan->items())->pluck('id')->toArray();
         $checklistData = DB::table('pekerjaan_checklist')
             ->whereIn('pekerjaan_id', $pekerjaanIds)
             ->get()
             ->groupBy('pekerjaan_id');
 
-        // Format response
-        $result = $pekerjaan->map(function($p) use ($checklistItems, $checklistData) {
+        // Format response data
+        $formattedData = collect($pekerjaan->items())->map(function($p) use ($checklistItems, $checklistData) {
             $checklist = [];
             foreach ($checklistItems as $item) {
                 $data = $checklistData->get($p->id)?->firstWhere('checklist_item_id', $item->id);
@@ -87,7 +87,13 @@ class PekerjaanChecklistController extends Controller
                 'description' => $i->description,
                 'sort_order' => $i->sort_order,
             ]),
-            'data' => $result,
+            'data' => $formattedData,
+            'meta' => [
+                'current_page' => $pekerjaan->currentPage(),
+                'last_page' => $pekerjaan->lastPage(),
+                'per_page' => $pekerjaan->perPage(),
+                'total' => $pekerjaan->total(),
+            ]
         ]);
     }
 

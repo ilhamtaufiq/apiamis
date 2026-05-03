@@ -137,4 +137,23 @@ class OutputController extends Controller
         $output->delete();
         return response()->json(['message' => 'Output deleted successfully'], 200);
     }
+    public function summary(Request $request)
+    {
+        $query = Output::query();
+
+        if ($request->has('tahun') && $request->tahun) {
+            $query->whereHas('pekerjaan.kegiatan', function($q) use ($request) {
+                $q->where('tahun_anggaran', $request->tahun);
+            });
+        }
+
+        $total = (clone $query)->count();
+        $wajib = (clone $query)->where('penerima_is_optional', false)->count();
+
+        return response()->json([
+            'total_output' => $total,
+            'wajib_count' => $wajib,
+            'opsional_count' => $total - $wajib,
+        ]);
+    }
 }

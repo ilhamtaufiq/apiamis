@@ -119,8 +119,13 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('kontrak/kegiatan/{kegiatanId}', [KontrakController::class, 'byKegiatan']);
     Route::get('kontrak/penyedia/{penyediaId}', [KontrakController::class, 'byPenyedia']);
     Route::get('kontrak/{id}/export', [KontrakController::class, 'export']);
+    Route::get('kontrak/logs', [KontrakController::class, 'getLogs']);
+    Route::post('kontrak/logs/{id}/cancel', [KontrakController::class, 'cancelLog']);
+    Route::get('kontrak/sequences', [KontrakController::class, 'getSequences']);
+    Route::post('kontrak/sequences/update', [KontrakController::class, 'updateSequence']);
 
     Route::apiResource('kontrak', KontrakController::class);
+    Route::get('penerima/summary', [PenerimaController::class, 'summary']);
     Route::apiResource('penerima', PenerimaController::class);
     Route::apiResource('berkas', BerkasController::class)->parameters(['berkas' => 'berkas']);
     Route::apiResource('foto', FotoController::class);
@@ -152,6 +157,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
 
     //Output
+    Route::get('output/summary', [OutputController::class, 'summary']);
     Route::apiResource('output', OutputController::class);
 
     // Tiket

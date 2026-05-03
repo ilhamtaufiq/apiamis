@@ -27,12 +27,10 @@ class UserResource extends JsonResource
             'email' => $this->email,
             'avatar' => $this->avatar,
             'email_verified_at' => $this->email_verified_at,
-            'roles' => $this->whenLoaded('roles', function () {
-                return $this->roles->pluck('name');
-            }),
-            'permissions' => $this->whenLoaded('permissions', function () {
-                return $this->permissions->pluck('name');
-            }),
+            'nip' => $this->nip,
+            'jabatan' => $this->jabatan,
+            'roles' => RoleResource::collection($this->whenLoaded('roles')),
+            'permissions' => PermissionResource::collection($this->whenLoaded('permissions')),
             'created_at' => $this->created_at,
             'updated_at' => $this->updated_at,
         ];

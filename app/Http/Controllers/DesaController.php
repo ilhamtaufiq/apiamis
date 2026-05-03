@@ -16,9 +16,21 @@ class DesaController extends Controller
      *     @OA\Response(response=200, description="Successful operation")
      * )
      */
-    public function index()
+    public function index(Request $request)
     {
-        $desa = Desa::with('kecamatan')->paginate(15);
+        $perPage = $request->query('per_page', 15);
+        $search = $request->query('search');
+
+        $query = Desa::with('kecamatan');
+
+        if ($search) {
+            $query->where('n_desa', 'like', "%{$search}%")
+                  ->orWhereHas('kecamatan', function($q) use ($search) {
+                      $q->where('n_kec', 'like', "%{$search}%");
+                  });
+        }
+
+        $desa = $query->paginate($perPage);
         return DesaResource::collection($desa);
     }
 
