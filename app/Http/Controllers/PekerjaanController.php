@@ -87,10 +87,7 @@ class PekerjaanController extends Controller
             // Search functionality
             if ($request->has('search') && !empty($request->search)) {
                 $searchTerm = $request->search;
-                $query->where(function($q) use ($searchTerm) {
-                    $q->where('nama_paket', 'LIKE', '%' . $searchTerm . '%')
-                      ->orWhere('kode_rekening', 'LIKE', '%' . $searchTerm . '%');
-                });
+                $query->whereFullText(['nama_paket', 'kode_rekening'], $searchTerm);
             }
             
             // Sorting

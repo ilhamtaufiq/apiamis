@@ -11,14 +11,17 @@ trait NotifiesAdminsOnChanges
     public static function bootNotifiesAdminsOnChanges()
     {
         static::created(function ($model) {
+            \Illuminate\Support\Facades\Cache::increment('dashboard_stats_version');
             static::notifyAdmins($model, 'dibuat');
         });
 
         static::updated(function ($model) {
+            \Illuminate\Support\Facades\Cache::increment('dashboard_stats_version');
             static::notifyAdmins($model, 'diperbarui');
         });
 
         static::deleted(function ($model) {
+            \Illuminate\Support\Facades\Cache::increment('dashboard_stats_version');
             static::notifyAdmins($model, 'dihapus');
         });
     }

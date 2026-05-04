@@ -24,9 +24,9 @@ class DocumentRegisterController extends Controller
         if ($request->has('search')) {
             $search = $request->search;
             $query->where(function($q) use ($search) {
-                $q->where('nomor', 'like', "%$search%")
+                $q->whereFullText(['nomor', 'description'], $search)
                   ->orWhereHas('kontrak.pekerjaan', function($sq) use ($search) {
-                      $sq->where('nama_paket', 'like', "%$search%");
+                      $sq->whereFullText(['nama_paket', 'kode_rekening'], $search);
                   });
             });
         }
