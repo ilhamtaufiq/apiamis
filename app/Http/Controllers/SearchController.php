@@ -70,8 +70,13 @@ class SearchController extends Controller
         $results = array_merge($results, $pekerjaan->toArray());
 
         // 2. Search Kontrak
-        $kontrak = Kontrak::whereRaw("MATCH(spk, spmk, kode_paket) AGAINST(? IN BOOLEAN MODE)", [$query])
-            ->limit(5)
+        $kontrak = Kontrak::where(function($q) use ($query) {
+            $q->whereRaw("MATCH(spk, spmk, kode_paket) AGAINST(? IN BOOLEAN MODE)", [$query])
+              ->orWhereHas('pekerjaan', function($pq) use ($query) {
+                  $pq->byUserRole()->whereRaw("MATCH(nama_paket, kode_rekening) AGAINST(? IN BOOLEAN MODE)", [$query]);
+              });
+        })
+            ->limit(10)
             ->get()
             ->map(function ($item) {
                 return [
@@ -131,9 +136,14 @@ class SearchController extends Controller
         $results = array_merge($results, $desa->toArray());
 
         // 6. Search Dokumentasi (Foto)
-        $dokumentasi = Foto::where('keterangan', 'like', "%{$query}%")
+        $dokumentasi = Foto::where(function($q) use ($query) {
+            $q->where('keterangan', 'like', "%{$query}%")
+              ->orWhereHas('pekerjaan', function($pq) use ($query) {
+                  $pq->byUserRole()->whereRaw("MATCH(nama_paket, kode_rekening) AGAINST(? IN BOOLEAN MODE)", [$query]);
+              });
+        })
             ->with('pekerjaan') 
-            ->limit(5)
+            ->limit(10)
             ->get()
             ->map(function ($item) {
                 return [
@@ -147,9 +157,14 @@ class SearchController extends Controller
         $results = array_merge($results, $dokumentasi->toArray());
 
         // 7. Search Penerima Manfaat
-        $penerima = Penerima::whereRaw("MATCH(nama, nik, alamat) AGAINST(? IN BOOLEAN MODE)", [$query])
+        $penerima = Penerima::where(function($q) use ($query) {
+            $q->whereRaw("MATCH(nama, nik, alamat) AGAINST(? IN BOOLEAN MODE)", [$query])
+              ->orWhereHas('pekerjaan', function($pq) use ($query) {
+                  $pq->byUserRole()->whereRaw("MATCH(nama_paket, kode_rekening) AGAINST(? IN BOOLEAN MODE)", [$query]);
+              });
+        })
             ->with('pekerjaan')
-            ->limit(5)
+            ->limit(10)
             ->get()
             ->map(function ($item) {
                 return [
@@ -163,9 +178,14 @@ class SearchController extends Controller
         $results = array_merge($results, $penerima->toArray());
 
         // 8. Search Output
-        $output = Output::whereRaw("MATCH(komponen, satuan) AGAINST(? IN BOOLEAN MODE)", [$query])
+        $output = Output::where(function($q) use ($query) {
+            $q->whereRaw("MATCH(komponen, satuan) AGAINST(? IN BOOLEAN MODE)", [$query])
+              ->orWhereHas('pekerjaan', function($pq) use ($query) {
+                  $pq->byUserRole()->whereRaw("MATCH(nama_paket, kode_rekening) AGAINST(? IN BOOLEAN MODE)", [$query]);
+              });
+        })
             ->with('pekerjaan')
-            ->limit(5)
+            ->limit(10)
             ->get()
             ->map(function ($item) {
                 return [
@@ -179,9 +199,14 @@ class SearchController extends Controller
         $results = array_merge($results, $output->toArray());
 
         // 9. Search Progress
-        $progress = Progress::where('content', 'like', "%{$query}%") // assumes content column can be queried directly if JSON cast allows LIKE or it contains string matches
+        $progress = Progress::where(function($q) use ($query) {
+            $q->where('content', 'like', "%{$query}%")
+              ->orWhereHas('pekerjaan', function($pq) use ($query) {
+                  $pq->byUserRole()->whereRaw("MATCH(nama_paket, kode_rekening) AGAINST(? IN BOOLEAN MODE)", [$query]);
+              });
+        })
             ->with('pekerjaan')
-            ->limit(5)
+            ->limit(10)
             ->get()
             ->map(function ($item) {
                 return [
