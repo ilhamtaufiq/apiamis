@@ -207,7 +207,7 @@ class PekerjaanController extends Controller
         $pekerjaan->load([
             'kecamatan', 'desa', 'kegiatan', 
             'foto', 'berkas', 'output', 'penerima', 'kontrak.penyedia', 'tags', 'pengawas', 'pendamping',
-            'progress', 'beritaAcara'
+            'progress'
         ]);
         
         return new PekerjaanDetailResource($pekerjaan);
@@ -615,7 +615,7 @@ class PekerjaanController extends Controller
     public function documentRegister(Request $request)
     {
         try {
-            $query = Pekerjaan::with(['kontrak.penyedia', 'beritaAcara', 'kegiatan'])
+            $query = Pekerjaan::with(['kontrak.penyedia', 'kegiatan'])
                 ->byUserRole();
 
             if ($request->has('tahun') && $request->tahun) {

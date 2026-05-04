@@ -14,7 +14,7 @@ use App\Http\Resources\OutputResource;
 use App\Http\Resources\PenerimaResource;
 use App\Http\Resources\TagResource;
 use App\Http\Resources\ProgressResource;
-use App\Http\Resources\BeritaAcaraResource;
+
 
 class PekerjaanDetailResource extends JsonResource
 {
@@ -73,7 +73,7 @@ class PekerjaanDetailResource extends JsonResource
             'penerima' => PenerimaResource::collection($this->whenLoaded('penerima')),
             'tags' => TagResource::collection($this->whenLoaded('tags')),
             'progress' => new ProgressResource($this->whenLoaded('progress')),
-            'berita_acara' => new BeritaAcaraResource($this->whenLoaded('beritaAcara')),
+
 
             'created_at' => $this->created_at?->toIso8601String(),
             'updated_at' => $this->updated_at?->toIso8601String(),

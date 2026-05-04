@@ -22,7 +22,7 @@ use App\Http\Controllers\RoutePermissionController;
 use App\Http\Controllers\MenuPermissionController;
 use App\Http\Controllers\ProgressController;
 use App\Http\Controllers\AppSettingController;
-use App\Http\Controllers\BeritaAcaraController;
+
 use App\Http\Controllers\UserPekerjaanController;
 use App\Http\Controllers\TiketController;
 use App\Http\Controllers\TiketCommentController;

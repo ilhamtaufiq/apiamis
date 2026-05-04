@@ -158,13 +158,7 @@ class Pekerjaan extends Model
         return $this->hasOne(Progress::class, 'pekerjaan_id');
     }
 
-    /**
-     * Relasi One-to-One dengan BeritaAcara
-     */
-    public function beritaAcara(): \Illuminate\Database\Eloquent\Relations\HasOne
-    {
-        return $this->hasOne(BeritaAcara::class, 'pekerjaan_id');
-    }
+
 
     /**
      * Relasi Many-to-Many dengan Tags
