@@ -6,6 +6,10 @@ use App\Models\Kontrak;
 use App\Http\Resources\KontrakResource;
 use App\Http\Resources\KontrakDetailResource;
 use Illuminate\Http\Request;
+use App\Imports\KontrakImport;
+use App\Exports\KontrakTemplateExport;
+use App\Exports\KontrakExport;
+use Maatwebsite\Excel\Facades\Excel;
 
 class KontrakController extends Controller
 {
@@ -58,7 +62,7 @@ class KontrakController extends Controller
      */
     public function index(Request $request)
     {
-        $query = Kontrak::with(['kegiatan', 'pekerjaan.kecamatan', 'pekerjaan.kegiatan', 'penyedia']);
+        $query = Kontrak::with(['kegiatan', 'pekerjaan.kecamatan', 'pekerjaan.kegiatan', 'penyedia'])->latest();
 
         if ($request->has('tahun') && $request->tahun) {
             $query->whereHas('kegiatan', function($q) use ($request) {
@@ -147,6 +151,45 @@ class KontrakController extends Controller
     {
         $kontrak->load('kegiatan', 'pekerjaan', 'penyedia');
         return new KontrakDetailResource($kontrak);
+    }
+
+    public function exportDoc(Kontrak $kontrak)
+    {
+        try {
+            $path = $this->exportService->exportKontrakByInstance($kontrak);
+            return response()->download($path)->deleteFileAfterSend(true);
+        } catch (\Exception $e) {
+            return response()->json(['message' => $e->getMessage()], 500);
+        }
+    }
+
+    public function exportRingkasan(Kontrak $kontrak)
+    {
+        if (!$kontrak->pekerjaan->isChecklistComplete()) {
+            return response()->json(['message' => 'Checklist pekerjaan belum 100% lengkap bos!'], 403);
+        }
+
+        try {
+            $path = $this->exportService->exportRingkasan($kontrak);
+            return response()->download($path)->deleteFileAfterSend(true);
+        } catch (\Exception $e) {
+            return response()->json(['message' => $e->getMessage()], 500);
+        }
+    }
+
+    public function exportBAP(Request $request, Kontrak $kontrak)
+    {
+        if (!$kontrak->pekerjaan->isChecklistComplete()) {
+            return response()->json(['message' => 'Checklist pekerjaan belum 100% lengkap bos!'], 403);
+        }
+
+        try {
+            // Urutan argumen: $kontrak, $format, $overrideData
+            $path = $this->exportService->exportBAP($kontrak, 'docx', $request->all());
+            return response()->download($path)->deleteFileAfterSend(true);
+        } catch (\Exception $e) {
+            return response()->json(['message' => $e->getMessage()], 500);
+        }
     }
 
     /**
@@ -246,7 +289,7 @@ class KontrakController extends Controller
         $format = $request->query('format', 'docx');
         
         try {
-            $path = $this->exportService->exportKontrak($pekerjaan, null, $format);
+            $path = $this->exportService->export($kontrak, $format);
             return response()->download($path)->deleteFileAfterSend(true);
         } catch (\Exception $e) {
             return response()->json(['message' => 'Export failed: ' . $e->getMessage()], 500);
@@ -309,5 +352,29 @@ class KontrakController extends Controller
         return response()->json([
             'data' => \App\Models\DocumentSequence::orderBy('year', 'desc')->get()
         ]);
+    }
+
+    public function downloadTemplate(Request $request)
+    {
+        return Excel::download(new KontrakTemplateExport($request->tahun), 'template_kontrak.xlsx');
+    }
+
+    public function import(Request $request)
+    {
+        $request->validate([
+            'file' => 'required|mimes:xlsx,xls,csv'
+        ]);
+
+        try {
+            Excel::import(new KontrakImport, $request->file('file'));
+            return response()->json(['message' => 'Kontrak berhasil diimport']);
+        } catch (\Exception $e) {
+            return response()->json(['message' => 'Gagal mengimport kontrak: ' . $e->getMessage()], 500);
+        }
+    }
+
+    public function exportExcel(Request $request)
+    {
+        return Excel::download(new \App\Exports\KontrakExport($request->tahun, $request->search), 'data_kontrak.xlsx');
     }
 }

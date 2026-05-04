@@ -114,6 +114,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::apiResource('penyedia', PenyediaController::class);
     Route::apiResource('kegiatan', KegiatanController::class);
     // Custom routes - Kontrak
+    Route::get('kontrak/export/excel', [KontrakController::class, 'exportExcel']);
     Route::get('kontrak/generate-number', [KontrakController::class, 'generateNumber']);
     Route::get('kontrak/pekerjaan/{pekerjaanId}', [KontrakController::class, 'byPekerjaan']);
     Route::get('kontrak/kegiatan/{kegiatanId}', [KontrakController::class, 'byKegiatan']);
@@ -123,8 +124,13 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('kontrak/logs/{id}/cancel', [KontrakController::class, 'cancelLog']);
     Route::get('kontrak/sequences', [KontrakController::class, 'getSequences']);
     Route::post('kontrak/sequences/update', [KontrakController::class, 'updateSequence']);
+    Route::post('kontrak/import', [KontrakController::class, 'import']);
+    Route::get('kontrak/import/template', [KontrakController::class, 'downloadTemplate']);
 
     Route::apiResource('kontrak', KontrakController::class);
+    Route::get('kontrak/{kontrak}/export', [KontrakController::class, 'exportDoc']);
+    Route::get('kontrak/{kontrak}/export-ringkasan', [KontrakController::class, 'exportRingkasan']);
+    Route::get('kontrak/{kontrak}/export-bap', [KontrakController::class, 'exportBAP']);
     Route::get('penerima/summary', [PenerimaController::class, 'summary']);
     Route::apiResource('penerima', PenerimaController::class);
     Route::apiResource('berkas', BerkasController::class)->parameters(['berkas' => 'berkas']);
@@ -141,6 +147,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::apiResource('tags', TagController::class);
     Route::get('pengawas/statistics', [PengawasController::class, 'statistics']);
     Route::apiResource('pengawas', PengawasController::class);
+    Route::get('draft-pekerjaan/export/excel', [DraftPekerjaanController::class, 'exportExcel']);
     Route::apiResource('draft-pekerjaan', DraftPekerjaanController::class);
     
     // Checklist Items (column management)

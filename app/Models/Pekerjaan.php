@@ -21,38 +21,38 @@ class Pekerjaan extends Model
     public function scopeByUserRole($query)
     {
         $user = auth()->user();
-        
+
         if (!$user) {
             return $query->whereRaw('1=0');
         }
-        
+
         if ($user->hasRole('admin')) {
             return $query;
         }
-        
-        return $query->where(function($q) use ($user) {
+
+        return $query->where(function ($q) use ($user) {
             $tableName = $this->getTable();
 
             // 1. Manually assigned via user_pekerjaan table
-            $q->whereIn("$tableName.id", function($sub) use ($user) {
+            $q->whereIn("$tableName.id", function ($sub) use ($user) {
                 $sub->select('pekerjaan_id')
                     ->from('user_pekerjaan')
                     ->where('user_id', $user->id);
             })
-            // 2. Assigned via kegiatan role (department/sector access)
-            ->orWhereIn("$tableName.kegiatan_id", function($sub) use ($user) {
-                $userRoleIds = $user->roles()->pluck('id')->toArray();
-                $sub->select('kegiatan_id')
-                    ->from('kegiatan_role')
-                    ->whereIn('role_id', $userRoleIds);
-            });
+                // 2. Assigned via kegiatan role (department/sector access)
+                ->orWhereIn("$tableName.kegiatan_id", function ($sub) use ($user) {
+                    $userRoleIds = $user->roles()->pluck('id')->toArray();
+                    $sub->select('kegiatan_id')
+                        ->from('kegiatan_role')
+                        ->whereIn('role_id', $userRoleIds);
+                });
 
             // 3. Automatically assigned if user's NIP matches the Pengawas/Pendamping master data
             if ($user->nip) {
-                $q->orWhere(function($sub) use ($user) {
-                    $sub->whereHas('pengawas', function($p) use ($user) {
+                $q->orWhere(function ($sub) use ($user) {
+                    $sub->whereHas('pengawas', function ($p) use ($user) {
                         $p->where('nip', $user->nip);
-                    })->orWhereHas('pendamping', function($p) use ($user) {
+                    })->orWhereHas('pendamping', function ($p) use ($user) {
                         $p->where('nip', $user->nip);
                     });
                 });
@@ -129,7 +129,7 @@ class Pekerjaan extends Model
     {
         return $this->hasMany(Penerima::class, 'pekerjaan_id');
     }
-     public function berkas(): HasMany
+    public function berkas(): HasMany
     {
         return $this->hasMany(Berkas::class, 'pekerjaan_id');
     }
@@ -199,6 +199,16 @@ class Pekerjaan extends Model
     public function pendamping(): BelongsTo
     {
         return $this->belongsTo(Pengawas::class, 'pendamping_id');
+    }
+
+    public function isChecklistComplete(): bool
+    {
+        $total = $this->checklistItems()->count();
+        if ($total === 0)
+            return false; // Strict: must have checklist and must be complete
+
+        $checked = $this->checklistItems()->wherePivot('is_checked', true)->count();
+        return $checked === $total;
     }
 
     public function draft(): \Illuminate\Database\Eloquent\Relations\HasOne

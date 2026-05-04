@@ -28,6 +28,7 @@ class KontrakResource extends JsonResource
             'kegiatan' => new KegiatanResource($this->whenLoaded('kegiatan')),
             'pekerjaan' => new PekerjaanResource($this->whenLoaded('pekerjaan')),
             'penyedia' => new PenyediaResource($this->whenLoaded('penyedia')),
+            'is_checklist_complete' => $this->pekerjaan ? $this->pekerjaan->isChecklistComplete() : false,
             'created_at' => $this->created_at?->toIso8601String(),
             'updated_at' => $this->updated_at?->toIso8601String(),
         ];

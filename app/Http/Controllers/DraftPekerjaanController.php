@@ -6,6 +6,8 @@ use Illuminate\Http\Request;
 use App\Http\Resources\DraftPekerjaanResource;
 use App\Http\Resources\PekerjaanResource;
 use App\Models\DraftPekerjaan;
+use App\Exports\DraftPekerjaanExport;
+use Maatwebsite\Excel\Facades\Excel;
 
 class DraftPekerjaanController extends Controller
 {
@@ -143,5 +145,10 @@ class DraftPekerjaanController extends Controller
         $draft->delete();
 
         return response()->json(null, 204);
+    }
+
+    public function exportExcel(Request $request)
+    {
+        return Excel::download(new DraftPekerjaanExport($request->tahun, $request->search), 'data_draft_pekerjaan.xlsx');
     }
 }
