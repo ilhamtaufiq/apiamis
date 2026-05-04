@@ -16,41 +16,12 @@ class KontrakController extends Controller
     protected $baService;
     protected $exportService;
 
-    public function __construct(\App\Services\BeritaAcaraService $baService, \App\Services\DocumentExportService $exportService)
+    public function __construct(\App\Services\DocumentExportService $exportService)
     {
-        $this->baService = $baService;
         $this->exportService = $exportService;
     }
 
-    /**
-     * @OA\Get(
-     *     path="/api/kontrak/generate-number",
-     *     summary="Generate next document number (Preview)",
-     *     tags={"Kontrak"},
-     *     @OA\Parameter(name="type", in="query", required=true, @OA\Schema(type="string", enum={"sppbj", "spk", "spmk"})),
-     *     @OA\Parameter(name="pekerjaan_id", in="query", required=true, @OA\Schema(type="integer")),
-     *     @OA\Response(response=200, description="Number generated")
-     * )
-     */
-    public function generateNumber(Request $request)
-    {
-        $validated = $request->validate([
-            'type' => 'required|string|in:sppbj,spk,spk_add,spmk,ba_lpp,ba_php,ba_stp,ba_final,stp_a,stp_b',
-            'year' => 'nullable|integer',
-            'pekerjaan_id' => 'required|integer|exists:tbl_pekerjaan,id',
-            'kontrak_id' => 'nullable|integer'
-        ]);
 
-        $nomor = $this->baService->generateNextNumber(
-            $validated['type'], 
-            $validated['year'] ?? null,
-            $validated['pekerjaan_id'],
-            $validated['kontrak_id'] ?? null,
-            true // SAVE TO DB IMMEDIATELY
-        );
-
-        return response()->json(['nomor' => $nomor]);
-    }
 
     /**
      * @OA\Get(
@@ -128,11 +99,7 @@ class KontrakController extends Controller
 
         $kontrak = Kontrak::create($validated);
         
-        // Permanently commit the next sequence number now that it's successfully saved
-        $year = $request->tgl_sppbj 
-            ? date('Y', strtotime($request->tgl_sppbj)) 
-            : ($request->tgl_spk ? date('Y', strtotime($request->tgl_spk)) : date('Y'));
-        \App\Models\DocumentSequence::where('year', $year)->increment('last_number');
+
         
         $kontrak->load('kegiatan', 'pekerjaan', 'penyedia');
         return new KontrakDetailResource($kontrak);
@@ -296,63 +263,7 @@ class KontrakController extends Controller
         }
     }
 
-    public function getLogs(Request $request)
-    {
-        $query = \DB::table('tbl_document_logs')
-            ->leftJoin('tbl_pekerjaan', 'tbl_document_logs.id_pekerjaan', '=', 'tbl_pekerjaan.id')
-            ->select('tbl_document_logs.*', 'tbl_pekerjaan.nama_paket as nama_paket');
 
-        if ($request->has('search') && $request->search) {
-            $search = $request->search;
-            $query->where(function($q) use ($search) {
-                $q->where('full_number', 'like', "%{$search}%")
-                  ->orWhere('nama_paket', 'like', "%{$search}%");
-            });
-        }
-
-        if ($request->has('type') && $request->type) {
-            $query->where('tbl_document_logs.type', $request->type);
-        }
-
-        return response()->json([
-            'data' => $query->orderBy('created_at', 'desc')->paginate(50)
-        ]);
-    }
-
-    public function cancelLog($id)
-    {
-        \DB::table('tbl_document_logs')
-            ->where('id', $id)
-            ->update([
-                'status' => 'canceled',
-                'updated_at' => now()
-            ]);
-
-        return response()->json(['message' => 'Document number canceled']);
-    }
-
-    public function updateSequence(Request $request)
-    {
-        $validated = $request->validate([
-            'type' => 'required|string',
-            'year' => 'required|integer',
-            'last_number' => 'required|integer|min:0'
-        ]);
-
-        \App\Models\DocumentSequence::updateOrCreate(
-            ['type' => $validated['type'], 'year' => $validated['year']],
-            ['last_number' => $validated['last_number']]
-        );
-
-        return response()->json(['message' => 'Sequence updated successfully']);
-    }
-
-    public function getSequences()
-    {
-        return response()->json([
-            'data' => \App\Models\DocumentSequence::orderBy('year', 'desc')->get()
-        ]);
-    }
 
     public function downloadTemplate(Request $request)
     {

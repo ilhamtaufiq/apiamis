@@ -115,15 +115,12 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::apiResource('kegiatan', KegiatanController::class);
     // Custom routes - Kontrak
     Route::get('kontrak/export/excel', [KontrakController::class, 'exportExcel']);
-    Route::get('kontrak/generate-number', [KontrakController::class, 'generateNumber']);
+
     Route::get('kontrak/pekerjaan/{pekerjaanId}', [KontrakController::class, 'byPekerjaan']);
     Route::get('kontrak/kegiatan/{kegiatanId}', [KontrakController::class, 'byKegiatan']);
     Route::get('kontrak/penyedia/{penyediaId}', [KontrakController::class, 'byPenyedia']);
     Route::get('kontrak/{id}/export', [KontrakController::class, 'export']);
-    Route::get('kontrak/logs', [KontrakController::class, 'getLogs']);
-    Route::post('kontrak/logs/{id}/cancel', [KontrakController::class, 'cancelLog']);
-    Route::get('kontrak/sequences', [KontrakController::class, 'getSequences']);
-    Route::post('kontrak/sequences/update', [KontrakController::class, 'updateSequence']);
+
     Route::post('kontrak/import', [KontrakController::class, 'import']);
     Route::get('kontrak/import/template', [KontrakController::class, 'downloadTemplate']);
 
@@ -180,11 +177,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('progress/pekerjaan/{pekerjaanId}', [ProgressController::class, 'store']);
 
     // Berita Acara routes
-    Route::get('berita-acara/sequence', [BeritaAcaraController::class, 'getSequence']);
-    Route::post('berita-acara/sequence', [BeritaAcaraController::class, 'updateSequence']);
-    Route::get('berita-acara/generate-number', [BeritaAcaraController::class, 'generateNumber']);
-    Route::get('berita-acara/pekerjaan/{pekerjaanId}', [BeritaAcaraController::class, 'show']);
-    Route::post('berita-acara/pekerjaan/{pekerjaanId}', [BeritaAcaraController::class, 'storeOrUpdate']);
+
+
 
     Route::get('/debug-data', function () {
         $kegiatan = \Illuminate\Support\Facades\DB::table('tbl_kegiatan')->limit(5)->get();
