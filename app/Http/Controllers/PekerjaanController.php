@@ -93,6 +93,18 @@ class PekerjaanController extends Controller
                 });
             }
             
+            // Sorting
+            $sortBy = $request->get('sort_by', 'created_at');
+            $sortDirection = $request->get('sort_direction', 'desc');
+            
+            $allowedSorts = ['id', 'nama_paket', 'kode_rekening', 'pagu', 'penerima_count', 'created_at'];
+            
+            if (in_array($sortBy, $allowedSorts)) {
+                $query->orderBy($sortBy, $sortDirection);
+            } else {
+                $query->latest();
+            }
+
             // Support fetching all records for dropdown (per_page=-1)
             if ($request->has('per_page') && $request->per_page == -1) {
                 return PekerjaanResource::collection($query->get());
@@ -616,7 +628,7 @@ class PekerjaanController extends Controller
     public function documentRegister(Request $request)
     {
         try {
-            $query = Pekerjaan::with(['kontrak.penyedia', 'kegiatan'])
+            $query = Pekerjaan::with(['kontrak.penyedia', 'kontrak.registers.type', 'kegiatan'])
                 ->byUserRole();
 
             if ($request->has('tahun') && $request->tahun) {

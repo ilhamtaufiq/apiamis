@@ -58,4 +58,9 @@ class Kontrak extends Model
     {
         return $this->belongsTo(Penyedia::class, 'id_penyedia');
     }
+
+    public function registers(): \Illuminate\Database\Eloquent\Relations\HasMany
+    {
+        return $this->hasMany(DocumentRegister::class, 'kontrak_id');
+    }
 }

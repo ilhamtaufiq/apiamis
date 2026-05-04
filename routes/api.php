@@ -177,8 +177,14 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('progress/pekerjaan/{pekerjaanId}', [ProgressController::class, 'report']);
     Route::post('progress/pekerjaan/{pekerjaanId}', [ProgressController::class, 'store']);
 
-    // Berita Acara routes
-
+    // Document Register (Dynamic)
+    Route::get('document-types', [\App\Http\Controllers\DocumentRegisterController::class, 'types']);
+    Route::post('document-types', [\App\Http\Controllers\DocumentRegisterController::class, 'storeType']);
+    Route::put('document-types/{id}', [\App\Http\Controllers\DocumentRegisterController::class, 'updateType']);
+    Route::delete('document-types/{id}', [\App\Http\Controllers\DocumentRegisterController::class, 'destroyType']);
+    Route::get('document-registers', [\App\Http\Controllers\DocumentRegisterController::class, 'index']);
+    Route::post('document-registers', [\App\Http\Controllers\DocumentRegisterController::class, 'store']);
+    Route::delete('document-registers/{id}', [\App\Http\Controllers\DocumentRegisterController::class, 'destroy']);
 
 
     Route::get('/debug-data', function () {
