@@ -245,4 +245,34 @@ class TiketController extends Controller
 
         return response()->json(['message' => 'Unauthorized'], 403);
     }
+    /**
+     * Bulk update tickets status
+     */
+    public function bulkUpdate(Request $request)
+    {
+        $user = auth()->user();
+        if (!$user->hasRole('admin')) {
+            return response()->json(['message' => 'Unauthorized'], 403);
+        }
+
+        $validator = Validator::make($request->all(), [
+            'ids' => 'required|array',
+            'ids.*' => 'exists:tbl_tiket,id',
+            'status' => 'required|in:open,pending,closed',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json(['message' => 'Validation error', 'errors' => $validator->errors()], 422);
+        }
+
+        $status = $request->status;
+        $ids = $request->ids;
+
+        Tiket::whereIn('id', $ids)->update(['status' => $status]);
+
+        // Optional: Notify users (could be slow if many, maybe dispatch jobs)
+        // For simplicity, we just return success for now
+        
+        return response()->json(['message' => count($ids) . ' tiket berhasil diperbarui']);
+    }
 }

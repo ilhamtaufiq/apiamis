@@ -165,6 +165,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::apiResource('output', OutputController::class);
 
     // Tiket
+    Route::post('tiket/bulk-update', [TiketController::class, 'bulkUpdate']);
     Route::apiResource('tiket', TiketController::class);
     Route::post('tiket/{tiket}/comments', [TiketCommentController::class, 'store']);
 

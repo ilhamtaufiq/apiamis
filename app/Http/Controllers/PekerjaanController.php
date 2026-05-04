@@ -53,6 +53,7 @@ class PekerjaanController extends Controller
             }
 
             $query = Pekerjaan::with(['kecamatan', 'desa', 'kegiatan', 'tags', 'pengawas', 'pendamping'])
+                ->withCount('penerima')
                 ->byUserRole();  // Aman karena sudah check auth
             
             // Filter by tahun via kegiatan

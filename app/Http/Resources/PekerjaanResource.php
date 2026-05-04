@@ -64,6 +64,7 @@ class PekerjaanResource extends JsonResource
             'pendamping' => new PengawasResource($this->whenLoaded('pendamping')),
             'tags' => TagResource::collection($this->whenLoaded('tags')),
             'draft' => new DraftPekerjaanResource($this->whenLoaded('draft')),
+            'penerima_count' => $this->penerima_count,
             'created_at' => $this->created_at?->toIso8601String(),
             'updated_at' => $this->updated_at?->toIso8601String(),
         ];
