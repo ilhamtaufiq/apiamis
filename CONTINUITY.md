@@ -18,10 +18,14 @@ Enabling Non-Admin Pekerjaan Access. Success is when non-admin users (Pengawas/P
     - Redesigned `pekerjaan.index.tsx` for non-admins to match dashboard aesthetic.
     - Fixed `.gitignore` in `storage/` and `storage/app/` to allow tracking of `.docx` templates.
     - Staged `SPK_Template.docx`, `bap_template.docx`, and `ringkasan_kontrak_template.docx` for commit.
+    - Filtered `Register Dokumen` to only show work packages with existing contracts (`has('kontrak')`).
+    - Consolidated `Register Dokumen` frontend to a single table view, removing redundant tabs.
+    - Replaced "Register Dinamis" and "Progress BA" with dynamic columns for each `DocumentType`.
+    - Removed text truncation and implemented responsive horizontal scrolling with sticky action columns.
   - Now:
-    - Final verification.
+    - Task complete.
   - Next:
-    - Phase 2 complete. Moving to Phase 3 (AI & Advanced Features).
+    - User to commit and push changes to server.
 
 # Open questions (UNCONFIRMED if needed):
 - None.

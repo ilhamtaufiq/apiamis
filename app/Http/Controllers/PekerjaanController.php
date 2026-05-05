@@ -625,7 +625,8 @@ class PekerjaanController extends Controller
     public function documentRegister(Request $request)
     {
         try {
-            $query = Pekerjaan::with(['kontrak.penyedia', 'kontrak.registers.type', 'kegiatan'])
+            $query = Pekerjaan::has('kontrak')
+                ->with(['kontrak.penyedia', 'kontrak.registers.type', 'kegiatan'])
                 ->byUserRole();
 
             if ($request->has('tahun') && $request->tahun) {
