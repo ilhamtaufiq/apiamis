@@ -37,23 +37,25 @@ class KontrakImport implements ToModel, WithHeadingRow, WithValidation, SkipsEmp
             return null;
         }
 
-        return new Kontrak([
-            'id_pekerjaan'      => $pekerjaan->id,
-            'id_penyedia'       => $penyedia->id,
-            'id_kegiatan'       => $pekerjaan->kegiatan_id,
-            'kode_rup'          => $row['kode_rup'] ?? null,
-            'kode_paket'        => $row['kode_paket'] ?? null,
-            'nomor_penawaran'   => $row['nomor_penawaran'] ?? null,
-            'tanggal_penawaran' => $this->parseDate($row['tanggal_penawaran'] ?? null),
-            'nilai_kontrak'     => $this->parseNumber($row['nilai_kontrak'] ?? 0),
-            'tgl_sppbj'         => $this->parseDate($row['tanggal_sppbj'] ?? null),
-            'tgl_spk'           => $this->parseDate($row['tanggal_spk'] ?? null),
-            'tgl_spmk'          => $this->parseDate($row['tanggal_spmk'] ?? null),
-            'tgl_selesai'       => $this->parseDate($row['tanggal_selesai_kontrak'] ?? null),
-            'sppbj'             => $row['nomor_sppbj'] ?? null,
-            'spk'               => $row['nomor_spk'] ?? null,
-            'spmk'              => $row['nomor_spmk'] ?? null,
-        ]);
+        return Kontrak::updateOrCreate(
+            ['id_pekerjaan' => $pekerjaan->id],
+            [
+                'id_penyedia'       => $penyedia->id,
+                'id_kegiatan'       => $pekerjaan->kegiatan_id,
+                'kode_rup'          => $row['kode_rup'] ?? null,
+                'kode_paket'        => $row['kode_paket'] ?? null,
+                'nomor_penawaran'   => $row['nomor_penawaran'] ?? null,
+                'tanggal_penawaran' => $this->parseDate($row['tanggal_penawaran'] ?? null),
+                'nilai_kontrak'     => $this->parseNumber($row['nilai_kontrak'] ?? 0),
+                'tgl_sppbj'         => $this->parseDate($row['tanggal_sppbj'] ?? null),
+                'tgl_spk'           => $this->parseDate($row['tanggal_spk'] ?? null),
+                'tgl_spmk'          => $this->parseDate($row['tanggal_spmk'] ?? null),
+                'tgl_selesai'       => $this->parseDate($row['tanggal_selesai_kontrak'] ?? null),
+                'sppbj'             => $row['nomor_sppbj'] ?? null,
+                'spk'               => $row['nomor_spk'] ?? null,
+                'spmk'              => $row['nomor_spmk'] ?? null,
+            ]
+        );
     }
 
     private function parseDate($value)

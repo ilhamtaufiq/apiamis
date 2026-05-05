@@ -27,6 +27,7 @@ class EventResource extends JsonResource
             'color' => $this->color,
             'backgroundColor' => $this->bg_color,
             'borderColor' => $this->border_color,
+            'attachments' => $this->attachments,
             'created_at' => $this->created_at,
             'updated_at' => $this->updated_at,
         ];

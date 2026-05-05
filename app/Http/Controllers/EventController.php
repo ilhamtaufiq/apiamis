@@ -40,7 +40,8 @@ class EventController extends Controller
      *             @OA\Property(property="is_allday", type="boolean"),
      *             @OA\Property(property="category", type="string", enum={"event","task","milestone","holiday"}),
      *             @OA\Property(property="location", type="string"),
-     *             @OA\Property(property="description", type="string")
+     *             @OA\Property(property="description", type="string"),
+     *             @OA\Property(property="attachments", type="array", @OA\Items(type="object"))
      *         )
      *     ),
      *     @OA\Response(response=201, description="Event created")
@@ -59,6 +60,7 @@ class EventController extends Controller
             'color' => 'nullable|string|max:20',
             'bg_color' => 'nullable|string|max:20',
             'border_color' => 'nullable|string|max:20',
+            'attachments' => 'nullable|array',
         ]);
 
         $event = Event::create(array_merge($validated, ['user_id' => Auth::id()]));
@@ -111,6 +113,7 @@ class EventController extends Controller
             'color' => 'nullable|string|max:20',
             'bg_color' => 'nullable|string|max:20',
             'border_color' => 'nullable|string|max:20',
+            'attachments' => 'nullable|array',
         ]);
 
         $event->update($validated);
@@ -137,5 +140,51 @@ class EventController extends Controller
         $event->delete();
 
         return response()->json(['message' => 'Event deleted successfully']);
+    }
+
+    /**
+     * @OA\Post(
+     *     path="/api/events/{id}/upload",
+     *     summary="Upload attachment for event",
+     *     tags={"Calendar Events"},
+     *     security={{"bearerAuth":{}}},
+     *     @OA\RequestBody(
+     *         required=true,
+     *         @OA\MediaType(
+     *             mediaType="multipart/form-data",
+     *             @OA\Schema(
+     *                 required={"file"},
+     *                 @OA\Property(property="file", type="string", format="binary")
+     *             )
+     *         )
+     *     ),
+     *     @OA\Response(response=200, description="File uploaded")
+     * )
+     */
+    public function upload(Request $request, Event $event)
+    {
+        if ($event->user_id !== Auth::id()) {
+            abort(403);
+        }
+
+        $request->validate([
+            'file' => 'required|file|max:10240', // Max 10MB
+        ]);
+
+        $media = $event->addMediaFromRequest('file')
+            ->toMediaCollection('event/attachments');
+
+        $attachments = $event->attachments ?? [];
+        $attachments[] = [
+            'id' => $media->id,
+            'name' => $media->file_name,
+            'url' => $media->getFullUrl(),
+            'type' => $media->mime_type,
+            'size' => $media->size,
+        ];
+
+        $event->update(['attachments' => $attachments]);
+
+        return new EventResource($event);
     }
 }

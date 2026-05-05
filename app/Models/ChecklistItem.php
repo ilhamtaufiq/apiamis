@@ -4,9 +4,11 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use App\Traits\Auditable;
 
 class ChecklistItem extends Model
 {
+    use Auditable;
     protected $table = 'tbl_checklist_items';
 
     protected $fillable = [

@@ -4,9 +4,11 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Casts\Attribute;
+use App\Traits\Auditable;
 
 class RoutePermission extends Model
 {
+    use Auditable;
     protected $fillable = [
         'route_path',
         'route_method',

@@ -3,9 +3,11 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use App\Traits\Auditable;
 
 class DraftPekerjaan extends Model
 {
+    use Auditable;
     protected $table = 'tbl_draft_pekerjaan';
 
     protected $fillable = [

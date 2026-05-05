@@ -5,9 +5,11 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Support\Str;
+use App\Traits\Auditable;
 
 class Tag extends Model
 {
+    use Auditable;
     protected $table = 'tbl_tags';
 
     protected $fillable = [

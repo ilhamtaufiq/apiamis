@@ -5,10 +5,11 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Spatie\MediaLibrary\HasMedia;
 use Spatie\MediaLibrary\InteractsWithMedia;
+use App\Traits\Auditable;
 
 class AppSetting extends Model implements HasMedia
 {
-    use InteractsWithMedia;
+    use InteractsWithMedia, Auditable;
 
     protected $table = 'app_settings';
 

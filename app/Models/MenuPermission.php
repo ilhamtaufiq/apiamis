@@ -3,9 +3,11 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use App\Traits\Auditable;
 
 class MenuPermission extends Model
 {
+    use Auditable;
     protected $fillable = [
         'menu_key',
         'menu_label',

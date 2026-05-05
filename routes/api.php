@@ -208,6 +208,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/notifications/broadcast', [\App\Http\Controllers\NotificationController::class, 'sendBroadcast'])->middleware('role:admin');
 
     // Calendar Events
+    Route::post('events/{event}/upload', [EventController::class, 'upload']);
     Route::apiResource('events', EventController::class);
 
     // Simulation Networks

@@ -3,9 +3,14 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Spatie\MediaLibrary\HasMedia;
+use Spatie\MediaLibrary\InteractsWithMedia;
+use App\Traits\Auditable;
 
-class Event extends Model
+class Event extends Model implements HasMedia
 {
+    use InteractsWithMedia, Auditable;
+
     protected $table = 'tbl_events';
 
     protected $fillable = [
@@ -20,12 +25,14 @@ class Event extends Model
         'color',
         'bg_color',
         'border_color',
+        'attachments',
     ];
 
     protected $casts = [
         'is_allday' => 'boolean',
         'start' => 'datetime',
         'end' => 'datetime',
+        'attachments' => 'array',
     ];
 
     public function user()

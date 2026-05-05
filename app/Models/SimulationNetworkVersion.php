@@ -4,9 +4,11 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use App\Traits\Auditable;
 
 class SimulationNetworkVersion extends Model
 {
+    use Auditable;
     protected $table = 'simulation_network_versions';
 
     public $timestamps = false;

@@ -3,9 +3,11 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use App\Traits\Auditable;
 
 class DocumentRegister extends Model
 {
+    use Auditable;
     protected $table = 'tbl_document_registers';
     protected $fillable = ['kontrak_id', 'type_id', 'nomor', 'tanggal', 'sequence_number', 'year', 'description'];
 
