@@ -1,0 +1,8 @@
+*
+!private/
+!public/
+!templates/
+!templates/*.docx
+!.gitignore
+
+
