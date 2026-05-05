@@ -16,6 +16,8 @@ Enabling Non-Admin Pekerjaan Access. Success is when non-admin users (Pengawas/P
     - Debugged and fixed SQL error in `Pekerjaan::scopeByUserRole` (table name mismatch).
     - Verified assigned data appearing for non-admins (Count: 2 for test user).
     - Redesigned `pekerjaan.index.tsx` for non-admins to match dashboard aesthetic.
+    - Fixed `.gitignore` in `storage/` and `storage/app/` to allow tracking of `.docx` templates.
+    - Staged `SPK_Template.docx`, `bap_template.docx`, and `ringkasan_kontrak_template.docx` for commit.
   - Now:
     - Final verification.
   - Next:
