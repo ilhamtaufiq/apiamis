@@ -121,6 +121,19 @@ class DocumentRegisterController extends Controller
         return response()->json($register, 201);
     }
 
+    public function update(Request $request, $id)
+    {
+        $register = DocumentRegister::findOrFail($id);
+        $validated = $request->validate([
+            'tanggal' => 'required|date',
+            'nomor' => 'required|string',
+            'description' => 'nullable|string',
+        ]);
+
+        $register->update($validated);
+        return response()->json($register);
+    }
+
     public function destroy($id)
     {
         $register = DocumentRegister::findOrFail($id);

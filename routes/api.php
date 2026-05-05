@@ -184,6 +184,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::delete('document-types/{id}', [\App\Http\Controllers\DocumentRegisterController::class, 'destroyType']);
     Route::get('document-registers', [\App\Http\Controllers\DocumentRegisterController::class, 'index']);
     Route::post('document-registers', [\App\Http\Controllers\DocumentRegisterController::class, 'store']);
+    Route::put('document-registers/{id}', [\App\Http\Controllers\DocumentRegisterController::class, 'update']);
     Route::delete('document-registers/{id}', [\App\Http\Controllers\DocumentRegisterController::class, 'destroy']);
 
 
