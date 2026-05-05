@@ -665,7 +665,18 @@ class PekerjaanController extends Controller
             }
 
             $data = $query->paginate($perPage);
-            return response()->json($data);
+            return response()->json([
+                'success' => true,
+                'data' => $data->items(),
+                'meta' => [
+                    'current_page' => $data->currentPage(),
+                    'last_page' => $data->lastPage(),
+                    'per_page' => $data->perPage(),
+                    'total' => $data->total(),
+                    'from' => $data->firstItem(),
+                    'to' => $data->lastItem(),
+                ]
+            ]);
 
         } catch (\Exception $e) {
             return response()->json([
