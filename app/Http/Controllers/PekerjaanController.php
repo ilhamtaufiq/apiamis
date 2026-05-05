@@ -87,7 +87,10 @@ class PekerjaanController extends Controller
             // Search functionality
             if ($request->has('search') && !empty($request->search)) {
                 $searchTerm = $request->search;
-                $query->whereFullText(['nama_paket', 'kode_rekening'], $searchTerm);
+                $query->where(function($q) use ($searchTerm) {
+                    $q->where('nama_paket', 'LIKE', '%' . $searchTerm . '%')
+                      ->orWhere('kode_rekening', 'LIKE', '%' . $searchTerm . '%');
+                });
             }
             
             // Sorting
@@ -626,7 +629,14 @@ class PekerjaanController extends Controller
     {
         try {
             $query = Pekerjaan::has('kontrak')
-                ->with(['kontrak.penyedia', 'kontrak.registers.type', 'kegiatan'])
+                ->with([
+                    'kontrak.penyedia', 
+                    'kontrak.registers.type', 
+                    'kegiatan',
+                    'output:id,pekerjaan_id,komponen,volume,satuan,penerima_is_optional',
+                    'berkas:id,pekerjaan_id,jenis_dokumen'
+                ])
+                ->withCount(['foto', 'penerima'])
                 ->byUserRole();
 
             if ($request->has('tahun') && $request->tahun) {
