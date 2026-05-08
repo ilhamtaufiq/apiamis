@@ -103,4 +103,71 @@ class AppSettingController extends Controller
         $allSettings = AppSetting::all();
         return AppSettingResource::collection($allSettings);
     }
+
+    /**
+     * Get storage statistics (sizes of photos, files, and database)
+     */
+    public function storageStats()
+    {
+        // Use database summation for media sizes (much more accurate for Spatie Media Library)
+        $fotoSize = \Illuminate\Support\Facades\DB::table('media')
+            ->where('collection_name', 'foto/pekerjaan')
+            ->sum('size') ?? 0;
+            
+        $fotoCount = \Illuminate\Support\Facades\DB::table('media')
+            ->where('collection_name', 'foto/pekerjaan')
+            ->count();
+            
+        $berkasSize = \Illuminate\Support\Facades\DB::table('media')
+            ->where('collection_name', 'berkas/dokumen')
+            ->sum('size') ?? 0;
+
+        $berkasCount = \Illuminate\Support\Facades\DB::table('media')
+            ->where('collection_name', 'berkas/dokumen')
+            ->count();
+
+        // Database size (MySQL)
+        $dbName = config('database.connections.mysql.database');
+        $dbSize = 0;
+        try {
+            $dbSizeResult = \Illuminate\Support\Facades\DB::select("
+                SELECT SUM(data_length + index_length) AS size 
+                FROM information_schema.TABLES 
+                WHERE table_schema = ?
+            ", [$dbName]);
+            $dbSize = (float)($dbSizeResult[0]->size ?? 0);
+        } catch (\Exception $e) {
+            // Fallback for other DBs if needed
+        }
+
+        return response()->json([
+            'data' => [
+                'foto' => (float)$fotoSize,
+                'foto_count' => $fotoCount,
+                'berkas' => (float)$berkasSize,
+                'berkas_count' => $berkasCount,
+                'database' => $dbSize,
+                'media_total' => (float)($fotoSize + $berkasSize),
+                'app_total' => (float)($fotoSize + $berkasSize + $dbSize)
+            ]
+        ]);
+    }
+
+    private function getDirSize($directory)
+    {
+        if (!file_exists($directory) || !is_dir($directory)) return 0;
+        
+        $size = 0;
+        try {
+            $files = new \RecursiveIteratorIterator(
+                new \RecursiveDirectoryIterator($directory, \RecursiveDirectoryIterator::SKIP_DOTS)
+            );
+            foreach ($files as $file) {
+                $size += $file->getSize();
+            }
+        } catch (\Exception $e) {
+            // Handle inaccessible files/directories
+        }
+        return $size;
+    }
 }
