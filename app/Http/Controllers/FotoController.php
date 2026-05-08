@@ -91,6 +91,7 @@ class FotoController extends Controller
             'koordinat' => 'required|string|max:255',
             'validasi_koordinat' => 'boolean',
             'validasi_koordinat_message' => 'nullable|string|max:255',
+            'unit_index' => 'nullable|integer',
             'file' => 'required|file|mimes:jpg,jpeg,png|max:5120', // Max 5MB and images only
         ]);
 
@@ -142,6 +143,7 @@ class FotoController extends Controller
             'koordinat' => 'nullable|string|max:255',
             'validasi_koordinat' => 'nullable|boolean',
             'validasi_koordinat_message' => 'nullable|string|max:255',
+            'unit_index' => 'nullable|integer',
             'file' => 'nullable|file|mimes:jpg,jpeg,png|max:5120',
         ]);
 

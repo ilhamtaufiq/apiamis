@@ -23,7 +23,8 @@ class Foto extends Model implements HasMedia
         'keterangan',
         'koordinat',
         'validasi_koordinat',
-        'validasi_koordinat_message'
+        'validasi_koordinat_message',
+        'unit_index'
     ];
 
     protected $casts = [
@@ -31,6 +32,7 @@ class Foto extends Model implements HasMedia
         'komponen_id' => 'integer',
         'penerima_id' => 'integer',
         'validasi_koordinat' => 'boolean',
+        'unit_index' => 'integer',
     ];
 
     public function pekerjaan(): BelongsTo
