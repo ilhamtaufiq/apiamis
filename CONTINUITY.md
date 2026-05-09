@@ -23,10 +23,10 @@ Enabling Non-Admin Pekerjaan Access. Success is when non-admin users (Pengawas/P
     - Replaced "Register Dinamis" and "Progress BA" with dynamic columns for each `DocumentType`.
     - Removed text truncation and implemented responsive horizontal scrolling with sticky action columns.
   - Now:
-    - Fixed `Dockerfile` deployment failure by adding `--ignore-platform-reqs` to the `vendor` build stage.
-    - Optimized `Dockerfile` performance by implementing BuildKit Cache Mounts for Composer (`/tmp/cache`) and NPM (`/root/.npm`). This enables faster incremental updates by persisting dependency caches across builds.
+    - Fixed `Dockerfile` deployment failure by adding `python3`, `make`, and `g++` to the `asset-builder` stage. This is required for the `@ilhamtaufiq/rab-analyzer` post-install script.
+    - Optimized build performance with BuildKit Cache Mounts.
   - Next:
-    - User to re-attempt deployment. The first build after this change will populate the cache, and subsequent builds will be significantly faster.
+    - User to re-attempt deployment.
 
 # Open questions (UNCONFIRMED if needed):
 - None.

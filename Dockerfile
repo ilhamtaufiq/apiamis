@@ -8,6 +8,8 @@ RUN --mount=type=cache,target=/tmp/cache \
 # Stage 2: Build Node.js assets
 FROM node:20-alpine AS asset-builder
 WORKDIR /app
+# Install Python and build dependencies for @ilhamtaufiq/rab-analyzer post-install scripts
+RUN apk add --no-cache python3 make g++ 
 COPY package.json package-lock.json ./
 RUN --mount=type=cache,target=/root/.npm \
     npm install
