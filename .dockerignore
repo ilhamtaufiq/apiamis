@@ -13,3 +13,4 @@ storage/*.key
 /storage/framework/sessions/*
 /storage/framework/views/*
 /storage/logs/*
+/scripts/venv

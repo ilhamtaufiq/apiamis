@@ -34,7 +34,10 @@ class RABAnalyzerController extends Controller
         $request->validate([
             'file' => 'required_without:berkas_id|file|mimes:pdf,xlsx,xls',
             'berkas_id' => 'required_without:file|integer|exists:tbl_berkas,id',
+            'type' => 'nullable|string|in:default,mck'
         ]);
+
+        $type = $request->get('type', 'default');
 
         try {
             if ($request->has('berkas_id')) {
@@ -70,12 +73,33 @@ class RABAnalyzerController extends Controller
                 Storage::disk('local')->makeDirectory('temp-rab');
             }
 
-            // Run Node.js script
-            $scriptsPath = base_path('scripts/analyze-rab.js');
-            $result = Process::run("node \"$scriptsPath\" \"$fullPath\"");
+            // Run appropriate script based on type
+            if ($type === 'mck') {
+                $scriptsPath = base_path('scripts/analyze-mck.py');
+                
+                // Detect venv
+                $venvPath = (PHP_OS_FAMILY === 'Windows') 
+                    ? base_path('scripts/venv/Scripts/python.exe')
+                    : base_path('scripts/venv/bin/python');
+                
+                if (file_exists($venvPath)) {
+                    $pythonCmd = "\"$venvPath\"";
+                } else {
+                    $pythonCmd = (PHP_OS_FAMILY === 'Windows') ? 'python' : 'python3';
+                }
+
+                $outName = 'rab_mck_' . uniqid() . '.csv';
+                $outputPath = Storage::disk('local')->path('temp-rab/' . $outName);
+                $result = Process::run("$pythonCmd \"$scriptsPath\" \"$fullPath\" \"$outputPath\"");
+            } else {
+                // Run Node.js script
+                $scriptsPath = base_path('scripts/analyze-rab.js');
+                $result = Process::run("node \"$scriptsPath\" \"$fullPath\"");
+            }
 
             if ($result->failed()) {
                 Log::error('RAB Analysis failed', [
+                    'type' => $type,
                     'error' => $result->errorOutput(),
                     'output' => $result->output()
                 ]);
@@ -86,20 +110,21 @@ class RABAnalyzerController extends Controller
             }
 
             $csvOutput = trim($result->output());
+            Log::info('RAB Analysis raw output: ' . $csvOutput);
             
             // Sometimes output contains other logs, let's take the last line which should be the path
             $lines = explode("\n", $csvOutput);
             $csvPath = trim(end($lines));
+            Log::info('Detected CSV Path: ' . $csvPath);
 
             if (!file_exists($csvPath)) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'Output CSV tidak ditemukan.'
+                    'message' => 'Output CSV tidak ditemukan. Path: ' . $csvPath
                 ], 500);
             }
 
             // Parse CSV
-            Log::info('RAB Analysis raw output: ' . $csvOutput);
             $analysis = $this->parseRabCsv($csvPath);
             Log::info('RAB Analysis result metadata', [
                 'extractedTotal' => $analysis['extractedTotal'],
@@ -132,32 +157,56 @@ class RABAnalyzerController extends Controller
         $documentTotal = 0;
         $handle = fopen($path, "r");
         
-        // Skip header
-        fgetcsv($handle);
+        // Read header to determine mapping
+        $header = fgetcsv($handle);
+        $mapping = [];
+        foreach ($header as $index => $col) {
+            $colLower = strtolower(trim($col));
+            if ($colLower === 'no') $mapping['no'] = $index;
+            if (str_contains($colLower, 'item') || str_contains($colLower, 'uraian')) $mapping['item'] = $index;
+            if (str_contains($colLower, 'satuan')) $mapping['satuan'] = $index;
+            if (str_contains($colLower, 'vol')) $mapping['vol'] = $index;
+            if (str_contains($colLower, 'harga') || str_contains($colLower, 'satuan')) {
+                 if (!isset($mapping['harga']) || str_contains($colLower, 'harga')) $mapping['harga'] = $index;
+            }
+            if (str_contains($colLower, 'pajak')) $mapping['pajak'] = $index;
+            if (str_contains($colLower, 'total')) $mapping['total'] = $index;
+            if (str_contains($colLower, 'keterangan')) $mapping['keterangan'] = $index;
+            if (str_contains($colLower, 'kunci')) $mapping['kunci'] = $index;
+            if (str_contains($colLower, 'type')) $mapping['type'] = $index;
+        }
         
         while (($data = fgetcsv($handle)) !== FALSE) {
-            if (count($data) < 7) continue;
+            $item = trim($data[$mapping['item'] ?? 1] ?? '');
+            $no = trim($data[$mapping['no'] ?? 0] ?? '');
             
-            $no = trim($data[0] ?? '');
-            $item = trim($data[1] ?? '');
-            
-            if ($no === 'METADATA' && $item === 'GRAND_TOTAL') {
-                $documentTotal = $this->cleanNumber($data[6] ?? 0);
+            if (($no === 'METADATA' || $no === 'METADATA_TOTAL') && $item === 'GRAND_TOTAL') {
+                $documentTotal = $this->cleanNumber($data[$mapping['total'] ?? 6] ?? 0);
                 continue;
             }
 
-            $satuan = trim($data[2] ?? '');
-            $vol = $this->cleanNumber($data[3] ?? 0);
-            $harga = $this->cleanNumber($data[4] ?? 0);
-            $total = $this->cleanNumber($data[6] ?? 0);
+            $satuan = trim($data[$mapping['satuan'] ?? 2] ?? '');
+            $vol = $this->cleanNumber($data[$mapping['vol'] ?? 3] ?? 0);
+            $harga = $this->cleanNumber($data[$mapping['harga'] ?? 4] ?? 0);
+            $total = $this->cleanNumber($data[$mapping['total'] ?? 6] ?? 0);
+            $pajak = trim($data[$mapping['pajak'] ?? 5] ?? '11%');
+            if (is_numeric($pajak)) $pajak = $pajak . '%';
+            
+            $keterangan = trim($data[$mapping['keterangan'] ?? -1] ?? '');
+            $kunci = trim($data[$mapping['kunci'] ?? -1] ?? '');
 
             $itemLower = strtolower($item);
             $isSummary = str_contains($itemLower, 'total') || str_contains($itemLower, 'jumlah') || str_contains($itemLower, 'grand total');
-            $isHeader = ($vol == 0 && $harga == 0 && $total == 0);
             
+            // Determine type from script if available, otherwise guess
             $type = 'item';
-            if ($isSummary) $type = 'summary';
-            elseif ($isHeader) $type = 'header';
+            if (isset($mapping['type'])) {
+                $type = trim($data[$mapping['type']]);
+            } else {
+                $isHeader = ($vol == 0 && $harga == 0 && $total == 0);
+                if ($isSummary) $type = 'summary';
+                elseif ($isHeader) $type = 'header';
+            }
 
             $items[] = [
                 'type' => $type,
@@ -166,8 +215,10 @@ class RABAnalyzerController extends Controller
                 'satuan' => $satuan,
                 'vol' => $vol,
                 'harga' => $harga,
-                'pajak' => '11%',
-                'total' => $total
+                'pajak' => $pajak,
+                'total' => $total,
+                'keterangan' => $keterangan,
+                'kunci' => $kunci
             ];
         }
         fclose($handle);
