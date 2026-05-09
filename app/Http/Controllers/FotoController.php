@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Foto;
+use App\Models\Pekerjaan;
 use App\Http\Resources\FotoResource;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
@@ -179,5 +180,122 @@ class FotoController extends Controller
         $foto->delete();
         
         return response()->json(['message' => 'Foto deleted successfully']);
+    }
+
+    public function generateVideo(Pekerjaan $pekerjaan)
+    {
+        $pekerjaan->load(['foto.penerima', 'foto.komponen']);
+        
+        $fotos = $pekerjaan->foto->sortBy([
+            ['keterangan', 'asc'],
+            ['created_at', 'asc'],
+        ]);
+
+        if ($fotos->count() === 0) {
+            return response()->json(['message' => 'Tidak ada foto untuk dibuat video'], 404);
+        }
+
+        $tempDir = storage_path('app/temp-video/' . uniqid());
+        if (!file_exists($tempDir)) {
+            mkdir($tempDir, 0775, true);
+        }
+
+        try {
+            $ffmpeg = 'ffmpeg';
+            $isWindows = strtoupper(substr(PHP_OS, 0, 3)) === 'WIN';
+            
+            // Set Font Path based on OS
+            if ($isWindows) {
+                $fontPath = 'C\\:/Windows/Fonts/arial.ttf';
+            } else {
+                // Ubuntu default font path
+                $fontPath = '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf';
+                // Fallback check for Ubuntu
+                if (!file_exists($fontPath)) {
+                    $fontPath = '/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf';
+                }
+            }
+
+            $namaPaket = str_replace(["'", "\""], "", $pekerjaan->nama_paket);
+            
+            $titleLen = strlen($namaPaket);
+            $titleSize = 32;
+            if ($titleLen > 30) $titleSize = 24;
+            if ($titleLen > 60) $titleSize = 18;
+
+            $i = 0;
+            foreach ($fotos as $foto) {
+                $media = $foto->getFirstMedia('foto/pekerjaan');
+                if ($media && file_exists($media->getPath())) {
+                    $inputPath = str_replace('\\', '/', $media->getPath());
+                    $outputPath = str_replace('\\', '/', $tempDir . '/' . sprintf('%04d', $i) . '.jpg');
+                    
+                    $progressText = $foto->keterangan ?: 'Progress';
+                    if (is_numeric($progressText)) $progressText .= "%";
+                    $progressText = "PROGRESS: " . $progressText;
+
+                    $safeFontPath = str_replace('\\', '/', $fontPath);
+                    $safeFontPath = str_replace(':', '\\:', $safeFontPath); // Escape colon for Windows path in drawtext
+                    
+                    $vf = "split[bg][fg];";
+                    $vf .= "[bg]scale=720:1280:force_original_aspect_ratio=increase,crop=720:1280,boxblur=20:10[bg];";
+                    $vf .= "[fg]scale=720:1280:force_original_aspect_ratio=decrease[fg];";
+                    $vf .= "[bg][fg]overlay=(W-w)/2:(H-h)/2,";
+                    $vf .= "drawbox=y=ih-250:color=black@0.6:width=iw:height=180:t=fill,";
+                    $vf .= "drawtext=fontfile='$safeFontPath':text='$namaPaket':x=(w-text_w)/2:y=h-210:fontsize=$titleSize:fontcolor=white,";
+                    $vf .= "drawtext=fontfile='$safeFontPath':text='$progressText':x=(w-text_w)/2:y=h-140:fontsize=48:fontcolor=yellow";
+                    
+                    $cmd = "ffmpeg -y -i \"$inputPath\" -vf \"$vf\" -frames:v 1 -q:v 2 \"$outputPath\" 2>&1";
+                    exec($cmd, $imageOutput, $imageReturn);
+                    
+                    if ($imageReturn !== 0) {
+                        \Illuminate\Support\Facades\Log::error("FFmpeg Image Process Failed", [
+                            'cmd' => $cmd,
+                            'output' => $imageOutput,
+                            'return' => $imageReturn
+                        ]);
+                    }
+                    $i++;
+                }
+            }
+
+            if ($i === 0) {
+                return response()->json(['message' => 'File foto tidak ditemukan di storage'], 404);
+            }
+
+            $outputFile = str_replace('\\', '/', $tempDir . '/progress_video.mp4');
+            $inputPattern = str_replace('\\', '/', $tempDir . '/%04d.jpg');
+            
+            $finalCmd = "ffmpeg -y -framerate 1 -i \"$inputPattern\" ";
+            $finalCmd .= "-c:v libx264 -pix_fmt yuv420p -preset ultrafast -crf 23 -r 30 \"$outputFile\" 2>&1";
+            
+            exec($finalCmd, $output, $returnVar);
+
+            if ($returnVar !== 0) {
+                \Illuminate\Support\Facades\Log::error("FFmpeg Video Combine Failed", [
+                    'cmd' => $finalCmd,
+                    'output' => $output,
+                    'return' => $returnVar
+                ]);
+                return response()->json([
+                    'message' => 'Gagal membuat video portrait.',
+                    'error' => $output
+                ], 500);
+            }
+
+            $downloadName = Str::slug($pekerjaan->nama_paket) . '_story_progress.mp4';
+            $finalPath = storage_path('app/public/' . $downloadName);
+            rename($outputFile, $finalPath);
+
+            return response()->download($finalPath, $downloadName)->deleteFileAfterSend(true);
+        } finally {
+            if (file_exists($tempDir)) {
+                $files = glob($tempDir . '/*');
+                foreach ($files as $file) {
+                    if (is_file($file)) unlink($file);
+                }
+                rmdir($tempDir);
+            }
+        }
     }
 }

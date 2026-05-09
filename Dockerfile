@@ -28,14 +28,14 @@ RUN apt-get update && apt-get install -y \
     git curl zip unzip \
     libpng-dev libjpeg-dev libfreetype6-dev \
     libonig-dev libxml2-dev libzip-dev libicu-dev \
-    python3 python3-pip python3-venv build-essential libreoffice \
+    python3 python3-pip python3-venv build-essential libreoffice ffmpeg \
     gnupg \
     && docker-php-ext-configure gd --with-freetype --with-jpeg \
     && docker-php-ext-install pdo_mysql mbstring exif pcntl bcmath gd zip intl \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Install Python requirements globally for system-wide access
-RUN pip3 install --no-cache-dir pandas pdfplumber openpyxl --break-system-packages
+RUN pip3 install --no-cache-dir pandas pdfplumber openpyxl easyocr opencv-python-headless --break-system-packages
 
 # Set PHP configuration for file uploads
 RUN echo "upload_max_filesize = 50M" > /usr/local/etc/php/conf.d/uploads.ini \

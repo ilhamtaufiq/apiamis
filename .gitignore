@@ -26,4 +26,6 @@ Thumbs.db
 /%SystemDrive%
 {[0-9A-F]*}
 *.tmp
+.smart-coding-cache
+.agent
 
