@@ -28,7 +28,7 @@ RUN apt-get update && apt-get install -y \
     git curl zip unzip \
     libpng-dev libjpeg-dev libfreetype6-dev \
     libonig-dev libxml2-dev libzip-dev libicu-dev \
-    python3 python3-pip python3-venv build-essential \
+    python3 python3-pip python3-venv build-essential libreoffice \
     gnupg \
     && docker-php-ext-configure gd --with-freetype --with-jpeg \
     && docker-php-ext-install pdo_mysql mbstring exif pcntl bcmath gd zip intl \

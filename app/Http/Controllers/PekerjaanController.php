@@ -687,5 +687,32 @@ class PekerjaanController extends Controller
             ], 500);
         }
     }
+    public function downloadAllBerkas(Pekerjaan $pekerjaan)
+    {
+        $pekerjaan->load('berkas');
+        
+        if ($pekerjaan->berkas->count() === 0) {
+            return response()->json(['message' => 'Tidak ada berkas untuk diunduh'], 404);
+        }
+
+        $zip = new \ZipArchive;
+        $fileName = str_replace([' ', '/', '\\'], '_', $pekerjaan->nama_paket) . '.zip';
+        $tempFile = tempnam(sys_get_temp_dir(), 'zip');
+
+        if ($zip->open($tempFile, \ZipArchive::CREATE | \ZipArchive::OVERWRITE) === TRUE) {
+            foreach ($pekerjaan->berkas as $berkas) {
+                $media = $berkas->getFirstMedia('berkas/dokumen');
+                if ($media && file_exists($media->getPath())) {
+                    // Gunakan jenis dokumen sebagai nama file di dalam zip
+                    $extension = pathinfo($media->file_name, PATHINFO_EXTENSION);
+                    $innerFileName = str_replace([' ', '/', '\\'], '_', $berkas->jenis_dokumen) . '_' . $media->id . '.' . $extension;
+                    $zip->addFile($media->getPath(), $innerFileName);
+                }
+            }
+            $zip->close();
+        }
+
+        return response()->download($tempFile, $fileName)->deleteFileAfterSend(true);
+    }
 }
 

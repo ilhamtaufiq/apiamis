@@ -72,6 +72,7 @@ Route::middleware('auth:sanctum')->group(function () {
     // Pekerjaan dengan role-based filtering
     Route::apiResource('pekerjaan', PekerjaanController::class);
     Route::get('pekerjaan/{pekerjaan}/media', [PekerjaanController::class, 'media']);
+    Route::get('pekerjaan/{pekerjaan}/download-all-berkas', [PekerjaanController::class, 'downloadAllBerkas']);
     
     // Menu permissions - user menus
     Route::get('menu-permissions/user/menus', [MenuPermissionController::class, 'getUserMenus']);
@@ -132,6 +133,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('penerima/summary', [PenerimaController::class, 'summary']);
     Route::apiResource('penerima', PenerimaController::class);
     Route::apiResource('berkas', BerkasController::class)->parameters(['berkas' => 'berkas']);
+    Route::get('berkas/{berkas}/export-pdf', [BerkasController::class, 'convertToPdf']);
     Route::apiResource('foto', FotoController::class);
     Route::apiResource('users', UserController::class);
     Route::apiResource('roles', RoleController::class);
