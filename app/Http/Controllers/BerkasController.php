@@ -169,8 +169,9 @@ class BerkasController extends Controller
             mkdir($outputDir, 0775, true);
         }
 
-        // Jalankan LibreOffice Headless
-        $command = "libreoffice --headless --convert-to pdf --outdir \"$outputDir\" \"$inputPath\"";
+        // Jalankan LibreOffice Headless dengan HOME set ke /tmp untuk menghindari permission error pada cache font/dconf
+        $libreoffice = env('LIBREOFFICE_PATH', 'libreoffice');
+        $command = "HOME=/tmp $libreoffice --headless -env:UserInstallation=file:///tmp/libreoffice_profile --convert-to pdf --outdir \"$outputDir\" \"$inputPath\"";
         exec($command, $output, $returnVar);
 
         if ($returnVar === 0) {
