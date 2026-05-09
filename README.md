@@ -10,11 +10,11 @@ APIAMIS is a Laravel-based REST API designed to power the ARUMANIS frontend syst
 
 - **Framework**: Laravel 12
 - **PHP**: ^8.2
-- **Authentication**: Laravel Sanctum
-- **Authorization**: Spatie Laravel Permission
-- **Media**: Spatie Laravel MediaLibrary (for file and photo uploads)
-- **API Documentation**: L5-Swagger
-- **Database**: MySQL/PostgreSQL
+- **Auth**: Laravel Sanctum & Spatie Permission
+- **Media**: Spatie MediaLibrary
+- **PDF Export**: LibreOffice Headless (Docker fix)
+- **RAB Script**: Python 3 (pandas, pdfplumber)
+- **DB**: MySQL/PostgreSQL
 
 ## 🚀 Getting Started
 
@@ -65,11 +65,13 @@ The API will be available at `http://localhost:8000` or `http://apiamis.test` if
 
 ## 📁 Features
 
-- **Audit Logging System**: Automatic event capturing with a specialized Trait for tracking all data mutations (`Auditable`).
-- **Geo-Fencing Support**: Server-side infrastructure for validating photo coordinates against administrative boundaries.
-- **Media Management**: Automatic handling of photo uploads and document storage via Spatie MediaLibrary.
-- **Region Normalization**: Automated name normalization for Kecamatan and Desa to ensure Map-GeoJSON consistency.
-- **Reporting**: Structured data for progress tracking and PDF/Excel exports.
+- **RAB Analyzer**: Ekstrak item pekerjaan otomatis dari Excel/PDF proyek MCK via Python.
+- **Konversi PDF**: Render dokumen ke PDF pake LibreOffice headless di server (via Docker).
+- **Audit Log**: Catat otomatis setiap ada data yang ditambah, diubah, atau dihapus.
+- **Validasi Koordinat**: Cek foto di lapangan apakah masuk dalam area proyek (Geo-fencing).
+- **Monitoring Storage**: Cek sisa kuota storage buat foto, file, dan database secara real-time.
+- **Manajemen Media**: Upload dan simpan dokumen lewat Spatie MediaLibrary.
+- **Normalisasi Wilayah**: Sinkronisasi otomatis nama Desa/Kecamatan biar gak ada beda sama GeoJSON map.
 
 ## 📝 License
 

@@ -189,4 +189,29 @@ class BerkasController extends Controller
             'debug' => $output
         ], 500);
     }
+
+    public function uploadFromUrl(Request $request)
+    {
+        $validated = $request->validate([
+            'pekerjaan_id' => 'required|exists:tbl_pekerjaan,id',
+            'jenis_dokumen' => 'required|string|max:255',
+            'url' => 'required|url',
+        ]);
+
+        $berkas = Berkas::create([
+            'pekerjaan_id' => $validated['pekerjaan_id'],
+            'jenis_dokumen' => $validated['jenis_dokumen'],
+        ]);
+
+        try {
+            $berkas->addMediaFromUrl($validated['url'])
+                ->toMediaCollection('berkas/dokumen');
+        } catch (\Exception $e) {
+            $berkas->delete();
+            return response()->json(['message' => 'Gagal mendownload file dari URL. Pastikan URL mengarah langsung ke file.'], 400);
+        }
+
+        $berkas->load('pekerjaan');
+        return new BerkasResource($berkas);
+    }
 }

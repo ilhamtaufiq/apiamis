@@ -28,6 +28,8 @@ class Penerima extends Model
         'pekerjaan_id' => 'integer',
         'jumlah_jiwa' => 'integer',
         'is_komunal' => 'boolean',
+        'nik' => 'encrypted',
+        'alamat' => 'encrypted',
     ];
 
     /**

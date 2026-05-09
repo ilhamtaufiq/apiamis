@@ -22,9 +22,12 @@ Enabling Non-Admin Pekerjaan Access. Success is when non-admin users (Pengawas/P
     - Consolidated `Register Dokumen` frontend to a single table view, removing redundant tabs.
     - Replaced "Register Dinamis" and "Progress BA" with dynamic columns for each `DocumentType`.
     - Removed text truncation and implemented responsive horizontal scrolling with sticky action columns.
-  - Now:
-    - Fixed `Dockerfile` deployment failure by adding `python3`, `make`, and `g++` to the `asset-builder` stage. This is required for the `@ilhamtaufiq/rab-analyzer` post-install script.
+    - Fixed `Dockerfile` deployment failure by adding `python3`, `make`, and `g++` to the `asset-builder` stage.
     - Optimized build performance with BuildKit Cache Mounts.
+    - Fixed LibreOffice PDF export in Docker by setting `HOME=/tmp` and using custom user profile directory.
+    - Updated README.md and CHANGELOG.md with recent features.
+  - Now:
+    - Verifying system stability after deployment.
   - Next:
     - User to re-attempt deployment.
 

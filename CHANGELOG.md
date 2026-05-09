@@ -2,6 +2,19 @@
 
 All notable changes to the APIAMIS project will be documented in this file.
 
+## [2026-05-09]
+
+### Added
+- **RAB Analyzer**: Fitur ekstraksi item pekerjaan otomatis buat proyek MCK pake Python.
+- **PDF Export (LibreOffice)**: Sekarang bisa konversi dokumen ke PDF langsung di server pake LibreOffice headless.
+- **Download ZIP**: Tombol "Download All" buat narik semua dokumen proyek jadi satu file ZIP.
+- **Statistik Storage**: Cek penggunaan disk buat foto, dokumen, dan database lewat API.
+
+### Fixed
+- **LibreOffice Docker Fix**: Fix error permission di Docker dengan memindah folder profile ke `/tmp` dan set environment `HOME`.
+- **CORS Production**: Aktifkan modul headers Apache di Docker biar gak kena block CORS pas dideploy.
+- **Cleanup File**: Otomatis hapus file temporary hasil konversi PDF biar gak menuhin storage.
+
 ## [2025-12-28]
 
 ### Added

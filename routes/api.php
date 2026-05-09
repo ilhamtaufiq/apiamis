@@ -37,6 +37,7 @@ use App\Http\Controllers\PekerjaanChecklistController;
 use App\Http\Controllers\Api\PengawasController;
 use App\Http\Controllers\DraftPekerjaanController;
 use App\Http\Controllers\RABAnalyzerController;
+use App\Http\Controllers\OCRController;
 
 
 // Authentication Routes
@@ -133,6 +134,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('penerima/summary', [PenerimaController::class, 'summary']);
     Route::apiResource('penerima', PenerimaController::class);
     Route::apiResource('berkas', BerkasController::class)->parameters(['berkas' => 'berkas']);
+    Route::post('berkas/upload-from-url', [BerkasController::class, 'uploadFromUrl']);
     Route::get('berkas/{berkas}/export-pdf', [BerkasController::class, 'convertToPdf']);
     Route::apiResource('foto', FotoController::class);
     Route::apiResource('users', UserController::class);
@@ -229,6 +231,9 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // Chat AI (MiniMax)
     Route::post('chat', [\App\Http\Controllers\ChatController::class, 'chat']);
+
+    // OCR
+    Route::post('ocr/ktp', [OCRController::class, 'processKtp']);
 });
 
 
