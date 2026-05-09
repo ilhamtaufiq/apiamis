@@ -11,6 +11,7 @@ use App\Http\Resources\BerkasResource;
 use App\Imports\PekerjaanImport;
 use App\Exports\PekerjaanTemplateExport;
 use Illuminate\Http\Request;
+use Illuminate\Support\Str;
 use Maatwebsite\Excel\Facades\Excel;
 
 class PekerjaanController extends Controller
@@ -687,32 +688,76 @@ class PekerjaanController extends Controller
             ], 500);
         }
     }
-    public function downloadAllBerkas(Pekerjaan $pekerjaan)
+    public function downloadAllBerkas(Pekerjaan $pekerjaan, Request $request)
     {
         $pekerjaan->load('berkas');
+        $format = $request->get('format', 'original'); // 'original' or 'pdf'
         
         if ($pekerjaan->berkas->count() === 0) {
             return response()->json(['message' => 'Tidak ada berkas untuk diunduh'], 404);
         }
 
         $zip = new \ZipArchive;
-        $fileName = str_replace([' ', '/', '\\'], '_', $pekerjaan->nama_paket) . '.zip';
+        $suffix = $format === 'pdf' ? '_PDF' : '';
+        $fileName = str_replace([' ', '/', '\\'], '_', $pekerjaan->nama_paket) . $suffix . '.zip';
         $tempFile = tempnam(sys_get_temp_dir(), 'zip');
 
         if ($zip->open($tempFile, \ZipArchive::CREATE | \ZipArchive::OVERWRITE) === TRUE) {
             foreach ($pekerjaan->berkas as $berkas) {
                 $media = $berkas->getFirstMedia('berkas/dokumen');
                 if ($media && file_exists($media->getPath())) {
-                    // Gunakan jenis dokumen sebagai nama file di dalam zip
-                    $extension = pathinfo($media->file_name, PATHINFO_EXTENSION);
-                    $innerFileName = str_replace([' ', '/', '\\'], '_', $berkas->jenis_dokumen) . '_' . $media->id . '.' . $extension;
-                    $zip->addFile($media->getPath(), $innerFileName);
+                    if ($format === 'pdf') {
+                        $pdfPath = $this->getPdfPath($media);
+                        if ($pdfPath && file_exists($pdfPath)) {
+                            $innerFileName = str_replace([' ', '/', '\\'], '_', $berkas->jenis_dokumen) . '_' . $media->id . '.pdf';
+                            $zip->addFile($pdfPath, $innerFileName);
+                        } else {
+                            // If PDF conversion fails, fall back to original for this file? 
+                            // Or skip? User asked for "Download Semua sebagai PDF".
+                            // I'll skip or add original with warning? Better skip or keep original.
+                            // Let's keep original if PDF fails, but with its original extension.
+                            $extension = pathinfo($media->file_name, PATHINFO_EXTENSION);
+                            $innerFileName = str_replace([' ', '/', '\\'], '_', $berkas->jenis_dokumen) . '_' . $media->id . '.' . $extension;
+                            $zip->addFile($media->getPath(), $innerFileName);
+                        }
+                    } else {
+                        $extension = pathinfo($media->file_name, PATHINFO_EXTENSION);
+                        $innerFileName = str_replace([' ', '/', '\\'], '_', $berkas->jenis_dokumen) . '_' . $media->id . '.' . $extension;
+                        $zip->addFile($media->getPath(), $innerFileName);
+                    }
                 }
             }
             $zip->close();
         }
 
         return response()->download($tempFile, $fileName)->deleteFileAfterSend(true);
+    }
+
+    private function getPdfPath($media)
+    {
+        $inputPath = $media->getPath();
+        if (Str::endsWith(strtolower($media->file_name), '.pdf')) {
+            return $inputPath;
+        }
+
+        $outputDir = storage_path('app/temp-pdf');
+        if (!file_exists($outputDir)) {
+            mkdir($outputDir, 0775, true);
+        }
+
+        $libreoffice = env('LIBREOFFICE_PATH', 'libreoffice');
+        // Gunakan profil terpisah untuk menghindari lock conflict
+        $command = "HOME=/tmp $libreoffice --headless -env:UserInstallation=file:///tmp/libreoffice_profile --convert-to pdf --outdir \"$outputDir\" \"$inputPath\"";
+        exec($command, $output, $returnVar);
+
+        if ($returnVar === 0) {
+            $fileName = pathinfo($media->file_name, PATHINFO_FILENAME) . '.pdf';
+            $outputPath = $outputDir . '/' . $fileName;
+            if (file_exists($outputPath)) {
+                return $outputPath;
+            }
+        }
+        return null;
     }
 }
 
