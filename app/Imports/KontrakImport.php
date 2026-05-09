@@ -16,26 +16,43 @@ use Carbon\Carbon;
 class KontrakImport implements ToModel, WithHeadingRow, WithValidation, SkipsEmptyRows, SkipsOnFailure
 {
     use SkipsFailures;
+    
+    public $rows = 0;
+    public $importedRows = 0;
+    public $skippedRows = [];
 
     public function model(array $row)
     {
         // Resolve Pekerjaan (Nama Paket)
-        $pekerjaanName = $row['nama_paket'] ?? null;
+        $pekerjaanName = isset($row['nama_paket']) ? trim($row['nama_paket']) : null;
         $pekerjaan = null;
         if ($pekerjaanName) {
             $pekerjaan = Pekerjaan::where('nama_paket', 'LIKE', '%' . $pekerjaanName . '%')->first();
         }
 
         // Resolve Penyedia (Nama Penyedia)
-        $penyediaName = $row['nama_penyedia'] ?? null;
+        $penyediaName = isset($row['nama_penyedia']) ? trim($row['nama_penyedia']) : null;
         $penyedia = null;
         if ($penyediaName) {
             $penyedia = Penyedia::where('nama', 'LIKE', '%' . $penyediaName . '%')->first();
         }
 
+
+        $this->rows++;
+
         if (!$pekerjaan || !$penyedia) {
+            $this->skippedRows[] = [
+                'row' => $this->rows + 1, // +1 for heading
+                'nama_paket' => $pekerjaanName,
+                'nama_penyedia' => $penyediaName,
+                'reason' => (!$pekerjaan ? 'Pekerjaan tidak ditemukan' : '') . 
+                            (!$pekerjaan && !$penyedia ? ' & ' : '') . 
+                            (!$penyedia ? 'Penyedia tidak ditemukan' : '')
+            ];
             return null;
         }
+
+        $this->importedRows++;
 
         return Kontrak::updateOrCreate(
             ['id_pekerjaan' => $pekerjaan->id],

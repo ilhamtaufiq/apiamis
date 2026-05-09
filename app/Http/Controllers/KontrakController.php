@@ -123,7 +123,7 @@ class KontrakController extends Controller
     public function exportDoc(Kontrak $kontrak)
     {
         try {
-            $path = $this->exportService->exportKontrakByInstance($kontrak);
+            $path = $this->exportService->export($kontrak);
             return response()->download($path)->deleteFileAfterSend(true);
         } catch (\Exception $e) {
             return response()->json(['message' => $e->getMessage()], 500);
@@ -277,8 +277,20 @@ class KontrakController extends Controller
         ]);
 
         try {
-            Excel::import(new KontrakImport, $request->file('file'));
-            return response()->json(['message' => 'Kontrak berhasil diimport']);
+            $import = new KontrakImport;
+            Excel::import($import, $request->file('file'));
+            
+            return response()->json([
+                'message' => 'Import selesai',
+                'debug' => [
+                    'total_rows_excel' => $import->rows,
+                    'total_imported' => $import->importedRows,
+                    'total_failed' => count($import->failures()),
+                    'total_skipped' => count($import->skippedRows),
+                    'skipped_details' => $import->skippedRows,
+                    'failures' => $import->failures()
+                ]
+            ]);
         } catch (\Exception $e) {
             return response()->json(['message' => 'Gagal mengimport kontrak: ' . $e->getMessage()], 500);
         }
@@ -286,6 +298,6 @@ class KontrakController extends Controller
 
     public function exportExcel(Request $request)
     {
-        return Excel::download(new \App\Exports\KontrakExport($request->tahun, $request->search), 'data_kontrak.xlsx');
+        return Excel::download(new KontrakExport($request->tahun, $request->search), 'data_kontrak.xlsx');
     }
 }
