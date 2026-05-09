@@ -23,9 +23,9 @@ Enabling Non-Admin Pekerjaan Access. Success is when non-admin users (Pengawas/P
     - Replaced "Register Dinamis" and "Progress BA" with dynamic columns for each `DocumentType`.
     - Removed text truncation and implemented responsive horizontal scrolling with sticky action columns.
   - Now:
-    - Task complete.
+    - Fixed `Dockerfile` deployment failure by adding `--ignore-platform-reqs` to the `vendor` build stage. This allows `composer install` to complete even when the build environment lacks specific PHP extensions (gd, exif) that are later provided in the final stage.
   - Next:
-    - User to commit and push changes to server.
+    - User to re-attempt deployment with the updated `Dockerfile`.
 
 # Open questions (UNCONFIRMED if needed):
 - None.

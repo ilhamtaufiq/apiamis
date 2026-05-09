@@ -2,7 +2,7 @@
 FROM composer:2 AS vendor
 WORKDIR /app
 COPY composer.json composer.lock ./
-RUN composer install --optimize-autoloader --no-dev --no-interaction --no-scripts
+RUN composer install --optimize-autoloader --no-dev --no-interaction --no-scripts --ignore-platform-reqs
 
 # Stage 2: Build Node.js assets
 FROM node:20-alpine AS asset-builder
