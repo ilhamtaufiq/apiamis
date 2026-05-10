@@ -53,9 +53,11 @@ class ChatController extends Controller
 
             PENTING: Anda adalah asisten 'Read-Only'. Anda TIDAK memiliki kemampuan untuk menginput, mengubah, atau menghapus data dalam sistem. Tugas Anda hanya memberikan informasi berdasarkan data yang ada.
 
-            PANDUAN VISUAL:
+            PANDUAN VISUAL & INTERAKSI:
             1. Jika konteks data menyediakan URL foto, tampilkan foto tersebut menggunakan format Markdown: ![Keterangan](URL).
-            2. Berikan informasi progres fisik secara jelas.
+            2. Berikan informasi progres fisik secara jelas. Sebutkan RATA-RATA PROGRES jika ditanya tentang wilayah atau kategori.
+            3. Sertakan LINK DETAIL proyek (jika ada dalam konteks) agar pengguna bisa langsung membuka halaman tersebut.
+            4. Selalu akhiri jawaban dengan 1 saran PERTANYAAN LANJUTAN yang relevan (misal: 'Apakah Anda ingin melihat detail penyedia untuk proyek ini?').
 
             Berikut adalah konteks data relasional dari database yang sesuai dengan pertanyaan pengguna:\n\n" . $context . "\n\n
             PANDUAN JAWABAN:
@@ -108,35 +110,82 @@ class ChatController extends Controller
         $context = "";
         $queryLower = strtolower($query);
 
-        // 1. Search Pekerjaan with its relations (Limited by user role for security)
+        // 1. STATISTIK & RINGKASAN (Untuk menjawab pertanyaan "Berapa banyak", "Total", dll)
+        $statsQuery = Pekerjaan::byUserRole()
+            ->where(function ($q) use ($query) {
+                $q->where('nama_paket', 'LIKE', "%{$query}%")
+                  ->orWhere('kode_rekening', 'LIKE', "%{$query}%")
+                  ->orWhereHas('desa', function($sub) use ($query) { $sub->where('n_desa', 'LIKE', "%{$query}%"); })
+                  ->orWhereHas('kecamatan', function($sub) use ($query) { $sub->where('n_kec', 'LIKE', "%{$query}%"); })
+                  ->orWhereHas('kegiatan', function($sub) use ($query) { 
+                      $sub->where('nama_sub_kegiatan', 'LIKE', "%{$query}%")
+                          ->orWhere('tahun_anggaran', 'LIKE', "%{$query}%");
+                  });
+            });
+
+        $totalCount = $statsQuery->count();
+        if ($totalCount > 0) {
+            $avgProgress = $statsQuery->with('progress')->get()->avg(function($p) {
+                return $p->progress->realisasi ?? 0;
+            });
+
+            $context .= "### STATISTIK & RINGKASAN:\n";
+            $context .= "- Total Pekerjaan Ditemukan: {$totalCount}\n";
+            $context .= "- Rata-rata Progres Fisik: " . number_format($avgProgress, 2) . "%\n";
+            
+            // Jika ada query tahun, berikan breakdown per sub kegiatan
+            if (preg_match('/\b(20\d{2})\b/', $query, $matches)) {
+                $year = $matches[1];
+                $breakdown = Pekerjaan::byUserRole()
+                    ->whereHas('kegiatan', function($q) use ($year) { $q->where('tahun_anggaran', $year); })
+                    ->select('kegiatan_id', DB::raw('count(*) as total'))
+                    ->groupBy('kegiatan_id')
+                    ->with('kegiatan')
+                    ->get();
+                
+                if ($breakdown->count() > 0) {
+                    $context .= "- Breakdown Tahun Anggaran {$year}:\n";
+                    foreach ($breakdown as $b) {
+                        $context .= "  * " . ($b->kegiatan->nama_sub_kegiatan ?? 'Lainnya') . ": {$b->total} paket\n";
+                    }
+                }
+            }
+            $context .= "\n";
+        }
+
+        // Base URL for links (Adjust according to frontend domain)
+        $baseUrl = config('app.frontend_url', url('/'));
+
+        // 2. Search Pekerjaan with its relations (Detailed List)
         $pekerjaan = Pekerjaan::byUserRole()
             ->with(['kecamatan', 'desa', 'kontrak.penyedia', 'kegiatan', 'progress', 'pengawas', 'foto'])
             ->where(function ($q) use ($query) {
-                // Hybrid Search: Full-Text + LIKE Fallback + Relation Search
+                // Hybrid Search
                 $q->whereRaw("MATCH(nama_paket, kode_rekening) AGAINST(? IN NATURAL LANGUAGE MODE)", [$query])
                   ->orWhere('nama_paket', 'LIKE', "%{$query}%")
-                  ->orWhereHas('desa', function($sub) use ($query) {
-                      $sub->where('n_desa', 'LIKE', "%{$query}%");
-                  })
-                  ->orWhereHas('kecamatan', function($sub) use ($query) {
-                      $sub->where('n_kec', 'LIKE', "%{$query}%");
+                  ->orWhereHas('desa', function($sub) use ($query) { $sub->where('n_desa', 'LIKE', "%{$query}%"); })
+                  ->orWhereHas('kecamatan', function($sub) use ($query) { $sub->where('n_kec', 'LIKE', "%{$query}%"); })
+                  ->orWhereHas('kegiatan', function($sub) use ($query) { 
+                      $sub->where('nama_sub_kegiatan', 'LIKE', "%{$query}%")
+                          ->orWhere('tahun_anggaran', 'LIKE', "%{$query}%");
                   });
             })
             ->limit(5)->get();
 
         if ($pekerjaan->count() > 0) {
-            $context .= "### DATA PEKERJAAN & PROGRES:\n";
+            $context .= "### DAFTAR DETAIL PEKERJAAN:\n";
             foreach ($pekerjaan as $p) {
                 $loc = ($p->desa->n_desa ?? '-') . ", " . ($p->kecamatan->n_kec ?? '-');
                 $progres = $p->progress->realisasi ?? 0;
                 $pengawas = $p->pengawas->nama ?? 'Belum ditunjuk';
                 
                 $context .= "- Paket: [ID: {$p->id}] {$p->nama_paket}\n";
+                $context .= "  * Link Detail: {$baseUrl}/pekerjaan/{$p->id}\n";
                 $context .= "  * Pagu: Rp " . number_format($p->pagu, 0, ',', '.') . "\n";
                 $context .= "  * Lokasi: {$loc}\n";
                 $context .= "  * Progres Fisik: {$progres}%\n";
                 $context .= "  * Pengawas Lapangan: {$pengawas}\n";
-                $context .= "  * Sub Kegiatan: " . ($p->kegiatan->nama_sub_kegiatan ?? '-') . "\n";
+                $context .= "  * Sub Kegiatan: " . ($p->kegiatan->nama_sub_kegiatan ?? '-') . " (" . ($p->kegiatan->tahun_anggaran ?? '-') . ")\n";
                 
                 // Add Photo URLs to context
                 if ($p->foto->count() > 0) {
