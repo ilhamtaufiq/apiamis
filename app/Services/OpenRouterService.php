@@ -8,11 +8,13 @@ use Illuminate\Support\Facades\Log;
 class OpenRouterService
 {
     protected $apiKey;
+    protected $model;
     protected $baseUrl = 'https://openrouter.ai/api/v1';
 
     public function __construct()
     {
         $this->apiKey = config('services.openrouter.api_key', env('OPENROUTER_API_KEY'));
+        $this->model = config('services.openrouter.model', 'google/gemini-2.0-flash-lite-preview-02-05:free');
     }
 
     /**
@@ -20,7 +22,7 @@ class OpenRouterService
      */
     public function chat(array $messages, array $options = [])
     {
-        $model = $options['model'] ?? 'nvidia/nemotron-3-super-120b-a12b:free';
+        $model = $options['model'] ?? $this->model;
         
         $payload = [
             'model' => $model,
@@ -39,7 +41,7 @@ class OpenRouterService
                 'Content-Type' => 'application/json',
                 'HTTP-Referer' => config('app.url'), // Optional, for OpenRouter ranking
                 'X-Title' => config('app.name'), // Optional
-            ])->post($this->baseUrl . '/chat/completions', $payload);
+            ])->timeout(120)->post($this->baseUrl . '/chat/completions', $payload);
 
             if ($response->failed()) {
                 Log::error('OpenRouter API Error', [

@@ -280,15 +280,21 @@ class KontrakController extends Controller
             $import = new KontrakImport;
             Excel::import($import, $request->file('file'));
             
+            $failures = collect($import->failures())->map(function($f) {
+                return [
+                    'row' => $f['row'] ?? null,
+                    'message' => is_array($f['errors']) ? implode(', ', $f['errors']) : $f['errors']
+                ];
+            });
+
             return response()->json([
                 'message' => 'Import selesai',
+                'success_count' => $import->importedRows,
+                'error_count' => count($failures),
+                'errors' => $failures,
                 'debug' => [
                     'total_rows_excel' => $import->rows,
-                    'total_imported' => $import->importedRows,
-                    'total_failed' => count($import->failures()),
-                    'total_skipped' => count($import->skippedRows),
-                    'skipped_details' => $import->skippedRows,
-                    'failures' => $import->failures()
+                    'total_skipped' => count($import->skippedRows ?? []),
                 ]
             ]);
         } catch (\Exception $e) {

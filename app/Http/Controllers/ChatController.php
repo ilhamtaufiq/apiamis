@@ -87,9 +87,7 @@ class ChatController extends Controller
         ];
 
         // 4. Call AI
-        $result = $this->openRouter->chat($messages, [
-            'model' => 'nvidia/nemotron-3-super-120b-a12b:free',
-        ]);
+        $result = $this->openRouter->chat($messages);
 
         if (!$result['success']) {
             return response()->json($result, 500);

@@ -5,74 +5,119 @@ namespace App\Imports;
 use App\Models\Kontrak;
 use App\Models\Pekerjaan;
 use App\Models\Penyedia;
-use Maatwebsite\Excel\Concerns\ToModel;
+use Maatwebsite\Excel\Concerns\ToCollection;
 use Maatwebsite\Excel\Concerns\WithHeadingRow;
-use Maatwebsite\Excel\Concerns\WithValidation;
 use Maatwebsite\Excel\Concerns\SkipsEmptyRows;
-use Maatwebsite\Excel\Concerns\SkipsOnFailure;
-use Maatwebsite\Excel\Concerns\SkipsFailures;
+use Illuminate\Support\Collection;
 use Carbon\Carbon;
 
-class KontrakImport implements ToModel, WithHeadingRow, WithValidation, SkipsEmptyRows, SkipsOnFailure
+class KontrakImport implements ToCollection, WithHeadingRow, SkipsEmptyRows
 {
-    use SkipsFailures;
-    
     public $rows = 0;
     public $importedRows = 0;
     public $skippedRows = [];
+    public $failures = [];
 
-    public function model(array $row)
+    public function collection(Collection $rows)
     {
-        // Resolve Pekerjaan (Nama Paket)
-        $pekerjaanName = isset($row['nama_paket']) ? trim($row['nama_paket']) : null;
-        $pekerjaan = null;
-        if ($pekerjaanName) {
-            $pekerjaan = Pekerjaan::where('nama_paket', 'LIKE', '%' . $pekerjaanName . '%')->first();
+        foreach ($rows as $index => $row) {
+            // Check if row is mostly empty (nama_paket is required)
+            if (!isset($row['nama_paket']) || empty(trim($row['nama_paket']))) {
+                continue;
+            }
+
+            $this->rows++;
+            $rowNumber = $index + 2; // +2 for heading row and 0-based index
+
+            // Parse dates first to extract year for strict matching
+            $tglSppbj = $this->parseDate($row['tanggal_sppbj'] ?? null);
+            $tglSpk = $this->parseDate($row['tanggal_spk'] ?? null);
+            $tglSpmk = $this->parseDate($row['tanggal_spmk'] ?? null);
+            $tglSelesai = $this->parseDate($row['tanggal_selesai_kontrak'] ?? null);
+            $tglPenawaran = $this->parseDate($row['tanggal_penawaran'] ?? null);
+
+            // Determine reference year (prioritize SPK date, then SPMK, then SPPBJ)
+            $refDate = $tglSpk ?? $tglSpmk ?? $tglSppbj;
+            $refYear = $refDate ? $refDate->year : null;
+
+            // Resolve Pekerjaan (Nama Paket) - STRICT EXACT MATCH + YEAR
+            $pekerjaanName = isset($row['nama_paket']) ? trim($row['nama_paket']) : null;
+            $pekerjaan = null;
+            if ($pekerjaanName) {
+                $query = Pekerjaan::where(function($q) use ($pekerjaanName) {
+                    $q->where('nama_paket', $pekerjaanName)
+                      ->orWhereRaw('LOWER(nama_paket) = ?', [strtolower($pekerjaanName)]);
+                });
+
+                if ($refYear) {
+                    $query->whereHas('kegiatan', function($q) use ($refYear) {
+                        $q->where('tahun_anggaran', $refYear);
+                    });
+                }
+
+                $pekerjaan = $query->first();
+            }
+
+            // Resolve Penyedia (Nama Penyedia) - STRICT EXACT MATCH
+            $penyediaName = isset($row['nama_penyedia']) ? trim($row['nama_penyedia']) : null;
+            $penyedia = null;
+            if ($penyediaName) {
+                $penyedia = Penyedia::where('nama', $penyediaName)
+                    ->orWhereRaw('LOWER(nama) = ?', [strtolower($penyediaName)])
+                    ->first();
+            }
+
+            // Strict Validation
+            if (!$pekerjaan || !$penyedia) {
+                $reason = "";
+                if (!$pekerjaan) {
+                    if ($refYear) {
+                        $reason .= "Pekerjaan '{$pekerjaanName}' tidak ditemukan pada tahun anggaran {$refYear}. ";
+                    } else {
+                        $reason .= "Pekerjaan '{$pekerjaanName}' tidak ditemukan (Tahun anggaran tidak dapat ditentukan dari tanggal SPK/SPMK). ";
+                    }
+                }
+                if (!$penyedia) $reason .= "Penyedia '{$penyediaName}' tidak ditemukan. ";
+
+                $this->failures[] = [
+                    'row' => $rowNumber,
+                    'attribute' => 'referensi',
+                    'errors' => [$reason],
+                    'values' => $row->toArray()
+                ];
+                continue;
+            }
+
+            try {
+                Kontrak::updateOrCreate(
+                    ['id_pekerjaan' => $pekerjaan->id],
+                    [
+                        'id_penyedia'       => $penyedia->id,
+                        'id_kegiatan'       => $pekerjaan->kegiatan_id,
+                        'kode_rup'          => $row['kode_rup'] ?? null,
+                        'kode_paket'        => $row['kode_paket'] ?? null,
+                        'nomor_penawaran'   => $row['nomor_penawaran'] ?? null,
+                        'tanggal_penawaran' => $tglPenawaran,
+                        'nilai_kontrak'     => $this->parseNumber($row['nilai_kontrak'] ?? 0),
+                        'tgl_sppbj'         => $tglSppbj,
+                        'tgl_spk'           => $tglSpk,
+                        'tgl_spmk'          => $tglSpmk,
+                        'tgl_selesai'       => $tglSelesai,
+                        'sppbj'             => $row['nomor_sppbj'] ?? null,
+                        'spk'               => $row['nomor_spk'] ?? null,
+                        'spmk'              => $row['nomor_spmk'] ?? null,
+                    ]
+                );
+                $this->importedRows++;
+            } catch (\Exception $e) {
+                $this->failures[] = [
+                    'row' => $rowNumber,
+                    'attribute' => 'database',
+                    'errors' => [$e->getMessage()],
+                    'values' => $row->toArray()
+                ];
+            }
         }
-
-        // Resolve Penyedia (Nama Penyedia)
-        $penyediaName = isset($row['nama_penyedia']) ? trim($row['nama_penyedia']) : null;
-        $penyedia = null;
-        if ($penyediaName) {
-            $penyedia = Penyedia::where('nama', 'LIKE', '%' . $penyediaName . '%')->first();
-        }
-
-
-        $this->rows++;
-
-        if (!$pekerjaan || !$penyedia) {
-            $this->skippedRows[] = [
-                'row' => $this->rows + 1, // +1 for heading
-                'nama_paket' => $pekerjaanName,
-                'nama_penyedia' => $penyediaName,
-                'reason' => (!$pekerjaan ? 'Pekerjaan tidak ditemukan' : '') . 
-                            (!$pekerjaan && !$penyedia ? ' & ' : '') . 
-                            (!$penyedia ? 'Penyedia tidak ditemukan' : '')
-            ];
-            return null;
-        }
-
-        $this->importedRows++;
-
-        return Kontrak::updateOrCreate(
-            ['id_pekerjaan' => $pekerjaan->id],
-            [
-                'id_penyedia'       => $penyedia->id,
-                'id_kegiatan'       => $pekerjaan->kegiatan_id,
-                'kode_rup'          => $row['kode_rup'] ?? null,
-                'kode_paket'        => $row['kode_paket'] ?? null,
-                'nomor_penawaran'   => $row['nomor_penawaran'] ?? null,
-                'tanggal_penawaran' => $this->parseDate($row['tanggal_penawaran'] ?? null),
-                'nilai_kontrak'     => $this->parseNumber($row['nilai_kontrak'] ?? 0),
-                'tgl_sppbj'         => $this->parseDate($row['tanggal_sppbj'] ?? null),
-                'tgl_spk'           => $this->parseDate($row['tanggal_spk'] ?? null),
-                'tgl_spmk'          => $this->parseDate($row['tanggal_spmk'] ?? null),
-                'tgl_selesai'       => $this->parseDate($row['tanggal_selesai_kontrak'] ?? null),
-                'sppbj'             => $row['nomor_sppbj'] ?? null,
-                'spk'               => $row['nomor_spk'] ?? null,
-                'spmk'              => $row['nomor_spmk'] ?? null,
-            ]
-        );
     }
 
     private function parseDate($value)
@@ -97,13 +142,8 @@ class KontrakImport implements ToModel, WithHeadingRow, WithValidation, SkipsEmp
         return (float) $clean;
     }
 
-    public function rules(): array
+    public function failures()
     {
-        return [
-            'nama_paket' => 'required',
-            'nama_penyedia' => 'required',
-            'nomor_spk' => 'required',
-            'nilai_kontrak' => 'required',
-        ];
+        return $this->failures;
     }
 }

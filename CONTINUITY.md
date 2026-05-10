@@ -8,10 +8,11 @@
   - Removed all tool/function definitions from `ChatController.php`.
   - Removed tool call handling logic.
   - Updated system prompt to define the AI as a "Read-Only" data analysis assistant.
+  - Increased OpenRouter API timeout to 120s and externalized model configuration.
 - State:
-  - Done: Removed input tools, cleaned up controller logic, updated system prompt.
-  - Now: Completed the task as per user request.
-  - Next: Monitor user feedback.
+  - Done: Removed input tools, updated prompt, increased timeout, and set Gemini 2.0 Flash Lite as the new default model.
+  - Now: Stabilized AI chat functionality against timeouts.
+  - Next: Monitor response times and user feedback.
 - Open questions (UNCONFIRMED if needed): None.
 - Working set (files/ids/commands):
   - c:\laragon\www\apiamis\app\Http\Controllers\ChatController.php
