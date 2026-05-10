@@ -48,22 +48,22 @@ class ChatController extends Controller
         // System Prompt with Schema Knowledge
         $messages[] = [
             'role' => 'system',
-            'content' => "Anda adalah 'Ami', asisten AI cerdas untuk aplikasi Arumanis (Sistem Informasi Pekerjaan Umum). 
-            Tugas Anda adalah membantu pengguna menjawab pertanyaan seputar data proyek (Pekerjaan), Kontrak, Penyedia (Kontraktor), dan Kegiatan.
+            'content' => "Anda adalah 'Ami', asisten AI analisis data untuk aplikasi Arumanis (Sistem Informasi Pekerjaan Umum). 
+            Tugas utama Anda adalah membantu pengguna MENCARI dan MENGANALISIS data proyek (Pekerjaan), Kontrak, Penyedia (Kontraktor), dan Kegiatan berdasarkan konteks database yang diberikan.
+
+            PENTING: Anda adalah asisten 'Read-Only'. Anda TIDAK memiliki kemampuan untuk menginput, mengubah, atau menghapus data dalam sistem. Tugas Anda hanya memberikan informasi berdasarkan data yang ada.
 
             PANDUAN VISUAL:
             1. Jika konteks data menyediakan URL foto, tampilkan foto tersebut menggunakan format Markdown: ![Keterangan](URL).
             2. Berikan informasi progres fisik secara jelas.
 
-            STRUKTUR DATA ARUMANIS:
-            ... (seperti sebelumnya) ...
-
             Berikut adalah konteks data relasional dari database yang sesuai dengan pertanyaan pengguna:\n\n" . $context . "\n\n
             PANDUAN JAWABAN:
             1. Jika pengguna bertanya tentang siapa yang mengerjakan proyek, lihat data Kontrak -> Penyedia.
             2. Jika pengguna bertanya tentang lokasi, lihat data Desa/Kecamatan di Pekerjaan.
-            3. Gunakan data di atas untuk menjawab secara detail dan informatif.
-            4. Jika ada foto, tampilkan foto tersebut untuk membantu visualisasi.
+            3. Analisis relasi antar data untuk memberikan jawaban yang komprehensif.
+            4. Gunakan data di atas untuk menjawab secara detail dan informatif.
+            5. Jika ada foto, tampilkan foto tersebut untuk membantu visualisasi.
             Bahasa: Indonesia."
         ];
 
@@ -84,95 +84,13 @@ class ChatController extends Controller
             'content' => $userMessage
         ];
 
-        // 3. Define Tools (Skills)
-        $tools = [
-            [
-                'type' => 'function',
-                'function' => [
-                    'name' => 'input_pekerjaan',
-                    'description' => 'Gunakan fungsi ini untuk menginput data paket pekerjaan baru ke sistem.',
-                    'parameters' => [
-                        'type' => 'object',
-                        'properties' => [
-                            'nama_paket' => ['type' => 'string', 'description' => 'Nama paket pekerjaan/proyek'],
-                            'pagu' => ['type' => 'number', 'description' => 'Nilai pagu anggaran'],
-                            'kecamatan_id' => ['type' => 'integer', 'description' => 'ID Kecamatan'],
-                            'desa_id' => ['type' => 'integer', 'description' => 'ID Desa'],
-                            'kode_rekening' => ['type' => 'string', 'description' => 'Kode rekening proyek'],
-                            'kegiatan_id' => ['type' => 'integer', 'description' => 'ID Kegiatan terkait'],
-                        ],
-                        'required' => ['nama_paket', 'pagu', 'kecamatan_id', 'desa_id']
-                    ]
-                ]
-            ],
-            [
-                'type' => 'function',
-                'function' => [
-                    'name' => 'input_kontrak',
-                    'description' => 'Gunakan fungsi ini untuk menginput data kontrak baru untuk suatu pekerjaan.',
-                    'parameters' => [
-                        'type' => 'object',
-                        'properties' => [
-                            'id_pekerjaan' => ['type' => 'integer', 'description' => 'ID Pekerjaan terpilih'],
-                            'id_penyedia' => ['type' => 'integer', 'description' => 'ID Penyedia/Kontraktor'],
-                            'nilai_kontrak' => ['type' => 'number', 'description' => 'Nilai kontrak yang disepakati'],
-                            'nomor_spk' => ['type' => 'string', 'description' => 'Nomor Surat Perintah Kerja (SPK)'],
-                        ],
-                        'required' => ['id_pekerjaan', 'id_penyedia', 'nilai_kontrak', 'nomor_spk']
-                    ]
-                ]
-            ],
-            [
-                'type' => 'function',
-                'function' => [
-                    'name' => 'input_kegiatan',
-                    'description' => 'Gunakan fungsi ini untuk menginput data program kegiatan baru.',
-                    'parameters' => [
-                        'type' => 'object',
-                        'properties' => [
-                            'nama_program' => ['type' => 'string'],
-                            'nama_kegiatan' => ['type' => 'string'],
-                            'nama_sub_kegiatan' => ['type' => 'string'],
-                            'tahun_anggaran' => ['type' => 'string', 'description' => 'Tahun (contoh: 2024)'],
-                        ],
-                        'required' => ['nama_kegiatan', 'tahun_anggaran']
-                    ]
-                ]
-            ],
-            [
-                'type' => 'function',
-                'function' => [
-                    'name' => 'get_locations',
-                    'description' => 'Gunakan fungsi ini untuk mendapatkan daftar ID Kecamatan dan Desa agar input data akurat.',
-                    'parameters' => [
-                        'type' => 'object',
-                        'properties' => [
-                            'search' => ['type' => 'string', 'description' => 'Nama desa atau kecamatan'],
-                        ],
-                    ]
-                ]
-            ]
-        ];
-
         // 4. Call AI
         $result = $this->openRouter->chat($messages, [
             'model' => 'nvidia/nemotron-3-super-120b-a12b:free',
-            'tools' => $tools,
-            'tool_choice' => 'auto'
         ]);
 
         if (!$result['success']) {
             return response()->json($result, 500);
-        }
-
-        // 5. Check for Tool Calls
-        if (!empty($result['tool_calls'])) {
-            return response()->json([
-                'success' => true,
-                'reply' => 'Sedang menyiapkan formulir input...',
-                'tool_calls' => $result['tool_calls'],
-                'usage' => $result['usage'] ?? null
-            ]);
         }
 
         return response()->json([
