@@ -112,9 +112,15 @@ class ChatController extends Controller
         $pekerjaan = Pekerjaan::byUserRole()
             ->with(['kecamatan', 'desa', 'kontrak.penyedia', 'kegiatan', 'progress', 'pengawas', 'foto'])
             ->where(function ($q) use ($query) {
-                // Hybrid Search: Full-Text + LIKE Fallback
+                // Hybrid Search: Full-Text + LIKE Fallback + Relation Search
                 $q->whereRaw("MATCH(nama_paket, kode_rekening) AGAINST(? IN NATURAL LANGUAGE MODE)", [$query])
-                  ->orWhere('nama_paket', 'LIKE', "%{$query}%");
+                  ->orWhere('nama_paket', 'LIKE', "%{$query}%")
+                  ->orWhereHas('desa', function($sub) use ($query) {
+                      $sub->where('n_desa', 'LIKE', "%{$query}%");
+                  })
+                  ->orWhereHas('kecamatan', function($sub) use ($query) {
+                      $sub->where('n_kec', 'LIKE', "%{$query}%");
+                  });
             })
             ->limit(5)->get();
 
