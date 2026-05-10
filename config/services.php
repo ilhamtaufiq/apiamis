@@ -44,5 +44,9 @@ return [
     'minimax' => [
         'api_key' => env('VITE_MINIMAX_API_KEY'),
     ],
+ 
+    'openrouter' => [
+        'api_key' => env('OPENROUTER_API_KEY'),
+    ],
 
 ];

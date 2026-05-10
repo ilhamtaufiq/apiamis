@@ -5,22 +5,23 @@ namespace App\Services;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
-class MiniMaxService
+class OpenRouterService
 {
     protected $apiKey;
-    protected $baseUrl = 'https://api.minimax.io/v1';
+    protected $baseUrl = 'https://openrouter.ai/api/v1';
 
     public function __construct()
     {
-        $this->apiKey = config('services.minimax.api_key', env('VITE_MINIMAX_API_KEY'));
+        $this->apiKey = config('services.openrouter.api_key', env('OPENROUTER_API_KEY'));
     }
 
     /**
-     * Send chat completion request
+     * Send chat completion request to OpenRouter
      */
     public function chat(array $messages, array $options = [])
     {
-        $model = $options['model'] ?? 'MiniMax-M2.7';
+        $model = $options['model'] ?? 'nvidia/nemotron-3-super-120b-a12b:free';
+        
         $payload = [
             'model' => $model,
             'messages' => $messages,
@@ -36,10 +37,12 @@ class MiniMaxService
             $response = Http::withHeaders([
                 'Authorization' => 'Bearer ' . $this->apiKey,
                 'Content-Type' => 'application/json',
+                'HTTP-Referer' => config('app.url'), // Optional, for OpenRouter ranking
+                'X-Title' => config('app.name'), // Optional
             ])->post($this->baseUrl . '/chat/completions', $payload);
 
             if ($response->failed()) {
-                Log::error('MiniMax API Error', [
+                Log::error('OpenRouter API Error', [
                     'status' => $response->status(),
                     'body' => $response->body(),
                 ]);
@@ -56,7 +59,7 @@ class MiniMaxService
                 'usage' => $response->json('usage'),
             ];
         } catch (\Exception $e) {
-            Log::error('MiniMax Exception', ['message' => $e->getMessage()]);
+            Log::error('OpenRouter Exception', ['message' => $e->getMessage()]);
             return [
                 'success' => false,
                 'message' => 'Exception occurred: ' . $e->getMessage(),

@@ -77,16 +77,7 @@ class RABAnalyzerController extends Controller
             if ($type === 'mck') {
                 $scriptsPath = base_path('scripts/analyze-mck.py');
                 
-                // Detect venv
-                $venvPath = (PHP_OS_FAMILY === 'Windows') 
-                    ? base_path('scripts/venv/Scripts/python.exe')
-                    : base_path('scripts/venv/bin/python');
-                
-                if (file_exists($venvPath)) {
-                    $pythonCmd = "\"$venvPath\"";
-                } else {
-                    $pythonCmd = (PHP_OS_FAMILY === 'Windows') ? 'python' : 'python3';
-                }
+                $pythonCmd = (PHP_OS_FAMILY === 'Windows') ? 'python' : 'python3';
 
                 $outName = 'rab_mck_' . uniqid() . '.csv';
                 $outputPath = Storage::disk('local')->path('temp-rab/' . $outName);

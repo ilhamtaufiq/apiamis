@@ -42,186 +42,201 @@ class SearchController extends Controller
     public function index(Request $request)
     {
         $query = $request->query('q');
+        $tahun = $request->query('tahun', date('Y'));
 
         if (!$query) {
-            return response()->json([
-                'success' => true,
-                'data' => []
-            ]);
+            return response()->json(['success' => true, 'data' => []]);
         }
 
-        $results = [];
-
-        // 1. Search Pekerjaan
-        $pekerjaan = Pekerjaan::byUserRole()
-            ->whereRaw("MATCH(nama_paket, kode_rekening) AGAINST(? IN BOOLEAN MODE)", [$query])
-            ->with(['desa', 'kecamatan'])
-            ->limit(10)
-            ->get()
-            ->map(function ($item) {
-                return [
-                    'id' => $item->id,
-                    'type' => 'Pekerjaan',
-                    'title' => $item->nama_paket,
-                    'subtitle' => $item->kode_rekening . ' - ' . ($item->desa->n_desa ?? ''),
-                    'url' => "/pekerjaan/{$item->id}"
-                ];
-            });
-        $results = array_merge($results, $pekerjaan->toArray());
-
-        // 2. Search Kontrak
-        $kontrak = Kontrak::where(function($q) use ($query) {
-            $q->whereRaw("MATCH(spk, spmk, kode_paket) AGAINST(? IN BOOLEAN MODE)", [$query])
-              ->orWhereHas('pekerjaan', function($pq) use ($query) {
-                  $pq->byUserRole()->whereRaw("MATCH(nama_paket, kode_rekening) AGAINST(? IN BOOLEAN MODE)", [$query]);
-              });
-        })
-            ->limit(10)
-            ->get()
-            ->map(function ($item) {
-                return [
-                    'id' => $item->id,
-                    'type' => 'Kontrak',
-                    'title' => 'Kontrak: ' . ($item->spk ?? $item->kode_paket),
-                    'subtitle' => 'Pekerjaan ID: ' . $item->id_pekerjaan,
-                    'url' => "/kontrak/{$item->id}"
-                ];
-            });
-        $results = array_merge($results, $kontrak->toArray());
-
-        // 3. Search Penyedia
-        $penyedia = Penyedia::whereRaw("MATCH(nama, direktur) AGAINST(? IN BOOLEAN MODE)", [$query])
-            ->limit(5)
-            ->get()
-            ->map(function ($item) {
-                return [
-                    'id' => $item->id,
-                    'type' => 'Penyedia',
-                    'title' => $item->nama,
-                    'subtitle' => "Direktur: " . $item->direktur,
-                    'url' => "/penyedia/{$item->id}"
-                ];
-            });
-        $results = array_merge($results, $penyedia->toArray());
-
-        // 4. Search Kegiatan
-        $kegiatan = Kegiatan::whereRaw("MATCH(nama_kegiatan, nama_sub_kegiatan, nama_program) AGAINST(? IN BOOLEAN MODE)", [$query])
-            ->limit(5)
-            ->get()
-            ->map(function ($item) {
-                return [
-                    'id' => $item->id,
-                    'type' => 'Kegiatan',
-                    'title' => $item->nama_kegiatan,
-                    'subtitle' => $item->nama_sub_kegiatan,
-                    'url' => "/kegiatan/{$item->id}" // assuming valid url in frontend
-                ];
-            });
-        $results = array_merge($results, $kegiatan->toArray());
-
-        // 5. Search Desa
-        $desa = Desa::whereRaw("MATCH(n_desa) AGAINST(? IN BOOLEAN MODE)", [$query])
-            ->with('kecamatan')
-            ->limit(5)
-            ->get()
-            ->map(function ($item) {
-                return [
-                    'id' => $item->id,
-                    'type' => 'Desa',
-                    'title' => 'Desa ' . $item->n_desa,
-                    'subtitle' => 'Kec. ' . ($item->kecamatan->n_kec ?? ''),
-                    'url' => "/desa/{$item->id}"
-                ];
-            });
-        $results = array_merge($results, $desa->toArray());
-
-        // 6. Search Dokumentasi (Foto)
-        $dokumentasi = Foto::where(function($q) use ($query) {
-            $q->where('keterangan', 'like', "%{$query}%")
-              ->orWhereHas('pekerjaan', function($pq) use ($query) {
-                  $pq->byUserRole()->whereRaw("MATCH(nama_paket, kode_rekening) AGAINST(? IN BOOLEAN MODE)", [$query]);
-              });
-        })
-            ->with('pekerjaan') 
-            ->limit(10)
-            ->get()
-            ->map(function ($item) {
-                return [
-                    'id' => $item->id,
-                    'type' => 'Dokumentasi',
-                    'title' => 'Dokumentasi: ' . ($item->keterangan ?? 'Tanpa Keterangan'),
-                    'subtitle' => 'Pekerjaan: ' . ($item->pekerjaan->nama_paket ?? ''),
-                    'url' => "/pekerjaan/{$item->pekerjaan_id}" // Generally points back to project
-                ];
-            });
-        $results = array_merge($results, $dokumentasi->toArray());
-
-        // 7. Search Penerima Manfaat
-        $penerima = Penerima::where(function($q) use ($query) {
-            $q->whereRaw("MATCH(nama, nik, alamat) AGAINST(? IN BOOLEAN MODE)", [$query])
-              ->orWhereHas('pekerjaan', function($pq) use ($query) {
-                  $pq->byUserRole()->whereRaw("MATCH(nama_paket, kode_rekening) AGAINST(? IN BOOLEAN MODE)", [$query]);
-              });
-        })
-            ->with('pekerjaan')
-            ->limit(10)
-            ->get()
-            ->map(function ($item) {
-                return [
-                    'id' => $item->id,
-                    'type' => 'Penerima Manfaat',
-                    'title' => 'Penerima: ' . $item->nama,
-                    'subtitle' => 'Alamat: ' . ($item->alamat ?? '') . ' | Pekerjaan: ' . ($item->pekerjaan->nama_paket ?? ''),
-                    'url' => "/pekerjaan/{$item->pekerjaan_id}" 
-                ];
-            });
-        $results = array_merge($results, $penerima->toArray());
-
-        // 8. Search Output
-        $output = Output::where(function($q) use ($query) {
-            $q->whereRaw("MATCH(komponen, satuan) AGAINST(? IN BOOLEAN MODE)", [$query])
-              ->orWhereHas('pekerjaan', function($pq) use ($query) {
-                  $pq->byUserRole()->whereRaw("MATCH(nama_paket, kode_rekening) AGAINST(? IN BOOLEAN MODE)", [$query]);
-              });
-        })
-            ->with('pekerjaan')
-            ->limit(10)
-            ->get()
-            ->map(function ($item) {
-                return [
-                    'id' => $item->id,
-                    'type' => 'Output',
-                    'title' => 'Output: ' . $item->komponen,
-                    'subtitle' => 'Volume: ' . $item->volume . ' ' . $item->satuan . ' | Pekerjaan: ' . ($item->pekerjaan->nama_paket ?? ''),
-                    'url' => "/pekerjaan/{$item->pekerjaan_id}"
-                ];
-            });
-        $results = array_merge($results, $output->toArray());
-
-        // 9. Search Progress
-        $progress = Progress::where(function($q) use ($query) {
-            $q->where('content', 'like', "%{$query}%")
-              ->orWhereHas('pekerjaan', function($pq) use ($query) {
-                  $pq->byUserRole()->whereRaw("MATCH(nama_paket, kode_rekening) AGAINST(? IN BOOLEAN MODE)", [$query]);
-              });
-        })
-            ->with('pekerjaan')
-            ->limit(10)
-            ->get()
-            ->map(function ($item) {
-                return [
-                    'id' => $item->id,
-                    'type' => 'Progress',
-                    'title' => 'Progress Log Entry',
-                    'subtitle' => 'Pekerjaan: ' . ($item->pekerjaan->nama_paket ?? ''),
-                    'url' => "/pekerjaan/{$item->pekerjaan_id}"
-                ];
-            });
-        $results = array_merge($results, $progress->toArray());
+        $results = array_merge(
+            $this->searchPekerjaan($query, $tahun),
+            $this->searchKontrak($query, $tahun),
+            $this->searchPenyedia($query),
+            $this->searchKegiatan($query),
+            $this->searchDesa($query),
+            $this->searchFoto($query),
+            $this->searchPenerima($query),
+            $this->searchOutput($query),
+            $this->searchProgress($query)
+        );
 
         return response()->json([
             'success' => true,
             'data' => collect($results)->sortBy('type')->values()->all()
         ]);
+    }
+
+    private function searchPekerjaan(string $query, ?string $tahun): array
+    {
+        return Pekerjaan::byUserRole()
+            ->where(function($q) use ($query) {
+                $q->whereRaw("MATCH(nama_paket, kode_rekening) AGAINST(? IN BOOLEAN MODE)", [$query])
+                  ->orWhere('nama_paket', 'LIKE', "%{$query}%");
+            })
+            ->whereHas('kegiatan', function($q) use ($tahun) {
+                if ($tahun) $q->where('tahun_anggaran', $tahun);
+            })
+            ->with(['desa', 'kecamatan', 'kegiatan'])
+            ->limit(10)
+            ->get()
+            ->map(fn($item) => [
+                'id' => $item->id,
+                'type' => 'Pekerjaan',
+                'title' => $item->nama_paket,
+                'subtitle' => ($item->kode_rekening ?? '') . ' - ' . ($item->desa->n_desa ?? ''),
+                'tahun' => $item->kegiatan->tahun_anggaran ?? null,
+                'url' => "/pekerjaan/{$item->id}"
+            ])->toArray();
+    }
+
+    private function searchKontrak(string $query, ?string $tahun): array
+    {
+        return Kontrak::where(function($q) use ($query) {
+            $q->whereRaw("MATCH(spk, spmk, kode_paket) AGAINST(? IN BOOLEAN MODE)", [$query])
+              ->orWhere('spk', 'LIKE', "%{$query}%")
+              ->orWhereHas('pekerjaan', function($pq) use ($query) {
+                  $pq->byUserRole()->where('nama_paket', 'LIKE', "%{$query}%");
+              });
+        })
+            ->whereHas('pekerjaan.kegiatan', function($q) use ($tahun) {
+                if ($tahun) $q->where('tahun_anggaran', $tahun);
+            })
+            ->with(['pekerjaan.kegiatan', 'penyedia'])
+            ->limit(15)
+            ->get()
+            ->map(fn($item) => [
+                'id' => $item->id,
+                'type' => 'Kontrak',
+                'title' => $item->spk ?? $item->kode_paket,
+                'subtitle' => ($item->pekerjaan->nama_paket ?? 'N/A'),
+                'penyedia' => $item->penyedia->nama ?? 'N/A',
+                'nilai' => $item->nilai_kontrak,
+                'tahun' => $item->pekerjaan->kegiatan->tahun_anggaran ?? null,
+                'url' => "/kontrak/{$item->id}"
+            ])->toArray();
+    }
+
+    private function searchPenyedia(string $query): array
+    {
+        return Penyedia::whereRaw("MATCH(nama, direktur) AGAINST(? IN BOOLEAN MODE)", [$query])
+            ->limit(5)
+            ->get()
+            ->map(fn($item) => [
+                'id' => $item->id,
+                'type' => 'Penyedia',
+                'title' => $item->nama,
+                'subtitle' => "Direktur: " . $item->direktur,
+                'url' => "/penyedia/{$item->id}"
+            ])->toArray();
+    }
+
+    private function searchKegiatan(string $query): array
+    {
+        return Kegiatan::whereRaw("MATCH(nama_kegiatan, nama_sub_kegiatan, nama_program) AGAINST(? IN BOOLEAN MODE)", [$query])
+            ->limit(5)
+            ->get()
+            ->map(fn($item) => [
+                'id' => $item->id,
+                'type' => 'Kegiatan',
+                'title' => $item->nama_kegiatan,
+                'subtitle' => $item->nama_sub_kegiatan,
+                'url' => "/kegiatan/{$item->id}"
+            ])->toArray();
+    }
+
+    private function searchDesa(string $query): array
+    {
+        return Desa::whereRaw("MATCH(n_desa) AGAINST(? IN BOOLEAN MODE)", [$query])
+            ->with('kecamatan')
+            ->limit(5)
+            ->get()
+            ->map(fn($item) => [
+                'id' => $item->id,
+                'type' => 'Desa',
+                'title' => 'Desa ' . $item->n_desa,
+                'subtitle' => 'Kec. ' . ($item->kecamatan->n_kec ?? ''),
+                'url' => "/desa/{$item->id}"
+            ])->toArray();
+    }
+
+    private function searchFoto(string $query): array
+    {
+        return Foto::where(function($q) use ($query) {
+            $q->where('keterangan', 'like', "%{$query}%")
+              ->orWhereHas('pekerjaan', function($pq) use ($query) {
+                  $pq->byUserRole()->where('nama_paket', 'LIKE', "%{$query}%");
+              });
+        })
+            ->with('pekerjaan') 
+            ->limit(10)
+            ->get()
+            ->map(fn(Foto $item) => [
+                'id' => $item->id,
+                'type' => 'Dokumentasi',
+                'title' => 'Dokumentasi: ' . ($item->keterangan ?? 'Tanpa Keterangan'),
+                'subtitle' => 'Pekerjaan: ' . ($item->pekerjaan->nama_paket ?? ''),
+                'image_url' => $item->getFirstMediaUrl('foto/pekerjaan'),
+                'url' => "/pekerjaan/{$item->pekerjaan_id}"
+            ])->toArray();
+    }
+
+    private function searchPenerima(string $query): array
+    {
+        return Penerima::where(function($q) use ($query) {
+            $q->whereRaw("MATCH(nama, nik, alamat) AGAINST(? IN BOOLEAN MODE)", [$query])
+              ->orWhereHas('pekerjaan', function($pq) use ($query) {
+                  $pq->byUserRole()->where('nama_paket', 'LIKE', "%{$query}%");
+              });
+        })
+            ->with('pekerjaan')
+            ->limit(10)
+            ->get()
+            ->map(fn($item) => [
+                'id' => $item->id,
+                'type' => 'Penerima Manfaat',
+                'title' => 'Penerima: ' . $item->nama,
+                'subtitle' => 'Alamat: ' . ($item->alamat ?? '') . ' | Pekerjaan: ' . ($item->pekerjaan->nama_paket ?? ''),
+                'url' => "/pekerjaan/{$item->pekerjaan_id}" 
+            ])->toArray();
+    }
+
+    private function searchOutput(string $query): array
+    {
+        return Output::where(function($q) use ($query) {
+            $q->whereRaw("MATCH(komponen, satuan) AGAINST(? IN BOOLEAN MODE)", [$query])
+              ->orWhereHas('pekerjaan', function($pq) use ($query) {
+                  $pq->byUserRole()->where('nama_paket', 'LIKE', "%{$query}%");
+              });
+        })
+            ->with('pekerjaan')
+            ->limit(10)
+            ->get()
+            ->map(fn($item) => [
+                'id' => $item->id,
+                'type' => 'Output',
+                'title' => 'Output: ' . $item->komponen,
+                'subtitle' => 'Volume: ' . $item->volume . ' ' . $item->satuan . ' | Pekerjaan: ' . ($item->pekerjaan->nama_paket ?? ''),
+                'url' => "/pekerjaan/{$item->pekerjaan_id}"
+            ])->toArray();
+    }
+
+    private function searchProgress(string $query): array
+    {
+        return Progress::where(function($q) use ($query) {
+            $q->where('content', 'like', "%{$query}%")
+              ->orWhereHas('pekerjaan', function($pq) use ($query) {
+                  $pq->byUserRole()->where('nama_paket', 'LIKE', "%{$query}%");
+              });
+        })
+            ->with('pekerjaan')
+            ->limit(10)
+            ->get()
+            ->map(fn($item) => [
+                'id' => $item->id,
+                'type' => 'Progress',
+                'title' => 'Progress Log Entry',
+                'subtitle' => 'Pekerjaan: ' . ($item->pekerjaan->nama_paket ?? ''),
+                'url' => "/pekerjaan/{$item->pekerjaan_id}"
+            ])->toArray();
     }
 }

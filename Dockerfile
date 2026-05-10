@@ -35,7 +35,7 @@ RUN apt-get update && apt-get install -y \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Install Python requirements globally for system-wide access
-RUN pip3 install --no-cache-dir pandas pdfplumber openpyxl easyocr opencv-python-headless --break-system-packages
+RUN pip3 install --no-cache-dir openpyxl --break-system-packages
 
 # Set PHP configuration for file uploads
 RUN echo "upload_max_filesize = 50M" > /usr/local/etc/php/conf.d/uploads.ini \
