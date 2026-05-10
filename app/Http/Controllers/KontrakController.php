@@ -33,7 +33,9 @@ class KontrakController extends Controller
      */
     public function index(Request $request)
     {
-        $query = Kontrak::with(['kegiatan', 'pekerjaan.kecamatan', 'pekerjaan.kegiatan', 'penyedia'])->latest();
+        $query = Kontrak::with(['kegiatan', 'pekerjaan.kecamatan', 'pekerjaan.kegiatan', 'penyedia'])
+            ->orderBy('tgl_spk', 'desc')
+            ->orderBy('created_at', 'desc');
 
         if ($request->has('tahun') && $request->tahun) {
             $query->whereHas('kegiatan', function($q) use ($request) {
