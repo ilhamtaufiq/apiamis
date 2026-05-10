@@ -14,14 +14,14 @@ class PekerjaanTemplateExport implements WithMultipleSheets
     public function sheets(): array
     {
         return [
-            new TemplateSheet(),
+            new PekerjaanTemplateSheet(),
             new KecamatanDesaRefSheet(),
             new KegiatanRefSheet(),
         ];
     }
 }
 
-class TemplateSheet implements FromCollection, WithTitle, WithHeadings
+class PekerjaanTemplateSheet implements FromCollection, WithTitle, WithHeadings
 {
     public function collection()
     {

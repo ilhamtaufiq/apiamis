@@ -113,7 +113,7 @@ Route::middleware('auth:sanctum')->group(function () {
     // API Resources
     Route::apiResource('kecamatan', KecamatanController::class);
     Route::apiResource('desa', DesaController::class);
-    Route::apiResource('penyedia', PenyediaController::class);
+    Route::apiResource('penyedia', PenyediaController::class)->parameters(['penyedia' => 'penyedia']);
     Route::apiResource('kegiatan', KegiatanController::class);
     // Custom routes - Kontrak
     Route::get('kontrak/export/excel', [KontrakController::class, 'exportExcel']);
@@ -229,8 +229,12 @@ Route::middleware('auth:sanctum')->group(function () {
     // RAB Analysis
     Route::post('analyze-rab', [RABAnalyzerController::class, 'analyze']);
 
-    // Chat AI (MiniMax)
+    // Chat AI (with sessions, cache, and learning)
     Route::post('chat', [\App\Http\Controllers\ChatController::class, 'chat']);
+    Route::get('chat/sessions', [\App\Http\Controllers\ChatController::class, 'sessions']);
+    Route::post('chat/sessions', [\App\Http\Controllers\ChatController::class, 'createSession']);
+    Route::delete('chat/sessions/{id}', [\App\Http\Controllers\ChatController::class, 'deleteSession']);
+    Route::get('chat/sessions/{id}/messages', [\App\Http\Controllers\ChatController::class, 'sessionMessages']);
 
 });
 

@@ -22,20 +22,32 @@ class NotificationController extends Controller
      */
     public function index(Request $request)
     {
-        $user = auth()->user();
-        $unreadOnly = $request->query('unread_only') === 'true';
+        try {
+            $user = auth()->user();
+            if (!$user) {
+                return response()->json(['message' => 'Unauthorized'], 401);
+            }
 
-        if ($unreadOnly) {
-            $notifications = $user->unreadNotifications()->latest()->take(50)->get();
-        } else {
-            // For notification center, use pagination
-            $notifications = $user->notifications()->latest()->paginate(20);
+            $unreadOnly = $request->query('unread_only') === 'true';
+
+            if ($unreadOnly) {
+                $notifications = $user->unreadNotifications()->latest()->take(50)->get();
+            } else {
+                // For notification center, use pagination
+                $notifications = $user->notifications()->latest()->paginate(20);
+            }
+
+            return response()->json([
+                'notifications' => $notifications,
+                'unread_count' => $user->unreadNotifications()->count()
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'message' => 'Server Error',
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ], 500);
         }
-
-        return response()->json([
-            'notifications' => $notifications,
-            'unread_count' => $user->unreadNotifications()->count()
-        ]);
     }
 
     /**

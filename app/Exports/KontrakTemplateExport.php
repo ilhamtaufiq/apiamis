@@ -22,14 +22,14 @@ class KontrakTemplateExport implements WithMultipleSheets
     public function sheets(): array
     {
         return [
-            new TemplateSheet(),
+            new KontrakTemplateSheet(),
             new PekerjaanRefSheet($this->tahun),
             new PenyediaRefSheet(),
         ];
     }
 }
 
-class TemplateSheet implements FromCollection, WithHeadings, WithTitle
+class KontrakTemplateSheet implements FromCollection, WithHeadings, WithTitle
 {
     public function collection()
     {

@@ -19,7 +19,7 @@ class TiketController extends Controller
      *     tags={"Ticketing"},
      *     security={{"bearerAuth":{}}},
      *     @OA\Parameter(name="status", in="query", required=false, @OA\Schema(type="string", enum={"open","pending","closed"})),
-     *     @OA\Parameter(name="kategori", in="query", required=false, @OA\Schema(type="string", enum={"bug","request","other"})),
+     *     @OA\Parameter(name="kategori", in="query", required=false, @OA\Schema(type="string", enum={"bug","request","lapangan","document","other"})),
      *     @OA\Response(response=200, description="Successful operation")
      * )
      */
@@ -68,7 +68,7 @@ class TiketController extends Controller
      *                 required={"subjek", "deskripsi", "kategori", "prioritas"},
      *                 @OA\Property(property="subjek", type="string"),
      *                 @OA\Property(property="deskripsi", type="string"),
-     *                 @OA\Property(property="kategori", type="string", enum={"bug","request","other"}),
+     *                 @OA\Property(property="kategori", type="string", enum={"bug","request","lapangan","document","other"}),
      *                 @OA\Property(property="prioritas", type="string", enum={"low","medium","high"}),
      *                 @OA\Property(property="pekerjaan_id", type="integer"),
      *                 @OA\Property(property="attachment", type="string", format="binary")
@@ -83,7 +83,7 @@ class TiketController extends Controller
         $validator = Validator::make($request->all(), [
             'subjek' => 'required|string|max:255',
             'deskripsi' => 'required|string',
-            'kategori' => 'required|in:bug,request,other',
+            'kategori' => 'required|in:bug,request,lapangan,document,other',
             'prioritas' => 'required|in:low,medium,high',
             'pekerjaan_id' => 'nullable|exists:tbl_pekerjaan,id',
             'attachment' => 'nullable|image|max:2048',
@@ -177,7 +177,7 @@ class TiketController extends Controller
             $validationRules = [
                 'subjek' => 'sometimes|string|max:255',
                 'deskripsi' => 'sometimes|string',
-                'kategori' => 'sometimes|in:bug,request,other',
+                'kategori' => 'sometimes|in:bug,request,lapangan,document,other',
                 'prioritas' => 'sometimes|in:low,medium,high',
                 'pekerjaan_id' => 'nullable|exists:tbl_pekerjaan,id',
                 'attachment' => 'nullable|image|max:2048',

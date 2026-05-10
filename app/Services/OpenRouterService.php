@@ -14,7 +14,7 @@ class OpenRouterService
     public function __construct()
     {
         $this->apiKey = config('services.openrouter.api_key', env('OPENROUTER_API_KEY'));
-        $this->model = config('services.openrouter.model', 'google/gemini-2.0-flash-lite-preview-02-05:free');
+        $this->model = config('services.openrouter.model', 'openrouter/free');
     }
 
     /**
@@ -23,7 +23,7 @@ class OpenRouterService
     public function chat(array $messages, array $options = [])
     {
         $model = $options['model'] ?? $this->model;
-        
+
         $payload = [
             'model' => $model,
             'messages' => $messages,
