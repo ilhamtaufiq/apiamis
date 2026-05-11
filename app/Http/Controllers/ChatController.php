@@ -225,8 +225,17 @@ class ChatController extends Controller
             }
         }
 
-        // ── 6. Call AI ──────────────────────────────────────────
-        $result = $this->openRouter->chat($messages);
+        // ── 6. Call AI (via LangChain Python Bridge) ────────────
+        $formattedHistory = $dbHistory->map(fn($msg) => [
+            'role' => $msg->role,
+            'content' => $msg->content,
+        ])->toArray();
+
+        $result = $this->openRouter->chatWithLangChain(
+            $userMessage, 
+            $context, 
+            $formattedHistory
+        );
 
         if (!$result['success']) {
             return response()->json($result, 500);

@@ -1,0 +1,7 @@
+{
+    "api_key": "sk-or-v1-fake-key-for-testing",
+    "model": "openrouter/free",
+    "message": "Halo Ami, kamu siapa?",
+    "context": "User sedang di Dashboard.",
+    "history": []
+}

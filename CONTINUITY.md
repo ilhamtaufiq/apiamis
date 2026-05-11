@@ -10,9 +10,15 @@
   - Updated system prompt to define the AI as a "Read-Only" data analysis assistant.
   - Increased OpenRouter API timeout to 120s and externalized model configuration.
 - State:
-  - Done: Removed input tools, updated prompt, increased timeout, and implemented persistent model selection via application settings.
-  - Now: Enabled dynamic AI model switching through the settings UI.
-  - Next: Monitor response times and user feedback.
+  - Done:
+    - Removed input tools and updated prompt for a read-only AI.
+    - Created `scripts/chat_langchain.py` for LangChain-based AI processing.
+    - Set up a standard Python `venv` in the root folder of `apiamis`.
+    - Integrated LangChain bridge into `OpenRouterService` and `ChatController`.
+  - Now:
+    - Installing LangChain dependencies in the new root `venv`.
+  - Next:
+    - Verify the LangChain integration with a test chat.
 - Open questions (UNCONFIRMED if needed): None.
 - Working set (files/ids/commands):
   - c:\laragon\www\apiamis\app\Http\Controllers\ChatController.php

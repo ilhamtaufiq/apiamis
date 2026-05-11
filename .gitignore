@@ -22,7 +22,13 @@
 Homestead.json
 Homestead.yaml
 Thumbs.db
-/scripts/venv
+# Python
+/venv/
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.python-version
 /%SystemDrive%
 {[0-9A-F]*}
 *.tmp

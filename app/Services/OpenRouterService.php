@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\AppSetting;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Process;
 
 class OpenRouterService
 {
@@ -69,6 +70,65 @@ class OpenRouterService
             return [
                 'success' => false,
                 'message' => 'Exception occurred: ' . $e->getMessage(),
+            ];
+        }
+    }
+
+    /**
+     * Call AI using LangChain Python Bridge
+     */
+    public function chatWithLangChain(string $message, string $context, array $history, array $options = [])
+    {
+        $pythonPath = base_path('venv/Scripts/python.exe');
+        $scriptPath = base_path('scripts/chat_langchain.py');
+
+        if (!file_exists($pythonPath)) {
+            return [
+                'success' => false,
+                'message' => 'Python venv not found at ' . $pythonPath,
+            ];
+        }
+
+        $input = [
+            'api_key' => $this->apiKey,
+            'model' => $options['model'] ?? $this->model,
+            'message' => $message,
+            'context' => $context,
+            'history' => $history,
+        ];
+
+        try {
+            $result = Process::input(json_encode($input))
+                ->timeout(120)
+                ->run([$pythonPath, $scriptPath]);
+
+            if ($result->failed()) {
+                Log::error('LangChain Script Error', [
+                    'error' => $result->errorOutput(),
+                    'output' => $result->output(),
+                ]);
+                return [
+                    'success' => false,
+                    'message' => 'LangChain execution failed: ' . ($result->errorOutput() ?: 'Unknown error'),
+                ];
+            }
+
+            $output = json_decode($result->output(), true);
+
+            if (!$output || !isset($output['success'])) {
+                Log::error('LangChain Invalid Output', ['output' => $result->output()]);
+                return [
+                    'success' => false,
+                    'message' => 'Invalid output format from LangChain script',
+                ];
+            }
+
+            return $output;
+        } catch (\Exception $e) {
+            Log::error('LangChain Bridge Exception', ['message' => $e->getMessage()]);
+            return [
+                'success' => false,
+                'message' => 'Bridge error: ' . $e->getMessage(),
             ];
         }
     }
