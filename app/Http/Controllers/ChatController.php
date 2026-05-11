@@ -112,6 +112,12 @@ class ChatController extends Controller
         ]);
 
         $userMessage = $request->input('message');
+        
+        // AUTO-TRIGGER: Jika frontend kirim kode ini, Ami langsung buatin laporan pagi
+        if ($userMessage === '__AUTO_MORNING_REPORT__') {
+            $userMessage = "Ami, sampurasun! Berikan laporan pagi atau ringkasan eksekutif hari ini.";
+        }
+
         $sessionId = $request->input('session_id');
         $history = $request->input('history', []);
         $user = $request->user();
@@ -285,7 +291,71 @@ class ChatController extends Controller
     {
         $context = "";
         $queryLower = strtolower($query);
+        $isExecutiveSummary = str_contains($queryLower, 'laporan pagi') || str_contains($queryLower, 'ringkasan eksekutif') || str_contains($queryLower, 'summary');
         $isSearchingPhoto = str_contains($queryLower, 'foto') || str_contains($queryLower, 'gambar') || str_contains($queryLower, 'dokumentasi') || str_contains($queryLower, 'lihat');
+
+        // 0. EXECUTIVE SUMMARY LOGIC (Proactive Reporting)
+        if ($isExecutiveSummary) {
+            $context .= "### EXECUTIVE CRITICAL SUMMARY (LAPORAN EKSEKUTIF):\n";
+            
+            // Search for stalled projects (Progress < 10% but has contract)
+            $stalled = Pekerjaan::byUserRole()
+                ->whereHas('kontrak')
+                ->where(function($q) {
+                    $q->whereDoesntHave('progress')
+                      ->orWhereHas('progress', function($p) { $p->where('realisasi', '<', 10); });
+                })
+                ->limit(5)->get();
+            
+            $baseUrl = config('app.url');
+            
+            if ($stalled->count() > 0) {
+                $context .= "- PAKET TERHAMBAT (Progres < 10%):\n";
+                foreach ($stalled as $s) {
+                    $url = "{$baseUrl}/pekerjaan/{$s->id}";
+                    $context .= "  * [ID: {$s->id}] {$s->nama_paket} (Lokasi: " . ($s->desa->n_desa ?? 'N/A') . ") -> [Lihat Detail]({$url})\n";
+                }
+            }
+
+            // Search for Open Tickets
+            $openTickets = Tiket::where('status', 'open')->latest()->limit(5)->get();
+            if ($openTickets->count() > 0) {
+                $context .= "- TIKET MASALAH AKTIF (Belum Selesai):\n";
+                foreach ($openTickets as $t) {
+                    $url = $t->pekerjaan_id ? "{$baseUrl}/pekerjaan/{$t->pekerjaan_id}" : "#";
+                    $context .= "  * [{$t->prioritas}] {$t->subjek} - Pelapor: " . ($t->user->name ?? 'N/A') . " -> [Buka Paket]({$url})\n";
+                }
+            }
+
+            // ── NEW: Recent Activity (Last 24 Hours) ──
+            $yesterday = now()->subDay();
+            $recentPhotos = Foto::where('created_at', '>=', $yesterday)->with('pekerjaan')->latest()->limit(3)->get();
+            $recentLogs = AuditLog::where('created_at', '>=', $yesterday)->with('user')->latest()->limit(5)->get();
+
+            if ($recentPhotos->count() > 0 || $recentLogs->count() > 0) {
+                $context .= "- AKTIVITAS TERBARU (24 Jam Terakhir):\n";
+                
+                // New Photos
+                foreach ($recentPhotos as $f) {
+                    $url = "{$baseUrl}/pekerjaan/{$f->pekerjaan_id}";
+                    $context .= "  * 📸 Upload Foto: " . ($f->pekerjaan->nama_paket ?? 'Paket') . " -> [Lihat Foto]({$url})\n";
+                }
+
+                // Significant Updates from Audit Log
+                foreach ($recentLogs as $log) {
+                    if (in_array($log->event, ['created', 'updated'])) {
+                        $modelName = class_basename($log->auditable_type);
+                        if (in_array($modelName, ['Pekerjaan', 'Kontrak', 'Progress', 'Penerima', 'Tiket'])) {
+                            $user = $log->user->name ?? 'User';
+                            $id = $log->auditable_id;
+                            $url = $modelName === 'Pekerjaan' ? "{$baseUrl}/pekerjaan/{$id}" : "#";
+                            $context .= "  * ✅ {$user} melakukan {$log->event} pada data {$modelName} (ID: {$id})\n";
+                        }
+                    }
+                }
+            }
+            $context .= "\n";
+        }
 
         // Clean query from common keywords & question words for better database matching (using word boundaries)
         $stopWords = ['apa', 'bagaimana', 'siapa', 'dimana', 'kapan', 'tampilkan', 'lihat', 'cari', 'dong', 'sih', 'ya', 'kah', 'tolong', 'bisa', 'boleh', 'yang', 'di', 'ke', 'dari', 'dan', 'atau', 'berapa', 'banyak', 'jumlah', 'total', 'paket', 'pekerjaan', 'tahun', 'anggaran'];
