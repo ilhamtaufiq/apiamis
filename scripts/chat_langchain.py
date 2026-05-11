@@ -1,6 +1,20 @@
 import sys
 import json
 import os
+from pathlib import Path
+
+# FIX: Set HOME environment variable for ChromaDB/Pathlib in server environments
+# This must happen before importing langchain_chroma
+# Determine project root (2 levels up from /scripts)
+project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+ai_storage = os.path.join(project_root, 'storage', 'ai')
+os.makedirs(ai_storage, exist_ok=True)
+
+# FORCE set environment variables for ChromaDB/Pathlib
+os.environ['HOME'] = ai_storage
+os.environ['USERPROFILE'] = ai_storage
+os.environ['KMP_DUPLICATE_LIB_OK'] = 'TRUE' # Bonus fix for OpenMP issues on Windows
+
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
@@ -26,8 +40,8 @@ def get_relevant_docs(query, api_key):
             embedding_function=embeddings
         )
         
-        # Search for top 5 most relevant chunks
-        docs = vectorstore.similarity_search(query, k=5)
+        # Search for top 20 most relevant chunks
+        docs = vectorstore.similarity_search(query, k=20)
         
         content = ""
         for i, doc in enumerate(docs):
@@ -74,26 +88,21 @@ def run_chat():
 GAYA BAHASA & PERSONA (SUPER MODE):
 - Sapa user dengan bahasa Sunda yang sopan di awal (misal: "Sampurasun bos!", "Wilujeng enjing!").
 - Gunakan Emoji yang relevan untuk mempercantik tampilan (📌, 💡, 🔍, 📊, 😊).
-- Gunakan TABEL MARKDOWN untuk list data.
-- **CHART SUPPORT**: Jika user bertanya soal tren, perbandingan, atau statistik yang cocok dijadikan grafik, berikan blok kode khusus di akhir jawaban dengan format:
+- **WAJIB TABEL**: Setiap menampilkan daftar paket/data lebih dari 1, GUNAKAN TABEL MARKDOWN yang rapi dengan header.
+- **CHART SUPPORT**: Jika ada data statistik, berikan blok kode khusus di akhir jawaban:
   ```json
-  { "type": "chart", "chart_type": "bar|pie|line", "data": [...] }
+  {{ "type": "chart", "chart_type": "bar|pie|line", "data": [...] }}
   ```
-- **DEEP LINKING**: Jika user ingin melaporkan masalah, berikan link ke form tiket dengan parameter pekerjaan_id (misal: `/tiket/create?pekerjaan_id=123`).
+- **DYNAMIC DEEP LINKING**: Jika merekomendasikan buat tiket, gunakan link `/tiket/create?pekerjaan_id=[ID_ASLI]`. Ganti `[ID_ASLI]` dengan kolom `id` yang ada di data context. JANGAN gunakan '123' atau 'XXX'.
 
 STRATEGI ANALISA DATA:
 1. Jika ditanya 'Laporan Pagi' atau 'Ringkasan Eksekutif', cari paket yang progresnya < 10% atau yang memiliki tiket 'Open' dan berikan ringkasan kritis.
-2. Jika ditanya soal JUMLAH atau TOTAL, WAJIB ambil data dari 'RINGKASAN STATISTIK DATA'.
+2. **ANALISA ANOMALI**: Jika ada paket dengan kontrak aktif (SPK turun) tapi progres masih 0%, sebutkan itu sebagai ANOMALI KONTRAK. Sebutkan juga jika ada penyedia ganda yang mengerjakan banyak proyek sekaligus.
 3. Selalu bandingkan data statistik dengan daftar detail.
 
-STRATEGI JIKA DATA TIDAK DITEMUKAN / PERTANYAAN TIDAK DIMENGERTI:
-1. Mohon Maaf secara sopan (gunakan emoji 🤖 atau 🧩).
-2. Tampilkan data alternatif yang mungkin relevan (jika ada).
-3. Berikan "💡 CONTOH PERTANYAAN YANG BISA ANDA COBA":
-   - "Ami, tampilkan laporan pagi hari ini."
-   - "Tampilkan grafik perbandingan progres per kecamatan."
-   - "Ada tiket masalah apa yang belum selesai?"
-4. Berikan tips singkat.
+STRATEGI JIKA DATA TIDAK DITEMUKAN:
+1. Mohon Maaf secara sopan.
+2. Tampilkan tips "💡 COBA TANYA SEPERTI INI".
 
 KONTEKS WILAYAH: Fokus pada desa/kecamatan di Kabupaten Cianjur.
 CONTOH NADA BICARA:
@@ -104,6 +113,7 @@ PENGETAHUAN SISTEM (MANUAL):
 
 KONTEKS DATA SAAT INI (REAL-TIME):
 {context}
+*(Instruksi Khusus: Jika user bertanya tentang jumlah total paket, nilai uang, atau statistik makro, WAJIB merujuk pada bagian 'RINGKASAN STATISTIK' di atas. Jangan menghitung manual dari daftar detail karena daftar tersebut sengaja dibatasi untuk efisiensi).*
 """
 
         prompt = ChatPromptTemplate.from_messages([
@@ -135,6 +145,7 @@ KONTEKS DATA SAAT INI (REAL-TIME):
         print(json.dumps({
             "success": True,
             "content": response_content,
+            "model": model,
             "usage": {}
         }))
 

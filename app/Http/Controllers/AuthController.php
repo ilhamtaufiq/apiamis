@@ -20,7 +20,11 @@ class AuthController extends Controller
     {
         /** @var \Laravel\Socialite\Two\AbstractProvider $driver */
         $driver = Socialite::driver('google');
-        $url = $driver->stateless()->redirect()->getTargetUrl();
+        // Add gender scope (People API)
+        $url = $driver->scopes(['https://www.googleapis.com/auth/user.gender.read'])
+                      ->stateless()
+                      ->redirect()
+                      ->getTargetUrl();
         return response()->json(['url' => $url]);
     }
 
@@ -40,12 +44,20 @@ class AuthController extends Controller
             $driver = Socialite::driver('google');
             $googleUser = $driver->stateless()->user();
             
+            // Extract gender if available from raw data (Google People API format)
+            $gender = null;
+            $rawUser = $googleUser->getRaw();
+            if (isset($rawUser['genders'][0]['value'])) {
+                $gender = $rawUser['genders'][0]['value']; // 'male', 'female', etc.
+            }
+
             $user = User::updateOrCreate(
                 ['email' => $googleUser->getEmail()],
                 [
                     'name' => $googleUser->getName(),
                     'google_id' => $googleUser->getId(),
                     'avatar' => $googleUser->getAvatar(),
+                    'gender' => $gender,
                     'email_verified_at' => now(),
                 ]
             );

@@ -40,7 +40,7 @@ class ChatController extends Controller
         $sessions = ChatSession::where('user_id', $request->user()->id)
             ->withCount('messages')
             ->orderByDesc('updated_at')
-            ->limit(50)
+            ->limit(500)
             ->get()
             ->map(fn($s) => [
                 'id' => $s->id,
@@ -112,10 +112,24 @@ class ChatController extends Controller
         ]);
 
         $userMessage = $request->input('message');
+        $isAutoReport = $userMessage === '__AUTO_MORNING_REPORT__';
         
         // AUTO-TRIGGER: Jika frontend kirim kode ini, Ami langsung buatin laporan pagi
-        if ($userMessage === '__AUTO_MORNING_REPORT__') {
+        if ($isAutoReport) {
             $userMessage = "Ami, sampurasun! Berikan laporan pagi atau ringkasan eksekutif hari ini.";
+            
+            // TOKEN SAVER: Check Cache for this specific user
+            $cacheKey = "ami_auto_report_u" . $request->user()->id;
+            $cachedResponse = \Illuminate\Support\Facades\Cache::get($cacheKey);
+            
+            if ($cachedResponse) {
+                return response()->json([
+                    'reply' => $cachedResponse,
+                    'session_id' => $request->input('session_id'),
+                    'cached' => true,
+                    'source' => 'token_saver'
+                ]);
+            }
         }
 
         $sessionId = $request->input('session_id');
@@ -169,7 +183,7 @@ class ChatController extends Controller
         // ── 2. Optimize History from DB (not from client) ───────
         $dbHistory = $session->messages()
             ->orderByDesc('id')
-            ->limit(10)
+            ->limit(100)
             ->get()
             ->reverse()
             ->values();
@@ -193,32 +207,32 @@ class ChatController extends Controller
         // ── 5. Prepare Messages for AI ──────────────────────────
         $messages = [];
         
-        // System Prompt (compressed)
+        // Prepare user identity and honorifics
+        $userName = $user->name;
+        $userGender = $user->gender;
+        
+        $honorific = 'Bos';
+        if ($userGender === 'male') {
+            $honorific = 'Bapak';
+        } elseif ($userGender === 'female') {
+            $honorific = 'Ibu';
+        }
+
         $messages[] = [
             'role' => 'system',
-            'content' => "Anda adalah 'Ami', asisten AI analisis data untuk aplikasi Arumanis (Sistem Informasi Pekerjaan Umum). 
-            Tugas utama Anda adalah membantu pengguna MENCARI dan MENGANALISIS data proyek (Pekerjaan), Kontrak, Penyedia (Kontraktor), dan Kegiatan berdasarkan konteks database yang diberikan.
-
-            PENTING: Anda adalah asisten 'Read-Only'. Anda TIDAK memiliki kemampuan untuk menginput, mengubah, atau menghapus data dalam sistem. Tugas Anda hanya memberikan informasi berdasarkan data yang ada.
-
-            PANDUAN VISUAL & INTERAKSI:
-            1. Gunakan Markdown secara maksimal. 
-            2. Jika menyajikan daftar data (Pekerjaan, Kontrak, atau Penyedia) yang lebih dari 2 item, WAJIB menggunakan tabel Markdown agar tampilan rapi.
-            3. Jika konteks data menyediakan URL foto, tampilkan foto tersebut menggunakan format Markdown: ![Keterangan](URL).
-            4. Berikan informasi progres fisik secara jelas. Sebutkan RATA-RATA PROGRES jika ditanya tentang wilayah atau kategori.
-            5. Sertakan LINK DETAIL proyek (jika ada dalam konteks) agar pengguna bisa langsung membuka halaman tersebut. Gunakan format [Nama Paket](URL).
-            6. SKILL KHUSUS: Anda memiliki kemampuan 'Pencarian Foto'. Jika pengguna meminta foto, cari di bagian 'FOTO LAPANGAN' atau 'HASIL PENCARIAN FOTO' dalam konteks. Tampilkan menggunakan Markdown.
-            7. Selalu akhiri jawaban dengan 1 saran PERTANYAAN LANJUTAN yang relevan (misal: 'Apakah Anda ingin melihat detail penyedia untuk proyek ini?').
- 
-            Berikut adalah konteks data relasional dari database yang sesuai dengan pertanyaan pengguna:\n\n" . $context . "\n\n" . $fewShotText . "
-            PANDUAN JAWABAN:
-            1. Jika pengguna bertanya tentang siapa yang mengerjakan proyek, lihat data Kontrak -> Penyedia.
-            2. Jika pengguna bertanya tentang lokasi, lihat data Desa/Kecamatan di Pekerjaan.
-            3. Analisis relasi antar data untuk memberikan jawaban yang komprehensif.
-            4. Gunakan data di atas untuk menjawab secara detail dan informatif.
-            5. Jika ada foto, tampilkan foto tersebut untuk membantu visualisasi.
-            6. Jika data yang diminta banyak, rangkum dalam tabel yang kolomnya relevan (misal: No, Paket, Lokasi, Pagu, Progres).
-            Bahasa: Indonesia."
+            'content' => "Anda adalah 'Ami', asisten AI analisis data Arumanis.\n" .
+            "User yang sedang login: {$userName}. Gender: " . ($userGender ?? 'Tidak diketahui') . ".\n" .
+            "Sapa user dengan: '{$honorific} {$userName}' (atau '{$honorific}' saja).\n\n" .
+            "Tugas utama: MEMBANTU MENCARI & MENGANALISIS data Pekerjaan, Kontrak, Penyedia, dan Kegiatan.\n" .
+            "Anda adalah asisten 'Read-Only'.\n\n" .
+            "PANDUAN INTERAKSI:\n" .
+            "1. Gunakan tabel Markdown untuk > 2 item data.\n" .
+            "2. Tampilkan foto jika ada URL: ![Foto](URL).\n" .
+            "3. Sertakan LINK DETAIL proyek: [Nama Paket](URL).\n" .
+            "4. Analisis relasi (Penyedia mengerjakan apa, Lokasi di mana).\n" .
+            "5. Akhiri dengan 1 saran pertanyaan lanjutan.\n\n" .
+            "KONTEKS DATA DARI DATABASE:\n" . $context . "\n\n" . $fewShotText . "\n" .
+            "Bahasa: Indonesia."
         ];
 
         // Add DB history (compressed: only content, skip tool_calls)
@@ -267,6 +281,12 @@ class ChatController extends Controller
         // ── 8. Learn from this interaction (cache for future) ───
         ChatKnowledgeCache::learn($userMessage, $context, $aiReply, $tokensUsed);
 
+        // ── CACHE SAVE (Token Saver) ───────────────────────────
+        if ($isAutoReport) {
+            $cacheKey = "ami_auto_report_u" . $user->id;
+            \Illuminate\Support\Facades\Cache::put($cacheKey, $aiReply, now()->addHours(4));
+        }
+
         // ── 9. Auto-title on first exchange ─────────────────────
         if ($session->messages()->count() <= 2) {
             $session->generateTitle();
@@ -279,6 +299,7 @@ class ChatController extends Controller
             'success' => true,
             'reply' => $aiReply,
             'session_id' => $session->id,
+            'model' => $result['model'] ?? 'ami-ai',
             'cached' => false,
             'usage' => $result['usage'] ?? null,
         ]);
@@ -293,32 +314,54 @@ class ChatController extends Controller
         $queryLower = strtolower($query);
         $isExecutiveSummary = str_contains($queryLower, 'laporan pagi') || str_contains($queryLower, 'ringkasan eksekutif') || str_contains($queryLower, 'summary');
         $isSearchingPhoto = str_contains($queryLower, 'foto') || str_contains($queryLower, 'gambar') || str_contains($queryLower, 'dokumentasi') || str_contains($queryLower, 'lihat');
+        $frontendUrl = config('app.frontend_url', url('/'));
 
         // 0. EXECUTIVE SUMMARY LOGIC (Proactive Reporting)
         if ($isExecutiveSummary) {
             $context .= "### EXECUTIVE CRITICAL SUMMARY (LAPORAN EKSEKUTIF):\n";
-            
-            // Search for stalled projects (Progress < 10% but has contract)
-            $stalled = Pekerjaan::byUserRole()
-                ->whereHas('kontrak')
-                ->where(function($q) {
-                    $q->whereDoesntHave('progress')
-                      ->orWhereHas('progress', function($p) { $p->where('realisasi', '<', 10); });
-                })
-                ->limit(5)->get();
-            
             $baseUrl = config('app.url');
+
+            // 1. STALLED PROJECTS (Progres < 10% based on Multi-Indicators)
+            $stalled = \App\Models\Pekerjaan::byUserRole()
+                ->whereHas('kontrak')
+                ->withCount(['checklistItems as total_checklist'])
+                ->withCount(['checklistItems as checked_checklist' => function($q) { $q->where('is_checked', true); }])
+                ->withCount('penerima')
+                ->withCount('foto')
+                ->with(['output'])
+                ->get()
+                ->filter(function ($p) {
+                    // Calculate Target from Output (using correct column 'volume')
+                    $target = $p->output->sum('volume');
+                    if ($target <= 0) $target = 1; // Avoid division by zero, use 1 as fallback
+
+                    // Indicator 1: Checklist
+                    $progChecklist = $p->total_checklist > 0 ? ($p->checked_checklist / $p->total_checklist) * 100 : 0;
+                    
+                    // Indicator 2: Penerima Benefits
+                    $progPenerima = ($p->penerima_count / $target) * 100;
+                    
+                    // Indicator 3: Photos (Activity)
+                    $progFoto = ($p->foto_count / $target) * 100;
+
+                    // Final Estimated Progress (Take the best indicator)
+                    $p->estimated_progress = max($progChecklist, $progPenerima, $progFoto);
+                    
+                    return $p->estimated_progress < 10;
+                })
+                ->values();
             
             if ($stalled->count() > 0) {
-                $context .= "- PAKET TERHAMBAT (Progres < 10%):\n";
+                $context .= "- PAKET TERHAMBAT (Estimasi Progres < 10%):\n";
                 foreach ($stalled as $s) {
+                    $prog = round($s->estimated_progress, 1);
                     $url = "{$baseUrl}/pekerjaan/{$s->id}";
-                    $context .= "  * [ID: {$s->id}] {$s->nama_paket} (Lokasi: " . ($s->desa->n_desa ?? 'N/A') . ") -> [Lihat Detail]({$url})\n";
+                    $context .= "  * [ID: {$s->id}] {$s->nama_paket} (Est: {$prog}%, Foto: {$s->foto_count}, Penerima: {$s->penerima_count}) -> [Lihat Detail]({$url})\n";
                 }
             }
 
             // Search for Open Tickets
-            $openTickets = Tiket::where('status', 'open')->latest()->limit(5)->get();
+            $openTickets = Tiket::where('status', 'open')->latest()->get();
             if ($openTickets->count() > 0) {
                 $context .= "- TIKET MASALAH AKTIF (Belum Selesai):\n";
                 foreach ($openTickets as $t) {
@@ -329,8 +372,8 @@ class ChatController extends Controller
 
             // ── NEW: Recent Activity (Last 24 Hours) ──
             $yesterday = now()->subDay();
-            $recentPhotos = Foto::where('created_at', '>=', $yesterday)->with('pekerjaan')->latest()->limit(3)->get();
-            $recentLogs = AuditLog::where('created_at', '>=', $yesterday)->with('user')->latest()->limit(5)->get();
+            $recentPhotos = Foto::where('created_at', '>=', $yesterday)->with('pekerjaan')->latest()->get();
+            $recentLogs = AuditLog::where('created_at', '>=', $yesterday)->with('user')->latest()->get();
 
             if ($recentPhotos->count() > 0 || $recentLogs->count() > 0) {
                 $context .= "- AKTIVITAS TERBARU (24 Jam Terakhir):\n";
@@ -415,8 +458,10 @@ class ChatController extends Controller
                 return $p->penerima->count();
             });
 
+            $countBerkontrak = $allData->filter(fn($p) => $p->kontrak->count() > 0)->count();
             $context .= "### RINGKASAN STATISTIK DATA (SUMBER KEBENARAN JUMLAH):\n";
             $context .= "- TOTAL KESELURUHAN PEKERJAAN: {$totalCount} paket\n";
+            $context .= "- JUMLAH PAKET BERKONTRAK: {$countBerkontrak} paket\n";
             $context .= "- TOTAL NILAI KONTRAK: Rp " . number_format($totalKontrak, 0, ',', '.') . "\n";
             $context .= "- TOTAL PENERIMA MANFAAT: {$totalPenerima} orang/KK\n";
             $context .= "- RATA-RATA PROGRES FISIK: " . number_format($avgProgress, 2) . "%\n";
@@ -437,7 +482,7 @@ class ChatController extends Controller
                     }
                 }
             }
-            $context .= "*(PENTING: Gunakan angka di atas untuk menjawab jumlah total, bukan menghitung dari daftar detail di bawah)*\n\n";
+            $context .= "*(PENTING: Gunakan angka statistik di atas sebagai SUMBER UTAMA untuk menjawab pertanyaan tentang JUMLAH TOTAL, PERSENTASE, atau NILAI UANG. Jangan hanya menghitung item yang muncul di daftar detail di bawah karena daftar tersebut dibatasi untuk efisiensi)*\n\n";
         }
 
         // 1.1 KHUSUS PENCARIAN FOTO (Skill: Foto Search)
@@ -449,7 +494,7 @@ class ChatController extends Controller
                     $q->where('nama_paket', 'LIKE', "%{$searchQuery}%")
                       ->orWhereHas('desa', function($sub) use ($searchQuery) { $sub->where('n_desa', 'LIKE', "%{$searchQuery}%"); });
                 })
-                ->limit(5)->get();
+                ->limit(99999)->get();
 
             if ($photoSearch->count() > 0) {
                 $context .= "### HASIL PENCARIAN FOTO PEKERJAAN:\n";
@@ -468,7 +513,6 @@ class ChatController extends Controller
                 $latestPhotos = Foto::whereHas('pekerjaan', function($q) { $q->byUserRole(); })
                     ->with('pekerjaan')
                     ->latest()
-                    ->limit(5)
                     ->get();
 
                 if ($latestPhotos->count() > 0) {
@@ -493,15 +537,12 @@ class ChatController extends Controller
         $pekerjaan = Pekerjaan::byUserRole()
             ->with(['kecamatan', 'desa', 'kontrak.penyedia', 'kegiatan', 'progress', 'pengawas', 'foto', 'penerima', 'output'])
             ->where(function ($q) use ($searchQuery) {
-                // Hybrid Search
                 if ($searchQuery) {
-                    $q->whereRaw("MATCH(nama_paket, kode_rekening) AGAINST(? IN NATURAL LANGUAGE MODE)", [$searchQuery])
-                      ->orWhere('nama_paket', 'LIKE', "%{$searchQuery}%")
+                    $q->where('nama_paket', 'LIKE', "%{$searchQuery}%")
                       ->orWhereHas('desa', function($sub) use ($searchQuery) { $sub->where('n_desa', 'LIKE', "%{$searchQuery}%"); })
                       ->orWhereHas('kecamatan', function($sub) use ($searchQuery) { $sub->where('n_kec', 'LIKE', "%{$searchQuery}%"); })
                       ->orWhereHas('kegiatan', function($sub) use ($searchQuery) { 
-                          $sub->where('nama_sub_kegiatan', 'LIKE', "%{$searchQuery}%")
-                              ->orWhere('tahun_anggaran', 'LIKE', "%{$searchQuery}%");
+                          $sub->where('nama_sub_kegiatan', 'LIKE', "%{$searchQuery}%");
                       });
                 }
             })
@@ -510,52 +551,38 @@ class ChatController extends Controller
                     $sub->where('tahun_anggaran', $year);
                 });
             })
-            ->limit(5)->get();
+            ->get();
 
         if ($pekerjaan->count() > 0) {
-            $context .= "### DAFTAR DETAIL PEKERJAAN:\n";
+            $context .= "### DAFTAR DETAIL PEKERJAAN (Menampilkan " . $pekerjaan->count() . " dari " . $totalCount . " paket):\n";
+            
+            // Jika data banyak, gunakan format compact (One-liner) agar tidak overflow token
+            $isCompact = $pekerjaan->count() > 10;
+            
             foreach ($pekerjaan as $p) {
                 $loc = ($p->desa->n_desa ?? '-') . ", " . ($p->kecamatan->n_kec ?? '-');
                 $progres = $p->progress->realisasi ?? 0;
-                $pengawas = $p->pengawas->nama ?? 'Belum ditunjuk';
+                $nilaiKontrak = $p->kontrak->sum('nilai_kontrak');
                 
-                $context .= "- Paket: [ID: {$p->id}] {$p->nama_paket}\n";
-                $context .= "  * Link Detail: {$baseUrl}/pekerjaan/{$p->id}\n";
-                $context .= "  * Pagu: Rp " . number_format($p->pagu, 0, ',', '.') . "\n";
-                
-                if ($p->kontrak->count() > 0) {
-                    $context .= "  * Detail Kontrak:\n";
-                    foreach ($p->kontrak as $k) {
-                        $context .= "    - Nilai: Rp " . number_format($k->nilai_kontrak, 0, ',', '.') . " (" . ($k->penyedia->nama ?? 'Penyedia N/A') . ")\n";
-                        $context .= "    - No. SPPBJ: " . ($k->sppbj ?? '-') . " (" . ($k->tgl_sppbj ? $k->tgl_sppbj->format('d/m/Y') : '-') . ")\n";
-                        $context .= "    - No. SPK: " . ($k->spk ?? '-') . " (" . ($k->tgl_spk ? $k->tgl_spk->format('d/m/Y') : '-') . ")\n";
-                        $context .= "    - No. SPMK: " . ($k->spmk ?? '-') . " (" . ($k->tgl_spmk ? $k->tgl_spmk->format('d/m/Y') : '-') . ")\n";
-                        $context .= "    - Target Selesai: " . ($k->tgl_selesai ? $k->tgl_selesai->format('d/m/Y') : '-') . "\n";
-                        if ($k->kode_rup) $context .= "    - Kode RUP: {$k->kode_rup}\n";
-                        
-                        // New: Document Registration Tracking
-                        $docs = DocumentRegister::where('kontrak_id', $k->id)->with('type')->get();
-                        if ($docs->count() > 0) {
-                            $context .= "    - Register Dokumen: " . $docs->map(fn($d) => ($d->type->name ?? 'Dokumen') . " No: " . ($d->nomor ?? '-'))->implode(', ') . "\n";
+                if ($isCompact) {
+                    // Format Super Ringkas (ID | Nama | Lokasi | Progres | Nilai)
+                    $context .= "- [ID:{$p->id}] {$p->nama_paket} | Lokasi: {$loc} | Progres: {$progres}% | Nilai: Rp " . number_format($nilaiKontrak, 0, ',', '.') . "\n";
+                } else {
+                    // Format Lengkap untuk data sedikit
+                    $context .= "- Paket: [ID: {$p->id}] {$p->nama_paket}\n";
+                    $context .= "  * Pagu: Rp " . number_format($p->pagu, 0, ',', '.') . "\n";
+                    if ($p->kontrak->count() > 0) {
+                        $context .= "  * Detail Kontrak:\n";
+                        foreach ($p->kontrak as $k) {
+                            $context .= "    - Nilai: Rp " . number_format($k->nilai_kontrak, 0, ',', '.') . " (" . ($k->penyedia->nama ?? 'Penyedia N/A') . ")\n";
+                            $context .= "    - No. SPK: " . ($k->spk ?? '-') . " | Selesai: " . ($k->tgl_selesai ? $k->tgl_selesai->format('d/m/Y') : '-') . "\n";
                         }
                     }
+                    $context .= "  * Lokasi: {$loc} | Progres: {$progres}% | Penerima: " . $p->penerima->count() . "\n";
+                    $context .= "  * Sub Kegiatan: " . ($p->kegiatan->nama_sub_kegiatan ?? '-') . "\n";
                 }
-
-                $context .= "  * Lokasi: {$loc}\n";
-                $context .= "  * Progres Fisik: {$progres}%\n";
-                $context .= "  * Penerima Manfaat: " . $p->penerima->count() . " orang/KK\n";
                 
-                if ($p->output->count() > 0) {
-                    $context .= "  * Output: ";
-                    $outputs = $p->output->map(fn($o) => "{$o->komponen} ({$o->volume} {$o->satuan})")->toArray();
-                    $context .= implode(", ", $outputs) . "\n";
-                }
-
-                $context .= "  * Pengawas Lapangan: {$pengawas}\n";
-                $context .= "  * Sub Kegiatan: " . ($p->kegiatan->nama_sub_kegiatan ?? '-') . " (" . ($p->kegiatan->tahun_anggaran ?? '-') . ")\n";
-                
-                // Add Photo URLs to context
-                if ($p->foto->count() > 0) {
+                if (!$isCompact && $p->foto->count() > 0) {
                     $context .= "  * Foto Lapangan:\n";
                     foreach ($p->foto->take(3) as $f) {
                         $url = $f->getFirstMediaUrl('foto/pekerjaan');
@@ -564,8 +591,8 @@ class ChatController extends Controller
                         }
                     }
                 }
-                $context .= "\n";
             }
+            $context .= "\n";
         }
 
         // 2. Search Penyedia/Kontraktor directly if mentioned
@@ -574,7 +601,7 @@ class ChatController extends Controller
                 $q->whereRaw("MATCH(nama, direktur) AGAINST(? IN NATURAL LANGUAGE MODE)", [$searchQuery])
                   ->orWhere('nama', 'LIKE', "%{$searchQuery}%");
             })
-            ->limit(3)->get();
+            ->get();
 
             if ($penyedia->count() > 0) {
                 $context .= "### DATA PENYEDIA (KONTRAKTOR):\n";
@@ -585,7 +612,7 @@ class ChatController extends Controller
                     $kontrakTerbaru = Kontrak::where('id_penyedia', $pen->id)
                         ->whereHas('pekerjaan', function($q) { $q->byUserRole(); })
                         ->with('pekerjaan')
-                        ->latest()->limit(2)->get();
+                        ->latest()->get();
 
                     if ($kontrakTerbaru->count() > 0) {
                         $context .= "  * Proyek yang sedang/pernah dikerjakan:\n";
@@ -603,7 +630,7 @@ class ChatController extends Controller
             $tikets = Tiket::with(['user', 'pekerjaan'])
                 ->where('subjek', 'LIKE', "%{$searchQuery}%")
                 ->orWhere('deskripsi', 'LIKE', "%{$searchQuery}%")
-                ->latest()->limit(5)->get();
+                ->latest()->get();
 
             if ($tikets->count() > 0) {
                 $context .= "### DATA TIKET MASALAH / KOMPLAIN:\n";
@@ -618,7 +645,7 @@ class ChatController extends Controller
 
         // 4. Search Audit Logs (History) if mentioned
         if (str_contains($queryLower, 'siapa') || str_contains($queryLower, 'kapan') || str_contains($queryLower, 'history') || str_contains($queryLower, 'log')) {
-            $logs = AuditLog::with('user')->latest()->limit(5)->get();
+            $logs = AuditLog::with('user')->latest()->get();
             if ($logs->count() > 0) {
                 $context .= "### RIWAYAT AKTIVITAS (LOG):\n";
                 foreach ($logs as $log) {
@@ -630,7 +657,7 @@ class ChatController extends Controller
 
         // 5. Fallback: Recent relevant data
         if (strlen($context) < 100) {
-            $recent = Pekerjaan::byUserRole()->with(['kontrak.penyedia', 'progress'])->latest()->limit(3)->get();
+            $recent = Pekerjaan::byUserRole()->with(['kontrak.penyedia', 'progress'])->latest()->get();
             if ($recent->count() > 0) {
                 $context .= "### DATA TERBARU (Mungkin Relevan):\n";
                 foreach ($recent as $r) {
@@ -643,7 +670,7 @@ class ChatController extends Controller
         // 5. Search Simulations if mentioned
         if (str_contains($queryLower, 'simulasi') || str_contains($queryLower, 'jaringan')) {
             $sims = SimulationNetwork::where('name', 'LIKE', "%{$searchQuery}%")
-                ->latest()->limit(3)->get();
+                ->latest()->get();
             if ($sims->count() > 0) {
                 $context .= "### DATA SIMULASI JARINGAN TEKNIS:\n";
                 foreach ($sims as $s) {
@@ -658,7 +685,7 @@ class ChatController extends Controller
             $events = Event::where('title', 'LIKE', "%{$searchQuery}%")
                 ->orWhere('description', 'LIKE', "%{$searchQuery}%")
                 ->where('start', '>=', now())
-                ->latest()->limit(5)->get();
+                ->latest()->get();
 
             if ($events->count() > 0) {
                 $context .= "### AGENDA & JADWAL MENDATANG:\n";

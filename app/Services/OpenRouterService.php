@@ -63,6 +63,7 @@ class OpenRouterService
                 'success' => true,
                 'content' => $response->json('choices.0.message.content'),
                 'tool_calls' => $response->json('choices.0.message.tool_calls'),
+                'model' => $response->json('model') ?? $model,
                 'usage' => $response->json('usage'),
             ];
         } catch (\Exception $e) {
@@ -122,8 +123,13 @@ class OpenRouterService
                 Log::error('LangChain Invalid Output', ['output' => $result->output()]);
                 return [
                     'success' => false,
+                    'model' => $input['model'],
                     'message' => 'Invalid output format from LangChain script',
                 ];
+            }
+
+            if (!isset($output['model'])) {
+                $output['model'] = $input['model'];
             }
 
             return $output;
