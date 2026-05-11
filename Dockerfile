@@ -34,8 +34,12 @@ RUN apt-get update && apt-get install -y \
     && docker-php-ext-install pdo_mysql mbstring exif pcntl bcmath gd zip intl \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
-# Install Python requirements globally for system-wide access
-RUN pip3 install --no-cache-dir openpyxl --break-system-packages
+# Copy requirements first for better caching
+COPY requirements.txt ./
+
+# Create Python venv and install dependencies
+RUN python3 -m venv venv \
+    && ./venv/bin/pip install --no-cache-dir -r requirements.txt
 
 # Set PHP configuration for file uploads
 RUN echo "upload_max_filesize = 50M" > /usr/local/etc/php/conf.d/uploads.ini \

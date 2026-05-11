@@ -9,16 +9,25 @@
   - Removed tool call handling logic.
   - Updated system prompt to define the AI as a "Read-Only" data analysis assistant.
   - Increased OpenRouter API timeout to 120s and externalized model configuration.
+  - Made Python venv path platform-aware (Windows/Linux) for Docker compatibility.
+  - Implemented automated Python venv creation in Dockerfile.
 - State:
   - Done:
     - Removed input tools and updated prompt for a read-only AI.
     - Created `scripts/chat_langchain.py` for LangChain-based AI processing.
     - Set up a standard Python `venv` in the root folder of `apiamis`.
     - Integrated LangChain bridge into `OpenRouterService` and `ChatController`.
+    - Fixed Python venv path for Docker deployment (Linux compatibility).
+    - Created `requirements.txt` and updated `Dockerfile` for automated venv setup.
+    - All core LangChain integration and Docker deployment fixes.
   - Now:
-    - Installing LangChain dependencies in the new root `venv`.
+    - Ready for testing in Docker environment.
   - Next:
-    - Verify the LangChain integration with a test chat.
+    - Verify the LangChain integration in the production/docker environment.
 - Open questions (UNCONFIRMED if needed): None.
 - Working set (files/ids/commands):
   - c:\laragon\www\apiamis\app\Http\Controllers\ChatController.php
+  - c:\laragon\www\apiamis\app\Services\OpenRouterService.php
+  - c:\laragon\www\apiamis\Dockerfile
+  - c:\laragon\www\apiamis\requirements.txt
+  - c:\laragon\www\apiamis\.dockerignore

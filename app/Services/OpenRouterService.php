@@ -79,7 +79,10 @@ class OpenRouterService
      */
     public function chatWithLangChain(string $message, string $context, array $history, array $options = [])
     {
-        $pythonPath = base_path('venv/Scripts/python.exe');
+        $isWindows = PHP_OS_FAMILY === 'Windows';
+        $pythonPath = $isWindows 
+            ? base_path('venv/Scripts/python.exe') 
+            : base_path('venv/bin/python');
         $scriptPath = base_path('scripts/chat_langchain.py');
 
         if (!file_exists($pythonPath)) {
