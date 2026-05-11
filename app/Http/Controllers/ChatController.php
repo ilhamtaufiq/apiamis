@@ -9,6 +9,11 @@ use App\Models\Kontrak;
 use App\Models\Penyedia;
 use App\Models\Kegiatan;
 use App\Models\Desa;
+use App\Models\Tiket;
+use App\Models\AuditLog;
+use App\Models\SimulationNetwork;
+use App\Models\DocumentRegister;
+use App\Models\Event;
 use App\Models\ChatSession;
 use App\Models\ChatMessage;
 use App\Models\ChatKnowledgeCache;
@@ -282,37 +287,72 @@ class ChatController extends Controller
         $queryLower = strtolower($query);
         $isSearchingPhoto = str_contains($queryLower, 'foto') || str_contains($queryLower, 'gambar') || str_contains($queryLower, 'dokumentasi') || str_contains($queryLower, 'lihat');
 
-        // Clean query from common keywords for better database matching
-        $cleanQuery = str_replace(['foto', 'gambar', 'dokumentasi', 'lihat', 'cari', 'tampilkan'], '', $queryLower);
-        $cleanQuery = trim($cleanQuery);
-        $searchQuery = $cleanQuery ?: $query; // Fallback to original if empty after cleaning
+        // Clean query from common keywords & question words for better database matching (using word boundaries)
+        $stopWords = ['apa', 'bagaimana', 'siapa', 'dimana', 'kapan', 'tampilkan', 'lihat', 'cari', 'dong', 'sih', 'ya', 'kah', 'tolong', 'bisa', 'boleh', 'yang', 'di', 'ke', 'dari', 'dan', 'atau', 'berapa', 'banyak', 'jumlah', 'total', 'paket', 'pekerjaan', 'tahun', 'anggaran'];
+        $regex = '/\b(' . implode('|', $stopWords) . ')\b/u';
+        $cleanQuery = preg_replace($regex, '', $queryLower);
+        
+        // Remove non-alphanumeric except spaces
+        $cleanQuery = preg_replace('/[^\w\s]/u', '', $cleanQuery);
+        $cleanQuery = trim(preg_replace('/\s+/', ' ', $cleanQuery));
+        
+        $searchQuery = $cleanQuery;
+        $year = null;
+        if (preg_match('/\b(20\d{2})\b/', $query, $matches)) {
+            $year = $matches[1];
+            // Remove year from search query to avoid double filtering in text fields
+            $searchQuery = trim(str_replace($year, '', $searchQuery));
+        }
 
-        // 1. STATISTIK & RINGKASAN (Untuk menjawab pertanyaan "Berapa banyak", "Total", dll)
-        $statsQuery = Pekerjaan::byUserRole()
-            ->where(function ($q) use ($searchQuery) {
-                $q->where('nama_paket', 'LIKE', "%{$searchQuery}%")
-                  ->orWhere('kode_rekening', 'LIKE', "%{$searchQuery}%")
-                  ->orWhereHas('desa', function($sub) use ($searchQuery) { $sub->where('n_desa', 'LIKE', "%{$searchQuery}%"); })
-                  ->orWhereHas('kecamatan', function($sub) use ($searchQuery) { $sub->where('n_kec', 'LIKE', "%{$searchQuery}%"); })
-                  ->orWhereHas('kegiatan', function($sub) use ($searchQuery) { 
-                      $sub->where('nama_sub_kegiatan', 'LIKE', "%{$searchQuery}%")
-                          ->orWhere('tahun_anggaran', 'LIKE', "%{$searchQuery}%");
-                  });
+        $statsQuery = Pekerjaan::byUserRole();
+        
+        if ($searchQuery || $year) {
+            $statsQuery->where(function ($q) use ($searchQuery, $year) {
+                if ($searchQuery) {
+                    $keywords = explode(' ', $searchQuery);
+                    $q->where(function($subQ) use ($keywords) {
+                        foreach ($keywords as $word) {
+                            if (strlen($word) < 2) continue;
+                            $subQ->where(function($finalQ) use ($word) {
+                                $finalQ->where('nama_paket', 'LIKE', "%{$word}%")
+                                      ->orWhere('kode_rekening', 'LIKE', "%{$word}%")
+                                      ->orWhereHas('kegiatan', function($k) use ($word) {
+                                          $k->where('nama_sub_kegiatan', 'LIKE', "%{$word}%");
+                                      });
+                            });
+                        }
+                    });
+                }
+                
+                if ($year) {
+                    $q->whereHas('kegiatan', function($sub) use ($year) {
+                        $sub->where('tahun_anggaran', $year);
+                    });
+                }
             });
+        }
 
         $totalCount = $statsQuery->count();
         if ($totalCount > 0) {
-            $avgProgress = $statsQuery->with('progress')->get()->avg(function($p) {
+            $allData = $statsQuery->with(['progress', 'kontrak', 'penerima'])->get();
+            $avgProgress = $allData->avg(function($p) {
                 return $p->progress->realisasi ?? 0;
             });
+            $totalKontrak = $allData->sum(function($p) {
+                return $p->kontrak->sum('nilai_kontrak');
+            });
+            $totalPenerima = $allData->sum(function($p) {
+                return $p->penerima->count();
+            });
 
-            $context .= "### STATISTIK & RINGKASAN:\n";
-            $context .= "- Total Pekerjaan Ditemukan: {$totalCount}\n";
-            $context .= "- Rata-rata Progres Fisik: " . number_format($avgProgress, 2) . "%\n";
+            $context .= "### RINGKASAN STATISTIK DATA (SUMBER KEBENARAN JUMLAH):\n";
+            $context .= "- TOTAL KESELURUHAN PEKERJAAN: {$totalCount} paket\n";
+            $context .= "- TOTAL NILAI KONTRAK: Rp " . number_format($totalKontrak, 0, ',', '.') . "\n";
+            $context .= "- TOTAL PENERIMA MANFAAT: {$totalPenerima} orang/KK\n";
+            $context .= "- RATA-RATA PROGRES FISIK: " . number_format($avgProgress, 2) . "%\n";
             
             // Jika ada query tahun, berikan breakdown per sub kegiatan
-            if (preg_match('/\b(20\d{2})\b/', $query, $matches)) {
-                $year = $matches[1];
+            if ($year) {
                 $breakdown = Pekerjaan::byUserRole()
                     ->whereHas('kegiatan', function($q) use ($year) { $q->where('tahun_anggaran', $year); })
                     ->select('kegiatan_id', DB::raw('count(*) as total'))
@@ -321,13 +361,13 @@ class ChatController extends Controller
                     ->get();
                 
                 if ($breakdown->count() > 0) {
-                    $context .= "- Breakdown Tahun Anggaran {$year}:\n";
+                    $context .= "- RINCIAN PER KEGIATAN TA {$year}:\n";
                     foreach ($breakdown as $b) {
                         $context .= "  * " . ($b->kegiatan->nama_sub_kegiatan ?? 'Lainnya') . ": {$b->total} paket\n";
                     }
                 }
             }
-            $context .= "\n";
+            $context .= "*(PENTING: Gunakan angka di atas untuk menjawab jumlah total, bukan menghitung dari daftar detail di bawah)*\n\n";
         }
 
         // 1.1 KHUSUS PENCARIAN FOTO (Skill: Foto Search)
@@ -381,17 +421,24 @@ class ChatController extends Controller
 
         // 2. Search Pekerjaan with its relations (Detailed List)
         $pekerjaan = Pekerjaan::byUserRole()
-            ->with(['kecamatan', 'desa', 'kontrak.penyedia', 'kegiatan', 'progress', 'pengawas', 'foto'])
+            ->with(['kecamatan', 'desa', 'kontrak.penyedia', 'kegiatan', 'progress', 'pengawas', 'foto', 'penerima', 'output'])
             ->where(function ($q) use ($searchQuery) {
                 // Hybrid Search
-                $q->whereRaw("MATCH(nama_paket, kode_rekening) AGAINST(? IN NATURAL LANGUAGE MODE)", [$searchQuery])
-                  ->orWhere('nama_paket', 'LIKE', "%{$searchQuery}%")
-                  ->orWhereHas('desa', function($sub) use ($searchQuery) { $sub->where('n_desa', 'LIKE', "%{$searchQuery}%"); })
-                  ->orWhereHas('kecamatan', function($sub) use ($searchQuery) { $sub->where('n_kec', 'LIKE', "%{$searchQuery}%"); })
-                  ->orWhereHas('kegiatan', function($sub) use ($searchQuery) { 
-                      $sub->where('nama_sub_kegiatan', 'LIKE', "%{$searchQuery}%")
-                          ->orWhere('tahun_anggaran', 'LIKE', "%{$searchQuery}%");
-                  });
+                if ($searchQuery) {
+                    $q->whereRaw("MATCH(nama_paket, kode_rekening) AGAINST(? IN NATURAL LANGUAGE MODE)", [$searchQuery])
+                      ->orWhere('nama_paket', 'LIKE', "%{$searchQuery}%")
+                      ->orWhereHas('desa', function($sub) use ($searchQuery) { $sub->where('n_desa', 'LIKE', "%{$searchQuery}%"); })
+                      ->orWhereHas('kecamatan', function($sub) use ($searchQuery) { $sub->where('n_kec', 'LIKE', "%{$searchQuery}%"); })
+                      ->orWhereHas('kegiatan', function($sub) use ($searchQuery) { 
+                          $sub->where('nama_sub_kegiatan', 'LIKE', "%{$searchQuery}%")
+                              ->orWhere('tahun_anggaran', 'LIKE', "%{$searchQuery}%");
+                      });
+                }
+            })
+            ->when($year, function($q) use ($year) {
+                $q->whereHas('kegiatan', function($sub) use ($year) {
+                    $sub->where('tahun_anggaran', $year);
+                });
             })
             ->limit(5)->get();
 
@@ -405,8 +452,35 @@ class ChatController extends Controller
                 $context .= "- Paket: [ID: {$p->id}] {$p->nama_paket}\n";
                 $context .= "  * Link Detail: {$baseUrl}/pekerjaan/{$p->id}\n";
                 $context .= "  * Pagu: Rp " . number_format($p->pagu, 0, ',', '.') . "\n";
+                
+                if ($p->kontrak->count() > 0) {
+                    $context .= "  * Detail Kontrak:\n";
+                    foreach ($p->kontrak as $k) {
+                        $context .= "    - Nilai: Rp " . number_format($k->nilai_kontrak, 0, ',', '.') . " (" . ($k->penyedia->nama ?? 'Penyedia N/A') . ")\n";
+                        $context .= "    - No. SPPBJ: " . ($k->sppbj ?? '-') . " (" . ($k->tgl_sppbj ? $k->tgl_sppbj->format('d/m/Y') : '-') . ")\n";
+                        $context .= "    - No. SPK: " . ($k->spk ?? '-') . " (" . ($k->tgl_spk ? $k->tgl_spk->format('d/m/Y') : '-') . ")\n";
+                        $context .= "    - No. SPMK: " . ($k->spmk ?? '-') . " (" . ($k->tgl_spmk ? $k->tgl_spmk->format('d/m/Y') : '-') . ")\n";
+                        $context .= "    - Target Selesai: " . ($k->tgl_selesai ? $k->tgl_selesai->format('d/m/Y') : '-') . "\n";
+                        if ($k->kode_rup) $context .= "    - Kode RUP: {$k->kode_rup}\n";
+                        
+                        // New: Document Registration Tracking
+                        $docs = DocumentRegister::where('kontrak_id', $k->id)->with('type')->get();
+                        if ($docs->count() > 0) {
+                            $context .= "    - Register Dokumen: " . $docs->map(fn($d) => ($d->type->name ?? 'Dokumen') . " No: " . ($d->nomor ?? '-'))->implode(', ') . "\n";
+                        }
+                    }
+                }
+
                 $context .= "  * Lokasi: {$loc}\n";
                 $context .= "  * Progres Fisik: {$progres}%\n";
+                $context .= "  * Penerima Manfaat: " . $p->penerima->count() . " orang/KK\n";
+                
+                if ($p->output->count() > 0) {
+                    $context .= "  * Output: ";
+                    $outputs = $p->output->map(fn($o) => "{$o->komponen} ({$o->volume} {$o->satuan})")->toArray();
+                    $context .= implode(", ", $outputs) . "\n";
+                }
+
                 $context .= "  * Pengawas Lapangan: {$pengawas}\n";
                 $context .= "  * Sub Kegiatan: " . ($p->kegiatan->nama_sub_kegiatan ?? '-') . " (" . ($p->kegiatan->tahun_anggaran ?? '-') . ")\n";
                 
@@ -418,13 +492,6 @@ class ChatController extends Controller
                         if ($url) {
                             $context .= "    - URL: {$url} (Keterangan: " . ($f->keterangan ?? 'Foto Proyek') . ")\n";
                         }
-                    }
-                }
-
-                if ($p->kontrak->count() > 0) {
-                    $context .= "  * Detail Kontrak:\n";
-                    foreach ($p->kontrak as $k) {
-                        $context .= "    - No SPK: {$k->spk} | Penyedia: " . ($k->penyedia->nama ?? 'N/A') . " (Nilai: Rp " . number_format($k->nilai_kontrak, 0, ',', '.') . ")\n";
                     }
                 }
                 $context .= "\n";
@@ -461,18 +528,74 @@ class ChatController extends Controller
             }
         }
 
-        // 3. Fallback: Recent relevant data if context still minimal
+        // 3. Search Tickets (Issues/Complaints) if mentioned
+        if (str_contains($queryLower, 'tiket') || str_contains($queryLower, 'masalah') || str_contains($queryLower, 'komplain')) {
+            $tikets = Tiket::with(['user', 'pekerjaan'])
+                ->where('subjek', 'LIKE', "%{$searchQuery}%")
+                ->orWhere('deskripsi', 'LIKE', "%{$searchQuery}%")
+                ->latest()->limit(5)->get();
+
+            if ($tikets->count() > 0) {
+                $context .= "### DATA TIKET MASALAH / KOMPLAIN:\n";
+                foreach ($tikets as $t) {
+                    $context .= "- Subjek: {$t->subjek} (Status: {$t->status} | Prioritas: {$t->prioritas})\n";
+                    $context .= "  * Pelapor: " . ($t->user->name ?? 'N/A') . " | Deskripsi: " . substr($t->deskripsi, 0, 100) . "...\n";
+                    if ($t->pekerjaan) $context .= "  * Terkait Paket: {$t->pekerjaan->nama_paket}\n";
+                }
+                $context .= "\n";
+            }
+        }
+
+        // 4. Search Audit Logs (History) if mentioned
+        if (str_contains($queryLower, 'siapa') || str_contains($queryLower, 'kapan') || str_contains($queryLower, 'history') || str_contains($queryLower, 'log')) {
+            $logs = AuditLog::with('user')->latest()->limit(5)->get();
+            if ($logs->count() > 0) {
+                $context .= "### RIWAYAT AKTIVITAS (LOG):\n";
+                foreach ($logs as $log) {
+                    $context .= "- [{$log->created_at}] {$log->user->name} melakukan {$log->event} pada {$log->auditable_type} (ID: {$log->auditable_id})\n";
+                }
+                $context .= "\n";
+            }
+        }
+
+        // 5. Fallback: Recent relevant data
         if (strlen($context) < 100) {
-            $recent = Pekerjaan::byUserRole()
-                ->with(['kontrak.penyedia', 'progress'])
-                ->latest()->limit(3)->get();
-                
+            $recent = Pekerjaan::byUserRole()->with(['kontrak.penyedia', 'progress'])->latest()->limit(3)->get();
             if ($recent->count() > 0) {
                 $context .= "### DATA TERBARU (Mungkin Relevan):\n";
                 foreach ($recent as $r) {
                     $penyediaName = $r->kontrak->first()->penyedia->nama ?? 'Belum ada penyedia';
-                    $progres = $r->progress->realisasi ?? 0;
-                    $context .= "- {$r->nama_paket} | Pagu: Rp " . number_format($r->pagu, 0, ',', '.') . " | Progres: {$progres}% | Penyedia: {$penyediaName}\n";
+                    $context .= "- {$r->nama_paket} | Progres: " . ($r->progress->realisasi ?? 0) . "% | Penyedia: {$penyediaName}\n";
+                }
+            }
+        }
+
+        // 5. Search Simulations if mentioned
+        if (str_contains($queryLower, 'simulasi') || str_contains($queryLower, 'jaringan')) {
+            $sims = SimulationNetwork::where('name', 'LIKE', "%{$searchQuery}%")
+                ->latest()->limit(3)->get();
+            if ($sims->count() > 0) {
+                $context .= "### DATA SIMULASI JARINGAN TEKNIS:\n";
+                foreach ($sims as $s) {
+                    $context .= "- Nama: {$s->name} (Versi: " . ($s->version ?? '1.0') . ")\n";
+                    $context .= "  * Deskripsi: " . ($s->description ?? 'Tidak ada deskripsi') . "\n";
+                }
+            }
+        }
+
+        // 6. Search Events (Calendar/Agenda) if mentioned
+        if (str_contains($queryLower, 'agenda') || str_contains($queryLower, 'jadwal') || str_contains($queryLower, 'rapat') || str_contains($queryLower, 'event')) {
+            $events = Event::where('title', 'LIKE', "%{$searchQuery}%")
+                ->orWhere('description', 'LIKE', "%{$searchQuery}%")
+                ->where('start', '>=', now())
+                ->latest()->limit(5)->get();
+
+            if ($events->count() > 0) {
+                $context .= "### AGENDA & JADWAL MENDATANG:\n";
+                foreach ($events as $ev) {
+                    $context .= "- {$ev->title} (" . $ev->start->format('d/m/Y H:i') . ")\n";
+                    if ($ev->location) $context .= "  * Lokasi: {$ev->location}\n";
+                    if ($ev->description) $context .= "  * Ket: " . substr($ev->description, 0, 100) . "...\n";
                 }
             }
         }

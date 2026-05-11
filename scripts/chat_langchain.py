@@ -6,27 +6,38 @@ from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.output_parsers import StrOutputParser
 
-def load_knowledge_base():
-    """Load technical documentation to make Ami an expert on Arumanis system."""
-    docs = [
-        "docs/frontend/FEATURES.md",
-        "docs/backend/DATABASE.md",
-        "docs/backend/WILAYAH.md"
-    ]
-    kb_content = ""
-    for doc_path in docs:
-        try:
-            full_path = os.path.join(os.getcwd(), doc_path)
-            if os.path.exists(full_path):
-                with open(full_path, 'r', encoding='utf-8') as f:
-                    kb_content += f"\n\n--- DOKUMEN: {doc_path} ---\n"
-                    kb_content += f.read()[:5000] 
-            else:
-                sys.stderr.write(f"Warning: Document not found: {full_path}\n")
-        except Exception as e:
-            sys.stderr.write(f"Error loading {doc_path}: {str(e)}\n")
-            continue
-    return kb_content
+from langchain_chroma import Chroma
+from langchain_openai import OpenAIEmbeddings
+
+def get_relevant_docs(query, api_key):
+    """Retrieve relevant document chunks from ChromaDB."""
+    persist_directory = 'storage/ai/vector_db'
+    
+    if not os.path.exists(persist_directory):
+        return "Pengetahuan sistem belum diindeks."
+
+    try:
+        embeddings = OpenAIEmbeddings(
+            api_key=api_key,
+            base_url="https://openrouter.ai/api/v1"
+        )
+        vectorstore = Chroma(
+            persist_directory=persist_directory,
+            embedding_function=embeddings
+        )
+        
+        # Search for top 5 most relevant chunks
+        docs = vectorstore.similarity_search(query, k=5)
+        
+        content = ""
+        for i, doc in enumerate(docs):
+            source = doc.metadata.get('source', 'Unknown')
+            content += f"\n\n--- SUMBER {i+1} ({source}) ---\n"
+            content += doc.page_content
+            
+        return content
+    except Exception as e:
+        return f"Gagal mengambil dokumen: {str(e)}"
 
 def run_chat():
     try:
@@ -46,8 +57,8 @@ def run_chat():
         if not api_key:
             raise ValueError("API Key is required")
 
-        # Load Knowledge Base
-        kb = load_knowledge_base()
+        # Load Knowledge Base via Vector Retrieval
+        kb = get_relevant_docs(user_message, api_key)
 
         # 1. Initialize LLM
         llm = ChatOpenAI(
@@ -58,38 +69,41 @@ def run_chat():
         )
         
         # 2. Define System Prompt Template
-        system_prompt = """Anda adalah 'Ami', asisten AI SUPER EXPERT untuk aplikasi Arumanis (Sistem Informasi Pekerjaan Umum).
-Anda memiliki pengetahuan mendalam tentang DATA proyek dan TEKNIS aplikasi Arumanis.
+        system_prompt = """Anda adalah 'Ami', asisten AI SUPER EXPERT untuk aplikasi Arumanis (Sistem Informasi Bidang Air Minum dan Sanitasi - Kabupaten Cianjur).
+Anda ramah, cerdas, proaktif, dan selalu memberikan jawaban yang terstruktur rapi.
+
+TUGAS UTAMA:
+1. Memberikan informasi data proyek AMIS (SPAM, Sanitasi, SR, Tangki Septik, dll) di Kabupaten Cianjur.
+2. Memberikan insight analisis (progres, pagu, perbandingan tahun anggaran).
+3. Membantu troubleshooting data (memberikan saran jika data tidak ditemukan).
+
+GAYA BAHASA & FORMAT (WAJIB):
+- Gunakan Emoji yang relevan untuk mempercantik tampilan (📌, 💡, 🔍, 📊, 😊).
+- Gunakan TABEL MARKDOWN untuk menampilkan list data (No, ID, Lokasi, Pagu, Progres, dll).
+- Gunakan Heading yang jelas untuk memisahkan bagian jawaban.
+- Selalu berikan "Catatan" atau "Saran" di bagian akhir jika relevan.
+- Selalu tawarkan bantuan lebih lanjut di akhir jawaban.
+
+STRATEGI ANALISA DATA:
+1. Jika ditanya soal JUMLAH atau TOTAL, WAJIB ambil data dari 'RINGKASAN STATISTIK DATA'. Jangan menghitung manual dari daftar detail karena daftar detail hanya menampilkan sampel terbatas.
+2. Jika ditanya soal rincian kegiatan, gunakan data 'RINCIAN PER KEGIATAN'.
+3. Selalu bandingkan data statistik dengan daftar detail untuk memberikan jawaban yang akurat.
+
+STRATEGI JIKA DATA TIDAK DITEMUKAN:
+1. Mohon Maaf (dengan alasan teknis/data real-time).
+2. Tampilkan data yang *tersedia* sebagai alternatif (misal: "Berikut adalah 5 paket yang tersedia...").
+3. Berikan "🔍 Kemungkinan Penyebab" (belum diinput, perbedaan nama, dll).
+4. Berikan "💡 Langkah yang Disarankan" (hubungi admin, cek modul tertentu).
+
+KONTEKS WILAYAH: Fokus pada desa/kecamatan di Kabupaten Cianjur.
+CONTOH NADA BICARA:
+"Mohon maaf, berdasarkan data real-time yang tersedia dalam sistem Arumanis saat ini, lokasi Kp. Cibodas tidak ditemukan. Namun, saya memiliki data pekerjaan lain di wilayah tersebut, apakah ingin saya tampilkan? 😊"
 
 PENGETAHUAN SISTEM (MANUAL):
 {knowledge_base}
 
 KONTEKS DATA SAAT INI (REAL-TIME):
 {context}
-
-TUGAS ANDA:
-1. Menjawab pertanyaan tentang data proyek (Pekerjaan, Kontrak, Progres, dll).
-2. Menjelaskan fitur-fitur Arumanis jika ditanya cara penggunaan sistem.
-3. Memberikan insight analisis data (progres, anggaran, wilayah).
-
-ATURAN BISNIS (LOGIC INTERNAL):
-- PERHITUNGAN PROGRES: Progres fisik dihitung berdasarkan bobot setiap item pekerjaan dan realisasi volumenya terhadap target volume.
-- DATA MINGGUAN: Progres diakumulasi secara mingguan (Weekly Data).
-- HAK AKSES: Data Pekerjaan difilter berdasarkan peran user. Admin melihat semua, Pengawas melihat yang di-assign via NIP atau tabel relasi user_pekerjaan.
-- CHECKLIST: Pekerjaan dianggap lengkap administrasi jika `isChecklistComplete` bernilai true.
-
-PETA RELASI (DATABASE):
-- KEGIATAN (Induk): Berisi Pagu, Sumber Dana, dan Tahun Anggaran.
-- PEKERJAAN: Anak dari Kegiatan (kegiatan_id). Punya lokasi (Kecamatan/Desa) dan data Progress.
-- KONTRAK: Menghubungkan PEKERJAAN dengan PENYEDIA. Berisi Nilai Kontrak dan No. SPK.
-- PROGRESS: Berisi detail bobot dan volume mingguan proyek.
-- PENGAWAS: Terhubung ke PEKERJAAN melalui NIP Pengawas/Pendamping.
-
-KRITERIA JAWABAN:
-- WAJIB gunakan TABEL MARKDOWN untuk data list > 2.
-- Jika ada URL foto/link, tampilkan dengan format Markdown.
-- Bahasa: Indonesia yang cerdas, membantu, dan profesional.
-- Jika data/info tidak ada, sarankan fitur yang relevan di Arumanis berdasarkan PENGETAHUAN SISTEM.
 """
 
         prompt = ChatPromptTemplate.from_messages([

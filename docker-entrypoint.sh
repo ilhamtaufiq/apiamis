@@ -22,8 +22,11 @@ php artisan config:cache
 php artisan route:cache
 php artisan view:cache
 
-# Run migrations if DB is ready (optional, with timeout)
-# php artisan migrate --force || echo "Migration skipped or failed"
+# Run AI Knowledge Indexing
+if [ -f "scripts/index_knowledge.py" ]; then
+    echo "Running AI Knowledge Indexing..."
+    ./venv/bin/python scripts/index_knowledge.py || echo "AI Indexing failed, but continuing..."
+fi
 
 # Start Apache
 exec apache2-foreground
