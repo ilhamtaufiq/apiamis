@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\AppSetting;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
@@ -14,7 +15,10 @@ class OpenRouterService
     public function __construct()
     {
         $this->apiKey = config('services.openrouter.api_key', env('OPENROUTER_API_KEY'));
-        $this->model = config('services.openrouter.model', 'openrouter/free');
+        
+        // Priority: AppSetting > Config > Default
+        $settingModel = AppSetting::getValue('openrouter_model');
+        $this->model = $settingModel ?? config('services.openrouter.model', 'openrouter/free');
     }
 
     /**
