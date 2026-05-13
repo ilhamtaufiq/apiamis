@@ -16,7 +16,7 @@ os.environ['USERPROFILE'] = ai_storage
 os.environ['KMP_DUPLICATE_LIB_OK'] = 'TRUE' # Bonus fix for OpenMP issues on Windows
 
 from langchain_openai import ChatOpenAI
-from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
+from langchain_core.messages import HumanMessage, SystemMessage, AIMessage, ToolMessage
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.output_parsers import StrOutputParser
 
@@ -67,6 +67,8 @@ def run_chat():
         user_message = input_data.get('message')
         context = input_data.get('context', '')
         history_raw = input_data.get('history', [])
+        tools_def = input_data.get('tools')
+        tool_history = input_data.get('tool_history', [])
         
         if not api_key:
             raise ValueError("API Key is required")
@@ -79,41 +81,37 @@ def run_chat():
             api_key=api_key,
             model=model,
             base_url="https://openrouter.ai/api/v1",
-            temperature=0.1, # Even lower for expert accuracy
+            temperature=0.1,
         )
+
+        # Bind tools if provided
+        if tools_def:
+            llm = llm.bind_tools(tools_def)
         
         # 2. Define System Prompt Template
         system_prompt = """Anda adalah 'Ami', asisten AI SUPER EXPERT untuk aplikasi Arumanis (Sistem Informasi Bidang Air Minum dan Sanitasi - Kabupaten Cianjur).
 
 GAYA BAHASA & PERSONA (SUPER MODE):
 - Sapa user dengan bahasa Sunda yang sopan di awal (misal: "Sampurasun bos!", "Wilujeng enjing!").
-- Gunakan Emoji yang relevan untuk mempercantik tampilan (📌, 💡, 🔍, 📊, 😊).
-- **WAJIB TABEL**: Setiap menampilkan daftar paket/data lebih dari 1, GUNAKAN TABEL MARKDOWN yang rapi dengan header.
-- **CHART SUPPORT**: Jika ada data statistik, berikan blok kode khusus di akhir jawaban:
+- Gunakan Emoji yang relevan (📌, 💡, 🔍, 📊, 😊).
+- **WAJIB TABEL**: Setiap menampilkan daftar paket/data lebih dari 1, GUNAKAN TABEL MARKDOWN yang rapi.
+- **CHART SUPPORT**: Jika ada data statistik, berikan blok kode khusus:
   ```json
   {{ "type": "chart", "chart_type": "bar|pie|line", "data": [...] }}
   ```
-- **DYNAMIC DEEP LINKING**: Jika merekomendasikan buat tiket, gunakan link `/tiket/create?pekerjaan_id=[ID_ASLI]`. Ganti `[ID_ASLI]` dengan kolom `id` yang ada di data context. JANGAN gunakan '123' atau 'XXX'.
 
 STRATEGI ANALISA DATA:
-1. Jika ditanya 'Laporan Pagi' atau 'Ringkasan Eksekutif', cari paket yang progresnya < 10% atau yang memiliki tiket 'Open' dan berikan ringkasan kritis.
-2. **ANALISA ANOMALI**: Jika ada paket dengan kontrak aktif (SPK turun) tapi progres masih 0%, sebutkan itu sebagai ANOMALI KONTRAK. Sebutkan juga jika ada penyedia ganda yang mengerjakan banyak proyek sekaligus.
-3. Selalu bandingkan data statistik dengan daftar detail.
-
-STRATEGI JIKA DATA TIDAK DITEMUKAN:
-1. Mohon Maaf secara sopan.
-2. Tampilkan tips "💡 COBA TANYA SEPERTI INI".
+1. **GUNAKAN TOOLS** jika informasi di konteks awal kurang spesifik atau butuh data statistik makro (seperti jumlah total paket per tahun).
+2. **JANGAN MENEBAK** angka atau statistik. Selalu gunakan tool `get_statistics` atau `search_projects`.
+3. Jika ditanya detail paket, cari dulu ID-nya lewat `search_projects` lalu panggil `get_project_details`.
 
 KONTEKS WILAYAH: Fokus pada desa/kecamatan di Kabupaten Cianjur.
-CONTOH NADA BICARA:
-"Sampurasun bos! Wilujeng enjing. 📌 Berdasarkan data real-time, ada 3 paket yang butuh perhatian karena progresnya masih 0% meskipun SPK sudah turun..."
 
-PENGETAHUAN SISTEM (MANUAL):
+PENGETAHUAN SISTEM (RETRIEVED):
 {knowledge_base}
 
-KONTEKS DATA SAAT INI (REAL-TIME):
+KONTEKS DATA AWAL (STATIC):
 {context}
-*(Instruksi Khusus: Jika user bertanya tentang jumlah total paket, nilai uang, atau statistik makro, WAJIB merujuk pada bagian 'RINGKASAN STATISTIK' di atas. Jangan menghitung manual dari daftar detail karena daftar tersebut sengaja dibatasi untuk efisiensi).*
 """
 
         prompt = ChatPromptTemplate.from_messages([
@@ -130,24 +128,57 @@ KONTEKS DATA SAAT INI (REAL-TIME):
             else:
                 formatted_history.append(AIMessage(content=msg.get('content')))
 
-        # 4. Create Chain
-        chain = prompt | llm | StrOutputParser()
+        # Append tool call history
+        if tool_history:
+            for interaction in tool_history:
+                ast_msg = interaction.get('assistant', {})
+                # Use additional_kwargs for OpenAI-style tool_calls in history
+                formatted_history.append(AIMessage(
+                    content=ast_msg.get('content', ''),
+                    additional_kwargs={'tool_calls': ast_msg.get('tool_calls', [])}
+                ))
+                for res in interaction.get('results', []):
+                    formatted_history.append(ToolMessage(
+                        tool_call_id=res['tool_call_id'],
+                        content=res['content']
+                    ))
 
-        # 5. Execute
-        response_content = chain.invoke({
+        # 4. Create Chain (use direct LLM invoke to get tool_calls)
+        chain_input = {
             "input": user_message,
             "context": context,
             "knowledge_base": kb,
             "history": formatted_history
-        })
+        }
         
-        # Output as JSON
-        print(json.dumps({
+        full_prompt = prompt.format_messages(**chain_input)
+        response = llm.invoke(full_prompt)
+        
+        # 5. Execute & Output
+        output = {
             "success": True,
-            "content": response_content,
+            "content": response.content,
             "model": model,
-            "usage": {}
-        }))
+            "usage": response.response_metadata.get('token_usage', {})
+        }
+
+        if hasattr(response, 'additional_kwargs') and 'tool_calls' in response.additional_kwargs:
+            output['tool_calls'] = response.additional_kwargs['tool_calls']
+        elif hasattr(response, 'tool_calls') and response.tool_calls:
+            # Normalize LangChain native tool_calls to OpenAI format for PHP compatibility
+            normalized_calls = []
+            for tc in response.tool_calls:
+                normalized_calls.append({
+                    'id': tc.get('id'),
+                    'type': 'function',
+                    'function': {
+                        'name': tc.get('name'),
+                        'arguments': json.dumps(tc.get('args')) if isinstance(tc.get('args'), dict) else tc.get('args')
+                    }
+                })
+            output['tool_calls'] = normalized_calls
+
+        print(json.dumps(output))
 
     except Exception as e:
         print(json.dumps({

@@ -1,29 +1,29 @@
 # Continuity Ledger
 
-- Goal: Limit AI chat capabilities to search and analysis only, removing all data recording skills.
-- Constraints/Assumptions: 
-  - AI should only interact with the database in a read-only manner.
-  - Context should be derived from controllers, models, and their relations.
+- Goal (incl. success criteria):
+  - Upgrade Ami AI intelligence by implementing Agentic Tool Calling.
+  - Enable precise data retrieval via Laravel Eloquent models.
+  - Support multi-turn reasoning loops in the PHP-Python bridge.
+
+- Constraints/Assumptions:
+  - Read-only database access.
+  - PHP/Laravel backend for tool execution.
+  - Python/LangChain for LLM reasoning.
+
 - Key decisions:
-  - Removed all tool/function definitions from `ChatController.php`.
-  - Removed tool call handling logic.
-  - Updated system prompt to define the AI as a "Read-Only" data analysis assistant.
-  - Increased OpenRouter API timeout to 120s and externalized model configuration.
-  - Made Python venv path platform-aware (Windows/Linux) for Docker compatibility.
-  - Implemented automated Python venv creation in Dockerfile.
+  - Implemented 4 core tools: `get_statistics`, `search_projects`, `get_project_details`, `get_contractor_info`.
+  - Used a multi-turn (max 3) tool loop in `ChatController.php`.
+  - Passed accumulated `tool_history` to Python to maintain reasoning context.
+
 - State:
   - Done:
-    - Removed input tools and updated prompt for a read-only AI.
-    - Created `scripts/chat_langchain.py` for LangChain-based AI processing.
-    - Set up a standard Python `venv` in the root folder of `apiamis`.
-    - Integrated LangChain bridge into `OpenRouterService` and `ChatController`.
-    - Fixed Python venv path for Docker deployment (Linux compatibility).
-    - Created `requirements.txt` and updated `Dockerfile` for automated venv setup.
-    - All core LangChain integration and Docker deployment fixes.
+    - Tool definitions and execution logic in PHP.
+    - Python bridge update for tool binding and result handling.
+    - Multi-turn recursion loop in ChatController.
   - Now:
-    - Ready for testing in Docker environment.
+    - Finalizing and testing the integration.
   - Next:
-    - Verify the LangChain integration in the production/docker environment.
+    - Implement tool execution loop in PHP/Python bridge.
 - Open questions (UNCONFIRMED if needed): None.
 - Working set (files/ids/commands):
   - c:\laragon\www\apiamis\app\Http\Controllers\ChatController.php

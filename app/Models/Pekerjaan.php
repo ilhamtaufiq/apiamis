@@ -209,4 +209,9 @@ class Pekerjaan extends Model
     {
         return $this->hasOne(DraftPekerjaan::class, 'pekerjaan_id');
     }
+
+    public function tiket(): HasMany
+    {
+        return $this->hasMany(Tiket::class, 'pekerjaan_id');
+    }
 }

@@ -99,6 +99,8 @@ class OpenRouterService
             'message' => $message,
             'context' => $context,
             'history' => $history,
+            'tools' => $options['tools'] ?? null,
+            'tool_history' => $options['tool_history'] ?? null,
         ];
 
         try {
