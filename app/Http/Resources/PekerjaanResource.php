@@ -46,11 +46,38 @@ class PekerjaanResource extends JsonResource
             }
         }
 
+        $progressTotal = 0;
+        if ($this->relationLoaded('progress') && $this->progress) {
+            $content = $this->progress->content ?? [];
+            $items = $content['items'] ?? [];
+            
+            foreach ($items as $item) {
+                $bobot = (float) ($item['bobot'] ?? 0);
+                $weeklyData = $item['weekly_data'] ?? [];
+                $itemTotalReal = 0;
+                
+                foreach ($weeklyData as $minggu => $data) {
+                    $realisasi = $data['realisasi'] ?? 0;
+                    if ($realisasi !== null) {
+                        $itemTotalReal += $realisasi;
+                    }
+                }
+                
+                $targetVolume = (float) ($item['target_volume'] ?? 0);
+                $progressPercent = $targetVolume > 0 
+                    ? ($itemTotalReal / $targetVolume) * 100 
+                    : 0;
+                $weightedProgress = ($progressPercent * $bobot) / 100;
+                $progressTotal += $weightedProgress;
+            }
+        }
+
         return [
             'id' => $this->id,
             'kode_rekening' => $this->kode_rekening,
             'nama_paket' => $this->nama_paket,
             'pagu' => $this->pagu,
+            'progress_total' => round($progressTotal, 2),
             'kecamatan_id' => $this->kecamatan_id,
             'desa_id' => $this->desa_id,
             'kegiatan_id' => $this->kegiatan_id,

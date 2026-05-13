@@ -53,7 +53,7 @@ class PekerjaanController extends Controller
                 return response()->json(['message' => 'Unauthorized'], 401);
             }
 
-            $query = Pekerjaan::with(['kecamatan', 'desa', 'kegiatan', 'tags', 'pengawas', 'pendamping'])
+            $query = Pekerjaan::with(['kecamatan', 'desa', 'kegiatan', 'tags', 'pengawas', 'pendamping', 'progress'])
                 ->withCount('penerima')
                 ->byUserRole();  // Aman karena sudah check auth
             
