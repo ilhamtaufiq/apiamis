@@ -23,7 +23,7 @@ class UpdateBlogRequest extends FormRequest
     {
         return [
             'title' => 'sometimes|required|string|max:255',
-            'slug' => 'sometimes|required|string|unique:tbl_blog,slug,' . $this->route('blog')->id,
+            'slug' => 'sometimes|required|string|unique:tbl_blog,slug,' . $this->route('blog'),
             'content' => 'sometimes|required|string',
             'category' => 'nullable|string|max:255',
             'cover_image' => 'nullable|string|max:255',
