@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\BroadcastHistory;
 use App\Models\User;
 use App\Notifications\AppNotification;
 use Illuminate\Http\Request;
@@ -62,10 +63,17 @@ class NotificationController extends Controller
      */
     public function markAsRead($id)
     {
-        $notification = auth()->user()->notifications()->findOrFail($id);
-        $notification->markAsRead();
+        try {
+            $notification = auth()->user()->notifications()->findOrFail($id);
+            $notification->markAsRead();
 
-        return response()->json(['message' => 'Notification marked as read']);
+            return response()->json(['message' => 'Notification marked as read']);
+        } catch (\Exception $e) {
+            return response()->json([
+                'message' => 'Server Error',
+                'error' => $e->getMessage()
+            ], 500);
+        }
     }
 
     /**
@@ -115,6 +123,7 @@ class NotificationController extends Controller
             'user_ids.*' => 'exists:users,id',
             'notification_type' => 'nullable|in:info,success,warning,error',
             'url' => 'nullable|string',
+            'is_banner' => 'nullable|boolean',
         ]);
 
         if ($validator->fails()) {
@@ -125,6 +134,7 @@ class NotificationController extends Controller
         $message = $request->message;
         $url = $request->url;
         $notificationType = $request->notification_type ?? 'info';
+        $isBanner = $request->is_banner ?? false;
 
         $recipients = null;
 
@@ -138,16 +148,54 @@ class NotificationController extends Controller
             return response()->json(['message' => 'No recipients found'], 404);
         }
 
+        // Save to broadcast history first
+        $history = BroadcastHistory::create([
+            'title' => $title,
+            'message' => $message,
+            'type' => $request->type,
+            'notification_type' => $notificationType,
+            'url' => $url,
+            'is_banner' => $isBanner,
+            'recipient_count' => $recipients->count()
+        ]);
+
         Notification::send($recipients, new AppNotification(
             $title,
             $message,
             $url,
-            $notificationType
+            $notificationType,
+            $isBanner,
+            $history->id
         ));
 
         return response()->json([
             'message' => 'Notification broadcasted successfully',
             'recipient_count' => $recipients->count()
         ]);
+    }
+
+    public function getBroadcastHistory()
+    {
+        return response()->json([
+            'history' => BroadcastHistory::latest()->paginate(10)
+        ]);
+    }
+
+    public function deleteBroadcast($id)
+    {
+        try {
+            $history = BroadcastHistory::findOrFail($id);
+            
+            // Delete associated notifications
+            \DB::table('notifications')
+                ->where('data->broadcast_history_id', $id)
+                ->delete();
+
+            $history->delete();
+
+            return response()->json(['message' => 'Broadcast deleted successfully']);
+        } catch (\Exception $e) {
+            return response()->json(['message' => 'Server Error', 'error' => $e->getMessage()], 500);
+        }
     }
 }

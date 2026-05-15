@@ -50,6 +50,11 @@ Route::get('auth/google/callback', [AuthController::class, 'handleGoogleCallback
 Route::get('app-settings', [AppSettingController::class, 'index']);
 Route::get('app-settings/storage-stats', [AppSettingController::class, 'storageStats'])->middleware('auth:sanctum');
 Route::post('app-settings', [AppSettingController::class, 'store'])->middleware('auth:sanctum');
+
+// Public Blog Routes
+Route::get('blog', [\App\Http\Controllers\BlogController::class, 'index']);
+Route::get('blog/{blog}', [\App\Http\Controllers\BlogController::class, 'show']);
+
 Route::middleware('auth:sanctum')->group(function () {
     Route::get('/', function () {
     return view('welcome');
@@ -146,6 +151,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('route-permissions/user/accessible', [RoutePermissionController::class, 'accessible']);
     Route::apiResource('route-permissions', RoutePermissionController::class);
     Route::apiResource('menu-permissions', MenuPermissionController::class);
+    Route::apiResource('blog', \App\Http\Controllers\BlogController::class)->except(['index', 'show']);
     Route::apiResource('tags', TagController::class);
     Route::get('pengawas/statistics', [PengawasController::class, 'statistics']);
     Route::apiResource('pengawas', PengawasController::class);
@@ -212,6 +218,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/notifications/{id}/read', [\App\Http\Controllers\NotificationController::class, 'markAsRead']);
     Route::post('/notifications/mark-all-read', [\App\Http\Controllers\NotificationController::class, 'markAllAsRead']);
     Route::post('/notifications/broadcast', [\App\Http\Controllers\NotificationController::class, 'sendBroadcast'])->middleware('role:admin');
+    Route::get('/notifications/broadcast-history', [\App\Http\Controllers\NotificationController::class, 'getBroadcastHistory'])->middleware('role:admin');
+    Route::delete('/notifications/broadcast/{id}', [\App\Http\Controllers\NotificationController::class, 'deleteBroadcast'])->middleware('role:admin');
 
     // Calendar Events
     Route::post('events/{event}/upload', [EventController::class, 'upload']);
