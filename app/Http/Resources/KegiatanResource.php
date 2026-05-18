@@ -15,6 +15,7 @@ class KegiatanResource extends JsonResource
         return [
             'id' => $this->id,
             'nama_program' => $this->nama_program,
+            'sub_bidang' => $this->sub_bidang,
             'nama_kegiatan' => $this->nama_kegiatan,
             'nama_sub_kegiatan' => $this->nama_sub_kegiatan,
             'tahun_anggaran' => $this->tahun_anggaran,

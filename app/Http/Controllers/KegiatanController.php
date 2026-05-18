@@ -61,6 +61,7 @@ class KegiatanController extends Controller
     {
         $validated = $request->validate([
             'nama_program' => 'nullable|string|max:255',
+            'sub_bidang' => 'nullable|string|max:255',
             'nama_kegiatan' => 'nullable|string|max:255',
             'nama_sub_kegiatan' => 'nullable|string|max:255',
             'tahun_anggaran' => 'nullable|string|max:50',
@@ -117,6 +118,7 @@ class KegiatanController extends Controller
     {
         $validated = $request->validate([
             'nama_program' => 'nullable|string|max:255',
+            'sub_bidang' => 'nullable|string|max:255',
             'nama_kegiatan' => 'nullable|string|max:255',
             'nama_sub_kegiatan' => 'nullable|string|max:255',
             'tahun_anggaran' => 'nullable|string|max:50',

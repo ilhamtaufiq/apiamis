@@ -139,7 +139,7 @@ class OutputController extends Controller
     }
     public function summary(Request $request)
     {
-        $query = Output::query();
+        $query = Output::with('pekerjaan.kegiatan');
 
         if ($request->has('tahun') && $request->tahun) {
             $query->whereHas('pekerjaan.kegiatan', function($q) use ($request) {
@@ -147,13 +147,58 @@ class OutputController extends Controller
             });
         }
 
-        $total = (clone $query)->count();
-        $wajib = (clone $query)->where('penerima_is_optional', false)->count();
+        $outputs = $query->get();
+
+        $total = $outputs->count();
+        $wajib = $outputs->where('penerima_is_optional', false)->count();
+        $totalVolume = $outputs->sum('volume');
+
+        // Resolve komponen label based on sub_bidang for "Sambungan Rumah"
+        $resolveLabel = function ($item) {
+            $komponen = $item->komponen;
+            $subBidang = $item->pekerjaan?->kegiatan?->sub_bidang;
+
+            if (stripos($komponen, 'sambungan rumah') !== false && $subBidang) {
+                $lower = strtolower($subBidang);
+                if (strpos($lower, 'air minum') !== false) {
+                    return 'Sambungan Rumah Water Meter';
+                } elseif (strpos($lower, 'sanitasi') !== false) {
+                    return 'Sambungan Rumah Sanitasi';
+                }
+            }
+
+            return $komponen;
+        };
+
+        // Group by resolved komponen label + satuan
+        $grouped = $outputs->groupBy(function ($item) use ($resolveLabel) {
+            return $resolveLabel($item) . '|||' . $item->satuan;
+        })->map(function ($items, $key) use ($resolveLabel) {
+            $parts = explode('|||', $key);
+            return [
+                'komponen' => $parts[0],
+                'satuan' => $parts[1],
+                'total_volume' => $items->sum('volume'),
+                'jumlah_pekerjaan' => $items->pluck('pekerjaan_id')->unique()->count(),
+                'pekerjaan' => $items->map(function ($item) use ($resolveLabel) {
+                    return [
+                        'id' => $item->id,
+                        'pekerjaan_id' => $item->pekerjaan_id,
+                        'nama_paket' => $item->pekerjaan?->nama_paket ?? '-',
+                        'volume' => $item->volume,
+                        'penerima_is_optional' => $item->penerima_is_optional,
+                        'sub_bidang' => $item->pekerjaan?->kegiatan?->sub_bidang,
+                    ];
+                })->values(),
+            ];
+        })->values();
 
         return response()->json([
             'total_output' => $total,
             'wajib_count' => $wajib,
             'opsional_count' => $total - $wajib,
+            'total_volume' => $totalVolume,
+            'rekap' => $grouped,
         ]);
     }
 }
