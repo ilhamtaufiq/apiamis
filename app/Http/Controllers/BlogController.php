@@ -6,25 +6,20 @@ use App\Http\Requests\StoreBlogRequest;
 use App\Http\Requests\UpdateBlogRequest;
 use App\Http\Resources\BlogResource;
 use App\Models\Blog;
+use App\Models\BlogAsset;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 class BlogController extends Controller
 {
-    /**
-     * Display a listing of the resource.
-     */
     public function index(Request $request): JsonResponse
     {
         $query = Blog::with('user');
 
-        // Guest users can only see published and public (non-internal) posts
         if (!auth('sanctum')->check()) {
             $query->where('is_published', true)
                   ->where('is_internal', false);
         } else {
-            // Authenticated users can see internal posts.
-            // They can also filter by published status (useful for management)
             if ($request->has('published')) {
                 $query->where('is_published', $request->boolean('published'));
             }
@@ -32,6 +27,10 @@ class BlogController extends Controller
 
         if ($request->has('category')) {
             $query->where('category', $request->category);
+        }
+
+        if ($request->boolean('featured')) {
+            $query->where('is_featured', true);
         }
 
         $blogs = $query->latest()->paginate(15);
@@ -47,19 +46,17 @@ class BlogController extends Controller
         ]);
     }
 
-    /**
-     * Store a newly created resource in storage.
-     */
     public function store(StoreBlogRequest $request): JsonResponse
     {
         $validated = $request->validated();
         $validated['user_id'] = auth()->id();
-        
+
         if ($request->boolean('is_published')) {
             $validated['published_at'] = now();
         }
 
         $blog = Blog::create($validated);
+        $this->attachReferencedVideoAssets($blog);
 
         return response()->json([
             'data' => new BlogResource($blog),
@@ -67,14 +64,10 @@ class BlogController extends Controller
         ], 201);
     }
 
-    /**
-     * Display the specified resource.
-     */
     public function show($id): JsonResponse
     {
         $blog = Blog::where('id', $id)->orWhere('slug', $id)->firstOrFail();
-        
-        // If post is internal and user is not logged in, forbid access
+
         if ($blog->is_internal && !auth('sanctum')->check()) {
             return response()->json([
                 'message' => 'Postingan ini hanya untuk internal.',
@@ -86,14 +79,11 @@ class BlogController extends Controller
         ]);
     }
 
-    /**
-     * Update the specified resource in storage.
-     */
     public function update(UpdateBlogRequest $request, $id): JsonResponse
     {
         $blog = Blog::where('id', $id)->orWhere('slug', $id)->firstOrFail();
         $validated = $request->validated();
-        
+
         if ($request->has('is_published')) {
             if ($request->boolean('is_published') && !$blog->is_published) {
                 $validated['published_at'] = now();
@@ -101,6 +91,7 @@ class BlogController extends Controller
         }
 
         $blog->update($validated);
+        $this->attachReferencedVideoAssets($blog);
 
         return response()->json([
             'data' => new BlogResource($blog),
@@ -108,9 +99,89 @@ class BlogController extends Controller
         ]);
     }
 
-    /**
-     * Remove the specified resource from storage.
-     */
+    public function uploadVideo(Request $request): JsonResponse
+    {
+        $request->validate([
+            'file' => 'required|file|mimetypes:video/mp4,video/webm,video/quicktime|max:102400',
+        ]);
+
+        $asset = BlogAsset::create([
+            'user_id' => auth()->id(),
+        ]);
+
+        $media = $asset->addMediaFromRequest('file')
+            ->toMediaCollection('blog/videos');
+
+        return response()->json([
+            'url' => $media->getFullUrl(),
+            'media_id' => $media->id,
+            'message' => 'Video berhasil diunggah',
+        ]);
+    }
+
+    private function attachReferencedVideoAssets(Blog $blog): void
+    {
+        preg_match_all('/<video[^>]+src=["\']([^"\']+)["\']/i', $blog->content, $matches);
+        $videoUrls = $matches[1] ?? [];
+
+        if (empty($videoUrls)) {
+            return;
+        }
+
+        $assets = BlogAsset::whereNull('blog_id')->get();
+
+        foreach ($assets as $asset) {
+            $media = $asset->getFirstMedia('blog/videos');
+
+            if ($media && in_array($media->getFullUrl(), $videoUrls, true)) {
+                $asset->update([
+                    'blog_id' => $blog->id,
+                ]);
+            }
+        }
+    }
+
+    public function feature($id): JsonResponse
+    {
+        $blog = Blog::where('id', $id)->orWhere('slug', $id)->firstOrFail();
+
+        if (!$blog->is_published || $blog->is_internal) {
+            return response()->json([
+                'message' => 'Hanya publikasi yang sudah terbit dan bersifat publik yang dapat dijadikan artikel utama.',
+            ], 422);
+        }
+
+        Blog::where('is_featured', true)->update([
+            'is_featured' => false,
+            'featured_at' => null,
+        ]);
+
+        $blog->update([
+            'is_featured' => true,
+            'featured_at' => now(),
+        ]);
+
+        return response()->json([
+            'data' => new BlogResource($blog->fresh('user')),
+            'message' => 'Artikel utama berhasil diperbarui',
+        ]);
+    }
+
+    public function unfeature($id): JsonResponse
+    {
+        $blog = Blog::where('id', $id)->orWhere('slug', $id)->firstOrFail();
+
+        $blog->update([
+            'is_featured' => false,
+            'featured_at' => null,
+        ]);
+
+        return response()->json([
+            'data' => new BlogResource($blog->fresh('user')),
+            'message' => 'Artikel tidak lagi menjadi artikel utama',
+        ]);
+    }
+
     public function destroy($id): JsonResponse
     {
         $blog = Blog::where('id', $id)->orWhere('slug', $id)->firstOrFail();

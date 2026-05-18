@@ -29,13 +29,17 @@ class Blog extends Model
         'user_id',
         'is_published',
         'is_internal',
+        'is_featured',
         'published_at',
+        'featured_at',
     ];
 
     protected $casts = [
         'is_published' => 'boolean',
         'is_internal' => 'boolean',
+        'is_featured' => 'boolean',
         'published_at' => 'datetime',
+        'featured_at' => 'datetime',
     ];
 
     /**
@@ -46,3 +50,4 @@ class Blog extends Model
         return $this->belongsTo(User::class, 'user_id');
     }
 }
+

@@ -151,6 +151,9 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('route-permissions/user/accessible', [RoutePermissionController::class, 'accessible']);
     Route::apiResource('route-permissions', RoutePermissionController::class);
     Route::apiResource('menu-permissions', MenuPermissionController::class);
+    Route::post('blog/upload-video', [\App\Http\Controllers\BlogController::class, 'uploadVideo']);
+    Route::post('blog/{blog}/feature', [\App\Http\Controllers\BlogController::class, 'feature']);
+    Route::delete('blog/{blog}/feature', [\App\Http\Controllers\BlogController::class, 'unfeature']);
     Route::apiResource('blog', \App\Http\Controllers\BlogController::class)->except(['index', 'show']);
     Route::apiResource('tags', TagController::class);
     Route::get('pengawas/statistics', [PengawasController::class, 'statistics']);
@@ -245,6 +248,9 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('chat/sessions/{id}/messages', [\App\Http\Controllers\ChatController::class, 'sessionMessages']);
 
 });
+
+
+
 
 
 

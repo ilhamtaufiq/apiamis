@@ -49,8 +49,14 @@ class SyncRoutePermissions extends Command
                 continue;
             }
 
+            // Clean URI: remove 'api/' if present
+            $cleanUri = $uri;
+            if (str_starts_with($uri, 'api/')) {
+                $cleanUri = substr($uri, 4);
+            }
+
             // Convert Laravel {param} or {param?} to :param
-            $path = '/' . preg_replace('/\{([a-zA-Z0-9_?]+)\}/', ':$1', $uri);
+            $path = '/' . preg_replace('/\{([a-zA-Z0-9_?]+)\}/', ':$1', $cleanUri);
             $path = str_replace('?', '', $path); // Remove optional parameter markers
             $path = preg_replace('/\/+/', '/', $path); // Clean double slashes
             $path = rtrim($path, '/');
@@ -104,6 +110,6 @@ class SyncRoutePermissions extends Command
 
         $this->info("Done! Scanned {$totalCount} routes. Created {$newCount} new entries.");
         
-        return Command::SUCCESS;
+        return self::SUCCESS;
     }
 }

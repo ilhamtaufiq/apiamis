@@ -7,11 +7,6 @@ use Illuminate\Http\Resources\Json\JsonResource;
 
 class BlogResource extends JsonResource
 {
-    /**
-     * Transform the resource into an array.
-     *
-     * @return array<string, mixed>
-     */
     public function toArray(Request $request): array
     {
         return [
@@ -23,7 +18,9 @@ class BlogResource extends JsonResource
             'cover_image' => $this->cover_image,
             'is_published' => $this->is_published,
             'is_internal' => $this->is_internal,
+            'is_featured' => $this->is_featured,
             'published_at' => $this->published_at?->toIso8601String(),
+            'featured_at' => $this->featured_at?->toIso8601String(),
             'user' => [
                 'id' => $this->user_id,
                 'name' => $this->user?->name,

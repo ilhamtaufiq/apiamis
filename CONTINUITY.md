@@ -1,30 +1,30 @@
 # Continuity Ledger
 
 - Goal (incl. success criteria):
-  - Upgrade Ami AI intelligence by implementing Agentic Tool Calling.
-  - Enable precise data retrieval via Laravel Eloquent models.
-  - Support multi-turn reasoning loops in the PHP-Python bridge.
+  - Fix Internal Server Error (500) in the Pekerjaan module.
+  - Resolve missing database tables (`personal_access_tokens`, `app_settings`) in the SQLite environment.
+  - Ensure backend stability for API requests from the Arumanis frontend.
 
 - Constraints/Assumptions:
-  - Read-only database access.
-  - PHP/Laravel backend for tool execution.
-  - Python/LangChain for LLM reasoning.
+  - Database: SQLite (currently active according to logs, despite .env setting).
+  - Framework: Laravel 11.
+  - Deployment: Local Laragon environment.
 
 - Key decisions:
-  - Implemented 4 core tools: `get_statistics`, `search_projects`, `get_project_details`, `get_contractor_info`.
-  - Used a multi-turn (max 3) tool loop in `ChatController.php`.
-  - Passed accumulated `tool_history` to Python to maintain reasoning context.
+  - Migrating database to ensure all system and application tables exist.
 
 - State:
   - Done:
-    - Tool definitions and execution logic in PHP.
-    - Python bridge update for tool binding and result handling.
-    - Multi-turn recursion loop in ChatController.
+    - Analyzed Laravel logs and identified `QueryException` due to missing tables.
   - Now:
-    - Finalizing and testing the integration.
+    - Running database migrations in the `apiamis` backend.
   - Next:
-    - Implement tool execution loop in PHP/Python bridge.
-- Open questions (UNCONFIRMED if needed): None.
+    - Verify functional API requests for the Pekerjaan form.
+    - Check if other modules are affected by missing tables.
+
+- Open questions (UNCONFIRMED if needed):
+  - Why is the app using SQLite when `.env` specifies MySQL? (Proceeding with SQLite as it's the current active connection).
+
 - Working set (files/ids/commands):
   - c:\laragon\www\apiamis\app\Http\Controllers\ChatController.php
   - c:\laragon\www\apiamis\app\Services\OpenRouterService.php

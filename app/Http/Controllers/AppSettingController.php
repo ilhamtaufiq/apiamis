@@ -53,6 +53,7 @@ class AppSettingController extends Controller
             'app_description' => 'nullable|string|max:500',
             'tahun_anggaran' => 'nullable|string|max:4',
             'openrouter_model' => 'nullable|string|max:255',
+            'landing_page_active' => 'nullable|string|in:0,1',
             'logo' => 'nullable|file|mimes:jpg,jpeg,png,svg|max:2048',
             'favicon' => 'nullable|file|mimes:jpg,jpeg,png,svg,ico|max:1024',
         ]);
@@ -77,6 +78,11 @@ class AppSettingController extends Controller
 
         if ($request->has('openrouter_model')) {
             $setting = AppSetting::setValue('openrouter_model', $request->openrouter_model, 'text');
+            $updatedSettings[] = $setting;
+        }
+
+        if ($request->has('landing_page_active')) {
+            $setting = AppSetting::setValue('landing_page_active', $request->landing_page_active, 'text');
             $updatedSettings[] = $setting;
         }
 
