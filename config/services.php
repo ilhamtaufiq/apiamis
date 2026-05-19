@@ -47,7 +47,11 @@ return [
 
     'openrouter' => [
         'api_key' => env('OPENROUTER_API_KEY'),
-        'model' => env('OPENROUTER_MODEL', 'openrouter/free'),
+        'model' => env('OPENROUTER_MODEL', 'openai/gpt-oss-120b:free'),
+        'fallback_model' => env('OPENROUTER_FALLBACK_MODEL', 'z-ai/glm-4.5-air:free'),
     ],
 
 ];
+
+
+

@@ -18,9 +18,26 @@ class UserController extends Controller
      *     @OA\Response(response=200, description="Successful operation")
      * )
      */
-    public function index()
+    public function index(Request $request)
     {
-        $users = User::with('roles', 'permissions')->paginate(15);
+        $query = User::with('roles', 'permissions');
+
+        if ($request->filled('search')) {
+            $search = $request->input('search');
+
+            $query->where(function ($q) use ($search) {
+                $q->where('name', 'like', "%{$search}%")
+                    ->orWhere('email', 'like', "%{$search}%")
+                    ->orWhere('nip', 'like', "%{$search}%")
+                    ->orWhere('jabatan', 'like', "%{$search}%")
+                    ->orWhereHas('roles', function ($roleQuery) use ($search) {
+                        $roleQuery->where('name', 'like', "%{$search}%");
+                    });
+            });
+        }
+
+        $users = $query->paginate($request->input('per_page', 15));
+
         return \App\Http\Resources\UserResource::collection($users);
     }
 

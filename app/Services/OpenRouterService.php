@@ -11,6 +11,7 @@ class OpenRouterService
 {
     protected $apiKey;
     protected $model;
+    protected $fallbackModel;
     protected $baseUrl = 'https://openrouter.ai/api/v1';
 
     public function __construct()
@@ -19,7 +20,8 @@ class OpenRouterService
         
         // Priority: AppSetting > Config > Default
         $settingModel = AppSetting::getValue('openrouter_model');
-        $this->model = $settingModel ?? config('services.openrouter.model', 'openrouter/free');
+        $this->model = $settingModel ?? config('services.openrouter.model', 'openai/gpt-oss-120b:free');
+        $this->fallbackModel = config('services.openrouter.fallback_model', 'z-ai/glm-4.5-air:free');
     }
 
     /**
@@ -112,7 +114,15 @@ class OpenRouterService
                 Log::error('LangChain Script Error', [
                     'error' => $result->errorOutput(),
                     'output' => $result->output(),
+                    'model' => $input['model'],
                 ]);
+
+                if (($options['model'] ?? $this->model) !== $this->fallbackModel) {
+                    return $this->chatWithLangChain($message, $context, $history, array_merge($options, [
+                        'model' => $this->fallbackModel,
+                    ]));
+                }
+
                 return [
                     'success' => false,
                     'message' => 'LangChain execution failed: ' . ($result->errorOutput() ?: 'Unknown error'),
@@ -144,3 +154,4 @@ class OpenRouterService
         }
     }
 }
+

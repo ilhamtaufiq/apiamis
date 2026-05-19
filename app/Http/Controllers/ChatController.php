@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use App\Services\OpenRouterService;
+use App\Services\ChatDataToolService;
 use App\Models\Pekerjaan;
 use App\Models\Kontrak;
 use App\Models\Penyedia;
@@ -24,10 +25,12 @@ use Illuminate\Support\Facades\Cache;
 class ChatController extends Controller
 {
     protected $openRouter;
+    protected $chatDataTools;
 
-    public function __construct(OpenRouterService $openRouter)
+    public function __construct(OpenRouterService $openRouter, ChatDataToolService $chatDataTools)
     {
         $this->openRouter = $openRouter;
+        $this->chatDataTools = $chatDataTools;
     }
 
     // ── Session CRUD ────────────────────────────────────────────────
@@ -149,7 +152,11 @@ class ChatController extends Controller
             'content' => $userMessage,
         ]);
 
-        $cached = ChatKnowledgeCache::findSimilar($userMessage);
+        $cached = null;
+        if (!$this->isDynamicDataQuery($userMessage)) {
+            $cached = ChatKnowledgeCache::findSimilar($userMessage);
+        }
+
         if ($cached && strlen($cached->response) > 50) {
             ChatMessage::create([
                 'chat_session_id' => $session->id,
@@ -313,156 +320,35 @@ class ChatController extends Controller
 
     private function getToolsDefinition()
     {
-        return [
-            [
-                'type' => 'function',
-                'function' => [
-                    'name' => 'get_statistics',
-                    'description' => 'Mendapatkan statistik makro seperti jumlah paket dan total pagu.',
-                    'parameters' => [
-                        'type' => 'object',
-                        'properties' => [
-                            'tahun' => ['type' => 'integer', 'description' => 'Tahun anggaran'],
-                            'kecamatan' => ['type' => 'string', 'description' => 'Nama kecamatan'],
-                        ],
-                    ],
-                ],
-            ],
-            [
-                'type' => 'function',
-                'function' => [
-                    'name' => 'search_projects',
-                    'description' => 'Mencari daftar paket pekerjaan.',
-                    'parameters' => [
-                        'type' => 'object',
-                        'properties' => [
-                            'keyword' => ['type' => 'string', 'description' => 'Kata kunci nama paket'],
-                            'tahun' => ['type' => 'integer', 'description' => 'Tahun anggaran'],
-                        ],
-                    ],
-                ],
-            ],
-            [
-                'type' => 'function',
-                'function' => [
-                    'name' => 'get_project_details',
-                    'description' => 'Mendapatkan detail lengkap satu paket.',
-                    'parameters' => [
-                        'type' => 'object',
-                        'properties' => [
-                            'id' => ['type' => 'integer', 'description' => 'ID paket'],
-                        ],
-                        'required' => ['id'],
-                    ],
-                ],
-            ],
-            [
-                'type' => 'function',
-                'function' => [
-                    'name' => 'get_contractor_info',
-                    'description' => 'Mendapatkan info penyedia.',
-                    'parameters' => [
-                        'type' => 'object',
-                        'properties' => [
-                            'nama' => ['type' => 'string', 'description' => 'Nama penyedia'],
-                        ],
-                        'required' => ['nama'],
-                    ],
-                ],
-            ],
-        ];
+        return $this->chatDataTools->definitions();
     }
 
     private function executeTool($name, $args)
     {
         try {
-            switch ($name) {
-                case 'get_statistics':
-                    $query = Pekerjaan::byUserRole();
-                    if (!empty($args['tahun'])) {
-                        $query->whereHas('kegiatan', fn($q) => $q->where('tahun_anggaran', $args['tahun']));
-                    }
-                    if (!empty($args['kecamatan'])) {
-                        $query->whereHas('kecamatan', fn($q) => $q->where('n_kec', 'LIKE', "%{$args['kecamatan']}%"));
-                    }
-                    
-                    $ids = $query->pluck('id');
-                    $totalTiket = Tiket::whereIn('pekerjaan_id', $ids)->count();
-                    $openTiket = Tiket::whereIn('pekerjaan_id', $ids)->where('status', 'open')->count();
-                    
-                    return [
-                        'total_pekerjaan' => $query->count(),
-                        'total_pagu' => (float) $query->sum('pagu'),
-                        'formatted_total_pagu' => 'Rp ' . number_format($query->sum('pagu'), 0, ',', '.'),
-                        'total_tiket' => $totalTiket,
-                        'open_tiket' => $openTiket,
-                        'tahun' => $args['tahun'] ?? 'semua',
-                        'kecamatan' => $args['kecamatan'] ?? 'semua',
-                    ];
-
-                case 'search_projects':
-                    $query = Pekerjaan::byUserRole()->with('kecamatan', 'desa');
-                    if (!empty($args['keyword'])) {
-                        $keyword = $args['keyword'];
-                        $query->where(function($q) use ($keyword) {
-                            $q->where('nama_paket', 'LIKE', "%{$keyword}%")
-                              ->orWhereHas('kecamatan', fn($sub) => $sub->where('n_kec', 'LIKE', "%{$keyword}%"))
-                              ->orWhereHas('desa', fn($sub) => $sub->where('n_desa', 'LIKE', "%{$keyword}%"));
-                        });
-                    }
-                    if (!empty($args['tahun'])) {
-                        $query->whereHas('kegiatan', fn($q) => $q->where('tahun_anggaran', $args['tahun']));
-                    }
-                    
-                    $results = $query->limit(15)->get()->map(fn($p) => [
-                        'id' => $p->id,
-                        'nama_paket' => $p->nama_paket,
-                        'lokasi' => ($p->desa->n_desa ?? '-') . ', ' . ($p->kecamatan->n_kec ?? '-'),
-                        'pagu' => $p->pagu
-                    ]);
-
-                    return ['results' => $results];
-
-                case 'get_project_details':
-                    $p = Pekerjaan::byUserRole()->with(['kontrak.penyedia', 'progress', 'kecamatan', 'desa', 'kegiatan', 'tiket'])->find($args['id']);
-                    if (!$p) return ['error' => 'Paket tidak ditemukan.'];
-
-                    return [
-                        'id' => $p->id,
-                        'nama' => $p->nama_paket,
-                        'tahun' => $p->kegiatan->tahun_anggaran ?? '-',
-                        'pagu' => $p->pagu,
-                        'kontrak' => $p->kontrak->map(fn($k) => [
-                            'nilai' => $k->nilai_kontrak,
-                            'penyedia' => $k->penyedia->nama ?? 'N/A',
-                            'spk' => $k->spk,
-                        ]),
-                        'progres' => $p->progress->content ?? [],
-                        'tiket' => $p->tiket->map(fn($t) => ['subjek' => $t->subjek, 'status' => $t->status]),
-                        'lokasi' => ($p->desa->n_desa ?? '-') . ', ' . ($p->kecamatan->n_kec ?? '-'),
-                    ];
-
-                case 'get_contractor_info':
-                    $pen = Penyedia::where('nama', 'LIKE', "%{$args['nama']}%")->first();
-                    if (!$pen) return ['error' => 'Penyedia tidak ditemukan.'];
-
-                    $kontraks = Kontrak::where('id_penyedia', $pen->id)->with('pekerjaan.kegiatan')->latest()->limit(5)->get();
-                    
-                    return [
-                        'nama' => $pen->nama,
-                        'direktur' => $pen->direktur,
-                        'histori_pekerjaan' => $kontraks->map(fn($k) => [
-                            'paket' => $k->pekerjaan->nama_paket ?? 'N/A',
-                            'nilai' => $k->nilai_kontrak,
-                            'tahun' => $k->pekerjaan->kegiatan->tahun_anggaran ?? '-'
-                        ])
-                    ];
-
-                default:
-                    return ['error' => 'Tool tidak ditemukan.'];
-            }
+            return $this->chatDataTools->execute($name, $args);
         } catch (\Exception $e) {
             return ['error' => $e->getMessage()];
         }
     }
+
+    private function isDynamicDataQuery(string $query): bool
+    {
+        $query = strtolower($query);
+        $keywords = [
+            'berapa', 'total', 'jumlah', 'data', 'pekerjaan', 'paket', 'kontrak', 'spk',
+            'penyedia', 'progress', 'progres', 'tiket', 'foto', 'output', 'penerima',
+            'kecamatan', 'desa', 'tahun', 'hari ini', 'terbaru',
+        ];
+
+        foreach ($keywords as $keyword) {
+            if (str_contains($query, $keyword)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
 }
+
+

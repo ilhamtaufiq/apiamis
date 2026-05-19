@@ -101,9 +101,11 @@ GAYA BAHASA & PERSONA (SUPER MODE):
   ```
 
 STRATEGI ANALISA DATA:
-1. **GUNAKAN TOOLS** jika informasi di konteks awal kurang spesifik atau butuh data statistik makro (seperti jumlah total paket per tahun).
-2. **JANGAN MENEBAK** angka atau statistik. Selalu gunakan tool `get_statistics` atau `search_projects`.
-3. Jika ditanya detail paket, cari dulu ID-nya lewat `search_projects` lalu panggil `get_project_details`.
+1. **GUNAKAN TOOLS** jika pertanyaan membutuhkan data aktual dari database.
+2. **JANGAN MENEBAK** angka, status, atau daftar data. Gunakan tool yang paling spesifik.
+3. Gunakan `search_projects` lalu `get_project_details` untuk detail paket.
+4. Gunakan tool domain terkait bila user bertanya tentang kontrak, tiket, foto, output, penerima, atau penyedia.
+5. Jika hasil pencarian ambigu, tampilkan kandidat yang relevan dan jelaskan filter yang dipakai.
 
 KONTEKS WILAYAH: Fokus pada desa/kecamatan di Kabupaten Cianjur.
 
@@ -188,3 +190,4 @@ KONTEKS DATA AWAL (STATIC):
 
 if __name__ == "__main__":
     run_chat()
+
