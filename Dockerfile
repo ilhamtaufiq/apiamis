@@ -6,7 +6,7 @@ WORKDIR /app
 COPY composer.json composer.lock ./
 ENV COMPOSER_CACHE_DIR=/tmp/composer-cache
 RUN --mount=type=cache,target=/tmp/composer-cache \
-    composer install --no-dev --no-interaction --no-scripts --prefer-dist --classmap-authoritative --no-progress --ignore-platform-reqs
+    composer install --no-dev --no-interaction --no-scripts --prefer-dist --no-progress --ignore-platform-reqs
 
 # Stage 2: Build Node.js assets
 FROM node:20-alpine AS asset-builder
