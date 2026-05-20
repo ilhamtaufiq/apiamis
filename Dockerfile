@@ -60,7 +60,7 @@ COPY --from=asset-builder --chown=www-data:www-data /app/public/build /var/www/h
 RUN mkdir -p storage/framework/{cache/data,sessions,views} \
     && mkdir -p storage/logs \
     && mkdir -p bootstrap/cache \
-    && mkdir -p storage/ai/vector_db \
+    && mkdir -p storage/ai \
     && chown -R www-data:www-data storage bootstrap/cache \
     && chmod -R 775 storage bootstrap/cache
 

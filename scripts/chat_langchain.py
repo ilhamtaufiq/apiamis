@@ -2,15 +2,13 @@ import sys
 import json
 import os
 from pathlib import Path
+import re
 
-# FIX: Set HOME environment variable for ChromaDB/Pathlib in server environments
-# This must happen before importing langchain_chroma
 # Determine project root (2 levels up from /scripts)
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 ai_storage = os.path.join(project_root, 'storage', 'ai')
 os.makedirs(ai_storage, exist_ok=True)
 
-# FORCE set environment variables for ChromaDB/Pathlib
 os.environ['HOME'] = ai_storage
 os.environ['USERPROFILE'] = ai_storage
 os.environ['KMP_DUPLICATE_LIB_OK'] = 'TRUE' # Bonus fix for OpenMP issues on Windows
@@ -18,40 +16,50 @@ os.environ['KMP_DUPLICATE_LIB_OK'] = 'TRUE' # Bonus fix for OpenMP issues on Win
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import HumanMessage, SystemMessage, AIMessage, ToolMessage
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
-from langchain_core.output_parsers import StrOutputParser
-
-from langchain_chroma import Chroma
-from langchain_openai import OpenAIEmbeddings
 
 def get_relevant_docs(query, api_key):
-    """Retrieve relevant document chunks from ChromaDB."""
-    persist_directory = 'storage/ai/vector_db'
-    
-    if not os.path.exists(persist_directory):
-        return "Pengetahuan sistem belum diindeks."
+    """Retrieve relevant Markdown chunks without heavyweight vector dependencies."""
+    docs_root = Path(project_root) / 'docs'
 
-    try:
-        embeddings = OpenAIEmbeddings(
-            api_key=api_key,
-            base_url="https://openrouter.ai/api/v1"
-        )
-        vectorstore = Chroma(
-            persist_directory=persist_directory,
-            embedding_function=embeddings
-        )
-        
-        # Search for top 20 most relevant chunks
-        docs = vectorstore.similarity_search(query, k=20)
-        
-        content = ""
-        for i, doc in enumerate(docs):
-            source = doc.metadata.get('source', 'Unknown')
-            content += f"\n\n--- SUMBER {i+1} ({source}) ---\n"
-            content += doc.page_content
-            
-        return content
-    except Exception as e:
-        return f"Gagal mengambil dokumen: {str(e)}"
+    if not docs_root.exists():
+        return "Pengetahuan sistem belum tersedia."
+
+    query_terms = {
+        term for term in re.findall(r"\w+", query.lower())
+        if len(term) >= 4
+    }
+
+    matches = []
+
+    for path in docs_root.rglob('*.md'):
+        try:
+            text = path.read_text(encoding='utf-8')
+        except UnicodeDecodeError:
+            text = path.read_text(encoding='utf-8', errors='ignore')
+
+        chunks = [
+            chunk.strip()
+            for chunk in re.split(r"\n(?=#{1,6}\s)|\n{2,}", text)
+            if chunk.strip()
+        ]
+
+        for chunk in chunks:
+            lowered = chunk.lower()
+            score = sum(1 for term in query_terms if term in lowered)
+            if score > 0:
+                matches.append((score, path.relative_to(project_root), chunk[:1500]))
+
+    if not matches:
+        return "Tidak ada potongan dokumen yang relevan ditemukan."
+
+    matches.sort(key=lambda item: item[0], reverse=True)
+
+    content = ""
+    for i, (_, source, chunk) in enumerate(matches[:12]):
+        content += f"\n\n--- SUMBER {i+1} ({source}) ---\n"
+        content += chunk
+
+    return content
 
 def run_chat():
     try:
@@ -73,7 +81,7 @@ def run_chat():
         if not api_key:
             raise ValueError("API Key is required")
 
-        # Load Knowledge Base via Vector Retrieval
+        # Load Knowledge Base from local Markdown docs
         kb = get_relevant_docs(user_message, api_key)
 
         # 1. Initialize LLM
