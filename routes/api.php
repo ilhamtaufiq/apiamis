@@ -22,6 +22,7 @@ use App\Http\Controllers\RoutePermissionController;
 use App\Http\Controllers\MenuPermissionController;
 use App\Http\Controllers\ProgressController;
 use App\Http\Controllers\AppSettingController;
+use App\Http\Controllers\BackupController;
 
 use App\Http\Controllers\UserPekerjaanController;
 use App\Http\Controllers\TiketController;
@@ -46,10 +47,10 @@ Route::post('auth/login', [AuthController::class, 'login']);
 Route::get('auth/google', [AuthController::class, 'redirectToGoogle']);
 Route::get('auth/google/callback', [AuthController::class, 'handleGoogleCallback']);
 
-// App Settings (public read, authenticated write)
-Route::get('app-settings', [AppSettingController::class, 'index']);
-Route::get('app-settings/storage-stats', [AppSettingController::class, 'storageStats'])->middleware('auth:sanctum');
-Route::post('app-settings', [AppSettingController::class, 'store'])->middleware('auth:sanctum');
+    // App Settings (public read, authenticated write)
+    Route::get('app-settings', [AppSettingController::class, 'index']);
+    Route::get('app-settings/storage-stats', [AppSettingController::class, 'storageStats'])->middleware('auth:sanctum');
+    Route::post('app-settings', [AppSettingController::class, 'store'])->middleware('auth:sanctum');
 
 // Public Blog Routes
 Route::get('blog', [\App\Http\Controllers\BlogController::class, 'index']);
@@ -236,6 +237,16 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('simulation-networks/{id}/results', [SimulationNetworkController::class, 'saveResults']);
     Route::post('simulation-networks/{id}/duplicate', [SimulationNetworkController::class, 'duplicate']);
     Route::get('simulation-networks/pekerjaan/{pekerjaanId}', [SimulationNetworkController::class, 'byPekerjaan']);
+
+    // System backup and restore
+    Route::prefix('app-settings/backups')
+        ->middleware('role:admin')
+        ->group(function () {
+            Route::get('/', [BackupController::class, 'index']);
+            Route::post('/', [BackupController::class, 'store']);
+            Route::get('{filename}', [BackupController::class, 'download'])->where('filename', '.*\.zip');
+            Route::post('restore', [BackupController::class, 'restore']);
+        });
     
     // RAB Analysis
     Route::post('analyze-rab', [RABAnalyzerController::class, 'analyze']);
