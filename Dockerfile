@@ -1,9 +1,12 @@
+# syntax=docker/dockerfile:1.7
+
 # Stage 1: Build PHP dependencies
 FROM composer:2 AS vendor
 WORKDIR /app
 COPY composer.json composer.lock ./
-RUN --mount=type=cache,target=/tmp/cache \
-    composer install --optimize-autoloader --no-dev --no-interaction --no-scripts --ignore-platform-reqs
+ENV COMPOSER_CACHE_DIR=/tmp/composer-cache
+RUN --mount=type=cache,target=/tmp/composer-cache \
+    composer install --no-dev --no-interaction --no-scripts --prefer-dist --classmap-authoritative --no-progress --ignore-platform-reqs
 
 # Stage 2: Build Node.js assets
 FROM node:20-alpine AS asset-builder
@@ -12,8 +15,9 @@ WORKDIR /app
 RUN apk add --no-cache python3 make g++ 
 COPY package.json package-lock.json ./
 RUN --mount=type=cache,target=/root/.npm \
-    npm install
-COPY . .
+    npm ci --no-audit --no-fund
+COPY vite.config.js ./
+COPY resources ./resources
 RUN npm run build
 
 # Stage 3: Final Production Image
@@ -23,13 +27,12 @@ WORKDIR /var/www/html
 # Enable Apache rewrite and headers
 RUN a2enmod rewrite headers
 
-# Install minimal runtime dependencies & PHP Extensions
-RUN apt-get update && apt-get install -y \
-    git curl zip unzip \
+# Install runtime dependencies & PHP Extensions
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    apt-get update && apt-get install -y --no-install-recommends \
     libpng-dev libjpeg-dev libfreetype6-dev \
     libonig-dev libxml2-dev libzip-dev libicu-dev \
-    python3 python3-pip python3-venv build-essential libreoffice ffmpeg \
-    gnupg \
+    python3 python3-pip python3-venv ffmpeg \
     && docker-php-ext-configure gd --with-freetype --with-jpeg \
     && docker-php-ext-install pdo_mysql mbstring exif pcntl bcmath gd zip intl \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
@@ -38,8 +41,9 @@ RUN apt-get update && apt-get install -y \
 COPY requirements.txt ./
 
 # Create Python venv and install dependencies
-RUN python3 -m venv venv \
-    && ./venv/bin/pip install --no-cache-dir -r requirements.txt
+RUN --mount=type=cache,target=/root/.cache/pip,sharing=locked \
+    python3 -m venv venv \
+    && ./venv/bin/pip install -r requirements.txt
 
 # Set PHP configuration for file uploads
 RUN echo "upload_max_filesize = 50M" > /usr/local/etc/php/conf.d/uploads.ini \

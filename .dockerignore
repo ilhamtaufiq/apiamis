@@ -1,11 +1,24 @@
 # Dependencies
 /vendor
 /node_modules
+.agent
+.smart-coding-cache
 .git
+/scratch
+/tmp_template
+/tests
 .env
 .env.*
+/README.md
+/CHANGELOG.md
+/CONTINUITY.md
+/HORIZION.md
+/analisa-apiamis.md
+/debug_*.php
+/dump_context.php
 storage/*.key
 *.log
+*.cache
 
 # Cached files (may contain hardcoded local paths)
 /bootstrap/cache/*.php
