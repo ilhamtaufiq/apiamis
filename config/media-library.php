@@ -169,7 +169,6 @@ return [
         Spatie\MediaLibrary\Conversions\ImageGenerators\Avif::class,
         Spatie\MediaLibrary\Conversions\ImageGenerators\Pdf::class,
         Spatie\MediaLibrary\Conversions\ImageGenerators\Svg::class,
-        Spatie\MediaLibrary\Conversions\ImageGenerators\Video::class,
     ],
 
     /*
@@ -183,26 +182,6 @@ return [
      * Should be either `gd` or `imagick`.
      */
     'image_driver' => env('IMAGE_DRIVER', 'gd'),
-
-    /*
-     * FFMPEG & FFProbe binaries paths, only used if you try to generate video
-     * thumbnails and have installed the php-ffmpeg/php-ffmpeg composer
-     * dependency.
-     */
-    'ffmpeg_path' => env('FFMPEG_PATH', '/usr/bin/ffmpeg'),
-    'ffprobe_path' => env('FFPROBE_PATH', '/usr/bin/ffprobe'),
-
-    /*
-     * The timeout (in seconds) that will be used when generating video
-     * thumbnails via FFMPEG.
-     */
-    'ffmpeg_timeout' => env('FFMPEG_TIMEOUT', 900),
-
-    /*
-     * The number of threads that FFMPEG should use. 0 means that FFMPEG
-     * may decide itself.
-     */
-    'ffmpeg_threads' => env('FFMPEG_THREADS', 0),
 
     /*
      * Here you can override the class names of the jobs used by this package. Make sure

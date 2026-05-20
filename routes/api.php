@@ -142,7 +142,6 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('berkas/upload-from-url', [BerkasController::class, 'uploadFromUrl']);
     Route::get('berkas/{berkas}/export-pdf', [BerkasController::class, 'convertToPdf']);
     Route::apiResource('foto', FotoController::class);
-    Route::get('pekerjaan/{pekerjaan}/generate-video', [FotoController::class, 'generateVideo']);
     Route::apiResource('users', UserController::class);
     Route::apiResource('roles', RoleController::class);
     Route::apiResource('permissions', PermissionController::class);
