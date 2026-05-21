@@ -35,17 +35,17 @@ trait NotifiesAdminsOnChanges
 
         $user = auth()->user();
         $userName = $user ? $user->name : 'System';
-        
+
         $modelName = class_basename($model);
         $title = "Data $modelName $action";
         $message = "Model $modelName dengan ID #{$model->id} telah $action oleh $userName.";
-        
-        // Construct a URL for the notification if possible
-        $url = null;
-        if ($modelName === 'Pekerjaan') {
-            $url = "/pekerjaan/{$model->id}";
-        } elseif ($modelName === 'Tiket') {
-            $url = "/tiket/{$model->id}";
+
+        // Construct a URL for the notification if possible.
+        // Related records deep-link to the relevant tab inside pekerjaan detail.
+        $url = static::notificationUrlFor($model, $modelName);
+
+        if ($url) {
+            $message .= ' Klik untuk membuka detail perubahan.';
         }
 
         try {
@@ -58,7 +58,7 @@ trait NotifiesAdminsOnChanges
                 $admin->notify(new AppNotification($title, $message, $url, 'info'));
             }
         } catch (\Exception $e) {
-            Log::error("Failed to notify admins about $modelName $action: " . $e->getMessage());
+            Log::error("Failed to notify admins about $modelName $action: ".$e->getMessage());
         }
     }
 }

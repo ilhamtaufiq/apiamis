@@ -2,14 +2,13 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Pekerjaan;
-use App\Models\KegiatanRole;
-use App\Http\Resources\PekerjaanResource;
-use App\Http\Resources\PekerjaanDetailResource;
-use App\Http\Resources\FotoResource;
-use App\Http\Resources\BerkasResource;
-use App\Imports\PekerjaanImport;
 use App\Exports\PekerjaanTemplateExport;
+use App\Http\Resources\BerkasResource;
+use App\Http\Resources\FotoResource;
+use App\Http\Resources\PekerjaanDetailResource;
+use App\Http\Resources\PekerjaanResource;
+use App\Imports\PekerjaanImport;
+use App\Models\Pekerjaan;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 use Maatwebsite\Excel\Facades\Excel;
@@ -23,98 +22,108 @@ class PekerjaanController extends Controller
      *     description="Returns paginated list of pekerjaan based on user role and filters",
      *     tags={"Pekerjaan"},
      *     security={{"bearerAuth":{}}, {"apiKeyAuth":{}}},
+     *
      *     @OA\Parameter(
      *         name="tahun",
      *         in="query",
      *         description="Filter by year",
      *         required=false,
+     *
      *         @OA\Schema(type="string")
      *     ),
+     *
      *     @OA\Parameter(
      *         name="kecamatan_id",
      *         in="query",
      *         description="Filter by kecamatan ID",
      *         required=false,
+     *
      *         @OA\Schema(type="integer")
      *     ),
+     *
      *     @OA\Parameter(
      *         name="search",
      *         in="query",
-     *         description="Search by name or code",
+     *         description="Search by package name, account code, or contractor",
      *         required=false,
+     *
      *         @OA\Schema(type="string")
      *     ),
+     *
      *     @OA\Response(response=200, description="Successful operation")
      * )
      */
     public function index(Request $request)
     {
-        if (!auth()->check()) {
-                return response()->json(['message' => 'Unauthorized'], 401);
-            }
+        if (! auth()->check()) {
+            return response()->json(['message' => 'Unauthorized'], 401);
+        }
 
-            $query = Pekerjaan::with(['kecamatan', 'desa', 'kegiatan', 'tags', 'pengawas', 'pendamping', 'progress'])
-                ->withCount('penerima')
-                ->byUserRole();  // Aman karena sudah check auth
-            
-            // Filter by tahun via kegiatan
-            if ($request->has('tahun') && !empty($request->tahun)) {
-                $query->whereHas('kegiatan', function($q) use ($request) {
-                    $q->where('tahun_anggaran', $request->tahun);
-                });
-            }
+        $query = Pekerjaan::with(['kecamatan', 'desa', 'kegiatan', 'tags', 'pengawas', 'pendamping', 'progress'])
+            ->withCount('penerima')
+            ->byUserRole();  // Aman karena sudah check auth
 
-            // Filter multi
-            if ($request->has('kecamatan_id') && !empty($request->kecamatan_id)) {
-                $query->where('kecamatan_id', $request->kecamatan_id);
-            }
+        // Filter by tahun via kegiatan
+        if ($request->has('tahun') && ! empty($request->tahun)) {
+            $query->whereHas('kegiatan', function ($q) use ($request) {
+                $q->where('tahun_anggaran', $request->tahun);
+            });
+        }
 
-            if ($request->has('kegiatan_id') && !empty($request->kegiatan_id)) {
-                $query->where('kegiatan_id', $request->kegiatan_id);
-            }
+        // Filter multi
+        if ($request->has('kecamatan_id') && ! empty($request->kecamatan_id)) {
+            $query->where('kecamatan_id', $request->kecamatan_id);
+        }
 
-            // Filter by tag
-            if ($request->has('tag_id') && !empty($request->tag_id)) {
-                $query->whereHas('tags', function($q) use ($request) {
-                    $q->where('tbl_tags.id', $request->tag_id);
-                });
-            }
+        if ($request->has('kegiatan_id') && ! empty($request->kegiatan_id)) {
+            $query->where('kegiatan_id', $request->kegiatan_id);
+        }
 
-            // Filter by pengawas
-            if ($request->has('pengawas_id') && !empty($request->pengawas_id)) {
-                $query->where('pengawas_id', $request->pengawas_id);
-            }
-            
-            // Search functionality
-            if ($request->has('search') && !empty($request->search)) {
-                $searchTerm = $request->search;
-                $query->where(function($q) use ($searchTerm) {
-                    $q->where('nama_paket', 'LIKE', '%' . $searchTerm . '%')
-                      ->orWhere('kode_rekening', 'LIKE', '%' . $searchTerm . '%');
-                });
-            }
-            
-            // Sorting
-            $sortBy = $request->get('sort_by', 'created_at');
-            $sortDirection = $request->get('sort_direction', 'desc');
-            
-            $allowedSorts = ['id', 'nama_paket', 'kode_rekening', 'pagu', 'penerima_count', 'created_at'];
-            
-            if (in_array($sortBy, $allowedSorts)) {
-                $query->orderBy($sortBy, $sortDirection);
-            } else {
-                $query->latest();
-            }
+        // Filter by tag
+        if ($request->has('tag_id') && ! empty($request->tag_id)) {
+            $query->whereHas('tags', function ($q) use ($request) {
+                $q->where('tbl_tags.id', $request->tag_id);
+            });
+        }
 
-            // Support fetching all records for dropdown (per_page=-1)
-            if ($request->has('per_page') && $request->per_page == -1) {
-                return PekerjaanResource::collection($query->get());
-            }
-            
-            $perPage = $request->get('per_page', 20);
-            $pekerjaan = $query->paginate($perPage);
-                
-            return PekerjaanResource::collection($pekerjaan);
+        // Filter by pengawas
+        if ($request->has('pengawas_id') && ! empty($request->pengawas_id)) {
+            $query->where('pengawas_id', $request->pengawas_id);
+        }
+
+        // Search functionality
+        if ($request->has('search') && ! empty($request->search)) {
+            $searchTerm = $request->search;
+            $query->where(function ($q) use ($searchTerm) {
+                $q->where('nama_paket', 'LIKE', '%'.$searchTerm.'%')
+                    ->orWhere('kode_rekening', 'LIKE', '%'.$searchTerm.'%')
+                    ->orWhereHas('kontrak.penyedia', function ($penyediaQuery) use ($searchTerm) {
+                        $penyediaQuery->where('nama', 'LIKE', '%'.$searchTerm.'%');
+                    });
+            });
+        }
+
+        // Sorting
+        $sortBy = $request->get('sort_by', 'created_at');
+        $sortDirection = $request->get('sort_direction', 'desc');
+
+        $allowedSorts = ['id', 'nama_paket', 'kode_rekening', 'pagu', 'penerima_count', 'created_at'];
+
+        if (in_array($sortBy, $allowedSorts)) {
+            $query->orderBy($sortBy, $sortDirection);
+        } else {
+            $query->latest();
+        }
+
+        // Support fetching all records for dropdown (per_page=-1)
+        if ($request->has('per_page') && $request->per_page == -1) {
+            return PekerjaanResource::collection($query->get());
+        }
+
+        $perPage = $request->get('per_page', 20);
+        $pekerjaan = $query->paginate($perPage);
+
+        return PekerjaanResource::collection($pekerjaan);
     }
 
     /**
@@ -124,11 +133,14 @@ class PekerjaanController extends Controller
      *      tags={"Pekerjaan"},
      *      summary="Create new pekerjaan",
      *      description="Store new pekerjaan in database",
+     *
      *      @OA\RequestBody(
      *          required=true,
      *          description="Pekerjaan data",
+     *
      *          @OA\JsonContent(
      *              required={"nama_paket","kecamatan_id","desa_id","pagu"},
+     *
      *              @OA\Property(property="kode_rekening", type="string", example="1.2.03.01"),
      *              @OA\Property(property="nama_paket", type="string", example="Pembangunan Saluran Air di Desa Argapura"),
      *              @OA\Property(property="kecamatan_id", type="integer", example=1),
@@ -137,10 +149,13 @@ class PekerjaanController extends Controller
      *              @OA\Property(property="pagu", type="number", format="float", example=250000000)
      *          )
      *      ),
+     *
      *      @OA\Response(
      *          response=201,
      *          description="Pekerjaan created successfully",
+     *
      *          @OA\JsonContent(
+     *
      *              @OA\Property(property="id", type="integer", example=1),
      *              @OA\Property(property="kode_rekening", type="string", example="1.2.03.01"),
      *              @OA\Property(property="nama_paket", type="string", example="Pembangunan Saluran Air"),
@@ -150,6 +165,7 @@ class PekerjaanController extends Controller
      *              @OA\Property(property="kegiatan", type="object")
      *          )
      *      ),
+     *
      *      @OA\Response(
      *          response=422,
      *          description="Validation error"
@@ -166,32 +182,37 @@ class PekerjaanController extends Controller
             'kegiatan_id' => 'nullable|integer|exists:tbl_kegiatan,id',
             'pagu' => 'required|numeric|min:0',
             'pengawas_id' => 'nullable|integer|exists:pengawas,id',
-            'pendamping_id' => 'nullable|integer|exists:pengawas,id'
+            'pendamping_id' => 'nullable|integer|exists:pengawas,id',
         ]);
 
         $pekerjaan = Pekerjaan::create($validated);
-        
+
         // Sync tags if provided
         if ($request->has('tag_ids')) {
             $pekerjaan->tags()->sync($request->tag_ids);
         }
-        
+
         $pekerjaan->load('kecamatan', 'desa', 'kegiatan', 'tags', 'pengawas', 'pendamping');
+
         return new PekerjaanDetailResource($pekerjaan);
     }
-   /**
+
+    /**
      * @OA\Get(
      *      path="/api/pekerjaan/{id}",
      *      operationId="getPekerjaanDetailByRole",
      *      tags={"Pekerjaan"},
      *      summary="Get detail pekerjaan (hanya jika diizinkan role)",
 
+     *
      *      @OA\Parameter(
      *          name="id",
      *          in="path",
      *          required=true,
+     *
      *          @OA\Schema(type="integer")
      *      ),
+     *
      *      @OA\Response(
      *          response=200,
      *          description="Detail pekerjaan jika diizinkan"
@@ -201,29 +222,29 @@ class PekerjaanController extends Controller
     public function show(Pekerjaan $pekerjaan)
     {
         // Check authentication first
-        if (!auth()->check() || !auth()->user()) {
+        if (! auth()->check() || ! auth()->user()) {
             return response()->json(['message' => 'Unauthorized'], 401);
         }
 
         $user = auth()->user();
-        
+
         // Check apakah user boleh akses pekerjaan ini
-        if (!$user->hasRole('admin')) {
+        if (! $user->hasRole('admin')) {
             $hasAccess = Pekerjaan::where('tbl_pekerjaan.id', $pekerjaan->id)
                 ->byUserRole()
                 ->exists();
 
-            if (!$hasAccess) {
+            if (! $hasAccess) {
                 abort(403, 'Anda tidak memiliki akses untuk pekerjaan ini');
             }
         }
-        
+
         $pekerjaan->load([
-            'kecamatan', 'desa', 'kegiatan', 
+            'kecamatan', 'desa', 'kegiatan',
             'foto', 'berkas', 'output', 'penerima', 'kontrak.penyedia', 'tags', 'pengawas', 'pendamping',
-            'progress'
+            'progress',
         ]);
-        
+
         return new PekerjaanDetailResource($pekerjaan);
     }
 
@@ -234,21 +255,27 @@ class PekerjaanController extends Controller
      *      tags={"Pekerjaan"},
      *      summary="Update pekerjaan",
      *      description="Update existing pekerjaan",
+     *
      *      @OA\Parameter(
      *          name="id",
      *          in="path",
      *          description="Pekerjaan ID",
      *          required=true,
+     *
      *          @OA\Schema(type="integer")
      *      ),
+     *
      *      @OA\RequestBody(
      *          required=true,
+     *
      *          @OA\JsonContent(
+     *
      *              @OA\Property(property="kode_rekening", type="string", example="1.2.03.02"),
      *              @OA\Property(property="nama_paket", type="string", example="Pembangunan Saluran Air (Updated)"),
      *              @OA\Property(property="pagu", type="number", format="float", example=300000000)
      *          )
      *      ),
+     *
      *      @OA\Response(
      *          response=200,
      *          description="Pekerjaan updated successfully"
@@ -269,17 +296,18 @@ class PekerjaanController extends Controller
             'kegiatan_id' => 'nullable|integer|exists:tbl_kegiatan,id',
             'pagu' => 'nullable|numeric|min:0',
             'pengawas_id' => 'nullable|integer|exists:pengawas,id',
-            'pendamping_id' => 'nullable|integer|exists:pengawas,id'
+            'pendamping_id' => 'nullable|integer|exists:pengawas,id',
         ]);
 
         $pekerjaan->update($validated);
-        
+
         // Sync tags if provided
         if ($request->has('tag_ids')) {
             $pekerjaan->tags()->sync($request->tag_ids);
         }
-        
+
         $pekerjaan->load('kecamatan', 'desa', 'kegiatan', 'tags', 'pengawas', 'pendamping');
+
         return new PekerjaanDetailResource($pekerjaan);
     }
 
@@ -290,13 +318,16 @@ class PekerjaanController extends Controller
      *      tags={"Pekerjaan"},
      *      summary="Delete pekerjaan",
      *      description="Delete existing pekerjaan",
+     *
      *      @OA\Parameter(
      *          name="id",
      *          in="path",
      *          description="Pekerjaan ID",
      *          required=true,
+     *
      *          @OA\Schema(type="integer")
      *      ),
+     *
      *      @OA\Response(
      *          response=200,
      *          description="Pekerjaan deleted successfully"
@@ -310,6 +341,7 @@ class PekerjaanController extends Controller
     public function destroy(Pekerjaan $pekerjaan)
     {
         $pekerjaan->delete();
+
         return response()->json(['message' => 'Pekerjaan deleted successfully'], 200);
     }
 
@@ -320,13 +352,16 @@ class PekerjaanController extends Controller
      *      tags={"Pekerjaan - Filter"},
      *      summary="Get pekerjaan by kecamatan",
      *      description="Get all pekerjaan in specific kecamatan",
+     *
      *      @OA\Parameter(
      *          name="kecamatanId",
      *          in="path",
      *          description="Kecamatan ID",
      *          required=true,
+     *
      *          @OA\Schema(type="integer")
      *      ),
+     *
      *      @OA\Response(
      *          response=200,
      *          description="List pekerjaan by kecamatan"
@@ -346,6 +381,7 @@ class PekerjaanController extends Controller
         }
 
         $pekerjaan = $query->paginate(20);
+
         return PekerjaanResource::collection($pekerjaan);
     }
 
@@ -356,13 +392,16 @@ class PekerjaanController extends Controller
      *      tags={"Pekerjaan - Filter"},
      *      summary="Get pekerjaan by desa",
      *      description="Get all pekerjaan in specific desa",
+     *
      *      @OA\Parameter(
      *          name="desaId",
      *          in="path",
      *          description="Desa ID",
      *          required=true,
+     *
      *          @OA\Schema(type="integer")
      *      ),
+     *
      *      @OA\Response(
      *          response=200,
      *          description="List pekerjaan by desa"
@@ -374,6 +413,7 @@ class PekerjaanController extends Controller
         $pekerjaan = Pekerjaan::where('desa_id', $desaId)
             ->with('kecamatan', 'desa', 'kegiatan', 'pengawas', 'pendamping')
             ->paginate(20);
+
         return PekerjaanResource::collection($pekerjaan);
     }
 
@@ -384,13 +424,16 @@ class PekerjaanController extends Controller
      *      tags={"Pekerjaan - Filter"},
      *      summary="Get pekerjaan by kegiatan",
      *      description="Get all pekerjaan in specific kegiatan",
+     *
      *      @OA\Parameter(
      *          name="kegiatanId",
      *          in="path",
      *          description="Kegiatan ID",
      *          required=true,
+     *
      *          @OA\Schema(type="integer")
      *      ),
+     *
      *      @OA\Response(
      *          response=200,
      *          description="List pekerjaan by kegiatan"
@@ -402,6 +445,7 @@ class PekerjaanController extends Controller
         $pekerjaan = Pekerjaan::where('kegiatan_id', $kegiatanId)
             ->with('kecamatan', 'desa', 'kegiatan', 'pengawas', 'pendamping')
             ->paginate(20);
+
         return PekerjaanResource::collection($pekerjaan);
     }
 
@@ -412,20 +456,25 @@ class PekerjaanController extends Controller
      *      tags={"Pekerjaan - Filter"},
      *      summary="Get pekerjaan by kecamatan and desa",
      *      description="Get all pekerjaan in specific kecamatan and desa",
+     *
      *      @OA\Parameter(
      *          name="kecamatanId",
      *          in="path",
      *          description="Kecamatan ID",
      *          required=true,
+     *
      *          @OA\Schema(type="integer")
      *      ),
+     *
      *      @OA\Parameter(
      *          name="desaId",
      *          in="path",
      *          description="Desa ID",
      *          required=true,
+     *
      *          @OA\Schema(type="integer")
      *      ),
+     *
      *      @OA\Response(
      *          response=200,
      *          description="List pekerjaan by kecamatan and desa"
@@ -446,6 +495,7 @@ class PekerjaanController extends Controller
         }
 
         $pekerjaan = $query->paginate(20);
+
         return PekerjaanResource::collection($pekerjaan);
     }
 
@@ -456,17 +506,22 @@ class PekerjaanController extends Controller
      *      tags={"Pekerjaan - Stats"},
      *      summary="Get total pagu by kecamatan",
      *      description="Calculate total pagu for specific kecamatan",
+     *
      *      @OA\Parameter(
      *          name="kecamatanId",
      *          in="path",
      *          description="Kecamatan ID",
      *          required=true,
+     *
      *          @OA\Schema(type="integer")
      *      ),
+     *
      *      @OA\Response(
      *          response=200,
      *          description="Total pagu calculated",
+     *
      *          @OA\JsonContent(
+     *
      *              @OA\Property(property="kecamatan_id", type="integer", example=1),
      *              @OA\Property(property="total_pagu", type="number", format="float", example=1250000000)
      *          )
@@ -477,10 +532,10 @@ class PekerjaanController extends Controller
     {
         $total = Pekerjaan::where('kecamatan_id', $kecamatanId)
             ->sum('pagu');
-        
+
         return response()->json([
             'kecamatan_id' => $kecamatanId,
-            'total_pagu' => $total
+            'total_pagu' => $total,
         ]);
     }
 
@@ -491,17 +546,22 @@ class PekerjaanController extends Controller
      *      tags={"Pekerjaan - Stats"},
      *      summary="Get total pagu by kegiatan",
      *      description="Calculate total pagu for specific kegiatan",
+     *
      *      @OA\Parameter(
      *          name="kegiatanId",
      *          in="path",
      *          description="Kegiatan ID",
      *          required=true,
+     *
      *          @OA\Schema(type="integer")
      *      ),
+     *
      *      @OA\Response(
      *          response=200,
      *          description="Total pagu calculated",
+     *
      *          @OA\JsonContent(
+     *
      *              @OA\Property(property="kegiatan_id", type="integer", example=3),
      *              @OA\Property(property="total_pagu", type="number", format="float", example=500000000)
      *          )
@@ -512,15 +572,17 @@ class PekerjaanController extends Controller
     {
         $total = Pekerjaan::where('kegiatan_id', $kegiatanId)
             ->sum('pagu');
-        
+
         return response()->json([
             'kegiatan_id' => $kegiatanId,
-            'total_pagu' => $total
+            'total_pagu' => $total,
         ]);
     }
+
     public function media(Pekerjaan $pekerjaan)
     {
         $pekerjaan->load('foto', 'berkas');
+
         return response()->json([
             'foto' => FotoResource::collection($pekerjaan->foto),
             'berkas' => BerkasResource::collection($pekerjaan->berkas),
@@ -534,11 +596,15 @@ class PekerjaanController extends Controller
      *      tags={"Pekerjaan"},
      *      summary="Import pekerjaan from excel",
 
+     *
      *      @OA\RequestBody(
      *          required=true,
+     *
      *          @OA\MediaType(
      *              mediaType="multipart/form-data",
+     *
      *              @OA\Schema(
+     *
      *                  @OA\Property(
      *                      property="file",
      *                      type="string",
@@ -547,6 +613,7 @@ class PekerjaanController extends Controller
      *              )
      *          )
      *      ),
+     *
      *      @OA\Response(
      *          response=200,
      *          description="Import successful"
@@ -556,30 +623,30 @@ class PekerjaanController extends Controller
     public function import(Request $request)
     {
         $request->validate([
-            'file' => 'required|mimes:xlsx,xls,csv'
+            'file' => 'required|mimes:xlsx,xls,csv',
         ]);
 
         try {
             $import = new PekerjaanImport;
-            
+
             // Disable events during bulk import to prevent notification flood
             Pekerjaan::withoutEvents(function () use ($import, $request) {
                 Excel::import($import, $request->file('file'));
             });
-            
+
             $failures = $import->failures();
-            
+
             if ($failures->count() > 0) {
                 // ... existing error handling ...
                 $errorMessages = [];
                 foreach ($failures as $failure) {
-                    $errorMessages[] = "Baris " . $failure->row() . ": " . implode(', ', $failure->errors());
+                    $errorMessages[] = 'Baris '.$failure->row().': '.implode(', ', $failure->errors());
                 }
-                
+
                 return response()->json([
                     'message' => 'Import selesai dengan beberapa error',
                     'errors' => array_slice($errorMessages, 0, 10),
-                    'error_count' => $failures->count()
+                    'error_count' => $failures->count(),
                 ], 422);
             }
 
@@ -588,20 +655,22 @@ class PekerjaanController extends Controller
             $userName = $user ? $user->name : 'System';
             $admins = \App\Models\User::role('admin')->get();
             $notification = new \App\Notifications\AppNotification(
-                "Import Pekerjaan Berhasil",
+                'Import Pekerjaan Berhasil',
                 "Sejumlah data pekerjaan telah berhasil diimport oleh $userName.",
-                "/pekerjaan",
+                '/pekerjaan',
                 'success'
             );
-            
+
             foreach ($admins as $admin) {
-                if ($user && $admin->id === $user->id) continue;
+                if ($user && $admin->id === $user->id) {
+                    continue;
+                }
                 $admin->notify($notification);
             }
 
             return response()->json(['message' => 'Data pekerjaan berhasil diimport'], 200);
         } catch (\Exception $e) {
-            return response()->json(['message' => 'Gagal mengimport data: ' . $e->getMessage()], 500);
+            return response()->json(['message' => 'Gagal mengimport data: '.$e->getMessage()], 500);
         }
     }
 
@@ -612,6 +681,7 @@ class PekerjaanController extends Controller
      *      tags={"Pekerjaan"},
      *      summary="Download excel template for import",
 
+     *
      *      @OA\Response(
      *          response=200,
      *          description="Template file download"
@@ -631,41 +701,43 @@ class PekerjaanController extends Controller
         try {
             $query = Pekerjaan::has('kontrak')
                 ->with([
-                    'kontrak.penyedia', 
-                    'kontrak.registers.type', 
+                    'kontrak.penyedia',
+                    'kontrak.registers.type',
                     'kegiatan',
                     'output:id,pekerjaan_id,komponen,volume,satuan,penerima_is_optional',
-                    'berkas:id,pekerjaan_id,jenis_dokumen'
+                    'berkas:id,pekerjaan_id,jenis_dokumen',
                 ])
                 ->withCount(['foto', 'penerima'])
                 ->byUserRole();
 
             if ($request->has('tahun') && $request->tahun) {
-                 $query->whereHas('kegiatan', function($q) use ($request) {
-                     $q->where('tahun_anggaran', $request->tahun);
-                 });
+                $query->whereHas('kegiatan', function ($q) use ($request) {
+                    $q->where('tahun_anggaran', $request->tahun);
+                });
             }
 
-            if ($request->has('search') && !empty($request->search)) {
+            if ($request->has('search') && ! empty($request->search)) {
                 $searchTerm = $request->search;
-                $query->where(function($q) use ($searchTerm) {
-                    $q->where('nama_paket', 'LIKE', '%' . $searchTerm . '%');
+                $query->where(function ($q) use ($searchTerm) {
+                    $q->where('nama_paket', 'LIKE', '%'.$searchTerm.'%');
                 });
             }
 
             $perPage = (int) $request->get('per_page', 20);
-            
+
             if ($perPage === -1) {
                 $data = $query->get();
+
                 return response()->json([
                     'data' => $data,
                     'meta' => [
                         'total' => $data->count(),
-                    ]
+                    ],
                 ]);
             }
 
             $data = $query->paginate($perPage);
+
             return response()->json([
                 'success' => true,
                 'data' => $data->items(),
@@ -676,7 +748,7 @@ class PekerjaanController extends Controller
                     'total' => $data->total(),
                     'from' => $data->firstItem(),
                     'to' => $data->lastItem(),
-                ]
+                ],
             ]);
 
         } catch (\Exception $e) {
@@ -684,45 +756,46 @@ class PekerjaanController extends Controller
                 'error' => 'Server Error',
                 'message' => $e->getMessage(),
                 'file' => $e->getFile(),
-                'line' => $e->getLine()
+                'line' => $e->getLine(),
             ], 500);
         }
     }
+
     public function downloadAllBerkas(Pekerjaan $pekerjaan, Request $request)
     {
         $pekerjaan->load('berkas');
         $format = $request->get('format', 'original'); // 'original' or 'pdf'
-        
+
         if ($pekerjaan->berkas->count() === 0) {
             return response()->json(['message' => 'Tidak ada berkas untuk diunduh'], 404);
         }
 
         $zip = new \ZipArchive;
         $suffix = $format === 'pdf' ? '_PDF' : '';
-        $fileName = str_replace([' ', '/', '\\'], '_', $pekerjaan->nama_paket) . $suffix . '.zip';
+        $fileName = str_replace([' ', '/', '\\'], '_', $pekerjaan->nama_paket).$suffix.'.zip';
         $tempFile = tempnam(sys_get_temp_dir(), 'zip');
 
-        if ($zip->open($tempFile, \ZipArchive::CREATE | \ZipArchive::OVERWRITE) === TRUE) {
+        if ($zip->open($tempFile, \ZipArchive::CREATE | \ZipArchive::OVERWRITE) === true) {
             foreach ($pekerjaan->berkas as $berkas) {
                 $media = $berkas->getFirstMedia('berkas/dokumen');
                 if ($media && file_exists($media->getPath())) {
                     if ($format === 'pdf') {
                         $pdfPath = $this->getPdfPath($media);
                         if ($pdfPath && file_exists($pdfPath)) {
-                            $innerFileName = str_replace([' ', '/', '\\'], '_', $berkas->jenis_dokumen) . '_' . $media->id . '.pdf';
+                            $innerFileName = str_replace([' ', '/', '\\'], '_', $berkas->jenis_dokumen).'_'.$media->id.'.pdf';
                             $zip->addFile($pdfPath, $innerFileName);
                         } else {
-                            // If PDF conversion fails, fall back to original for this file? 
+                            // If PDF conversion fails, fall back to original for this file?
                             // Or skip? User asked for "Download Semua sebagai PDF".
                             // I'll skip or add original with warning? Better skip or keep original.
                             // Let's keep original if PDF fails, but with its original extension.
                             $extension = pathinfo($media->file_name, PATHINFO_EXTENSION);
-                            $innerFileName = str_replace([' ', '/', '\\'], '_', $berkas->jenis_dokumen) . '_' . $media->id . '.' . $extension;
+                            $innerFileName = str_replace([' ', '/', '\\'], '_', $berkas->jenis_dokumen).'_'.$media->id.'.'.$extension;
                             $zip->addFile($media->getPath(), $innerFileName);
                         }
                     } else {
                         $extension = pathinfo($media->file_name, PATHINFO_EXTENSION);
-                        $innerFileName = str_replace([' ', '/', '\\'], '_', $berkas->jenis_dokumen) . '_' . $media->id . '.' . $extension;
+                        $innerFileName = str_replace([' ', '/', '\\'], '_', $berkas->jenis_dokumen).'_'.$media->id.'.'.$extension;
                         $zip->addFile($media->getPath(), $innerFileName);
                     }
                 }
@@ -741,7 +814,7 @@ class PekerjaanController extends Controller
         }
 
         $outputDir = storage_path('app/temp-pdf');
-        if (!file_exists($outputDir)) {
+        if (! file_exists($outputDir)) {
             mkdir($outputDir, 0775, true);
         }
 
@@ -751,13 +824,13 @@ class PekerjaanController extends Controller
         exec($command, $output, $returnVar);
 
         if ($returnVar === 0) {
-            $fileName = pathinfo($media->file_name, PATHINFO_FILENAME) . '.pdf';
-            $outputPath = $outputDir . '/' . $fileName;
+            $fileName = pathinfo($media->file_name, PATHINFO_FILENAME).'.pdf';
+            $outputPath = $outputDir.'/'.$fileName;
             if (file_exists($outputPath)) {
                 return $outputPath;
             }
         }
+
         return null;
     }
 }
-

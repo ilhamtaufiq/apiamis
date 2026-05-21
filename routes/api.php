@@ -1,44 +1,47 @@
 <?php
 
+use App\Http\Controllers\AnalyticsController;
+use App\Http\Controllers\Api\PengawasController;
+use App\Http\Controllers\AppSettingController;
+use App\Http\Controllers\AuditLogController;
+use App\Http\Controllers\AuthController;
+use App\Http\Controllers\BackupController;
+use App\Http\Controllers\BerkasController;
+use App\Http\Controllers\ChecklistItemController;
+use App\Http\Controllers\ClientErrorReportController;
+use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\DataQualityController;
+use App\Http\Controllers\DesaController;
+use App\Http\Controllers\DraftPekerjaanController;
+use App\Http\Controllers\EventController;
+use App\Http\Controllers\FotoController;
+use App\Http\Controllers\KecamatanController;
+use App\Http\Controllers\KegiatanController;
+use App\Http\Controllers\KegiatanRoleController;
+use App\Http\Controllers\KontrakController;
+use App\Http\Controllers\MenuPermissionController;
+use App\Http\Controllers\OutputController;
+use App\Http\Controllers\PekerjaanChecklistController;
+use App\Http\Controllers\PekerjaanController;
+use App\Http\Controllers\PenerimaController;
+use App\Http\Controllers\PenyediaController;
+use App\Http\Controllers\PermissionController;
+use App\Http\Controllers\ProgressController;
+use App\Http\Controllers\RABAnalyzerController;
+use App\Http\Controllers\RoleController;
+use App\Http\Controllers\RoutePermissionController;
+use App\Http\Controllers\SimulationNetworkController;
+use App\Http\Controllers\SpamKelembagaanRawController;
+use App\Http\Controllers\SpamTerbangunRawController;
+use App\Http\Controllers\SpmAirMinumController;
+use App\Http\Controllers\TagController;
+use App\Http\Controllers\TiketCommentController;
+use App\Http\Controllers\TiketController;
+use App\Http\Controllers\UserController;
+use App\Http\Controllers\UserPekerjaanController;
+use App\Http\Controllers\WhatsAppController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
-use App\Http\Controllers\AuthController;
-use App\Http\Controllers\KecamatanController;
-use App\Http\Controllers\DesaController;
-use App\Http\Controllers\PenyediaController;
-use App\Http\Controllers\KegiatanController;
-use App\Http\Controllers\PekerjaanController;
-use App\Http\Controllers\DashboardController;
-use App\Http\Controllers\KontrakController;
-use App\Http\Controllers\OutputController;
-use App\Http\Controllers\PenerimaController;
-use App\Http\Controllers\BerkasController;
-use App\Http\Controllers\FotoController;
-use App\Http\Controllers\UserController;
-use App\Http\Controllers\RoleController;
-use App\Http\Controllers\PermissionController;
-use App\Http\Controllers\KegiatanRoleController;
-use App\Http\Controllers\RoutePermissionController;
-use App\Http\Controllers\MenuPermissionController;
-use App\Http\Controllers\ProgressController;
-use App\Http\Controllers\AppSettingController;
-use App\Http\Controllers\BackupController;
-
-use App\Http\Controllers\UserPekerjaanController;
-use App\Http\Controllers\TiketController;
-use App\Http\Controllers\TiketCommentController;
-use App\Http\Controllers\EventController;
-use App\Http\Controllers\DataQualityController;
-use App\Http\Controllers\AuditLogController;
-use App\Http\Controllers\AnalyticsController;
-use App\Http\Controllers\SimulationNetworkController;
-use App\Http\Controllers\TagController;
-use App\Http\Controllers\ChecklistItemController;
-use App\Http\Controllers\PekerjaanChecklistController;
-use App\Http\Controllers\Api\PengawasController;
-use App\Http\Controllers\DraftPekerjaanController;
-use App\Http\Controllers\RABAnalyzerController;
-
 
 // Authentication Routes
 Route::post('auth/login', [AuthController::class, 'login']);
@@ -47,10 +50,10 @@ Route::post('auth/login', [AuthController::class, 'login']);
 Route::get('auth/google', [AuthController::class, 'redirectToGoogle']);
 Route::get('auth/google/callback', [AuthController::class, 'handleGoogleCallback']);
 
-    // App Settings (public read, authenticated write)
-    Route::get('app-settings', [AppSettingController::class, 'index']);
-    Route::get('app-settings/storage-stats', [AppSettingController::class, 'storageStats'])->middleware('auth:sanctum');
-    Route::post('app-settings', [AppSettingController::class, 'store'])->middleware('auth:sanctum');
+// App Settings (public read, authenticated write)
+Route::get('app-settings', [AppSettingController::class, 'index']);
+Route::get('app-settings/storage-stats', [AppSettingController::class, 'storageStats'])->middleware('auth:sanctum');
+Route::post('app-settings', [AppSettingController::class, 'store'])->middleware('auth:sanctum');
 
 // Public Blog Routes
 Route::get('blog', [\App\Http\Controllers\BlogController::class, 'index']);
@@ -58,11 +61,14 @@ Route::get('blog/{blog}', [\App\Http\Controllers\BlogController::class, 'show'])
 
 Route::middleware('auth:sanctum')->group(function () {
     Route::get('/', function () {
-    return view('welcome');
+        return view('welcome');
     });
     Route::post('auth/logout', [AuthController::class, 'logout']);
     Route::get('auth/me', [AuthController::class, 'me']);
     Route::post('auth/impersonate/{user}', [AuthController::class, 'impersonate'])->middleware('role:admin');
+
+    // Frontend error reporting
+    Route::post('client-error-reports', [ClientErrorReportController::class, 'store']);
 
     // Custom routes - Pekerjaan
     Route::get('pekerjaan/document-register', [PekerjaanController::class, 'documentRegister']);
@@ -79,16 +85,16 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::apiResource('pekerjaan', PekerjaanController::class);
     Route::get('pekerjaan/{pekerjaan}/media', [PekerjaanController::class, 'media']);
     Route::get('pekerjaan/{pekerjaan}/download-all-berkas', [PekerjaanController::class, 'downloadAllBerkas']);
-    
+
     // Menu permissions - user menus
     Route::get('menu-permissions/user/menus', [MenuPermissionController::class, 'getUserMenus']);
-    
-    // Manajemen kegiatan-role dan user-pekerjaan (hanya admin) 
+
+    // Manajemen kegiatan-role dan user-pekerjaan (hanya admin)
     Route::middleware(['role:admin'])->group(function () {
         Route::get('kegiatan-role', [KegiatanRoleController::class, 'index']);
         Route::post('kegiatan-role', [KegiatanRoleController::class, 'store']);
         Route::delete('kegiatan-role/{kegiatanRoleId}', [KegiatanRoleController::class, 'destroy'])->where('kegiatanRoleId', '[0-9]+');
-        
+
         // User-Pekerjaan Assignment
         Route::get('user-pekerjaan', [UserPekerjaanController::class, 'index']);
         Route::post('user-pekerjaan', [UserPekerjaanController::class, 'store']);
@@ -96,17 +102,22 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('user-pekerjaan/user/{userId}', [UserPekerjaanController::class, 'byUser']);
         Route::get('user-pekerjaan/pekerjaan/{pekerjaanId}', [UserPekerjaanController::class, 'byPekerjaan']);
         Route::get('user-pekerjaan/available-users', [UserPekerjaanController::class, 'availableUsers']);
-        
+
         // Data Quality Diagnostic
         Route::get('data-quality/stats', [DataQualityController::class, 'getStats']);
 
         // Audit Logs
         Route::get('audit-logs', [AuditLogController::class, 'index']);
         Route::get('audit-logs/{auditLog}', [AuditLogController::class, 'show']);
+        // Frontend Error Logs
+        Route::get('error-logs', [ClientErrorReportController::class, 'index']);
+        Route::get('error-logs/{errorLog}', [ClientErrorReportController::class, 'show']);
+        Route::post('error-logs/{errorLog}/resolve', [ClientErrorReportController::class, 'resolve']);
+        Route::post('error-logs/{errorLog}/reopen', [ClientErrorReportController::class, 'reopen']);
     });
 
     Route::get('/user', function (Request $request) {
-    return $request->user();
+        return $request->user();
     })->middleware('auth:sanctum');
 
     // Dashboard
@@ -117,6 +128,22 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('search', [\App\Http\Controllers\SearchController::class, 'index']);
 
     // API Resources
+    Route::get('spam-terbangun-raw/stats', [SpamTerbangunRawController::class, 'stats']);
+    Route::post('spam-terbangun-raw/import', [SpamTerbangunRawController::class, 'import'])->middleware('role:admin');
+    Route::apiResource('spam-terbangun-raw', SpamTerbangunRawController::class)
+        ->only(['index', 'show'])
+        ->parameters(['spam-terbangun-raw' => 'spamTerbangunRaw']);
+    Route::get('spam-kelembagaan-raw/stats', [SpamKelembagaanRawController::class, 'stats']);
+    Route::get('spam-kelembagaan-raw/options', [SpamKelembagaanRawController::class, 'options']);
+    Route::post('spam-kelembagaan-raw/import', [SpamKelembagaanRawController::class, 'import'])->middleware('role:admin');
+    Route::apiResource('spam-kelembagaan-raw', SpamKelembagaanRawController::class)
+        ->only(['index', 'show'])
+        ->parameters(['spam-kelembagaan-raw' => 'spamKelembagaanRaw']);
+    Route::get('spm-air-minum/stats', [SpmAirMinumController::class, 'stats']);
+    Route::get('spm-air-minum/options', [SpmAirMinumController::class, 'options']);
+    Route::get('spm-air-minum/unmatched', [SpmAirMinumController::class, 'unmatched']);
+    Route::post('spm-air-minum/consolidate', [SpmAirMinumController::class, 'consolidate'])->middleware('role:admin');
+    Route::apiResource('spm-air-minum', SpmAirMinumController::class)->only(['index', 'show']);
     Route::apiResource('kecamatan', KecamatanController::class);
     Route::apiResource('desa', DesaController::class);
     Route::apiResource('penyedia', PenyediaController::class)->parameters(['penyedia' => 'penyedia']);
@@ -160,21 +187,20 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::apiResource('pengawas', PengawasController::class);
     Route::get('draft-pekerjaan/export/excel', [DraftPekerjaanController::class, 'exportExcel']);
     Route::apiResource('draft-pekerjaan', DraftPekerjaanController::class);
-    
+
     // Checklist Items (column management)
     Route::apiResource('checklist-items', ChecklistItemController::class);
     Route::post('checklist-items/reorder', [ChecklistItemController::class, 'reorder']);
-    
+
     // Pekerjaan Checklist
     Route::get('pekerjaan-checklist', [PekerjaanChecklistController::class, 'index']);
     Route::post('pekerjaan-checklist/toggle', [PekerjaanChecklistController::class, 'toggle']);
-    
+
     // Custom routes
     Route::get('desa/kecamatan/{kecamatanId}', [DesaController::class, 'byKecamatan']);
     Route::get('kegiatan/tahun/{tahun}', [KegiatanController::class, 'byTahun']);
 
-
-    //Output
+    // Output
     Route::get('output/summary', [OutputController::class, 'summary']);
     Route::apiResource('output', OutputController::class);
 
@@ -183,7 +209,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::apiResource('tiket', TiketController::class);
     Route::post('tiket/{tiket}/comments', [TiketCommentController::class, 'store']);
 
-    // Custom penerima  
+    // Custom penerima
     Route::get('penerima/pekerjaan/{pekerjaanId}', [PenerimaController::class, 'byPekerjaan']);
     Route::get('penerima/pekerjaan/{pekerjaanId}/stats/komunal', [PenerimaController::class, 'komunalCount']);
 
@@ -201,20 +227,30 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::put('document-registers/{id}', [\App\Http\Controllers\DocumentRegisterController::class, 'update']);
     Route::delete('document-registers/{id}', [\App\Http\Controllers\DocumentRegisterController::class, 'destroy']);
 
-
     Route::get('/debug-data', function () {
         $kegiatan = \Illuminate\Support\Facades\DB::table('tbl_kegiatan')->limit(5)->get();
         $pekerjaan = \Illuminate\Support\Facades\DB::table('tbl_pekerjaan')->limit(5)->get();
         $sumPagu = \App\Models\Kegiatan::sum('pagu');
         $pekerjaanRelation = \App\Models\Pekerjaan::with('kegiatan')->first();
-        
+
         return response()->json([
             'kegiatan_raw' => $kegiatan,
             'pekerjaan_raw' => $pekerjaan,
             'sum_pagu_eloquent' => $sumPagu,
-            'pekerjaan_relation_test' => $pekerjaanRelation
+            'pekerjaan_relation_test' => $pekerjaanRelation,
         ]);
     });
+
+    // WhatsApp bridge
+    Route::prefix('whatsapp')
+        ->middleware('role:admin')
+        ->group(function () {
+            Route::get('status', [WhatsAppController::class, 'status']);
+            Route::post('start', [WhatsAppController::class, 'start']);
+            Route::post('stop', [WhatsAppController::class, 'stop']);
+            Route::post('send', [WhatsAppController::class, 'send']);
+            Route::post('send-bulk', [WhatsAppController::class, 'sendBulk']);
+        });
 
     // Notifications
     Route::get('/notifications', [\App\Http\Controllers\NotificationController::class, 'index']);
@@ -243,10 +279,12 @@ Route::middleware('auth:sanctum')->group(function () {
         ->group(function () {
             Route::get('/', [BackupController::class, 'index']);
             Route::post('/', [BackupController::class, 'store']);
+            Route::get('jobs/{jobId}', [BackupController::class, 'showJob']);
             Route::get('{filename}', [BackupController::class, 'download'])->where('filename', '.*\.zip');
+            Route::delete('{filename}', [BackupController::class, 'destroy'])->where('filename', '.*\.zip');
             Route::post('restore', [BackupController::class, 'restore']);
         });
-    
+
     // RAB Analysis
     Route::post('analyze-rab', [RABAnalyzerController::class, 'analyze']);
 
@@ -258,9 +296,3 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('chat/sessions/{id}/messages', [\App\Http\Controllers\ChatController::class, 'sessionMessages']);
 
 });
-
-
-
-
-
-
