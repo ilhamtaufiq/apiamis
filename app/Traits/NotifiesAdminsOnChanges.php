@@ -61,4 +61,37 @@ trait NotifiesAdminsOnChanges
             Log::error("Failed to notify admins about $modelName $action: ".$e->getMessage());
         }
     }
+
+    protected static function notificationUrlFor($model, string $modelName): ?string
+    {
+        $pekerjaanId = match ($modelName) {
+            'Pekerjaan' => $model->getKey(),
+            'Kontrak' => $model->getAttribute('id_pekerjaan'),
+            'Output', 'Penerima', 'Foto', 'Berkas', 'Progress' => $model->getAttribute('pekerjaan_id'),
+            default => null,
+        };
+
+        if ($pekerjaanId) {
+            $tab = match ($modelName) {
+                'Kontrak' => 'kontrak',
+                'Output' => 'output',
+                'Penerima' => 'penerima',
+                'Foto' => 'foto',
+                'Berkas' => 'berkas',
+                'Progress' => 'progress',
+                default => null,
+            };
+
+            return $tab
+                ? "/pekerjaan/{$pekerjaanId}?tab={$tab}"
+                : "/pekerjaan/{$pekerjaanId}";
+        }
+
+        return match ($modelName) {
+            'Kegiatan' => "/kegiatan/{$model->getKey()}/edit",
+            'Kecamatan' => "/kecamatan/{$model->getKey()}/edit",
+            'Penyedia' => "/penyedia/{$model->getKey()}/edit",
+            default => null,
+        };
+    }
 }
