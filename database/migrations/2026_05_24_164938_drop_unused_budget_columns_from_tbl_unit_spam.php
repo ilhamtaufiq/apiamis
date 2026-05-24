@@ -11,15 +11,21 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::table('tbl_unit_spam', function (Blueprint $table) {
-            $table->dropColumn([
-                'sumber_dana',
-                'program',
-                'tarif_dasar_hukum',
-                'iuran_nominal',
-                'biaya_operasional',
-                'biaya_pembangunan'
-            ]);
+        $columns = [
+            'sumber_dana',
+            'program',
+            'tarif_dasar_hukum',
+            'iuran_nominal',
+            'biaya_operasional',
+            'biaya_pembangunan'
+        ];
+
+        Schema::table('tbl_unit_spam', function (Blueprint $table) use ($columns) {
+            foreach ($columns as $column) {
+                if (Schema::hasColumn('tbl_unit_spam', $column)) {
+                    $table->dropColumn($column);
+                }
+            }
         });
     }
 
