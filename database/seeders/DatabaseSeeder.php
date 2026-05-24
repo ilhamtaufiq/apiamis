@@ -22,8 +22,8 @@ class DatabaseSeeder extends Seeder
         $this->call(TblUnitSpamTableSeeder::class);
         $this->call(TblSpamBudgetsTableSeeder::class);
         $this->call(TblPengelolaTableSeeder::class);
+        $this->call(TblSpamAchievementsTableSeeder::class);
 
         \Illuminate\Support\Facades\Schema::enableForeignKeyConstraints();
-        $this->call(TblSpamAchievementsTableSeeder::class);
     }
 }
