@@ -15,15 +15,15 @@ class DatabaseSeeder extends Seeder
      */
     public function run(): void
     {
-        // User::factory(10)->create();
+        // Disable FK checks so SPAM seeders can insert
+        // without requiring tbl_desa to be pre-populated
+        \Illuminate\Support\Facades\Schema::disableForeignKeyConstraints();
 
-        User::factory()->create([
-            'name' => 'Test User',
-            'email' => 'test@example.com',
-        ]);
         $this->call(TblUnitSpamTableSeeder::class);
         $this->call(TblSpamBudgetsTableSeeder::class);
         $this->call(TblPengelolaTableSeeder::class);
         $this->call(TblSpamAchievementsTableSeeder::class);
+
+        \Illuminate\Support\Facades\Schema::enableForeignKeyConstraints();
     }
 }
