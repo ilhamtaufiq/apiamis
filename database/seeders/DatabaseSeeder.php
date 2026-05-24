@@ -15,8 +15,7 @@ class DatabaseSeeder extends Seeder
      */
     public function run(): void
     {
-        // Disable FK checks so SPAM seeders can insert
-        // without requiring tbl_desa to be pre-populated
+        // Disable FK checks so seeders can insert in any order
         \Illuminate\Support\Facades\Schema::disableForeignKeyConstraints();
 
         $this->call(TblUnitSpamTableSeeder::class);
