@@ -31,9 +31,7 @@ use App\Http\Controllers\RABAnalyzerController;
 use App\Http\Controllers\RoleController;
 use App\Http\Controllers\RoutePermissionController;
 use App\Http\Controllers\SimulationNetworkController;
-use App\Http\Controllers\SpamKelembagaanRawController;
-use App\Http\Controllers\SpamTerbangunRawController;
-use App\Http\Controllers\SpmAirMinumController;
+use App\Http\Controllers\SpamUnitController;
 use App\Http\Controllers\TagController;
 use App\Http\Controllers\TiketCommentController;
 use App\Http\Controllers\TiketController;
@@ -128,22 +126,12 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('search', [\App\Http\Controllers\SearchController::class, 'index']);
 
     // API Resources
-    Route::get('spam-terbangun-raw/stats', [SpamTerbangunRawController::class, 'stats']);
-    Route::post('spam-terbangun-raw/import', [SpamTerbangunRawController::class, 'import'])->middleware('role:admin');
-    Route::apiResource('spam-terbangun-raw', SpamTerbangunRawController::class)
-        ->only(['index', 'show'])
-        ->parameters(['spam-terbangun-raw' => 'spamTerbangunRaw']);
-    Route::get('spam-kelembagaan-raw/stats', [SpamKelembagaanRawController::class, 'stats']);
-    Route::get('spam-kelembagaan-raw/options', [SpamKelembagaanRawController::class, 'options']);
-    Route::post('spam-kelembagaan-raw/import', [SpamKelembagaanRawController::class, 'import'])->middleware('role:admin');
-    Route::apiResource('spam-kelembagaan-raw', SpamKelembagaanRawController::class)
-        ->only(['index', 'show'])
-        ->parameters(['spam-kelembagaan-raw' => 'spamKelembagaanRaw']);
-    Route::get('spm-air-minum/stats', [SpmAirMinumController::class, 'stats']);
-    Route::get('spm-air-minum/options', [SpmAirMinumController::class, 'options']);
-    Route::get('spm-air-minum/unmatched', [SpmAirMinumController::class, 'unmatched']);
-    Route::post('spm-air-minum/consolidate', [SpmAirMinumController::class, 'consolidate'])->middleware('role:admin');
-    Route::apiResource('spm-air-minum', SpmAirMinumController::class)->only(['index', 'show']);
+    Route::get('spam-units/stats', [SpamUnitController::class, 'stats']);
+    Route::post('spam-units/{unitSpam}/achievements', [SpamUnitController::class, 'addAchievement']);
+    Route::post('spam-units/{unitSpam}/budgets', [SpamUnitController::class, 'addBudget']);
+    Route::delete('spam-units/{unitSpam}/budgets/{budgetId}', [SpamUnitController::class, 'deleteBudget']);
+    Route::post('spam-units/import', [SpamUnitController::class, 'import']);
+    Route::apiResource('spam-units', SpamUnitController::class);
     Route::apiResource('kecamatan', KecamatanController::class);
     Route::apiResource('desa', DesaController::class);
     Route::apiResource('penyedia', PenyediaController::class)->parameters(['penyedia' => 'penyedia']);
