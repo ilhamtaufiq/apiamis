@@ -64,7 +64,7 @@ class ClientErrorReportController extends Controller
     public function store(Request $request): JsonResponse
     {
         $validated = $request->validate([
-            'source' => ['required', 'string', Rule::in(['react', 'window.error', 'unhandledrejection', 'manual'])],
+            'source' => ['required', 'string', Rule::in(['react', 'window.error', 'unhandledrejection', 'console.error', 'manual'])],
             'message' => ['required', 'string', 'max:5000'],
             'stack' => ['nullable', 'string'],
             'component_stack' => ['nullable', 'string'],

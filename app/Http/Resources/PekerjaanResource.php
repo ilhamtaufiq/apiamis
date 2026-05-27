@@ -47,29 +47,61 @@ class PekerjaanResource extends JsonResource
         }
 
         $progressTotal = 0;
+        $progressRencana = 0;
+        $deviasi = 0;
+
         if ($this->relationLoaded('progress') && $this->progress) {
             $content = $this->progress->content ?? [];
             $items = $content['items'] ?? [];
             
+            // 1. Temukan minggu terakhir yang ada laporan realisasinya
+            $maxReportedWeek = 0;
+            foreach ($items as $item) {
+                $weeklyData = $item['weekly_data'] ?? [];
+                foreach ($weeklyData as $minggu => $data) {
+                    if (isset($data['realisasi']) && $data['realisasi'] !== null) {
+                        $maxReportedWeek = max($maxReportedWeek, (int) $minggu);
+                    }
+                }
+            }
+            
+            // 2. Hitung progres fisik dan rencana (rencana hanya dihitung sampai maxReportedWeek)
             foreach ($items as $item) {
                 $bobot = (float) ($item['bobot'] ?? 0);
                 $weeklyData = $item['weekly_data'] ?? [];
                 $itemTotalReal = 0;
+                $itemTotalRencana = 0;
                 
                 foreach ($weeklyData as $minggu => $data) {
-                    $realisasi = $data['realisasi'] ?? 0;
+                    $realisasi = $data['realisasi'] ?? null;
                     if ($realisasi !== null) {
                         $itemTotalReal += $realisasi;
+                    }
+
+                    if ((int)$minggu <= $maxReportedWeek) {
+                        $rencana = $data['rencana'] ?? 0;
+                        if ($rencana !== null) {
+                            $itemTotalRencana += $rencana;
+                        }
                     }
                 }
                 
                 $targetVolume = (float) ($item['target_volume'] ?? 0);
+                
                 $progressPercent = $targetVolume > 0 
                     ? ($itemTotalReal / $targetVolume) * 100 
                     : 0;
                 $weightedProgress = ($progressPercent * $bobot) / 100;
                 $progressTotal += $weightedProgress;
+
+                $rencanaPercent = $targetVolume > 0
+                    ? ($itemTotalRencana / $targetVolume) * 100
+                    : 0;
+                $weightedRencana = ($rencanaPercent * $bobot) / 100;
+                $progressRencana += $weightedRencana;
             }
+
+            $deviasi = $progressTotal - $progressRencana;
         }
 
         return [
@@ -78,6 +110,7 @@ class PekerjaanResource extends JsonResource
             'nama_paket' => $this->nama_paket,
             'pagu' => $this->pagu,
             'progress_total' => round($progressTotal, 2),
+            'deviasi' => round($deviasi, 2),
             'kecamatan_id' => $this->kecamatan_id,
             'desa_id' => $this->desa_id,
             'kegiatan_id' => $this->kegiatan_id,

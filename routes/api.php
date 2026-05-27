@@ -205,6 +205,9 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('progress/pekerjaan/{pekerjaanId}', [ProgressController::class, 'report']);
     Route::post('progress/pekerjaan/{pekerjaanId}', [ProgressController::class, 'store']);
 
+    // Master Fase Pekerjaan
+    Route::apiResource('master-fase-pekerjaan', \App\Http\Controllers\MasterFasePekerjaanController::class);
+
     // Document Register (Dynamic)
     Route::get('document-types', [\App\Http\Controllers\DocumentRegisterController::class, 'types']);
     Route::post('document-types', [\App\Http\Controllers\DocumentRegisterController::class, 'storeType']);
