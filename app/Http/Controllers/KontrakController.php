@@ -2,18 +2,19 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Kontrak;
-use App\Http\Resources\KontrakResource;
-use App\Http\Resources\KontrakDetailResource;
-use Illuminate\Http\Request;
-use App\Imports\KontrakImport;
-use App\Exports\KontrakTemplateExport;
 use App\Exports\KontrakExport;
+use App\Exports\KontrakTemplateExport;
+use App\Http\Resources\KontrakDetailResource;
+use App\Http\Resources\KontrakResource;
+use App\Imports\KontrakImport;
+use App\Models\Kontrak;
+use Illuminate\Http\Request;
 use Maatwebsite\Excel\Facades\Excel;
 
 class KontrakController extends Controller
 {
     protected $baService;
+
     protected $exportService;
 
     public function __construct(\App\Services\DocumentExportService $exportService)
@@ -21,13 +22,12 @@ class KontrakController extends Controller
         $this->exportService = $exportService;
     }
 
-
-
     /**
      * @OA\Get(
      *     path="/api/kontrak",
      *     summary="List all kontrak",
      *     tags={"Kontrak"},
+     *
      *     @OA\Response(response=200, description="Successful operation")
      * )
      */
@@ -38,28 +38,29 @@ class KontrakController extends Controller
             ->orderBy('created_at', 'desc');
 
         if ($request->has('tahun') && $request->tahun) {
-            $query->whereHas('kegiatan', function($q) use ($request) {
+            $query->whereHas('kegiatan', function ($q) use ($request) {
                 $q->where('tahun_anggaran', $request->tahun);
             });
         }
-        
+
         // Search functionality
         if ($request->has('search') && $request->search) {
             $search = $request->search;
-            $query->where(function($q) use ($search) {
+            $query->where(function ($q) use ($search) {
                 $q->where('kode_rup', 'like', "%{$search}%")
-                  ->orWhere('nomor_penawaran', 'like', "%{$search}%")
-                  ->orWhere('kode_paket', 'like', "%{$search}%")
-                  ->orWhereHas('pekerjaan', function($q) use ($search) {
-                      $q->where('nama_paket', 'like', "%{$search}%");
-                  })
-                  ->orWhereHas('penyedia', function($q) use ($search) {
-                      $q->where('nama', 'like', "%{$search}%");
-                  });
+                    ->orWhere('nomor_penawaran', 'like', "%{$search}%")
+                    ->orWhere('kode_paket', 'like', "%{$search}%")
+                    ->orWhereHas('pekerjaan', function ($q) use ($search) {
+                        $q->where('nama_paket', 'like', "%{$search}%");
+                    })
+                    ->orWhereHas('penyedia', function ($q) use ($search) {
+                        $q->where('nama', 'like', "%{$search}%");
+                    });
             });
         }
-        
+
         $kontrak = $query->paginate(20);
+
         return KontrakResource::collection($kontrak);
     }
 
@@ -68,14 +69,18 @@ class KontrakController extends Controller
      *     path="/api/kontrak",
      *     summary="Create new kontrak",
      *     tags={"Kontrak"},
+     *
      *     @OA\RequestBody(
      *         required=true,
+     *
      *         @OA\JsonContent(
      *             required={"id_pekerjaan", "id_penyedia"},
+     *
      *             @OA\Property(property="id_pekerjaan", type="integer"),
      *             @OA\Property(property="id_penyedia", type="integer")
      *         )
      *     ),
+     *
      *     @OA\Response(response=201, description="Kontrak created")
      * )
      */
@@ -100,10 +105,9 @@ class KontrakController extends Controller
         ]);
 
         $kontrak = Kontrak::create($validated);
-        
 
-        
         $kontrak->load('kegiatan', 'pekerjaan', 'penyedia');
+
         return new KontrakDetailResource($kontrak);
     }
 
@@ -112,20 +116,33 @@ class KontrakController extends Controller
      *     path="/api/kontrak/{id}",
      *     summary="Get kontrak detail",
      *     tags={"Kontrak"},
+     *
      *     @OA\Parameter(name="id", in="path", required=true, @OA\Schema(type="integer")),
+     *
      *     @OA\Response(response=200, description="Successful operation")
      * )
      */
     public function show(Kontrak $kontrak)
     {
-        $kontrak->load('kegiatan', 'pekerjaan', 'penyedia');
+        $kontrak->load([
+            'kegiatan',
+            'pekerjaan',
+            'penyedia',
+            'latestApprovedAddendum',
+            'addendums.items',
+            'addendums.media',
+        ]);
+
         return new KontrakDetailResource($kontrak);
     }
 
     public function exportDoc(Kontrak $kontrak)
     {
         try {
+            $kontrak->loadMissing(['kegiatan', 'pekerjaan.kegiatan', 'pekerjaan.kecamatan', 'pekerjaan.desa', 'penyedia', 'approvedAddendums']);
+
             $path = $this->exportService->export($kontrak);
+
             return response()->download($path)->deleteFileAfterSend(true);
         } catch (\Exception $e) {
             return response()->json(['message' => $e->getMessage()], 500);
@@ -134,12 +151,15 @@ class KontrakController extends Controller
 
     public function exportRingkasan(Kontrak $kontrak)
     {
-        if (!$kontrak->pekerjaan->isChecklistComplete()) {
+        $kontrak->loadMissing(['kegiatan', 'pekerjaan.kegiatan', 'pekerjaan.kecamatan', 'pekerjaan.desa', 'penyedia', 'approvedAddendums']);
+
+        if (! $kontrak->pekerjaan->isChecklistComplete()) {
             return response()->json(['message' => 'Checklist pekerjaan belum 100% lengkap bos!'], 403);
         }
 
         try {
             $path = $this->exportService->exportRingkasan($kontrak);
+
             return response()->download($path)->deleteFileAfterSend(true);
         } catch (\Exception $e) {
             return response()->json(['message' => $e->getMessage()], 500);
@@ -148,13 +168,16 @@ class KontrakController extends Controller
 
     public function exportBAP(Request $request, Kontrak $kontrak)
     {
-        if (!$kontrak->pekerjaan->isChecklistComplete()) {
+        $kontrak->loadMissing(['kegiatan', 'pekerjaan.kegiatan', 'pekerjaan.kecamatan', 'pekerjaan.desa', 'penyedia', 'approvedAddendums']);
+
+        if (! $kontrak->pekerjaan->isChecklistComplete()) {
             return response()->json(['message' => 'Checklist pekerjaan belum 100% lengkap bos!'], 403);
         }
 
         try {
             // Urutan argumen: $kontrak, $format, $overrideData
             $path = $this->exportService->exportBAP($kontrak, 'docx', $request->all());
+
             return response()->download($path)->deleteFileAfterSend(true);
         } catch (\Exception $e) {
             return response()->json(['message' => $e->getMessage()], 500);
@@ -166,7 +189,9 @@ class KontrakController extends Controller
      *     path="/api/kontrak/{id}",
      *     summary="Update kontrak",
      *     tags={"Kontrak"},
+     *
      *     @OA\Parameter(name="id", in="path", required=true, @OA\Schema(type="integer")),
+     *
      *     @OA\Response(response=200, description="Kontrak updated")
      * )
      */
@@ -192,6 +217,7 @@ class KontrakController extends Controller
 
         $kontrak->update($validated);
         $kontrak->load('kegiatan', 'pekerjaan', 'penyedia');
+
         return new KontrakDetailResource($kontrak);
     }
 
@@ -200,13 +226,16 @@ class KontrakController extends Controller
      *     path="/api/kontrak/{id}",
      *     summary="Delete kontrak",
      *     tags={"Kontrak"},
+     *
      *     @OA\Parameter(name="id", in="path", required=true, @OA\Schema(type="integer")),
+     *
      *     @OA\Response(response=200, description="Kontrak deleted")
      * )
      */
     public function destroy(Kontrak $kontrak)
     {
         $kontrak->delete();
+
         return response()->json(['message' => 'Kontrak deleted successfully'], 200);
     }
 
@@ -215,18 +244,21 @@ class KontrakController extends Controller
     public function byPekerjaan($pekerjaanId)
     {
         $kontrak = Kontrak::where('id_pekerjaan', $pekerjaanId)->with('kegiatan', 'pekerjaan', 'penyedia')->paginate(20);
+
         return KontrakResource::collection($kontrak);
     }
 
     public function byKegiatan($kegiatanId)
     {
         $kontrak = Kontrak::where('id_kegiatan', $kegiatanId)->with('kegiatan', 'pekerjaan', 'penyedia')->paginate(20);
+
         return KontrakResource::collection($kontrak);
     }
 
     public function byPenyedia($penyediaId)
     {
         $kontrak = Kontrak::where('id_penyedia', $penyediaId)->with('kegiatan', 'pekerjaan', 'penyedia')->paginate(20);
+
         return KontrakResource::collection($kontrak);
     }
 
@@ -235,8 +267,10 @@ class KontrakController extends Controller
      *     path="/api/kontrak/{id}/export",
      *     summary="Export contract in Word/PDF",
      *     tags={"Kontrak"},
+     *
      *     @OA\Parameter(name="id", in="path", required=true, @OA\Schema(type="integer")),
      *     @OA\Parameter(name="format", in="query", @OA\Schema(type="string", enum={"docx", "pdf"})),
+     *
      *     @OA\Response(response=200, description="File download")
      * )
      */
@@ -244,28 +278,29 @@ class KontrakController extends Controller
     {
         // Try finding by direct contract ID first
         $kontrak = Kontrak::find($id);
-        
+
         // If not found, try finding by pekerjaan_id
-        if (!$kontrak) {
-             $kontrak = Kontrak::where('id_pekerjaan', $id)->latest()->first();
+        if (! $kontrak) {
+            $kontrak = Kontrak::where('id_pekerjaan', $id)->latest()->first();
         }
 
-        if (!$kontrak) {
+        if (! $kontrak) {
             return response()->json(['message' => 'Kontrak not found'], 404);
         }
 
         $pekerjaan = $kontrak->pekerjaan;
         $format = $request->query('format', 'docx');
-        
+
         try {
+            $kontrak->loadMissing(['kegiatan', 'pekerjaan.kegiatan', 'pekerjaan.kecamatan', 'pekerjaan.desa', 'penyedia', 'approvedAddendums']);
+
             $path = $this->exportService->export($kontrak, $format);
+
             return response()->download($path)->deleteFileAfterSend(true);
         } catch (\Exception $e) {
-            return response()->json(['message' => 'Export failed: ' . $e->getMessage()], 500);
+            return response()->json(['message' => 'Export failed: '.$e->getMessage()], 500);
         }
     }
-
-
 
     public function downloadTemplate(Request $request)
     {
@@ -275,17 +310,17 @@ class KontrakController extends Controller
     public function import(Request $request)
     {
         $request->validate([
-            'file' => 'required|mimes:xlsx,xls,csv'
+            'file' => 'required|mimes:xlsx,xls,csv',
         ]);
 
         try {
             $import = new KontrakImport;
             Excel::import($import, $request->file('file'));
-            
-            $failures = collect($import->failures())->map(function($f) {
+
+            $failures = collect($import->failures())->map(function ($f) {
                 return [
                     'row' => $f['row'] ?? null,
-                    'message' => is_array($f['errors']) ? implode(', ', $f['errors']) : $f['errors']
+                    'message' => is_array($f['errors']) ? implode(', ', $f['errors']) : $f['errors'],
                 ];
             });
 
@@ -297,10 +332,10 @@ class KontrakController extends Controller
                 'debug' => [
                     'total_rows_excel' => $import->rows,
                     'total_skipped' => count($import->skippedRows ?? []),
-                ]
+                ],
             ]);
         } catch (\Exception $e) {
-            return response()->json(['message' => 'Gagal mengimport kontrak: ' . $e->getMessage()], 500);
+            return response()->json(['message' => 'Gagal mengimport kontrak: '.$e->getMessage()], 500);
         }
     }
 

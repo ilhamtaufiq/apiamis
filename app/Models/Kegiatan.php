@@ -2,16 +2,31 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
-
-use App\Traits\NotifiesAdminsOnChanges;
 use App\Traits\Auditable;
+use App\Traits\NotifiesAdminsOnChanges;
+use Illuminate\Database\Eloquent\Model;
 
 class Kegiatan extends Model
 {
-    use NotifiesAdminsOnChanges, Auditable;
+    use Auditable, NotifiesAdminsOnChanges;
+
     protected $table = 'tbl_kegiatan';
-    
+
+    public const SUMBER_DANA_OPTIONS = [
+        'APBD',
+        'APBN',
+        'DAU',
+        'DAK',
+        'DID',
+        'Bantuan Provinsi',
+        'DBH',
+        'SILPA',
+        'DBH Pajak Rokok',
+        'PAD',
+        'DBHCT',
+        'DBH Prov',
+    ];
+
     protected $fillable = [
         'nama_program',
         'sub_bidang',
@@ -20,11 +35,11 @@ class Kegiatan extends Model
         'tahun_anggaran',
         'sumber_dana',
         'pagu',
-        'kode_rekening'
+        'kode_rekening',
     ];
 
     protected $casts = [
         'pagu' => 'decimal:2',
-        'kode_rekening' => 'array'
+        'kode_rekening' => 'array',
     ];
 }

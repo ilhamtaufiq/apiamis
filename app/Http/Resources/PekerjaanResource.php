@@ -4,10 +4,6 @@ namespace App\Http\Resources;
 
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
-use App\Http\Resources\KecamatanResource;
-use App\Http\Resources\DesaResource;
-use App\Http\Resources\KegiatanResource;
-use App\Http\Resources\TagResource;
 
 class PekerjaanResource extends JsonResource
 {
@@ -18,8 +14,8 @@ class PekerjaanResource extends JsonResource
     {
         $user = auth()->user();
         $sources = [];
-        
-        if ($user && !$user->hasRole('admin')) {
+
+        if ($user && ! $user->hasRole('admin')) {
             static $assignedIds = null;
             static $roleKegiatanIds = null;
 
@@ -37,12 +33,20 @@ class PekerjaanResource extends JsonResource
                     ->toArray();
             }
 
-            if (in_array($this->id, $assignedIds)) $sources[] = 'manual';
-            if (in_array($this->kegiatan_id, $roleKegiatanIds)) $sources[] = 'role';
-            
+            if (in_array($this->id, $assignedIds)) {
+                $sources[] = 'manual';
+            }
+            if (in_array($this->kegiatan_id, $roleKegiatanIds)) {
+                $sources[] = 'role';
+            }
+
             if ($user->nip) {
-                if ($this->pengawas_id && $this->pengawas && $this->pengawas->nip === $user->nip) $sources[] = 'pengawas';
-                if ($this->pendamping_id && $this->pendamping && $this->pendamping->nip === $user->nip) $sources[] = 'pendamping';
+                if ($this->pengawas_id && $this->pengawas && $this->pengawas->nip === $user->nip) {
+                    $sources[] = 'pengawas';
+                }
+                if ($this->pendamping_id && $this->pendamping && $this->pendamping->nip === $user->nip) {
+                    $sources[] = 'pendamping';
+                }
             }
         }
 
@@ -53,7 +57,7 @@ class PekerjaanResource extends JsonResource
         if ($this->relationLoaded('progress') && $this->progress) {
             $content = $this->progress->content ?? [];
             $items = $content['items'] ?? [];
-            
+
             // 1. Temukan minggu terakhir yang ada laporan realisasinya
             $maxReportedWeek = 0;
             foreach ($items as $item) {
@@ -64,32 +68,32 @@ class PekerjaanResource extends JsonResource
                     }
                 }
             }
-            
+
             // 2. Hitung progres fisik dan rencana (rencana hanya dihitung sampai maxReportedWeek)
             foreach ($items as $item) {
                 $bobot = (float) ($item['bobot'] ?? 0);
                 $weeklyData = $item['weekly_data'] ?? [];
                 $itemTotalReal = 0;
                 $itemTotalRencana = 0;
-                
+
                 foreach ($weeklyData as $minggu => $data) {
                     $realisasi = $data['realisasi'] ?? null;
                     if ($realisasi !== null) {
                         $itemTotalReal += $realisasi;
                     }
 
-                    if ((int)$minggu <= $maxReportedWeek) {
+                    if ((int) $minggu <= $maxReportedWeek) {
                         $rencana = $data['rencana'] ?? 0;
                         if ($rencana !== null) {
                             $itemTotalRencana += $rencana;
                         }
                     }
                 }
-                
+
                 $targetVolume = (float) ($item['target_volume'] ?? 0);
-                
-                $progressPercent = $targetVolume > 0 
-                    ? ($itemTotalReal / $targetVolume) * 100 
+
+                $progressPercent = $targetVolume > 0
+                    ? ($itemTotalReal / $targetVolume) * 100
                     : 0;
                 $weightedProgress = ($progressPercent * $bobot) / 100;
                 $progressTotal += $weightedProgress;
@@ -124,6 +128,27 @@ class PekerjaanResource extends JsonResource
             'pendamping' => new PengawasResource($this->whenLoaded('pendamping')),
             'tags' => TagResource::collection($this->whenLoaded('tags')),
             'draft' => new DraftPekerjaanResource($this->whenLoaded('draft')),
+            'kontrak' => $this->whenLoaded('kontrak', fn () => $this->kontrak->map(fn ($kontrak) => [
+                'id' => $kontrak->id,
+                'spk' => $kontrak->spk,
+                'kode_paket' => $kontrak->kode_paket,
+                'tgl_spmk' => $kontrak->tgl_spmk?->format('Y-m-d'),
+                'tgl_selesai' => $kontrak->tgl_selesai?->format('Y-m-d'),
+                'nilai_kontrak' => $kontrak->nilai_kontrak,
+                'penyedia' => $kontrak->relationLoaded('penyedia') && $kontrak->penyedia ? [
+                    'id' => $kontrak->penyedia->id,
+                    'nama' => $kontrak->penyedia->nama,
+                ] : null,
+                'addendums' => $kontrak->relationLoaded('addendums')
+                    ? $kontrak->addendums->map(fn ($addendum) => [
+                        'id' => $addendum->id,
+                        'addendum_ke' => $addendum->addendum_ke,
+                        'nomor_addendum' => $addendum->nomor_addendum,
+                        'tanggal_addendum' => $addendum->tanggal_addendum?->format('Y-m-d'),
+                        'status' => $addendum->status,
+                    ])->values()
+                    : [],
+            ])->values()),
             'penerima_count' => $this->penerima_count,
             'created_at' => $this->created_at?->toIso8601String(),
             'updated_at' => $this->updated_at?->toIso8601String(),

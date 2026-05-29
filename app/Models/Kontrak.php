@@ -2,16 +2,16 @@
 
 namespace App\Models;
 
+use App\Traits\Auditable;
+use App\Traits\NotifiesAdminsOnChanges;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use Illuminate\Database\Eloquent\Factories\HasFactory;
-
-use App\Traits\NotifiesAdminsOnChanges;
-use App\Traits\Auditable;
 
 class Kontrak extends Model
 {
-    use NotifiesAdminsOnChanges, HasFactory, Auditable;
+    use Auditable, HasFactory, NotifiesAdminsOnChanges;
+
     protected $table = 'tbl_kontrak';
 
     protected $fillable = [
@@ -29,7 +29,7 @@ class Kontrak extends Model
         'tgl_selesai',
         'sppbj',
         'spk',
-        'spmk'
+        'spmk',
     ];
 
     protected $casts = [
@@ -62,5 +62,40 @@ class Kontrak extends Model
     public function registers(): \Illuminate\Database\Eloquent\Relations\HasMany
     {
         return $this->hasMany(DocumentRegister::class, 'kontrak_id');
+    }
+
+    public function addendums(): \Illuminate\Database\Eloquent\Relations\HasMany
+    {
+        return $this->hasMany(KontrakAddendum::class, 'kontrak_id')->orderBy('addendum_ke');
+    }
+
+    public function approvedAddendums(): \Illuminate\Database\Eloquent\Relations\HasMany
+    {
+        return $this->addendums()->where('status', 'disetujui');
+    }
+
+    public function latestApprovedAddendum(): \Illuminate\Database\Eloquent\Relations\HasOne
+    {
+        return $this->hasOne(KontrakAddendum::class, 'kontrak_id')
+            ->where('status', 'disetujui')
+            ->latestOfMany('addendum_ke');
+    }
+
+    public function nilaiKontrakBerjalan(): ?float
+    {
+        $addendum = $this->relationLoaded('latestApprovedAddendum')
+            ? $this->latestApprovedAddendum
+            : $this->latestApprovedAddendum()->first();
+
+        return $addendum?->nilai_kontrak_sesudah ?? $this->nilai_kontrak;
+    }
+
+    public function tglSelesaiBerjalan(): mixed
+    {
+        $addendum = $this->relationLoaded('latestApprovedAddendum')
+            ? $this->latestApprovedAddendum
+            : $this->latestApprovedAddendum()->first();
+
+        return $addendum?->tgl_selesai_sesudah ?? $this->tgl_selesai;
     }
 }

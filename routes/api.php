@@ -18,6 +18,7 @@ use App\Http\Controllers\FotoController;
 use App\Http\Controllers\KecamatanController;
 use App\Http\Controllers\KegiatanController;
 use App\Http\Controllers\KegiatanRoleController;
+use App\Http\Controllers\KontrakAddendumController;
 use App\Http\Controllers\KontrakController;
 use App\Http\Controllers\MenuPermissionController;
 use App\Http\Controllers\OutputController;
@@ -28,6 +29,7 @@ use App\Http\Controllers\PenyediaController;
 use App\Http\Controllers\PermissionController;
 use App\Http\Controllers\ProgressController;
 use App\Http\Controllers\RABAnalyzerController;
+use App\Http\Controllers\RkaController;
 use App\Http\Controllers\RoleController;
 use App\Http\Controllers\RoutePermissionController;
 use App\Http\Controllers\SimulationNetworkController;
@@ -136,6 +138,10 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::apiResource('desa', DesaController::class);
     Route::apiResource('penyedia', PenyediaController::class)->parameters(['penyedia' => 'penyedia']);
     Route::apiResource('kegiatan', KegiatanController::class);
+    Route::get('rka', [RkaController::class, 'index']);
+    Route::post('rka/import', [RkaController::class, 'import']);
+    Route::get('rka/{rkaDocument}', [RkaController::class, 'show']);
+    Route::delete('rka/{rkaDocument}', [RkaController::class, 'destroy']);
     // Custom routes - Kontrak
     Route::get('kontrak/export/excel', [KontrakController::class, 'exportExcel']);
 
@@ -143,6 +149,17 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('kontrak/kegiatan/{kegiatanId}', [KontrakController::class, 'byKegiatan']);
     Route::get('kontrak/penyedia/{penyediaId}', [KontrakController::class, 'byPenyedia']);
     Route::get('kontrak/{id}/export', [KontrakController::class, 'export']);
+    Route::get('kontrak-addendums', [KontrakAddendumController::class, 'all']);
+    Route::get('kontrak/{kontrak}/addendums', [KontrakAddendumController::class, 'index']);
+    Route::post('kontrak/{kontrak}/addendums', [KontrakAddendumController::class, 'store']);
+
+    Route::get('kontrak-addendums/{kontrakAddendum}', [KontrakAddendumController::class, 'show']);
+    Route::put('kontrak-addendums/{kontrakAddendum}', [KontrakAddendumController::class, 'update']);
+    Route::delete('kontrak-addendums/{kontrakAddendum}', [KontrakAddendumController::class, 'destroy']);
+    Route::post('kontrak-addendums/{kontrakAddendum}/submit', [KontrakAddendumController::class, 'submit']);
+    Route::post('kontrak-addendums/{kontrakAddendum}/approve', [KontrakAddendumController::class, 'approve']);
+    Route::post('kontrak-addendums/{kontrakAddendum}/reject', [KontrakAddendumController::class, 'reject']);
+    Route::post('kontrak-addendums/{kontrakAddendum}/upload', [KontrakAddendumController::class, 'upload']);
 
     Route::post('kontrak/import', [KontrakController::class, 'import']);
     Route::get('kontrak/import/template', [KontrakController::class, 'downloadTemplate']);

@@ -3,6 +3,7 @@
 !public/
 !templates/
 !templates/*.docx
+templates/~$*.docx
+templates/~?*.docx
 !.gitignore
-
 
