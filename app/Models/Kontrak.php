@@ -54,6 +54,12 @@ class Kontrak extends Model
         return $this->belongsTo(Pekerjaan::class, 'id_pekerjaan');
     }
 
+    public function pekerjaans(): \Illuminate\Database\Eloquent\Relations\BelongsToMany
+    {
+        return $this->belongsToMany(Pekerjaan::class, 'kontrak_pekerjaan', 'kontrak_id', 'pekerjaan_id')
+                    ->withTimestamps();
+    }
+
     public function penyedia(): BelongsTo
     {
         return $this->belongsTo(Penyedia::class, 'id_penyedia');

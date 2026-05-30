@@ -21,8 +21,11 @@ class KontrakImport implements ToCollection, WithHeadingRow, SkipsEmptyRows
     public function collection(Collection $rows)
     {
         foreach ($rows as $index => $row) {
+            // Allow both old heading "Nama Paket" and new heading "Nama Paket (pisahkan dengan koma jika konsolidasi)"
+            $pekerjaanNamesRaw = $row['nama_paket_pisahkan_dengan_koma_jika_konsolidasi'] ?? $row['nama_paket'] ?? '';
+
             // Check if row is mostly empty (nama_paket is required)
-            if (!isset($row['nama_paket']) || empty(trim($row['nama_paket']))) {
+            if (empty(trim($pekerjaanNamesRaw))) {
                 continue;
             }
 
@@ -40,10 +43,14 @@ class KontrakImport implements ToCollection, WithHeadingRow, SkipsEmptyRows
             $refDate = $tglSpk ?? $tglSpmk ?? $tglSppbj;
             $refYear = $refDate ? $refDate->year : null;
 
-            // Resolve Pekerjaan (Nama Paket) - STRICT EXACT MATCH + YEAR
-            $pekerjaanName = isset($row['nama_paket']) ? trim($row['nama_paket']) : null;
-            $pekerjaan = null;
-            if ($pekerjaanName) {
+            // Resolve Pekerjaan (Nama Paket) - STRICT EXACT MATCH + YEAR (bisa multiple dipisah koma)
+            $pekerjaanNames = array_map('trim', explode(',', $pekerjaanNamesRaw));
+            $pekerjaanNames = array_filter($pekerjaanNames);
+
+            $pekerjaans = [];
+            $missingPekerjaans = [];
+
+            foreach ($pekerjaanNames as $pekerjaanName) {
                 $query = Pekerjaan::where(function($q) use ($pekerjaanName) {
                     $q->where('nama_paket', $pekerjaanName)
                       ->orWhereRaw('LOWER(nama_paket) = ?', [strtolower($pekerjaanName)]);
@@ -55,7 +62,12 @@ class KontrakImport implements ToCollection, WithHeadingRow, SkipsEmptyRows
                     });
                 }
 
-                $pekerjaan = $query->first();
+                $p = $query->first();
+                if ($p) {
+                    $pekerjaans[] = $p;
+                } else {
+                    $missingPekerjaans[] = $pekerjaanName;
+                }
             }
 
             // Resolve Penyedia (Nama Penyedia) - STRICT EXACT MATCH
@@ -68,13 +80,14 @@ class KontrakImport implements ToCollection, WithHeadingRow, SkipsEmptyRows
             }
 
             // Strict Validation
-            if (!$pekerjaan || !$penyedia) {
+            if (count($missingPekerjaans) > 0 || count($pekerjaans) == 0 || !$penyedia) {
                 $reason = "";
-                if (!$pekerjaan) {
+                if (count($missingPekerjaans) > 0) {
+                    $missingStr = implode(', ', $missingPekerjaans);
                     if ($refYear) {
-                        $reason .= "Pekerjaan '{$pekerjaanName}' tidak ditemukan pada tahun anggaran {$refYear}. ";
+                        $reason .= "Pekerjaan '{$missingStr}' tidak ditemukan pada tahun anggaran {$refYear}. ";
                     } else {
-                        $reason .= "Pekerjaan '{$pekerjaanName}' tidak ditemukan (Tahun anggaran tidak dapat ditentukan dari tanggal SPK/SPMK). ";
+                        $reason .= "Pekerjaan '{$missingStr}' tidak ditemukan (Tahun anggaran tidak dapat ditentukan dari tanggal SPK/SPMK). ";
                     }
                 }
                 if (!$penyedia) $reason .= "Penyedia '{$penyediaName}' tidak ditemukan. ";
@@ -89,25 +102,39 @@ class KontrakImport implements ToCollection, WithHeadingRow, SkipsEmptyRows
             }
 
             try {
-                Kontrak::updateOrCreate(
-                    ['id_pekerjaan' => $pekerjaan->id],
-                    [
-                        'id_penyedia'       => $penyedia->id,
-                        'id_kegiatan'       => $pekerjaan->kegiatan_id,
-                        'kode_rup'          => $row['kode_rup'] ?? null,
-                        'kode_paket'        => $row['kode_paket'] ?? null,
-                        'nomor_penawaran'   => $row['nomor_penawaran'] ?? null,
-                        'tanggal_penawaran' => $tglPenawaran,
-                        'nilai_kontrak'     => $this->parseNumber($row['nilai_kontrak'] ?? 0),
-                        'tgl_sppbj'         => $tglSppbj,
-                        'tgl_spk'           => $tglSpk,
-                        'tgl_spmk'          => $tglSpmk,
-                        'tgl_selesai'       => $tglSelesai,
-                        'sppbj'             => $row['nomor_sppbj'] ?? null,
-                        'spk'               => $row['nomor_spk'] ?? null,
-                        'spmk'              => $row['nomor_spmk'] ?? null,
-                    ]
-                );
+                $firstPekerjaan = $pekerjaans[0];
+                // Find existing kontrak by checking if the first pekerjaan is already in any kontrak
+                $existingKontrak = $firstPekerjaan->kontraks()->first();
+                
+                $kontrakData = [
+                    'id_penyedia'       => $penyedia->id,
+                    'id_kegiatan'       => $firstPekerjaan->kegiatan_id,
+                    'id_pekerjaan'      => $firstPekerjaan->id, // fallback for legacy
+                    'kode_rup'          => $row['kode_rup'] ?? null,
+                    'kode_paket'        => $row['kode_paket'] ?? null,
+                    'nomor_penawaran'   => $row['nomor_penawaran'] ?? null,
+                    'tanggal_penawaran' => $tglPenawaran,
+                    'nilai_kontrak'     => $this->parseNumber($row['nilai_kontrak'] ?? 0),
+                    'tgl_sppbj'         => $tglSppbj,
+                    'tgl_spk'           => $tglSpk,
+                    'tgl_spmk'          => $tglSpmk,
+                    'tgl_selesai'       => $tglSelesai,
+                    'sppbj'             => $row['nomor_sppbj'] ?? null,
+                    'spk'               => $row['nomor_spk'] ?? null,
+                    'spmk'              => $row['nomor_spmk'] ?? null,
+                ];
+
+                if ($existingKontrak) {
+                    $existingKontrak->update($kontrakData);
+                    $kontrak = $existingKontrak;
+                } else {
+                    $kontrak = Kontrak::create($kontrakData);
+                }
+
+                // Sync all pekerjaans to pivot table
+                $pekerjaanIds = collect($pekerjaans)->pluck('id')->toArray();
+                $kontrak->pekerjaans()->sync($pekerjaanIds);
+
                 $this->importedRows++;
             } catch (\Exception $e) {
                 $this->failures[] = [

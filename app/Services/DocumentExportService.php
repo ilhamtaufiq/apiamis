@@ -34,7 +34,7 @@ class DocumentExportService
         $propertyClose->setValue($templateProcessor, '}');
 
         // 3. Prepare Data
-        $data = $this->prepareData($kontrak->pekerjaan, $kontrak, $overrideData);
+        $data = $this->prepareData($kontrak->pekerjaans->first(), $kontrak, $overrideData);
 
         // 4. Direct XML Replacement (More reliable than TemplateProcessor for custom braces)
         // We replace in Main Part, Headers, and Footers
@@ -68,7 +68,7 @@ class DocumentExportService
         }
 
         // 5. Save to temporary file
-        $fileName = 'Kontrak_'.Str::slug($kontrak->pekerjaan->nama_paket).'_'.date('YmdHis').'.docx';
+        $fileName = 'Kontrak_'.Str::slug($kontrak->pekerjaans->first()?->nama_paket).'_'.date('YmdHis').'.docx';
         $tempPath = storage_path('app/public/temp/'.$fileName);
 
         if (! is_dir(storage_path('app/public/temp'))) {

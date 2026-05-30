@@ -33,7 +33,7 @@ class KontrakController extends Controller
      */
     public function index(Request $request)
     {
-        $query = Kontrak::with(['kegiatan', 'pekerjaan.kecamatan', 'pekerjaan.kegiatan', 'penyedia'])
+        $query = Kontrak::with(['kegiatan', 'pekerjaans.kecamatan', 'pekerjaans.kegiatan', 'penyedia'])
             ->orderBy('tgl_spk', 'desc')
             ->orderBy('created_at', 'desc');
 
@@ -50,7 +50,7 @@ class KontrakController extends Controller
                 $q->where('kode_rup', 'like', "%{$search}%")
                     ->orWhere('nomor_penawaran', 'like', "%{$search}%")
                     ->orWhere('kode_paket', 'like', "%{$search}%")
-                    ->orWhereHas('pekerjaan', function ($q) use ($search) {
+                    ->orWhereHas('pekerjaans', function ($q) use ($search) {
                         $q->where('nama_paket', 'like', "%{$search}%");
                     })
                     ->orWhereHas('penyedia', function ($q) use ($search) {
@@ -88,7 +88,8 @@ class KontrakController extends Controller
     {
         $validated = $request->validate([
             'id_kegiatan' => 'nullable|integer|exists:tbl_kegiatan,id',
-            'id_pekerjaan' => 'required|integer|exists:tbl_pekerjaan,id',
+            'pekerjaan_ids' => 'required|array',
+            'pekerjaan_ids.*' => 'integer|exists:tbl_pekerjaan,id',
             'id_penyedia' => 'required|integer|exists:tbl_penyedia,id',
             'kode_rup' => 'nullable|string|max:50',
             'kode_paket' => 'nullable|string|max:50',
@@ -105,8 +106,12 @@ class KontrakController extends Controller
         ]);
 
         $kontrak = Kontrak::create($validated);
+        
+        if ($request->has('pekerjaan_ids')) {
+            $kontrak->pekerjaans()->sync($request->pekerjaan_ids);
+        }
 
-        $kontrak->load('kegiatan', 'pekerjaan', 'penyedia');
+        $kontrak->load('kegiatan', 'pekerjaans', 'penyedia');
 
         return new KontrakDetailResource($kontrak);
     }
@@ -126,7 +131,7 @@ class KontrakController extends Controller
     {
         $kontrak->load([
             'kegiatan',
-            'pekerjaan',
+            'pekerjaans',
             'penyedia',
             'latestApprovedAddendum',
             'addendums.items',
@@ -139,7 +144,7 @@ class KontrakController extends Controller
     public function exportDoc(Kontrak $kontrak)
     {
         try {
-            $kontrak->loadMissing(['kegiatan', 'pekerjaan.kegiatan', 'pekerjaan.kecamatan', 'pekerjaan.desa', 'penyedia', 'approvedAddendums']);
+            $kontrak->loadMissing(['kegiatan', 'pekerjaans.kegiatan', 'pekerjaans.kecamatan', 'pekerjaans.desa', 'penyedia', 'approvedAddendums']);
 
             $path = $this->exportService->export($kontrak);
 
@@ -151,9 +156,10 @@ class KontrakController extends Controller
 
     public function exportRingkasan(Kontrak $kontrak)
     {
-        $kontrak->loadMissing(['kegiatan', 'pekerjaan.kegiatan', 'pekerjaan.kecamatan', 'pekerjaan.desa', 'penyedia', 'approvedAddendums']);
+        $kontrak->loadMissing(['kegiatan', 'pekerjaans.kegiatan', 'pekerjaans.kecamatan', 'pekerjaans.desa', 'penyedia', 'approvedAddendums']);
 
-        if (! $kontrak->pekerjaan->isChecklistComplete()) {
+        $firstPekerjaan = $kontrak->pekerjaans->first();
+        if ($firstPekerjaan && ! $firstPekerjaan->isChecklistComplete()) {
             return response()->json(['message' => 'Checklist pekerjaan belum 100% lengkap bos!'], 403);
         }
 
@@ -168,9 +174,10 @@ class KontrakController extends Controller
 
     public function exportBAP(Request $request, Kontrak $kontrak)
     {
-        $kontrak->loadMissing(['kegiatan', 'pekerjaan.kegiatan', 'pekerjaan.kecamatan', 'pekerjaan.desa', 'penyedia', 'approvedAddendums']);
+        $kontrak->loadMissing(['kegiatan', 'pekerjaans.kegiatan', 'pekerjaans.kecamatan', 'pekerjaans.desa', 'penyedia', 'approvedAddendums']);
 
-        if (! $kontrak->pekerjaan->isChecklistComplete()) {
+        $firstPekerjaan = $kontrak->pekerjaans->first();
+        if ($firstPekerjaan && ! $firstPekerjaan->isChecklistComplete()) {
             return response()->json(['message' => 'Checklist pekerjaan belum 100% lengkap bos!'], 403);
         }
 
@@ -199,7 +206,8 @@ class KontrakController extends Controller
     {
         $validated = $request->validate([
             'id_kegiatan' => 'nullable|integer|exists:tbl_kegiatan,id',
-            'id_pekerjaan' => 'nullable|integer|exists:tbl_pekerjaan,id',
+            'pekerjaan_ids' => 'nullable|array',
+            'pekerjaan_ids.*' => 'integer|exists:tbl_pekerjaan,id',
             'id_penyedia' => 'nullable|integer|exists:tbl_penyedia,id',
             'kode_rup' => 'nullable|string|max:50',
             'kode_paket' => 'nullable|string|max:50',
@@ -216,7 +224,11 @@ class KontrakController extends Controller
         ]);
 
         $kontrak->update($validated);
-        $kontrak->load('kegiatan', 'pekerjaan', 'penyedia');
+        if ($request->has('pekerjaan_ids')) {
+            $kontrak->pekerjaans()->sync($request->pekerjaan_ids);
+        }
+        
+        $kontrak->load('kegiatan', 'pekerjaans', 'penyedia');
 
         return new KontrakDetailResource($kontrak);
     }
@@ -243,7 +255,9 @@ class KontrakController extends Controller
 
     public function byPekerjaan($pekerjaanId)
     {
-        $kontrak = Kontrak::where('id_pekerjaan', $pekerjaanId)->with('kegiatan', 'pekerjaan', 'penyedia')->paginate(20);
+        $kontrak = Kontrak::whereHas('pekerjaans', function($q) use ($pekerjaanId) {
+            $q->where('pekerjaan_id', $pekerjaanId);
+        })->with('kegiatan', 'pekerjaans', 'penyedia')->paginate(20);
 
         return KontrakResource::collection($kontrak);
     }
@@ -281,18 +295,20 @@ class KontrakController extends Controller
 
         // If not found, try finding by pekerjaan_id
         if (! $kontrak) {
-            $kontrak = Kontrak::where('id_pekerjaan', $id)->latest()->first();
+            $kontrak = Kontrak::whereHas('pekerjaans', function($q) use ($id) {
+                $q->where('pekerjaan_id', $id);
+            })->latest()->first();
         }
 
         if (! $kontrak) {
             return response()->json(['message' => 'Kontrak not found'], 404);
         }
 
-        $pekerjaan = $kontrak->pekerjaan;
+        $pekerjaan = $kontrak->pekerjaans->first();
         $format = $request->query('format', 'docx');
 
         try {
-            $kontrak->loadMissing(['kegiatan', 'pekerjaan.kegiatan', 'pekerjaan.kecamatan', 'pekerjaan.desa', 'penyedia', 'approvedAddendums']);
+            $kontrak->loadMissing(['kegiatan', 'pekerjaans.kegiatan', 'pekerjaans.kecamatan', 'pekerjaans.desa', 'penyedia', 'approvedAddendums']);
 
             $path = $this->exportService->export($kontrak, $format);
 

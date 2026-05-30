@@ -40,24 +40,34 @@ Authorization: ApiKey amis_live_xxxxxxxxx
 
 Sanctum tetap dipakai untuk frontend internal dan admin. API key publik memiliki lifecycle sendiri: generate, revoke, rotate, scope, expiry, quota, rate limit, dan audit.
 
-## Endpoint Publik Tahap Awal
+## Endpoint Publik
 
-Mulai dari endpoint read-only yang aman:
+API publik akan mendukung operasi **Read-Only** serta **Create & Update** yang dikontrol melalui *scope/abilities* dari masing-masing API Key. Endpoint yang tersedia:
 
 ```text
-GET /api/public/v1/health
-GET /api/public/v1/kecamatan
-GET /api/public/v1/desa
-GET /api/public/v1/kegiatan
-GET /api/public/v1/pekerjaan
-GET /api/public/v1/pekerjaan/{id}
-GET /api/public/v1/progress/pekerjaan/{id}
+GET    /api/public/v1/health
+GET    /api/public/v1/kecamatan
+POST   /api/public/v1/kecamatan
+PUT    /api/public/v1/kecamatan/{id}
+GET    /api/public/v1/desa
+POST   /api/public/v1/desa
+PUT    /api/public/v1/desa/{id}
+GET    /api/public/v1/kegiatan
+POST   /api/public/v1/kegiatan
+PUT    /api/public/v1/kegiatan/{id}
+GET    /api/public/v1/pekerjaan
+GET    /api/public/v1/pekerjaan/{id}
+POST   /api/public/v1/pekerjaan
+PUT    /api/public/v1/pekerjaan/{id}
+GET    /api/public/v1/progress/pekerjaan/{id}
+POST   /api/public/v1/progress/pekerjaan/{id}
+PUT    /api/public/v1/progress/{id}
 ```
 
-Endpoint berikut tidak dibuka pada tahap awal:
+Endpoint berikut tetap tidak dibuka untuk akses publik:
 
-- create/update/delete data
-- upload berkas/foto
+- delete data
+- upload berkas/foto (kecuali ditentukan lain)
 - export dokumen
 - user, role, permission
 - audit log
@@ -66,103 +76,53 @@ Endpoint berikut tidak dibuka pada tahap awal:
 - debug endpoint
 - endpoint AI/chat internal
 
-## Model API Key
+## Manajemen API Key (Laravel Sanctum)
 
-Buat tabel baru, misalnya `public_api_clients`.
+Untuk mengelola API Key beserta opsi akses (Read-Only vs Create/Update), disarankan menggunakan **Laravel Sanctum**. Sanctum memiliki fitur *Token Abilities* yang memungkinkan kita mengatur *scope* spesifik dari setiap token yang di-generate.
 
-Kolom yang disarankan:
+Buat tabel/model baru khusus sebagai *owner* dari token publik (agar tidak tercampur dengan tabel `users`), misalnya `PublicApiClient` yang menggunakan trait `HasApiTokens`:
 
 ```text
 id
 name
 owner_name
 owner_email
-key_prefix
-key_hash
-scopes JSON
 rate_limit_per_minute
 allowed_ips JSON nullable
 is_active boolean
-last_used_at nullable
-expires_at nullable
-created_by nullable
 created_at
 updated_at
 ```
 
-Aturan keamanan:
+Token aktual, verifikasi hash, *scopes* (abilities), dan *last_used_at* akan dikelola secara otomatis oleh Sanctum melalui tabel `personal_access_tokens`.
 
-- Plain API key hanya ditampilkan sekali saat dibuat atau di-rotate.
-- Database hanya menyimpan hash API key.
-- `key_prefix` disimpan untuk lookup cepat dan identifikasi admin.
-- Verifikasi hash memakai perbandingan timing-safe seperti `hash_equals`.
-- Key yang revoked, inactive, atau expired harus ditolak.
-
-Contoh format key:
-
-```text
-amis_live_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-amis_test_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-```
-
-Contoh scope:
+Contoh scope yang akan di-generate via Sanctum:
 
 ```json
 [
   "kecamatan:read",
-  "desa:read",
-  "kegiatan:read",
+  "kecamatan:write",
   "pekerjaan:read",
-  "progress:read"
+  "pekerjaan:write"
 ]
 ```
 
-## Middleware API Key
+## Routing dan Middleware
 
-Buat middleware:
-
-```text
-app/Http/Middleware/AuthenticatePublicApiKey.php
-```
-
-Tanggung jawab middleware:
-
-1. Membaca API key dari `X-API-Key` atau `Authorization: ApiKey ...`.
-2. Validasi format key.
-3. Lookup client berdasarkan `key_prefix`.
-4. Cocokkan hash API key.
-5. Pastikan client aktif.
-6. Pastikan key belum expired.
-7. Cek allowed IP jika dikonfigurasi.
-8. Inject client ke request, misalnya `public_api_client`.
-9. Update `last_used_at`.
-10. Return error JSON konsisten.
-
-Daftarkan alias middleware di `bootstrap/app.php`, misalnya:
-
-```php
-'public.api_key' => \App\Http\Middleware\AuthenticatePublicApiKey::class,
-```
-
-Karena `check.route.permission` saat ini dipasang pada seluruh API route, tambahkan pengecualian eksplisit untuk path `api/public/*` agar request publik tidak bercampur dengan permission internal.
-
-## Routing
-
-Route publik dapat ditambahkan di `routes/api.php` atau dipisahkan ke file baru `routes/public_api.php`.
+Route publik dapat ditambahkan di `routes/api.php` atau dipisahkan ke file baru `routes/public_api.php`. Kita akan menggunakan middleware `auth:sanctum` dengan guard khusus untuk PublicApiClient, dikombinasikan dengan middleware pengecekan kemampuan token (token abilities).
 
 Contoh:
 
 ```php
 Route::prefix('public/v1')
-    ->middleware(['public.api_key', 'throttle:public-api'])
+    ->middleware(['auth:sanctum', 'throttle:public-api'])
     ->group(function () {
         Route::get('health', [PublicHealthController::class, 'show']);
-        Route::get('kecamatan', [PublicKecamatanController::class, 'index']);
-        Route::get('desa', [PublicDesaController::class, 'index']);
-        Route::get('kegiatan', [PublicKegiatanController::class, 'index']);
-        Route::get('pekerjaan', [PublicPekerjaanController::class, 'index']);
-        Route::get('pekerjaan/{pekerjaan}', [PublicPekerjaanController::class, 'show']);
-        Route::get('progress/pekerjaan/{pekerjaan}', [PublicProgressController::class, 'showByPekerjaan']);
+        
+        // Pekerjaan
+        Route::get('pekerjaan', [PublicPekerjaanController::class, 'index'])->middleware('ability:pekerjaan:read');
+        Route::post('pekerjaan', [PublicPekerjaanController::class, 'store'])->middleware('ability:pekerjaan:write');
+        Route::put('pekerjaan/{id}', [PublicPekerjaanController::class, 'update'])->middleware('ability:pekerjaan:write');
     });
 ```
 
@@ -228,25 +188,18 @@ Pekerjaan::query()
 
 Dengan pendekatan ini, default semua data tidak terbuka sampai admin memutuskan data tersebut layak dipublikasikan.
 
-## Scope dan Authorization API Key
+## Scope dan Authorization API Key (Token Abilities)
 
-Setiap route publik harus mendefinisikan scope minimal.
+Setiap route publik harus mendefinisikan scope minimal yang akan dicek menggunakan middleware Sanctum `ability:`.
 
-Contoh:
-
-```text
-GET /api/public/v1/pekerjaan              pekerjaan:read
-GET /api/public/v1/pekerjaan/{id}         pekerjaan:read
-GET /api/public/v1/progress/pekerjaan/{id} progress:read
-GET /api/public/v1/kecamatan              kecamatan:read
-GET /api/public/v1/desa                   desa:read
-GET /api/public/v1/kegiatan               kegiatan:read
-```
-
-Scope bisa dicek di middleware tambahan, misalnya:
+Contoh Scopes:
 
 ```text
-public.scope:pekerjaan:read
+GET  /api/public/v1/pekerjaan              -> pekerjaan:read
+POST /api/public/v1/pekerjaan              -> pekerjaan:write
+PUT  /api/public/v1/pekerjaan/{id}         -> pekerjaan:write
+GET  /api/public/v1/kecamatan              -> kecamatan:read
+POST /api/public/v1/kecamatan              -> kecamatan:write
 ```
 
 ## Rate Limit dan Quota
@@ -463,9 +416,9 @@ Kasus wajib:
 
 ## Keputusan Awal yang Direkomendasikan
 
-- API publik read-only pada versi pertama.
-- API key dedicated, bukan token login Sanctum.
-- Data publik harus opt-in melalui `is_public` dan `published_at`.
-- Resource publik dibuat terpisah dari resource internal.
-- Admin API key management tetap lewat Sanctum dan role admin.
-- Frontend admin dibuat di `/mnt/c/laragon/www/bun` setelah endpoint backend stabil.
+- API publik mendukung mode **Read-Only** dan **Create/Update** berbasis *scope/abilities*.
+- API key dikelola secara efisien menggunakan **Laravel Sanctum** yang di-attach ke model `PublicApiClient`.
+- Operasi Create/Update harus menggunakan `FormRequest` khusus publik (misal: `StorePekerjaanPublicRequest`) untuk mem-filter parameter yang tidak aman.
+- Data publik (Read) harus opt-in melalui `is_public` dan `published_at` (terutama untuk `Pekerjaan`).
+- Resource respon publik dibuat terpisah dari resource internal.
+- Frontend admin untuk manajemen API Client tetap berada di `/mnt/c/laragon/www/bun`.

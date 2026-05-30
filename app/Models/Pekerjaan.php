@@ -143,11 +143,12 @@ class Pekerjaan extends Model
     }
 
     /**
-     * Relasi One-to-Many dengan Kontrak
+     * Relasi Many-to-Many dengan Kontrak
      */
-    public function kontrak(): HasMany
+    public function kontrak(): \Illuminate\Database\Eloquent\Relations\BelongsToMany
     {
-        return $this->hasMany(Kontrak::class, 'id_pekerjaan');
+        return $this->belongsToMany(Kontrak::class, 'kontrak_pekerjaan', 'pekerjaan_id', 'kontrak_id')
+            ->withTimestamps();
     }
 
     /**

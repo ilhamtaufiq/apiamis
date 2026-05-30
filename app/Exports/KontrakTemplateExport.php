@@ -39,7 +39,7 @@ class KontrakTemplateSheet implements FromCollection, WithHeadings, WithTitle
     public function headings(): array
     {
         return [
-            'Nama Paket',
+            'Nama Paket (pisahkan dengan koma jika konsolidasi)',
             'Nama Penyedia',
             'Kode RUP',
             'Kode Paket',
