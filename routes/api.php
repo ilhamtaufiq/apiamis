@@ -167,6 +167,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::apiResource('kontrak', KontrakController::class);
     Route::get('kontrak/{kontrak}/export', [KontrakController::class, 'exportDoc']);
     Route::get('kontrak/{kontrak}/export-ringkasan', [KontrakController::class, 'exportRingkasan']);
+    Route::get('kontrak/{kontrak}/export-cover', [KontrakController::class, 'exportCover']);
     Route::get('kontrak/{kontrak}/export-bap', [KontrakController::class, 'exportBAP']);
     Route::get('penerima/summary', [PenerimaController::class, 'summary']);
     Route::apiResource('penerima', PenerimaController::class);

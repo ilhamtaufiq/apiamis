@@ -172,6 +172,19 @@ class KontrakController extends Controller
         }
     }
 
+    public function exportCover(Kontrak $kontrak)
+    {
+        $kontrak->loadMissing(['kegiatan', 'pekerjaans.kegiatan', 'pekerjaans.kecamatan', 'pekerjaans.desa', 'penyedia', 'approvedAddendums']);
+
+        try {
+            $path = $this->exportService->exportCover($kontrak);
+
+            return response()->download($path)->deleteFileAfterSend(true);
+        } catch (\Exception $e) {
+            return response()->json(['message' => $e->getMessage()], 500);
+        }
+    }
+
     public function exportBAP(Request $request, Kontrak $kontrak)
     {
         $kontrak->loadMissing(['kegiatan', 'pekerjaans.kegiatan', 'pekerjaans.kecamatan', 'pekerjaans.desa', 'penyedia', 'approvedAddendums']);

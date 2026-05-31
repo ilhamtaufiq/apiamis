@@ -113,6 +113,25 @@ class DocumentExportService
         return $this->export($kontrak, $format, 'bap_template.docx', $overrideData);
     }
 
+    public function exportCover($kontrak, $format = 'docx')
+    {
+        $subBidang = strtolower((string) (
+            $kontrak->pekerjaans->first()?->kegiatan?->sub_bidang
+            ?? $kontrak->kegiatan?->sub_bidang
+            ?? ''
+        ));
+
+        if (str_contains($subBidang, 'air minum')) {
+            return $this->export($kontrak, $format, 'cover_kontrak_am.docx');
+        }
+
+        if (str_contains($subBidang, 'sanitasi')) {
+            return $this->export($kontrak, $format, 'cover_kontrak_san.docx');
+        }
+
+        throw new \Exception('Template cover kontrak untuk sub bidang ini belum tersedia.');
+    }
+
     private function prepareData($pekerjaan, $kontrak, $overrideData = [])
     {
         // Set Locale for Carbon and System
@@ -142,10 +161,14 @@ class DocumentExportService
             // Kontrak details
             'nilai_kontrak' => 'Rp. '.number_format($kontrak->nilai_kontrak, 0, ',', '.'),
             'nilai_kontrak_terbilang' => $this->terbilang($kontrak->nilai_kontrak),
+            'terbilang_nilai_kontrak' => $this->terbilang($kontrak->nilai_kontrak),
             'tgl_sppbj' => $kontrak->tgl_sppbj instanceof Carbon ? $kontrak->tgl_sppbj->translatedFormat('d F Y') : '-',
             'tgl_spk' => $kontrak->tgl_spk instanceof Carbon ? $kontrak->tgl_spk->translatedFormat('d F Y') : '-',
             'tgl_selesai' => $kontrak->tgl_selesai instanceof Carbon ? $kontrak->tgl_selesai->translatedFormat('d F Y') : '-',
             'tgl_spmk' => $kontrak->tgl_spmk instanceof Carbon ? $kontrak->tgl_spmk->translatedFormat('d F Y') : '-',
+            'tanggal_spk' => $kontrak->tgl_spk instanceof Carbon ? $kontrak->tgl_spk->translatedFormat('d F Y') : '-',
+            'tanggal_mulai' => $kontrak->tgl_spmk instanceof Carbon ? $kontrak->tgl_spmk->translatedFormat('d F Y') : '-',
+            'tanggal_selesai' => $kontrak->tgl_selesai instanceof Carbon ? $kontrak->tgl_selesai->translatedFormat('d F Y') : '-',
             'nomor_sppbj' => $kontrak->sppbj ?: '-',
             'nomor_spk' => $kontrak->spk ?: '-',
             'nomor_spmk' => $kontrak->spmk ?: '-',
@@ -171,10 +194,13 @@ class DocumentExportService
 
             // Waktu & Masa Pelaksanaan
             'masa_hari' => ($kontrak->tgl_spmk instanceof Carbon && $kontrak->tgl_selesai instanceof Carbon)
-                ? (int) $kontrak->tgl_spmk->diffInDays($kontrak->tgl_selesai) + 1
+                ? (int) $kontrak->tgl_spmk->diffInDays($kontrak->tgl_selesai)
+                : '-',
+            'masa' => ($kontrak->tgl_spmk instanceof Carbon && $kontrak->tgl_selesai instanceof Carbon)
+                ? ((int) $kontrak->tgl_spmk->diffInDays($kontrak->tgl_selesai)).' Hari'
                 : '-',
             'masa_hari_terbilang' => ($kontrak->tgl_spmk instanceof Carbon && $kontrak->tgl_selesai instanceof Carbon)
-                ? $this->terbilang((int) $kontrak->tgl_spmk->diffInDays($kontrak->tgl_selesai) + 1)
+                ? $this->terbilang((int) $kontrak->tgl_spmk->diffInDays($kontrak->tgl_selesai))
                 : '-',
         ];
 
@@ -386,32 +412,32 @@ class DocumentExportService
      */
     private function terbilang($angka)
     {
-        $angka = abs($angka);
+        $angka = (int) abs($angka);
         $baca = ['', 'Satu', 'Dua', 'Tiga', 'Empat', 'Lima', 'Enam', 'Tujuh', 'Delapan', 'Sembilan', 'Sepuluh', 'Sebelas'];
         $terbilang = '';
 
         if ($angka < 12) {
-            $terbilang = ' '.$baca[$angka];
+            $terbilang = $baca[$angka];
         } elseif ($angka < 20) {
             $terbilang = $this->terbilang($angka - 10).' Belas';
         } elseif ($angka < 100) {
-            $terbilang = $this->terbilang($angka / 10).' Puluh'.$this->terbilang($angka % 10);
+            $terbilang = $this->terbilang((int) ($angka / 10)).' Puluh '.$this->terbilang($angka % 10);
         } elseif ($angka < 200) {
-            $terbilang = ' Seratus'.$this->terbilang($angka - 100);
+            $terbilang = 'Seratus '.$this->terbilang($angka - 100);
         } elseif ($angka < 1000) {
-            $terbilang = $this->terbilang($angka / 100).' Ratus'.$this->terbilang($angka % 100);
+            $terbilang = $this->terbilang((int) ($angka / 100)).' Ratus '.$this->terbilang($angka % 100);
         } elseif ($angka < 2000) {
-            $terbilang = ' Seribu'.$this->terbilang($angka - 1000);
+            $terbilang = 'Seribu '.$this->terbilang($angka - 1000);
         } elseif ($angka < 1000000) {
-            $terbilang = $this->terbilang($angka / 1000).' Ribu'.$this->terbilang($angka % 1000);
+            $terbilang = $this->terbilang((int) ($angka / 1000)).' Ribu '.$this->terbilang($angka % 1000);
         } elseif ($angka < 1000000000) {
-            $terbilang = $this->terbilang($angka / 1000000).' Juta'.$this->terbilang($angka % 1000000);
+            $terbilang = $this->terbilang((int) ($angka / 1000000)).' Juta '.$this->terbilang($angka % 1000000);
         } elseif ($angka < 1000000000000) {
-            $terbilang = $this->terbilang($angka / 1000000000).' Milyar'.$this->terbilang(fmod($angka, 1000000000));
+            $terbilang = $this->terbilang((int) ($angka / 1000000000)).' Milyar '.$this->terbilang($angka % 1000000000);
         } elseif ($angka < 1000000000000000) {
-            $terbilang = $this->terbilang($angka / 1000000000000).' Trilyun'.$this->terbilang(fmod($angka, 1000000000000));
+            $terbilang = $this->terbilang((int) ($angka / 1000000000000)).' Trilyun '.$this->terbilang($angka % 1000000000000);
         }
 
-        return trim($terbilang);
+        return trim(preg_replace('/\s+/', ' ', $terbilang));
     }
 }
