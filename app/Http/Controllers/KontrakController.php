@@ -88,8 +88,9 @@ class KontrakController extends Controller
     {
         $validated = $request->validate([
             'id_kegiatan' => 'nullable|integer|exists:tbl_kegiatan,id',
-            'pekerjaan_ids' => 'required|array',
+            'pekerjaan_ids' => 'nullable|array',
             'pekerjaan_ids.*' => 'integer|exists:tbl_pekerjaan,id',
+            'id_pekerjaan' => 'nullable|integer|exists:tbl_pekerjaan,id',
             'id_penyedia' => 'required|integer|exists:tbl_penyedia,id',
             'kode_rup' => 'nullable|string|max:50',
             'kode_paket' => 'nullable|string|max:50',
@@ -105,11 +106,19 @@ class KontrakController extends Controller
             'spmk' => 'nullable|string|max:50',
         ]);
 
+        $pekerjaanIds = $validated['pekerjaan_ids'] ?? [];
+        if (empty($pekerjaanIds) && ! empty($validated['id_pekerjaan'])) {
+            $pekerjaanIds = [(int) $validated['id_pekerjaan']];
+        }
+
+        if (empty($pekerjaanIds)) {
+            return response()->json(['message' => 'Minimal satu pekerjaan harus dipilih'], 422);
+        }
+
+        $validated['id_pekerjaan'] = $validated['id_pekerjaan'] ?? $pekerjaanIds[0];
         $kontrak = Kontrak::create($validated);
         
-        if ($request->has('pekerjaan_ids')) {
-            $kontrak->pekerjaans()->sync($request->pekerjaan_ids);
-        }
+        $kontrak->pekerjaans()->sync($pekerjaanIds);
 
         $kontrak->load('kegiatan', 'pekerjaans', 'penyedia');
 
@@ -221,6 +230,7 @@ class KontrakController extends Controller
             'id_kegiatan' => 'nullable|integer|exists:tbl_kegiatan,id',
             'pekerjaan_ids' => 'nullable|array',
             'pekerjaan_ids.*' => 'integer|exists:tbl_pekerjaan,id',
+            'id_pekerjaan' => 'nullable|integer|exists:tbl_pekerjaan,id',
             'id_penyedia' => 'nullable|integer|exists:tbl_penyedia,id',
             'kode_rup' => 'nullable|string|max:50',
             'kode_paket' => 'nullable|string|max:50',
@@ -237,8 +247,16 @@ class KontrakController extends Controller
         ]);
 
         $kontrak->update($validated);
-        if ($request->has('pekerjaan_ids')) {
-            $kontrak->pekerjaans()->sync($request->pekerjaan_ids);
+
+        $pekerjaanIds = $validated['pekerjaan_ids'] ?? [];
+        if (empty($pekerjaanIds) && ! empty($validated['id_pekerjaan'])) {
+            $pekerjaanIds = [(int) $validated['id_pekerjaan']];
+        }
+        if (empty($validated['id_pekerjaan']) && ! empty($pekerjaanIds)) {
+            $validated['id_pekerjaan'] = $pekerjaanIds[0];
+        }
+        if (! empty($pekerjaanIds)) {
+            $kontrak->pekerjaans()->sync($pekerjaanIds);
         }
         
         $kontrak->load('kegiatan', 'pekerjaans', 'penyedia');
@@ -269,22 +287,26 @@ class KontrakController extends Controller
     public function byPekerjaan($pekerjaanId)
     {
         $kontrak = Kontrak::whereHas('pekerjaans', function($q) use ($pekerjaanId) {
-            $q->where('pekerjaan_id', $pekerjaanId);
-        })->with('kegiatan', 'pekerjaans', 'penyedia')->paginate(20);
+            $q->whereKey($pekerjaanId);
+        })->with('kegiatan', 'pekerjaans.kecamatan', 'pekerjaans.kegiatan', 'penyedia')->paginate(20);
 
         return KontrakResource::collection($kontrak);
     }
 
     public function byKegiatan($kegiatanId)
     {
-        $kontrak = Kontrak::where('id_kegiatan', $kegiatanId)->with('kegiatan', 'pekerjaan', 'penyedia')->paginate(20);
+        $kontrak = Kontrak::where('id_kegiatan', $kegiatanId)
+            ->with('kegiatan', 'pekerjaans.kecamatan', 'pekerjaans.kegiatan', 'penyedia')
+            ->paginate(20);
 
         return KontrakResource::collection($kontrak);
     }
 
     public function byPenyedia($penyediaId)
     {
-        $kontrak = Kontrak::where('id_penyedia', $penyediaId)->with('kegiatan', 'pekerjaan', 'penyedia')->paginate(20);
+        $kontrak = Kontrak::where('id_penyedia', $penyediaId)
+            ->with('kegiatan', 'pekerjaans.kecamatan', 'pekerjaans.kegiatan', 'penyedia')
+            ->paginate(20);
 
         return KontrakResource::collection($kontrak);
     }
@@ -309,7 +331,7 @@ class KontrakController extends Controller
         // If not found, try finding by pekerjaan_id
         if (! $kontrak) {
             $kontrak = Kontrak::whereHas('pekerjaans', function($q) use ($id) {
-                $q->where('pekerjaan_id', $id);
+                $q->whereKey($id);
             })->latest()->first();
         }
 
@@ -350,6 +372,8 @@ class KontrakController extends Controller
                 return [
                     'row' => $f['row'] ?? null,
                     'message' => is_array($f['errors']) ? implode(', ', $f['errors']) : $f['errors'],
+                    'values' => $f['values'] ?? null,
+                    'debug' => $f['debug'] ?? null,
                 ];
             });
 

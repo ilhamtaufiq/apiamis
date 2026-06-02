@@ -152,6 +152,14 @@ class Pekerjaan extends Model
     }
 
     /**
+     * Alias backward-compatible untuk pemanggilan lama.
+     */
+    public function kontraks(): \Illuminate\Database\Eloquent\Relations\BelongsToMany
+    {
+        return $this->kontrak();
+    }
+
+    /**
      * Relasi One-to-One dengan Progress
      */
     public function progress(): \Illuminate\Database\Eloquent\Relations\HasOne

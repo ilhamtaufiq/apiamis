@@ -17,6 +17,8 @@ class KontrakImport implements ToCollection, WithHeadingRow, SkipsEmptyRows
     public $importedRows = 0;
     public $skippedRows = [];
     public $failures = [];
+    protected array $pekerjaanCache = [];
+    protected ?Collection $penyediaCache = null;
 
     public function collection(Collection $rows)
     {
@@ -44,25 +46,14 @@ class KontrakImport implements ToCollection, WithHeadingRow, SkipsEmptyRows
             $refYear = $refDate ? $refDate->year : null;
 
             // Resolve Pekerjaan (Nama Paket) - STRICT EXACT MATCH + YEAR (bisa multiple dipisah koma)
-            $pekerjaanNames = array_map('trim', explode(',', $pekerjaanNamesRaw));
+            $pekerjaanNames = preg_split('/\s*,\s*/u', trim($pekerjaanNamesRaw), -1, PREG_SPLIT_NO_EMPTY) ?: [];
             $pekerjaanNames = array_filter($pekerjaanNames);
 
             $pekerjaans = [];
             $missingPekerjaans = [];
 
             foreach ($pekerjaanNames as $pekerjaanName) {
-                $query = Pekerjaan::where(function($q) use ($pekerjaanName) {
-                    $q->where('nama_paket', $pekerjaanName)
-                      ->orWhereRaw('LOWER(nama_paket) = ?', [strtolower($pekerjaanName)]);
-                });
-
-                if ($refYear) {
-                    $query->whereHas('kegiatan', function($q) use ($refYear) {
-                        $q->where('tahun_anggaran', $refYear);
-                    });
-                }
-
-                $p = $query->first();
+                $p = $this->findPekerjaan($pekerjaanName, $refYear);
                 if ($p) {
                     $pekerjaans[] = $p;
                 } else {
@@ -72,12 +63,7 @@ class KontrakImport implements ToCollection, WithHeadingRow, SkipsEmptyRows
 
             // Resolve Penyedia (Nama Penyedia) - STRICT EXACT MATCH
             $penyediaName = isset($row['nama_penyedia']) ? trim($row['nama_penyedia']) : null;
-            $penyedia = null;
-            if ($penyediaName) {
-                $penyedia = Penyedia::where('nama', $penyediaName)
-                    ->orWhereRaw('LOWER(nama) = ?', [strtolower($penyediaName)])
-                    ->first();
-            }
+            $penyedia = $penyediaName ? $this->findPenyedia($penyediaName) : null;
 
             // Strict Validation
             if (count($missingPekerjaans) > 0 || count($pekerjaans) == 0 || !$penyedia) {
@@ -92,19 +78,24 @@ class KontrakImport implements ToCollection, WithHeadingRow, SkipsEmptyRows
                 }
                 if (!$penyedia) $reason .= "Penyedia '{$penyediaName}' tidak ditemukan. ";
 
-                $this->failures[] = [
-                    'row' => $rowNumber,
-                    'attribute' => 'referensi',
-                    'errors' => [$reason],
-                    'values' => $row->toArray()
-                ];
-                continue;
+            $this->failures[] = [
+                'row' => $rowNumber,
+                'attribute' => 'referensi',
+                'errors' => [$reason],
+                'values' => $row->toArray(),
+                'debug' => [
+                    'normalized_pekerjaan' => array_map(fn ($item) => $this->normalizeLookupText($item), $pekerjaanNames),
+                    'normalized_penyedia' => $this->normalizeLookupText($penyediaName),
+                    'ref_year' => $refYear,
+                ],
+            ];
+            continue;
             }
 
             try {
                 $firstPekerjaan = $pekerjaans[0];
                 // Find existing kontrak by checking if the first pekerjaan is already in any kontrak
-                $existingKontrak = $firstPekerjaan->kontraks()->first();
+                $existingKontrak = $firstPekerjaan->kontrak()->first();
                 
                 $kontrakData = [
                     'id_penyedia'       => $penyedia->id,
@@ -141,10 +132,74 @@ class KontrakImport implements ToCollection, WithHeadingRow, SkipsEmptyRows
                     'row' => $rowNumber,
                     'attribute' => 'database',
                     'errors' => [$e->getMessage()],
-                    'values' => $row->toArray()
+                    'values' => $row->toArray(),
                 ];
             }
         }
+    }
+
+    protected function findPekerjaan(string $name, ?int $refYear): ?Pekerjaan
+    {
+        $target = $this->normalizeLookupText($name);
+
+        $candidates = $this->getPekerjaanCandidates($refYear);
+        $match = $candidates->first(function (Pekerjaan $pekerjaan) use ($target) {
+            return $this->normalizeLookupText($pekerjaan->nama_paket) === $target;
+        });
+
+        if ($match) {
+            return $match;
+        }
+
+        if ($refYear !== null) {
+            $allCandidates = $this->getPekerjaanCandidates(null);
+
+            return $allCandidates->first(function (Pekerjaan $pekerjaan) use ($target) {
+                return $this->normalizeLookupText($pekerjaan->nama_paket) === $target;
+            });
+        }
+
+        return null;
+    }
+
+    protected function getPekerjaanCandidates(?int $refYear): Collection
+    {
+        $cacheKey = $refYear ? (string) $refYear : 'all';
+
+        if (! isset($this->pekerjaanCache[$cacheKey])) {
+            $query = Pekerjaan::query()->with('kegiatan');
+
+            if ($refYear) {
+                $query->whereHas('kegiatan', function ($q) use ($refYear) {
+                    $q->where('tahun_anggaran', $refYear);
+                });
+            }
+
+            $this->pekerjaanCache[$cacheKey] = $query->get();
+        }
+
+        return $this->pekerjaanCache[$cacheKey];
+    }
+
+    protected function findPenyedia(string $name): ?Penyedia
+    {
+        if ($this->penyediaCache === null) {
+            $this->penyediaCache = Penyedia::query()->get();
+        }
+
+        $target = $this->normalizeLookupText($name);
+
+        return $this->penyediaCache->first(function (Penyedia $penyedia) use ($target) {
+            return $this->normalizeLookupText($penyedia->nama) === $target
+                || $this->normalizeLookupText($penyedia->direktur) === $target;
+        });
+    }
+
+    protected function normalizeLookupText(?string $value): string
+    {
+        $value = preg_replace('/[^\pL\pN]+/u', '', trim((string) $value));
+
+        return mb_strtolower($value);
     }
 
     private function parseDate($value)
