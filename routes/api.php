@@ -28,6 +28,7 @@ use App\Http\Controllers\PenerimaController;
 use App\Http\Controllers\PenyediaController;
 use App\Http\Controllers\PermissionController;
 use App\Http\Controllers\ProgressController;
+use App\Http\Controllers\PuspenProgressFisikController;
 use App\Http\Controllers\RABAnalyzerController;
 use App\Http\Controllers\RkaController;
 use App\Http\Controllers\RoleController;
@@ -60,6 +61,8 @@ Route::post('app-settings', [AppSettingController::class, 'store'])->middleware(
 // Public Blog Routes
 Route::get('blog', [\App\Http\Controllers\BlogController::class, 'index']);
 Route::get('blog/{blog}', [\App\Http\Controllers\BlogController::class, 'show']);
+Route::get('public/puspen/progress-fisik', [PuspenProgressFisikController::class, 'publicIndex']);
+Route::post('public/puspen/progress-fisik/bulk-update', [PuspenProgressFisikController::class, 'publicBulkUpdate']);
 
 Route::middleware('auth:sanctum')->group(function () {
     Route::get('/', function () {
@@ -224,6 +227,8 @@ Route::middleware('auth:sanctum')->group(function () {
     // Progress routes
     Route::get('progress/pekerjaan/{pekerjaanId}', [ProgressController::class, 'report']);
     Route::post('progress/pekerjaan/{pekerjaanId}', [ProgressController::class, 'store']);
+    Route::get('puspen/progress-fisik', [PuspenProgressFisikController::class, 'index']);
+    Route::post('puspen/progress-fisik/bulk-update', [PuspenProgressFisikController::class, 'bulkUpdate']);
 
     // Master Fase Pekerjaan
     Route::apiResource('master-fase-pekerjaan', \App\Http\Controllers\MasterFasePekerjaanController::class);

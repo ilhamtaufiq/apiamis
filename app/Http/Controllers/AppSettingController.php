@@ -56,6 +56,7 @@ class AppSettingController extends Controller
             'chat_provider' => 'nullable|string|max:64',
             'chat_base_url' => 'nullable|string|max:255',
             'landing_page_active' => 'nullable|string|in:0,1',
+            'puspen_progress_fisik_public' => 'nullable|string|in:0,1',
             'logo' => 'nullable|file|mimes:jpg,jpeg,png,svg|max:2048',
             'favicon' => 'nullable|file|mimes:jpg,jpeg,png,svg,ico|max:1024',
         ]);
@@ -106,6 +107,11 @@ class AppSettingController extends Controller
 
         if ($request->has('landing_page_active')) {
             $setting = AppSetting::setValue('landing_page_active', $request->landing_page_active, 'text');
+            $updatedSettings[] = $setting;
+        }
+
+        if ($request->has('puspen_progress_fisik_public')) {
+            $setting = AppSetting::setValue('puspen_progress_fisik_public', $request->puspen_progress_fisik_public, 'text');
             $updatedSettings[] = $setting;
         }
 
