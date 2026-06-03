@@ -112,6 +112,7 @@ class ChatController extends Controller
             'message' => 'required|string',
             'session_id' => 'nullable|integer',
             'history' => 'nullable|array',
+            'provider' => 'nullable|string|max:64',
         ]);
 
         $userMessage = $request->input('message');
@@ -199,6 +200,7 @@ class ChatController extends Controller
         $loopCount = 0;
         $maxLoops = 3;
         $toolHistory = []; 
+        $requestedProvider = $request->input('provider', 'auto');
 
         $finalResult = null;
 
@@ -208,6 +210,7 @@ class ChatController extends Controller
                 $context, 
                 $formattedHistory,
                 [
+                    'provider' => $requestedProvider,
                     'tools' => $tools,
                     'tool_history' => $toolHistory,
                 ]

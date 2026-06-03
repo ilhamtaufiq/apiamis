@@ -10,6 +10,10 @@ class AppSettingResource extends JsonResource
     {
         $value = $this->value;
 
+        if (str_starts_with((string) $this->key, 'chat_api_key_')) {
+            $value = null;
+        }
+
         // If the setting is a file type, return the media URL
         if ($this->type === 'file') {
             $media = $this->getFirstMedia('app-settings');

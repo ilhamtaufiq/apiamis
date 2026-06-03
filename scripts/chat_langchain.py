@@ -72,6 +72,8 @@ def run_chat():
         
         api_key = input_data.get('api_key')
         model = input_data.get('model', 'openrouter/free')
+        base_url = input_data.get('base_url', 'https://openrouter.ai/api/v1')
+        headers = input_data.get('headers', {})
         user_message = input_data.get('message')
         context = input_data.get('context', '')
         history_raw = input_data.get('history', [])
@@ -88,7 +90,8 @@ def run_chat():
         llm = ChatOpenAI(
             api_key=api_key,
             model=model,
-            base_url="https://openrouter.ai/api/v1",
+            base_url=base_url,
+            default_headers=headers if headers else None,
             temperature=0.1,
         )
 

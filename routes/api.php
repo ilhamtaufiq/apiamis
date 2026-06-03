@@ -32,9 +32,11 @@ use App\Http\Controllers\RABAnalyzerController;
 use App\Http\Controllers\RkaController;
 use App\Http\Controllers\RoleController;
 use App\Http\Controllers\RoutePermissionController;
+use App\Http\Controllers\SignatureLibraryController;
 use App\Http\Controllers\SimulationNetworkController;
 use App\Http\Controllers\SpamUnitController;
 use App\Http\Controllers\TagController;
+use App\Http\Controllers\ToolPdfController;
 use App\Http\Controllers\TiketCommentController;
 use App\Http\Controllers\TiketController;
 use App\Http\Controllers\UserController;
@@ -296,6 +298,17 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // RAB Analysis
     Route::post('analyze-rab', [RABAnalyzerController::class, 'analyze']);
+
+    // Tools PDFs
+    Route::get('tool-pdfs/{toolPdf}/download', [ToolPdfController::class, 'download']);
+    Route::post('tool-pdfs/bulk-download', [ToolPdfController::class, 'bulkDownload']);
+    Route::post('tool-pdfs/sign', [ToolPdfController::class, 'sign']);
+    Route::apiResource('tool-pdfs', ToolPdfController::class)->only(['index', 'store', 'destroy']);
+
+    // Signature libraries
+    Route::get('signature-libraries', [SignatureLibraryController::class, 'index']);
+    Route::post('signature-libraries', [SignatureLibraryController::class, 'store']);
+    Route::delete('signature-libraries/{id}', [SignatureLibraryController::class, 'destroy']);
 
     // Chat AI (with sessions, cache, and learning)
     Route::post('chat', [\App\Http\Controllers\ChatController::class, 'chat']);

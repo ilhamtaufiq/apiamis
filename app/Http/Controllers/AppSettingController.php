@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\AppSetting;
 use App\Http\Resources\AppSettingResource;
+use App\Services\OpenRouterService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 
@@ -52,11 +53,19 @@ class AppSettingController extends Controller
             'app_name' => 'nullable|string|max:255',
             'app_description' => 'nullable|string|max:500',
             'tahun_anggaran' => 'nullable|string|max:4',
-            'openrouter_model' => 'nullable|string|max:255',
+            'chat_provider' => 'nullable|string|max:64',
+            'chat_base_url' => 'nullable|string|max:255',
             'landing_page_active' => 'nullable|string|in:0,1',
             'logo' => 'nullable|file|mimes:jpg,jpeg,png,svg|max:2048',
             'favicon' => 'nullable|file|mimes:jpg,jpeg,png,svg,ico|max:1024',
         ]);
+
+        foreach (OpenRouterService::providerOptions() as $providerId => $providerConfig) {
+            $settingKey = $this->chatApiKeySettingKey($providerId);
+            $request->validate([
+                $settingKey => 'nullable|string|max:2000',
+            ]);
+        }
 
         $updatedSettings = [];
 
@@ -76,9 +85,23 @@ class AppSettingController extends Controller
             $updatedSettings[] = $setting;
         }
 
-        if ($request->has('openrouter_model')) {
-            $setting = AppSetting::setValue('openrouter_model', $request->openrouter_model, 'text');
+        if ($request->has('chat_provider')) {
+            $setting = AppSetting::setValue('chat_provider', $request->chat_provider, 'text');
             $updatedSettings[] = $setting;
+        }
+
+        if ($request->has('chat_base_url')) {
+            $setting = AppSetting::setValue('chat_base_url', $request->chat_base_url, 'text');
+            $updatedSettings[] = $setting;
+        }
+
+        foreach (OpenRouterService::providerOptions() as $providerId => $providerConfig) {
+            $settingKey = $this->chatApiKeySettingKey($providerId);
+
+            if ($request->has($settingKey)) {
+                $setting = AppSetting::setValue($settingKey, $request->input($settingKey), 'secret');
+                $updatedSettings[] = $setting;
+            }
         }
 
         if ($request->has('landing_page_active')) {
@@ -181,5 +204,10 @@ class AppSettingController extends Controller
             // Handle inaccessible files/directories
         }
         return $size;
+    }
+
+    private function chatApiKeySettingKey(string $providerId): string
+    {
+        return 'chat_api_key_' . str_replace('-', '_', $providerId);
     }
 }
