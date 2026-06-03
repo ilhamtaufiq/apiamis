@@ -67,13 +67,7 @@ class PuspenProgressFisikController extends Controller
 
     public function bulkUpdate(Request $request)
     {
-        $validated = $request->validate([
-            'tahun' => 'required|integer|min:2000|max:2100',
-            'items' => 'required|array',
-            'items.*.kontrak_id' => 'required|integer|exists:tbl_kontrak,id',
-            'items.*.rencana' => 'nullable|numeric|min:0|max:100',
-            'items.*.realisasi' => 'nullable|numeric|min:0|max:100',
-        ]);
+        $validated = $this->validateProgressPayload($request, true);
 
         foreach ($validated['items'] as $item) {
             PuspenProgressFisik::updateOrCreate(
@@ -97,12 +91,7 @@ class PuspenProgressFisikController extends Controller
             return response()->json(['message' => 'Halaman progress fisik Puspen sedang dikunci'], 403);
         }
 
-        $validated = $request->validate([
-            'items' => 'required|array',
-            'items.*.kontrak_id' => 'required|integer|exists:tbl_kontrak,id',
-            'items.*.rencana' => 'nullable|numeric|min:0|max:100',
-            'items.*.realisasi' => 'nullable|numeric|min:0|max:100',
-        ]);
+        $validated = $this->validateProgressPayload($request, false);
 
         $tahun = (int) (AppSetting::getValue('tahun_anggaran') ?: now()->year);
 
@@ -120,5 +109,50 @@ class PuspenProgressFisikController extends Controller
         }
 
         return response()->json(['message' => 'Progress fisik berhasil disimpan']);
+    }
+
+    private function validateProgressPayload(Request $request, bool $needsYear): array
+    {
+        $rules = [
+            'items' => 'required|array',
+            'items.*.kontrak_id' => 'required|integer|exists:tbl_kontrak,id',
+            'items.*.rencana' => ['nullable', function ($attribute, $value, $fail) {
+                $this->validateDecimalInput($attribute, $value, $fail);
+            }],
+            'items.*.realisasi' => ['nullable', function ($attribute, $value, $fail) {
+                $this->validateDecimalInput($attribute, $value, $fail);
+            }],
+        ];
+
+        if ($needsYear) {
+            $rules['tahun'] = 'required|integer|min:2000|max:2100';
+        }
+
+        return $request->validate($rules);
+    }
+
+    private function validateDecimalInput(string $attribute, mixed $value, \Closure $fail): void
+    {
+        if ($value === null || $value === '') {
+            return;
+        }
+
+        $stringValue = trim((string) $value);
+
+        if (preg_match('/^\d+([.,]\d{1,2})?$/', $stringValue) !== 1) {
+            $fail("Field {$attribute} harus berupa angka desimal dengan maksimal 2 angka di belakang koma.");
+            return;
+        }
+
+        $normalized = str_replace(',', '.', $stringValue);
+        if (! is_numeric($normalized)) {
+            $fail("Field {$attribute} harus berupa angka desimal.");
+            return;
+        }
+
+        $numeric = (float) $normalized;
+        if ($numeric < 0 || $numeric > 100) {
+            $fail("Field {$attribute} harus berada antara 0 dan 100.");
+        }
     }
 }
