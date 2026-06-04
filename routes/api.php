@@ -29,6 +29,7 @@ use App\Http\Controllers\PenyediaController;
 use App\Http\Controllers\PermissionController;
 use App\Http\Controllers\ProgressController;
 use App\Http\Controllers\PuspenProgressFisikController;
+use App\Http\Controllers\PuspenMediaShareController;
 use App\Http\Controllers\RABAnalyzerController;
 use App\Http\Controllers\RkaController;
 use App\Http\Controllers\RoleController;
@@ -63,6 +64,9 @@ Route::get('blog', [\App\Http\Controllers\BlogController::class, 'index']);
 Route::get('blog/{blog}', [\App\Http\Controllers\BlogController::class, 'show']);
 Route::get('public/puspen/progress-fisik', [PuspenProgressFisikController::class, 'publicIndex']);
 Route::post('public/puspen/progress-fisik/bulk-update', [PuspenProgressFisikController::class, 'publicBulkUpdate']);
+Route::get('public/puspen/media-shares/{shareToken}', [PuspenMediaShareController::class, 'publicShow']);
+Route::get('public/puspen/media-shares/{shareToken}/preview/{media}', [PuspenMediaShareController::class, 'publicPreview']);
+Route::get('public/puspen/media-shares/{shareToken}/download', [PuspenMediaShareController::class, 'publicDownload']);
 
 Route::middleware('auth:sanctum')->group(function () {
     Route::get('/', function () {
@@ -229,6 +233,10 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('progress/pekerjaan/{pekerjaanId}', [ProgressController::class, 'store']);
     Route::get('puspen/progress-fisik', [PuspenProgressFisikController::class, 'index']);
     Route::post('puspen/progress-fisik/bulk-update', [PuspenProgressFisikController::class, 'bulkUpdate']);
+    Route::get('puspen/media-library', [PuspenMediaShareController::class, 'mediaLibrary']);
+    Route::apiResource('puspen/media-shares', PuspenMediaShareController::class)
+        ->parameters(['media-shares' => 'puspenMediaShare'])
+        ->only(['index', 'store', 'update', 'destroy']);
 
     // Master Fase Pekerjaan
     Route::apiResource('master-fase-pekerjaan', \App\Http\Controllers\MasterFasePekerjaanController::class);
