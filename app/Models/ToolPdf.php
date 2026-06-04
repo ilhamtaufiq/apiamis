@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Spatie\MediaLibrary\HasMedia;
 use Spatie\MediaLibrary\InteractsWithMedia;
+use App\Models\ToolPdfSignaturePlacement;
 
 class ToolPdf extends Model implements HasMedia
 {
@@ -37,6 +38,11 @@ class ToolPdf extends Model implements HasMedia
     public function children(): HasMany
     {
         return $this->hasMany(self::class, 'parent_id');
+    }
+
+    public function signaturePlacements(): HasMany
+    {
+        return $this->hasMany(ToolPdfSignaturePlacement::class, 'tool_pdf_id');
     }
 
     public function scopeOwnedBy($query, int $userId)

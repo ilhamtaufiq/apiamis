@@ -8,13 +8,15 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+use Illuminate\Support\Facades\Validator;
+use Illuminate\Validation\Rule;
 
 class ToolPdfController extends Controller
 {
     public function index(Request $request)
     {
         $query = ToolPdf::ownedBy($request->user()->id)
-            ->with(['media', 'parent:id,name'])
+            ->with(['media', 'parent:id,name', 'signaturePlacements'])
             ->orderByDesc('created_at');
 
         if ($request->filled('kind') && $request->kind !== 'all') {
@@ -37,6 +39,7 @@ class ToolPdfController extends Controller
         $validated = $request->validate([
             'file' => 'required|file|mimes:pdf|max:51200',
             'name' => 'nullable|string|max:255',
+            'placements' => 'nullable|string',
         ]);
 
         $pdf = DB::transaction(function () use ($request, $validated) {
@@ -50,7 +53,9 @@ class ToolPdfController extends Controller
 
             $pdf->addMediaFromRequest('file')->toMediaCollection('pdf');
 
-            return $pdf->load(['media']);
+            $this->storeSignaturePlacements($pdf, $validated['placements'] ?? null);
+
+            return $pdf->load(['media', 'signaturePlacements']);
         });
 
         return (new ToolPdfResource($pdf))
@@ -63,7 +68,13 @@ class ToolPdfController extends Controller
         $validated = $request->validate([
             'file' => 'required|file|mimes:pdf|max:51200',
             'name' => 'nullable|string|max:255',
-            'source_id' => 'nullable|exists:tool_pdfs,id',
+            'placements' => 'nullable|string',
+            'source_id' => [
+                'nullable',
+                Rule::exists('tool_pdfs', 'id')
+                    ->where(fn ($query) => $query
+                        ->where('user_id', $request->user()->id)),
+            ],
         ]);
 
         $signedPdf = DB::transaction(function () use ($request, $validated) {
@@ -85,7 +96,9 @@ class ToolPdfController extends Controller
 
             $signedPdf->addMediaFromRequest('file')->toMediaCollection('pdf');
 
-            return $signedPdf->load(['media', 'parent:id,name']);
+            $this->storeSignaturePlacements($signedPdf, $validated['placements'] ?? null);
+
+            return $signedPdf->load(['media', 'parent:id,name', 'signaturePlacements']);
         });
 
         return (new ToolPdfResource($signedPdf))
@@ -97,12 +110,17 @@ class ToolPdfController extends Controller
     {
         $validated = $request->validate([
             'ids' => 'required|array|min:1',
-            'ids.*' => 'required|exists:tool_pdfs,id',
+            'ids.*' => [
+                'required',
+                Rule::exists('tool_pdfs', 'id')
+                    ->where(fn ($query) => $query
+                        ->where('user_id', $request->user()->id)),
+            ],
         ]);
 
         $toolPdfs = ToolPdf::ownedBy($request->user()->id)
             ->whereIn('id', $validated['ids'])
-            ->with('media')
+            ->with(['media', 'signaturePlacements'])
             ->get()
             ->values();
 
@@ -162,5 +180,58 @@ class ToolPdfController extends Controller
             'success' => true,
             'message' => 'File PDF berhasil dihapus',
         ]);
+    }
+
+    private function storeSignaturePlacements(ToolPdf $toolPdf, ?string $placementsJson): void
+    {
+        if ($placementsJson === null || trim($placementsJson) === '') {
+            return;
+        }
+
+        $placements = json_decode($placementsJson, true);
+        if (!is_array($placements)) {
+            abort(422, 'Format placement tanda tangan tidak valid');
+        }
+
+        Validator::make(['placements' => $placements], [
+            'placements' => 'array',
+            'placements.*.signature_id' => 'required|string|max:64',
+            'placements.*.page_number' => 'required|integer|min:1',
+            'placements.*.x_ratio' => 'required|numeric|min:0|max:1',
+            'placements.*.y_ratio' => 'required|numeric|min:0|max:1',
+            'placements.*.scale' => 'required|numeric|min:0.01|max:1',
+            'placements.*.sort_order' => 'nullable|integer|min:0',
+            'placements.*.signature_name' => 'required|string|max:255',
+            'placements.*.signature_file_name' => 'required|string|max:255',
+            'placements.*.signature_mime_type' => 'required|string|max:100',
+            'placements.*.signature_width' => 'required|integer|min:1|max:20000',
+            'placements.*.signature_height' => 'required|integer|min:1|max:20000',
+            'placements.*.signature_data_url' => [
+                'nullable',
+                'string',
+                'regex:/^data:image\/(png|jpe?g|webp);base64,/i',
+            ],
+            'placements.*.signature_source_type' => 'nullable|in:upload,library',
+            'placements.*.signature_source_id' => 'nullable|string|max:64',
+        ])->validate();
+
+        foreach ($placements as $index => $placement) {
+            $toolPdf->signaturePlacements()->create([
+                'signature_id' => (string) $placement['signature_id'],
+                'page_number' => (int) $placement['page_number'],
+                'x_ratio' => (float) $placement['x_ratio'],
+                'y_ratio' => (float) $placement['y_ratio'],
+                'scale' => (float) $placement['scale'],
+                'sort_order' => isset($placement['sort_order']) ? (int) $placement['sort_order'] : $index,
+                'signature_name' => (string) $placement['signature_name'],
+                'signature_file_name' => (string) $placement['signature_file_name'],
+                'signature_mime_type' => (string) $placement['signature_mime_type'],
+                'signature_width' => (int) $placement['signature_width'],
+                'signature_height' => (int) $placement['signature_height'],
+                'signature_data_url' => $placement['signature_data_url'] ?? null,
+                'signature_source_type' => $placement['signature_source_type'] ?? null,
+                'signature_source_id' => $placement['signature_source_id'] ?? null,
+            ]);
+        }
     }
 }
