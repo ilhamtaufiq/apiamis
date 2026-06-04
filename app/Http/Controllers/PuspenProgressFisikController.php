@@ -45,7 +45,9 @@ class PuspenProgressFisikController extends Controller
 
         $query = Kontrak::query()
             ->with([
-                'pekerjaans:id,nama_paket',
+                'kegiatan:id,nama_sub_kegiatan',
+                'pekerjaans.kegiatan:id,nama_sub_kegiatan',
+                'pekerjaans:id,nama_paket,kegiatan_id',
                 'progress_fisik' => fn ($q) => $q->where('tahun_anggaran', $tahun),
             ])
             ->where(function ($q) use ($tahun) {
@@ -58,11 +60,75 @@ class PuspenProgressFisikController extends Controller
         if ($search) {
             $query->where(function ($q) use ($search) {
                 $q->where('kode_paket', 'like', "%{$search}%")
-                    ->orWhereHas('pekerjaans', fn ($p) => $p->where('nama_paket', 'like', "%{$search}%"));
+                    ->orWhereHas('kegiatan', fn ($k) => $k->where('nama_sub_kegiatan', 'like', "%{$search}%"))
+                    ->orWhereHas('pekerjaans', fn ($p) => $p->where('nama_paket', 'like', "%{$search}%"))
+                    ->orWhereHas('pekerjaans.kegiatan', fn ($k) => $k->where('nama_sub_kegiatan', 'like', "%{$search}%"));
             });
         }
 
-        return PuspenProgressFisikResource::collection($query->paginate($perPage));
+        $summary = $this->calculateSummary((clone $query)->get());
+
+        return PuspenProgressFisikResource::collection($query->paginate($perPage))
+            ->additional(['summary' => $summary]);
+    }
+
+    private function calculateSummary($items): array
+    {
+        $total = $this->calculateAverage($items);
+        $latestUpdatedAt = $items
+            ->map(fn ($item) => $item->progress_fisik?->updated_at)
+            ->filter()
+            ->sortDesc()
+            ->first();
+        $perSubKegiatan = [];
+
+        foreach ($items as $item) {
+            $names = $this->subKegiatanNames($item);
+
+            foreach ($names as $name) {
+                $perSubKegiatan[$name] ??= [];
+                $perSubKegiatan[$name][] = $item;
+            }
+        }
+
+        $perSubKegiatan = collect($perSubKegiatan)
+            ->map(fn ($group, $name) => [
+                'sub_kegiatan' => $name,
+                ...$this->calculateAverage(collect($group)),
+            ])
+            ->values()
+            ->all();
+
+        return [
+            ...$total,
+            'latest_updated_at' => $latestUpdatedAt?->toISOString(),
+            'per_sub_kegiatan' => $perSubKegiatan,
+        ];
+    }
+
+    private function calculateAverage($items): array
+    {
+        $count = max($items->count(), 1);
+        $rencana = $items->sum(fn ($item) => (float) ($item->progress_fisik?->rencana ?? 0)) / $count;
+        $realisasi = $items->sum(fn ($item) => (float) ($item->progress_fisik?->realisasi ?? 0)) / $count;
+
+        return [
+            'count' => $items->count(),
+            'rencana' => round($rencana, 2),
+            'realisasi' => round($realisasi, 2),
+            'deviasi' => round($realisasi - $rencana, 2),
+        ];
+    }
+
+    private function subKegiatanNames(Kontrak $kontrak): array
+    {
+        $names = collect([$kontrak->kegiatan?->nama_sub_kegiatan])
+            ->merge($kontrak->pekerjaans->pluck('kegiatan.nama_sub_kegiatan'))
+            ->filter()
+            ->unique()
+            ->values();
+
+        return $names->isEmpty() ? ['Tanpa Sub Kegiatan'] : $names->all();
     }
 
     public function bulkUpdate(Request $request)
