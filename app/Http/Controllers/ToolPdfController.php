@@ -75,22 +75,9 @@ class ToolPdfController extends Controller
                     ->findOrFail($validated['source_id']);
             }
 
-            if ($source) {
-                $source->update([
-                    'name' => $validated['name'] ?: $source->name,
-                    'original_filename' => $file->getClientOriginalName(),
-                    'kind' => 'signed',
-                ]);
-
-                $source->clearMediaCollection('pdf');
-                $source->addMediaFromRequest('file')->toMediaCollection('pdf');
-
-                return $source->load(['media', 'parent:id,name']);
-            }
-
             $signedPdf = ToolPdf::create([
                 'user_id' => $request->user()->id,
-                'parent_id' => null,
+                'parent_id' => $source?->id,
                 'name' => $validated['name'] ?: pathinfo($file->getClientOriginalName(), PATHINFO_FILENAME),
                 'original_filename' => $file->getClientOriginalName(),
                 'kind' => 'signed',
