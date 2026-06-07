@@ -4,7 +4,9 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Spatie\Image\Enums\Fit;
 use Spatie\MediaLibrary\HasMedia;
+use Spatie\MediaLibrary\MediaCollections\Models\Media;
 use Spatie\MediaLibrary\InteractsWithMedia;
 
 use App\Traits\NotifiesAdminsOnChanges;
@@ -53,5 +55,13 @@ class Foto extends Model implements HasMedia
     public function registerMediaCollections(): void
     {
         $this->addMediaCollection('foto/pekerjaan');
+    }
+
+    public function registerMediaConversions(?Media $media = null): void
+    {
+        $this->addMediaConversion('thumb')
+            ->fit(Fit::Crop, 120, 120)
+            ->sharpen(10)
+            ->nonQueued();
     }
 }

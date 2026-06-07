@@ -53,6 +53,9 @@ class PekerjaanResource extends JsonResource
         $progressTotal = 0;
         $progressRencana = 0;
         $deviasi = 0;
+        $fotoStatus = null;
+        $fotoRequiredCount = null;
+        $fotoActualCount = null;
 
         if ($this->relationLoaded('progress') && $this->progress) {
             $content = $this->progress->content ?? [];
@@ -108,6 +111,48 @@ class PekerjaanResource extends JsonResource
             $deviasi = $progressTotal - $progressRencana;
         }
 
+        if ($this->relationLoaded('output') && $this->relationLoaded('foto')) {
+            $fotoActualCount = $this->foto->count();
+            $fotoRequiredCount = 0;
+            $hasAnyFoto = false;
+            $isComplete = true;
+            $fotoByOutput = $this->foto->groupBy('komponen_id');
+
+            foreach ($this->output as $output) {
+                $outputPhotos = $fotoByOutput->get($output->id, collect());
+                $outputPhotoCount = $outputPhotos->count();
+                $hasAnyFoto = $hasAnyFoto || $outputPhotoCount > 0;
+
+                $requiredUnits = $output->penerima_is_optional
+                    ? 1
+                    : max(1, (int) ceil((float) ($output->volume ?? 0)));
+                $requiredPhotos = $requiredUnits * 5;
+                $fotoRequiredCount += $requiredPhotos;
+
+                $distinctRecipients = $outputPhotos
+                    ->pluck('penerima_id')
+                    ->filter()
+                    ->unique()
+                    ->count();
+
+                if ($outputPhotoCount < $requiredPhotos) {
+                    $isComplete = false;
+                }
+
+                if (! $output->penerima_is_optional && $distinctRecipients < $requiredUnits) {
+                    $isComplete = false;
+                }
+            }
+
+            if (! $hasAnyFoto) {
+                $fotoStatus = 'belum_ada_foto';
+            } elseif (! $isComplete) {
+                $fotoStatus = 'belum_selesai';
+            } else {
+                $fotoStatus = 'selesai';
+            }
+        }
+
         return [
             'id' => $this->id,
             'kode_rekening' => $this->kode_rekening,
@@ -115,6 +160,9 @@ class PekerjaanResource extends JsonResource
             'pagu' => $this->pagu,
             'progress_total' => round($progressTotal, 2),
             'deviasi' => round($deviasi, 2),
+            'foto_count' => $this->foto_count ?? $fotoActualCount,
+            'foto_required_count' => $fotoRequiredCount,
+            'foto_status' => $fotoStatus,
             'kecamatan_id' => $this->kecamatan_id,
             'desa_id' => $this->desa_id,
             'kegiatan_id' => $this->kegiatan_id,

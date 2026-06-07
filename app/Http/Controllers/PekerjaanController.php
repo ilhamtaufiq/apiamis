@@ -70,8 +70,12 @@ class PekerjaanController extends Controller
             'kontrak.penyedia',
             'kontrak.addendums',
         ])
-            ->withCount('penerima')
+            ->withCount(['penerima', 'foto'])
             ->byUserRole();  // Aman karena sudah check auth
+
+        if ($request->boolean('summary')) {
+            $query->with(['output', 'foto']);
+        }
 
         // Filter by tahun via kegiatan
         if ($request->has('tahun') && ! empty($request->tahun)) {
