@@ -48,15 +48,7 @@ class Pekerjaan extends Model
                 });
 
             // 3. Automatically assigned if user's NIP matches the Pengawas/Pendamping master data
-            if ($user->nip) {
-                $q->orWhere(function ($sub) use ($user) {
-                    $sub->whereHas('pengawas', function ($p) use ($user) {
-                        $p->where('nip', $user->nip);
-                    })->orWhereHas('pendamping', function ($p) use ($user) {
-                        $p->where('nip', $user->nip);
-                    });
-                });
-            }
+            // (Dihapus sesuai permintaan, sekarang menggunakan assignment manual)
         });
     }
 
