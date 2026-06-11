@@ -6,6 +6,7 @@ use App\Http\Controllers\AppSettingController;
 use App\Http\Controllers\AuditLogController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\BackupController;
+use App\Http\Controllers\BeritaAcaraController;
 use App\Http\Controllers\BerkasController;
 use App\Http\Controllers\ChecklistItemController;
 use App\Http\Controllers\ClientErrorReportController;
@@ -78,6 +79,10 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // Frontend error reporting
     Route::post('client-error-reports', [ClientErrorReportController::class, 'store']);
+
+    // Berita Acara sequence
+    Route::get('berita-acara/sequence', [BeritaAcaraController::class, 'getSequence']);
+    Route::post('berita-acara/sequence', [BeritaAcaraController::class, 'updateSequence']);
 
     // Custom routes - Pekerjaan
     Route::get('pekerjaan/document-register', [PekerjaanController::class, 'documentRegister']);

@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\DocumentRegister;
 use App\Models\DocumentType;
 use App\Models\Kontrak;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Http\Request;
 
 class DocumentRegisterController extends Controller
@@ -91,16 +92,25 @@ class DocumentRegisterController extends Controller
         $date = new \DateTime($validated['tanggal']);
         $year = $date->format('Y');
 
-        // Sequence logic
+        // Sequence logic - Using global sequence (tbl_document_sequences)
         if ($request->has('sequence_number') && !empty($request->sequence_number)) {
             $sequence = (int) $request->sequence_number;
         } else {
-            $lastRegister = DocumentRegister::where('type_id', $type->id)
+            // Ambil nomor urut dari pool global per tahun
+            $seq = DB::table('tbl_document_sequences')
                 ->where('year', $year)
-                ->orderBy('sequence_number', 'desc')
+                ->where('type', 'berita-acara')
                 ->first();
-            $sequence = $lastRegister ? $lastRegister->sequence_number + 1 : 1;
+
+            $sequence = $seq ? $seq->last_number + 1 : 1;
         }
+
+        // Update pool global dengan nomor urut terbaru
+        DB::table('tbl_document_sequences')
+            ->updateOrInsert(
+                ['year' => $year, 'type' => 'berita-acara'],
+                ['last_number' => $sequence]
+            );
 
         $nomor = $this->generateNumber($type, $sequence, $date, $validated['kontrak_id']);
 
