@@ -136,11 +136,13 @@ class ChatController extends Controller
         $sessionId = $request->input('session_id');
         $user = $request->user();
 
+        $isNewSession = false;
         $session = null;
         if ($sessionId) {
             $session = ChatSession::where('user_id', $user->id)->find($sessionId);
         }
         if (!$session) {
+            $isNewSession = true;
             $session = ChatSession::create([
                 'user_id' => $user->id,
                 'title' => 'Percakapan Baru',
@@ -166,8 +168,8 @@ class ChatController extends Controller
                 'tokens_used' => 0,
             ]);
 
-            if ($session->messages()->count() <= 2) {
-                $session->generateTitle();
+            if ($isNewSession) {
+                $session->generateTitle($userMessage);
             }
 
             return response()->json([
@@ -289,8 +291,8 @@ class ChatController extends Controller
             Cache::put("ami_auto_report_u" . $user->id, $aiReply, now()->addHours(4));
         }
 
-        if ($session->messages()->count() <= 2) {
-            $session->generateTitle();
+        if ($isNewSession) {
+            $session->generateTitle($userMessage);
         }
 
         $session->touch();

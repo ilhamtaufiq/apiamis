@@ -21,15 +21,19 @@ class ChatSession extends Model
     }
 
     /**
-     * Auto-generate title from first user message
+     * Auto-generate title from first user message (B7: pass content to skip DB query)
      */
-    public function generateTitle(): void
+    public function generateTitle(?string $content = null): void
     {
-        $firstMessage = $this->messages()->where('role', 'user')->first();
-        if ($firstMessage) {
-            $this->update([
-                'title' => mb_substr($firstMessage->content, 0, 60) . (mb_strlen($firstMessage->content) > 60 ? '...' : '')
-            ]);
+        if ($content === null) {
+            $content = $this->messages()->where('role', 'user')->value('content');
+        }
+        if ($content) {
+            $truncated = mb_substr($content, 0, 60);
+            if (mb_strlen($content) > 60) {
+                $truncated .= '...';
+            }
+            $this->update(['title' => $truncated]);
         }
     }
 }

@@ -1,0 +1,15 @@
+{
+  "category": "enhancement",
+  "description": "**11. HTTP/2 Multiplexing & Keep-Alive Tuning** Enable HTTP/2 on the reverse proxy with tuned keep-alive (60s) and max concurrent streams. Eliminates head-of-line blocking and reuses TCP connections. **12. Cursor-Based Pagination** Replace `OFFSET/LIMIT` pagination with cursor-based tokens for large datasets. Deep-page offset scans degrade linearly; cursor pagination stays O(1) per page. **13. Lazy Initialization of Heavy Middleware** Defer auth validation, logging sinks, and feature-flag loading until first use. Reduces cold-start latency and prevents request blocking during eager init. **14. Circuit Breakers for External API Dependencies** Wrap third-party API calls with resilience patterns (circuit breaker + fallback to cached response). Prevents cascading failures during upstream outages. **15. Request Rate Limiting & Load Shedding** Token-bucket rate limiting at the API gateway protects against abusive traffic and DDoS, preventing CPU/memory exhaustion under sudden load. ---",
+  "title": "Tier 3 — Worthwhile, Lower Urgency",
+  "status": "backlog",
+  "id": "feature-1781878393278-1p7dtw1sn",
+  "createdAt": "2026-06-19T14:13:13.280Z",
+  "descriptionHistory": [
+    {
+      "description": "**11. HTTP/2 Multiplexing & Keep-Alive Tuning** Enable HTTP/2 on the reverse proxy with tuned keep-alive (60s) and max concurrent streams. Eliminates head-of-line blocking and reuses TCP connections. **12. Cursor-Based Pagination** Replace `OFFSET/LIMIT` pagination with cursor-based tokens for large datasets. Deep-page offset scans degrade linearly; cursor pagination stays O(1) per page. **13. Lazy Initialization of Heavy Middleware** Defer auth validation, logging sinks, and feature-flag loading until first use. Reduces cold-start latency and prevents request blocking during eager init. **14. Circuit Breakers for External API Dependencies** Wrap third-party API calls with resilience patterns (circuit breaker + fallback to cached response). Prevents cascading failures during upstream outages. **15. Request Rate Limiting & Load Shedding** Token-bucket rate limiting at the API gateway protects against abusive traffic and DDoS, preventing CPU/memory exhaustion under sudden load. ---",
+      "timestamp": "2026-06-19T14:13:13.280Z",
+      "source": "initial"
+    }
+  ]
+}

@@ -1,0 +1,15 @@
+{
+  "category": "enhancement",
+  "description": "Several high-value optimizations were absent across all panel responses: - **Connection multiplexing** beyond HTTP/2 (e.g., database pipelining, gRPC streaming for data-heavy endpoints) - **Materialized views** for complex aggregations queried repeatedly - **Query result streaming** for large dataset exports (avoids full in-memory buffering) - **Cache preheating** on deploy to avoid thundering-herd against a cold cache - **Serialization optimization** (zero-copy, schema-based serializers like FlatBuffers or Cap'n Proto for internal services) - **Database maintenance routines** (regular VACUUM, ANALYZE, index rebuild schedules) These are worth investigating alongside Tier 2/3 items once the foundational optimizations are in place.",
+  "title": "Blind Spots to Watch",
+  "status": "backlog",
+  "id": "feature-1781878393302-uc73s0cgh",
+  "createdAt": "2026-06-19T14:13:13.308Z",
+  "descriptionHistory": [
+    {
+      "description": "Several high-value optimizations were absent across all panel responses: - **Connection multiplexing** beyond HTTP/2 (e.g., database pipelining, gRPC streaming for data-heavy endpoints) - **Materialized views** for complex aggregations queried repeatedly - **Query result streaming** for large dataset exports (avoids full in-memory buffering) - **Cache preheating** on deploy to avoid thundering-herd against a cold cache - **Serialization optimization** (zero-copy, schema-based serializers like FlatBuffers or Cap'n Proto for internal services) - **Database maintenance routines** (regular VACUUM, ANALYZE, index rebuild schedules) These are worth investigating alongside Tier 2/3 items once the foundational optimizations are in place.",
+      "timestamp": "2026-06-19T14:13:13.307Z",
+      "source": "initial"
+    }
+  ]
+}

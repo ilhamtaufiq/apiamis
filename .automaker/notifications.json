@@ -1,0 +1,82 @@
+{
+  "version": 1,
+  "notifications": [
+    {
+      "id": "8e3d4bd8-5a79-44d8-ba05-940f23aa579b",
+      "type": "auto_mode_error",
+      "title": "feature-1781882842711-0qykvb1v72ym",
+      "message": "Auto Mode Error: Claude Code process exited with code 1",
+      "createdAt": "2026-06-19T15:30:39.000Z",
+      "read": false,
+      "dismissed": false,
+      "featureId": "feature-1781882842711-0qykvb1v72ym",
+      "projectPath": "C:\\laragon\\www\\apiamis"
+    },
+    {
+      "id": "01cc084e-804f-4b07-aba0-6346b6039975",
+      "type": "auto_mode_error",
+      "title": "feature-1781882842711-0qykvb1v72ym",
+      "message": "Auto Mode Error: Claude Code process exited with code 1",
+      "createdAt": "2026-06-19T15:30:39.000Z",
+      "read": false,
+      "dismissed": false,
+      "featureId": "feature-1781882842711-0qykvb1v72ym",
+      "projectPath": "C:\\laragon\\www\\apiamis"
+    },
+    {
+      "id": "7f0ca2f2-3aa4-48ef-b521-4387ec764d5a",
+      "type": "auto_mode_error",
+      "title": "feature-1781882842711-0qykvb1v72ym",
+      "message": "Auto Mode Error: Claude Code process exited with code 1",
+      "createdAt": "2026-06-19T15:30:39.000Z",
+      "read": false,
+      "dismissed": false,
+      "featureId": "feature-1781882842711-0qykvb1v72ym",
+      "projectPath": "C:\\laragon\\www\\apiamis"
+    },
+    {
+      "id": "14f3cc79-aab1-4217-9d28-656df3089f5f",
+      "type": "auto_mode_error",
+      "title": "feature-1781882842711-0qykvb1v72ym",
+      "message": "Auto Mode Error: Claude Code process exited with code 1",
+      "createdAt": "2026-06-19T15:30:39.000Z",
+      "read": false,
+      "dismissed": false,
+      "featureId": "feature-1781882842711-0qykvb1v72ym",
+      "projectPath": "C:\\laragon\\www\\apiamis"
+    },
+    {
+      "id": "ffbecd19-1b84-41a2-b2eb-c5344ef5b511",
+      "type": "auto_mode_error",
+      "title": "feature-1781882842711-0qykvb1v72ym",
+      "message": "Auto Mode Error: Claude Code process exited with code 1",
+      "createdAt": "2026-06-19T15:30:39.000Z",
+      "read": false,
+      "dismissed": false,
+      "featureId": "feature-1781882842711-0qykvb1v72ym",
+      "projectPath": "C:\\laragon\\www\\apiamis"
+    },
+    {
+      "id": "62c0d643-7a57-47cb-acd0-3b226672ff76",
+      "type": "auto_mode_error",
+      "title": "feature-1781882842711-0qykvb1v72ym",
+      "message": "Auto Mode Error: Agent execution ended with: error_during_execution",
+      "createdAt": "2026-06-19T15:55:57.115Z",
+      "read": false,
+      "dismissed": false,
+      "featureId": "feature-1781882842711-0qykvb1v72ym",
+      "projectPath": "C:\\laragon\\www\\apiamis"
+    },
+    {
+      "id": "0fe2d160-04ba-43e7-b872-6e433e26fb1b",
+      "type": "feature_waiting_approval",
+      "title": "feature-1781882842711-0qykvb1v72ym",
+      "message": "Feature Ready for Review",
+      "createdAt": "2026-06-19T16:07:40.347Z",
+      "read": false,
+      "dismissed": false,
+      "featureId": "feature-1781882842711-0qykvb1v72ym",
+      "projectPath": "C:\\laragon\\www\\apiamis"
+    }
+  ]
+}

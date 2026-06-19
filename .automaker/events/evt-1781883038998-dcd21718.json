@@ -1,0 +1,11 @@
+{
+  "id": "evt-1781883038998-dcd21718",
+  "trigger": "feature_error",
+  "timestamp": "2026-06-19T15:30:38.999Z",
+  "projectPath": "C:\\laragon\\www\\apiamis",
+  "projectName": "apiamis",
+  "featureId": "feature-1781882842711-0qykvb1v72ym",
+  "featureName": "",
+  "error": "Claude Code process exited with code 1",
+  "errorType": "execution"
+}

@@ -104,7 +104,7 @@ class ChatDataToolService
     {
         $query = $this->baseProjectQuery($args);
         $ids = (clone $query)->pluck('id');
-        $projects = (clone $query)->with('progress')->get();
+        $projects = (clone $query)->select('id', 'pagu')->with('progress:pekerjaan_id,content')->get();
 
         $progressValues = $projects->map(fn($p) => $this->calculateProgressTotal($p->progress?->content ?? []));
         $averageProgress = $progressValues->count() > 0 ? round($progressValues->avg(), 2) : 0;

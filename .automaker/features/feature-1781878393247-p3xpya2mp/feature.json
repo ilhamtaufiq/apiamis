@@ -1,0 +1,15 @@
+{
+  "category": "enhancement",
+  "description": "**6. Response Compression (Brotli/Gzip)** Enable compression middleware on the API gateway or reverse proxy for JSON responses >1KB. Brotli preferred for modern clients; Gzip fallback. Reduces wire payload 60–80%, directly cutting transfer time on mobile and high-latency networks. **7. Bulk Database Operations** Refactor individual INSERT/UPDATE/DELETE loops into multi-row SQL statements or batched writes with a flush interval. Replaces N roundtrips with 1, achieving 50–200× throughput gain on write-heavy endpoints. **8. Read/Write Query Splitting** Route SELECT queries to database read replicas; keep writes on the primary. Add staleness tolerance per endpoint. Distributes read load across cluster replicas and preserves primary capacity for transactional writes. **9. Field Projection & Selective Responses** Let clients request only needed fields via query parameters or GraphQL selection sets. Reduces serialized payload size 30–50% and avoids fetching unused columns from the database. **10. ETags for Conditional Requests** Generate ETag headers from response content hashes. Return `304 Not Modified` when the client sends a matching `If-None-Match` header. Eliminates body serialization and transfer for unchanged resources. ---",
+  "title": "Tier 2 — Strong ROI, Medium Effort",
+  "status": "backlog",
+  "id": "feature-1781878393247-p3xpya2mp",
+  "createdAt": "2026-06-19T14:13:13.261Z",
+  "descriptionHistory": [
+    {
+      "description": "**6. Response Compression (Brotli/Gzip)** Enable compression middleware on the API gateway or reverse proxy for JSON responses >1KB. Brotli preferred for modern clients; Gzip fallback. Reduces wire payload 60–80%, directly cutting transfer time on mobile and high-latency networks. **7. Bulk Database Operations** Refactor individual INSERT/UPDATE/DELETE loops into multi-row SQL statements or batched writes with a flush interval. Replaces N roundtrips with 1, achieving 50–200× throughput gain on write-heavy endpoints. **8. Read/Write Query Splitting** Route SELECT queries to database read replicas; keep writes on the primary. Add staleness tolerance per endpoint. Distributes read load across cluster replicas and preserves primary capacity for transactional writes. **9. Field Projection & Selective Responses** Let clients request only needed fields via query parameters or GraphQL selection sets. Reduces serialized payload size 30–50% and avoids fetching unused columns from the database. **10. ETags for Conditional Requests** Generate ETag headers from response content hashes. Return `304 Not Modified` when the client sends a matching `If-None-Match` header. Eliminates body serialization and transfer for unchanged resources. ---",
+      "timestamp": "2026-06-19T14:13:13.261Z",
+      "source": "initial"
+    }
+  ]
+}

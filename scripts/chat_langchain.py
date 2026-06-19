@@ -18,47 +18,39 @@ from langchain_core.messages import HumanMessage, SystemMessage, AIMessage, Tool
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 
 def get_relevant_docs(query, api_key):
-    """Retrieve relevant Markdown chunks without heavyweight vector dependencies."""
-    docs_root = Path(project_root) / 'docs'
+    """Retrieve relevant Markdown chunks from pre-built knowledge index (B1 perf fix)."""
+    index_path = Path(project_root) / 'storage' / 'ai' / 'knowledge_index.json'
 
-    if not docs_root.exists():
-        return "Pengetahuan sistem belum tersedia."
+    if not index_path.exists():
+        return "Pengetahuan sistem belum tersedia (jalankan `python scripts/index_knowledge.py` dulu)."
 
     query_terms = {
         term for term in re.findall(r"\w+", query.lower())
         if len(term) >= 4
     }
+    if not query_terms:
+        return ""
 
-    matches = []
+    try:
+        entries = json.loads(index_path.read_text(encoding='utf-8'))
+    except Exception:
+        return "Gagal membaca index pengetahuan."
 
-    for path in docs_root.rglob('*.md'):
-        try:
-            text = path.read_text(encoding='utf-8')
-        except UnicodeDecodeError:
-            text = path.read_text(encoding='utf-8', errors='ignore')
+    scored = []
+    for entry in entries:
+        lowered = entry['content'].lower()
+        score = sum(1 for term in query_terms if term in lowered)
+        if score > 0:
+            scored.append((score, entry['source'], entry['content'][:1500]))
 
-        chunks = [
-            chunk.strip()
-            for chunk in re.split(r"\n(?=#{1,6}\s)|\n{2,}", text)
-            if chunk.strip()
-        ]
-
-        for chunk in chunks:
-            lowered = chunk.lower()
-            score = sum(1 for term in query_terms if term in lowered)
-            if score > 0:
-                matches.append((score, path.relative_to(project_root), chunk[:1500]))
-
-    if not matches:
+    if not scored:
         return "Tidak ada potongan dokumen yang relevan ditemukan."
 
-    matches.sort(key=lambda item: item[0], reverse=True)
-
+    scored.sort(key=lambda item: item[0], reverse=True)
     content = ""
-    for i, (_, source, chunk) in enumerate(matches[:12]):
+    for i, (_, source, chunk) in enumerate(scored[:12]):
         content += f"\n\n--- SUMBER {i+1} ({source}) ---\n"
         content += chunk
-
     return content
 
 def run_chat():

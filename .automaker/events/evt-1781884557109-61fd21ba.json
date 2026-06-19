@@ -1,0 +1,11 @@
+{
+  "id": "evt-1781884557109-61fd21ba",
+  "trigger": "feature_error",
+  "timestamp": "2026-06-19T15:55:57.111Z",
+  "projectPath": "C:\\laragon\\www\\apiamis",
+  "projectName": "apiamis",
+  "featureId": "feature-1781882842711-0qykvb1v72ym",
+  "featureName": "",
+  "error": "Agent execution ended with: error_during_execution",
+  "errorType": "execution"
+}

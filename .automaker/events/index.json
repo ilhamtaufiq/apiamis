@@ -1,0 +1,32 @@
+{
+  "version": 1,
+  "events": [
+    {
+      "id": "evt-1781885260350-759e41cb",
+      "trigger": "feature_success",
+      "timestamp": "2026-06-19T16:07:40.351Z",
+      "featureId": "feature-1781882842711-0qykvb1v72ym"
+    },
+    {
+      "id": "evt-1781884557109-61fd21ba",
+      "trigger": "feature_error",
+      "timestamp": "2026-06-19T15:55:57.111Z",
+      "featureName": "",
+      "featureId": "feature-1781882842711-0qykvb1v72ym"
+    },
+    {
+      "id": "evt-1781883038998-dcd21718",
+      "trigger": "feature_error",
+      "timestamp": "2026-06-19T15:30:38.999Z",
+      "featureName": "",
+      "featureId": "feature-1781882842711-0qykvb1v72ym"
+    },
+    {
+      "id": "evt-1781882842757-6ede16c9",
+      "trigger": "feature_created",
+      "timestamp": "2026-06-19T15:27:22.757Z",
+      "featureName": "Untitled Feature",
+      "featureId": "feature-1781882842711-0qykvb1v72ym"
+    }
+  ]
+}
