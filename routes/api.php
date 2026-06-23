@@ -16,6 +16,7 @@ use App\Http\Controllers\DesaController;
 use App\Http\Controllers\DraftPekerjaanController;
 use App\Http\Controllers\EventController;
 use App\Http\Controllers\FotoController;
+use App\Http\Controllers\KoordinatValidationController;
 use App\Http\Controllers\KecamatanController;
 use App\Http\Controllers\KegiatanController;
 use App\Http\Controllers\KegiatanRoleController;
@@ -189,6 +190,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::apiResource('berkas', BerkasController::class)->parameters(['berkas' => 'berkas']);
     Route::post('berkas/upload-from-url', [BerkasController::class, 'uploadFromUrl']);
     Route::get('berkas/{berkas}/export-pdf', [BerkasController::class, 'convertToPdf']);
+    Route::post('koordinat/validate', [KoordinatValidationController::class, 'validate']);
     Route::apiResource('foto', FotoController::class);
     Route::apiResource('users', UserController::class);
     Route::apiResource('roles', RoleController::class);

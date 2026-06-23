@@ -5,11 +5,15 @@ namespace App\Http\Controllers;
 use App\Http\Resources\FotoResource;
 use App\Models\Foto;
 use App\Models\Pekerjaan;
+use App\Services\KoordinatValidationService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 
 class FotoController extends Controller
 {
+    public function __construct(
+        private readonly KoordinatValidationService $koordinatValidationService,
+    ) {}
     /**
      * @OA\Get(
      *     path="/api/foto",
@@ -109,11 +113,18 @@ class FotoController extends Controller
             'penerima_id' => 'nullable|integer',
             'keterangan' => 'required|in:0%,25%,50%,75%,100%',
             'koordinat' => 'required|string|max:255',
-            'validasi_koordinat' => 'boolean',
-            'validasi_koordinat_message' => 'nullable|string|max:255',
             'unit_index' => 'nullable|integer',
             'file' => 'required|file|mimes:jpg,jpeg,png|max:5120', // Max 5MB and images only
         ]);
+
+        $pekerjaan = Pekerjaan::query()->findOrFail($validated['pekerjaan_id']);
+        $koordinatValidation = $this->koordinatValidationService->validateForPekerjaan(
+            $pekerjaan,
+            $validated['koordinat'],
+        );
+
+        $validated['validasi_koordinat'] = $koordinatValidation['valid'];
+        $validated['validasi_koordinat_message'] = $koordinatValidation['message'];
 
         $foto = Foto::create($validated);
 
@@ -167,11 +178,21 @@ class FotoController extends Controller
             'penerima_id' => 'nullable|integer',
             'keterangan' => 'nullable|in:0%,25%,50%,75%,100%',
             'koordinat' => 'nullable|string|max:255',
-            'validasi_koordinat' => 'nullable|boolean',
-            'validasi_koordinat_message' => 'nullable|string|max:255',
             'unit_index' => 'nullable|integer',
             'file' => 'nullable|file|mimes:jpg,jpeg,png|max:5120',
         ]);
+
+        if (array_key_exists('koordinat', $validated) && $validated['koordinat'] !== null) {
+            $pekerjaanId = $validated['pekerjaan_id'] ?? $foto->pekerjaan_id;
+            $pekerjaan = Pekerjaan::query()->findOrFail($pekerjaanId);
+            $koordinatValidation = $this->koordinatValidationService->validateForPekerjaan(
+                $pekerjaan,
+                $validated['koordinat'],
+            );
+
+            $validated['validasi_koordinat'] = $koordinatValidation['valid'];
+            $validated['validasi_koordinat_message'] = $koordinatValidation['message'];
+        }
 
         $foto->update($validated);
 
