@@ -822,29 +822,6 @@ class PekerjaanController extends Controller
 
     private function getPdfPath($media)
     {
-        $inputPath = $media->getPath();
-        if (Str::endsWith(strtolower($media->file_name), '.pdf')) {
-            return $inputPath;
-        }
-
-        $outputDir = storage_path('app/temp-pdf');
-        if (! file_exists($outputDir)) {
-            mkdir($outputDir, 0775, true);
-        }
-
-        $libreoffice = env('LIBREOFFICE_PATH', 'libreoffice');
-        // Gunakan profil terpisah untuk menghindari lock conflict
-        $command = "HOME=/tmp $libreoffice --headless -env:UserInstallation=file:///tmp/libreoffice_profile --convert-to pdf --outdir \"$outputDir\" \"$inputPath\"";
-        exec($command, $output, $returnVar);
-
-        if ($returnVar === 0) {
-            $fileName = pathinfo($media->file_name, PATHINFO_FILENAME).'.pdf';
-            $outputPath = $outputDir.'/'.$fileName;
-            if (file_exists($outputPath)) {
-                return $outputPath;
-            }
-        }
-
-        return null;
+        return app(\App\Services\DocumentPdfConverter::class)->convertMediaToPdf($media);
     }
 }

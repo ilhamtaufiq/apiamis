@@ -2,7 +2,9 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Resources\AuditLogResource;
 use App\Models\AuditLog;
+use App\Models\Pekerjaan;
 use Illuminate\Http\Request;
 
 class AuditLogController extends Controller
@@ -40,10 +42,20 @@ class AuditLogController extends Controller
 
         $perPage = $request->input('per_page', 15);
         $logs = $query->paginate($perPage);
+        $items = $logs->items();
+
+        $pekerjaanIds = AuditLogResource::collectPekerjaanIds($items);
+        $pekerjaanNames = Pekerjaan::query()
+            ->whereIn('id', $pekerjaanIds)
+            ->pluck('nama_paket', 'id');
+
+        AuditLogResource::withPekerjaanNames($pekerjaanNames);
+        $data = AuditLogResource::collection($items)->resolve();
+        AuditLogResource::clearPekerjaanNames();
 
         return response()->json([
             'success' => true,
-            'data' => $logs->items(),
+            'data' => $data,
             'meta' => [
                 'current_page' => $logs->currentPage(),
                 'last_page' => $logs->lastPage(),
@@ -65,9 +77,20 @@ class AuditLogController extends Controller
      */
     public function show(AuditLog $auditLog): \Illuminate\Http\JsonResponse
     {
+        $auditLog->load('user');
+
+        $pekerjaanId = AuditLogResource::resolvePekerjaanId($auditLog);
+        $pekerjaanNames = $pekerjaanId
+            ? Pekerjaan::query()->whereKey($pekerjaanId)->pluck('nama_paket', 'id')
+            : collect();
+
+        AuditLogResource::withPekerjaanNames($pekerjaanNames);
+        $data = (new AuditLogResource($auditLog))->resolve();
+        AuditLogResource::clearPekerjaanNames();
+
         return response()->json([
             'success' => true,
-            'data' => $auditLog->load('user')
+            'data' => $data,
         ]);
     }
 }

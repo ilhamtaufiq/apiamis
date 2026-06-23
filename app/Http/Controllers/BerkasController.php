@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Berkas;
 use App\Http\Resources\BerkasResource;
+use App\Services\DocumentPdfConverter;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 
@@ -149,45 +150,32 @@ class BerkasController extends Controller
         
         return response()->json(['message' => 'Berkas deleted successfully']);
     }
-    public function convertToPdf(Berkas $berkas)
+    public function convertToPdf(Berkas $berkas, DocumentPdfConverter $converter)
     {
         $media = $berkas->getFirstMedia('berkas/dokumen');
-        if (!$media) {
+        if (! $media) {
             return response()->json(['message' => 'Berkas tidak ditemukan'], 404);
         }
 
-        $inputPath = $media->getPath();
-        
-        // Jika sudah PDF, langsung download saja
-        if (Str::endsWith(strtolower($media->file_name), '.pdf')) {
-            return response()->download($inputPath, $media->file_name);
+        $outputPath = $converter->convertMediaToPdf($media);
+
+        if (! $outputPath || ! file_exists($outputPath)) {
+            $extension = strtolower(pathinfo($media->file_name, PATHINFO_EXTENSION));
+
+            return response()->json([
+                'message' => match ($extension) {
+                    'doc', 'docx', 'ppt', 'pptx', 'odt', 'odp' => 'Gagal mengonversi dokumen ke PDF. Untuk format office ini, pasang LibreOffice di server atau set LIBREOFFICE_PATH.',
+                    default => 'Gagal mengonversi berkas ke PDF. Format file tidak didukung atau file rusak.',
+                },
+            ], 500);
         }
 
-        $outputDir = storage_path('app/temp-pdf');
-        
-        if (!file_exists($outputDir)) {
-            mkdir($outputDir, 0775, true);
-        }
+        $downloadName = $converter->getSuggestedDownloadName($media);
+        $deleteAfterSend = ! Str::endsWith(strtolower($media->file_name), '.pdf');
 
-        // Jalankan LibreOffice Headless dengan HOME set ke /tmp untuk menghindari permission error pada cache font/dconf
-        $libreoffice = env('LIBREOFFICE_PATH', 'libreoffice');
-        $command = "HOME=/tmp $libreoffice --headless -env:UserInstallation=file:///tmp/libreoffice_profile --convert-to pdf --outdir \"$outputDir\" \"$inputPath\"";
-        exec($command, $output, $returnVar);
-
-        if ($returnVar === 0) {
-            // LibreOffice menyimpan dengan nama file yang sama tapi ekstensi .pdf
-            $fileName = pathinfo($media->file_name, PATHINFO_FILENAME) . '.pdf';
-            $outputPath = $outputDir . '/' . $fileName;
-            
-            if (file_exists($outputPath)) {
-                return response()->download($outputPath, $fileName)->deleteFileAfterSend(true);
-            }
-        }
-
-        return response()->json([
-            'message' => 'Gagal mengonversi berkas ke PDF. Pastikan LibreOffice terinstal di server.',
-            'debug' => $output
-        ], 500);
+        return response()->download($outputPath, $downloadName, [
+            'Content-Type' => 'application/pdf',
+        ])->deleteFileAfterSend($deleteAfterSend);
     }
 
     public function uploadFromUrl(Request $request)

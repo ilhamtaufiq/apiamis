@@ -31,6 +31,7 @@ use App\Http\Controllers\PermissionController;
 use App\Http\Controllers\ProgressController;
 use App\Http\Controllers\PuspenProgressFisikController;
 use App\Http\Controllers\PuspenMediaShareController;
+use App\Http\Controllers\PuspenPengawasKpiController;
 use App\Http\Controllers\RABAnalyzerController;
 use App\Http\Controllers\RkaController;
 use App\Http\Controllers\RoleController;
@@ -238,6 +239,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('progress/pekerjaan/{pekerjaanId}', [ProgressController::class, 'store']);
     Route::get('puspen/progress-fisik', [PuspenProgressFisikController::class, 'index']);
     Route::post('puspen/progress-fisik/bulk-update', [PuspenProgressFisikController::class, 'bulkUpdate']);
+    Route::get('puspen/pengawas-kpi', [PuspenPengawasKpiController::class, 'index']);
     Route::get('puspen/media-library', [PuspenMediaShareController::class, 'mediaLibrary']);
     Route::apiResource('puspen/media-shares', PuspenMediaShareController::class)
         ->parameters(['media-shares' => 'puspenMediaShare'])
