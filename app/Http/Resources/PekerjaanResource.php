@@ -176,6 +176,7 @@ class PekerjaanResource extends JsonResource
             'pendamping' => new PengawasResource($this->whenLoaded('pendamping')),
             'tags' => TagResource::collection($this->whenLoaded('tags')),
             'draft' => new DraftPekerjaanResource($this->whenLoaded('draft')),
+            'output' => OutputResource::collection($this->whenLoaded('output')),
             'kontrak' => $this->whenLoaded('kontrak', fn () => $this->kontrak->map(fn ($kontrak) => [
                 'id' => $kontrak->id,
                 'spk' => $kontrak->spk,
