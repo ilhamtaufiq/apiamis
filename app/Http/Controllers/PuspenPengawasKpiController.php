@@ -2,10 +2,11 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Pengawas;
-use App\Models\Pekerjaan;
+use App\Models\User;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Spatie\Permission\Models\Role;
 
 class PuspenPengawasKpiController extends Controller
 {
@@ -21,90 +22,8 @@ class PuspenPengawasKpiController extends Controller
         $search = $validated['search'] ?? null;
         $perPage = (int) ($validated['per_page'] ?? 20);
 
-        // Base query for pengawas with their supervised pekerjaan
-        $pengawasQuery = Pengawas::query();
+        $results = $this->buildResults($tahun, $search);
 
-        if ($search) {
-            $pengawasQuery->where(function ($q) use ($search) {
-                $q->where('nama', 'like', "%{$search}%")
-                  ->orWhere('nip', 'like', "%{$search}%");
-            });
-        }
-
-        $pengawas = $pengawasQuery->get();
-
-        $results = [];
-
-        foreach ($pengawas as $p) {
-            // Get all pekerjaan IDs supervised by this pengawas (as pengawas or pendamping)
-            $pekerjaanIds = Pekerjaan::query()
-                ->where('pengawas_id', $p->id)
-                ->orWhere('pendamping_id', $p->id)
-                ->pluck('id');
-
-            $pekerjaanCount = $pekerjaanIds->count();
-
-            if ($pekerjaanCount === 0) {
-                continue;
-            }
-
-            // Counts from related tables — only the sections pengawas actually update in Pekerjaan Detail:
-            // Output, Penerima, Foto, Progress Fisik (the Laporan Progress Fisik tab)
-            $fotoCount = DB::table('tbl_foto')
-                ->whereIn('pekerjaan_id', $pekerjaanIds)
-                ->count();
-
-            $penerimaCount = DB::table('tbl_penerima')
-                ->whereIn('pekerjaan_id', $pekerjaanIds)
-                ->count();
-
-            $outputCount = DB::table('tbl_output')
-                ->whereIn('pekerjaan_id', $pekerjaanIds)
-                ->count();
-
-            // Progress Fisik: detailed updates in the Progress tab (tbl_progress.content contains weekly fisik items)
-            // Count of progress reports = proxy for how much fisik data has been inputted/updated by pengawas
-            $fisikCount = DB::table('tbl_progress')
-                ->whereIn('pekerjaan_id', $pekerjaanIds)
-                ->count();
-
-            // Composite score focused on the 4 inputs mentioned:
-            // Foto (documentation), Penerima (beneficiaries), Output (physical outputs), Progress Fisik
-            // Weights: foto 1, penerima 1, output 2 (important deliverables), fisik 2 (core progress)
-            $score = ($fotoCount * 1) +
-                     ($penerimaCount * 1) +
-                     ($outputCount * 2) +
-                     ($fisikCount * 2);
-
-            $results[] = [
-                'id' => $p->id,
-                'nama' => $p->nama,
-                'nip' => $p->nip,
-                'jabatan' => $p->jabatan,
-                'pekerjaan_count' => $pekerjaanCount,
-                'foto_count' => $fotoCount,
-                'penerima_count' => $penerimaCount,
-                'output_count' => $outputCount,
-                // Progress Fisik count (from the detailed "Laporan Progress Fisik" tab in Pekerjaan Detail)
-                'fisik_count' => $fisikCount,
-                'score' => round($score, 1),
-            ];
-        }
-
-        // Sort by score desc, then by pekerjaan_count
-        usort($results, function ($a, $b) {
-            if ($b['score'] === $a['score']) {
-                return $b['pekerjaan_count'] <=> $a['pekerjaan_count'];
-            }
-            return $b['score'] <=> $a['score'];
-        });
-
-        // Assign rank
-        foreach ($results as $index => &$row) {
-            $row['rank'] = $index + 1;
-        }
-
-        // Apply search already done, now paginate manually (simple)
         $total = count($results);
         $page = max(1, (int) $request->get('page', 1));
         $offset = ($page - 1) * $perPage;
@@ -123,5 +42,161 @@ class PuspenPengawasKpiController extends Controller
                 'tahun' => $tahun,
             ],
         ]);
+    }
+
+    public function show(Request $request, int $userId)
+    {
+        $validated = $request->validate([
+            'tahun' => 'nullable|integer|min:2000|max:2100',
+        ]);
+
+        $tahun = (int) ($validated['tahun'] ?? now()->year);
+
+        $user = User::whereHas('roles', function ($q) {
+            $q->where('name', 'pengawas');
+        })->findOrFail($userId);
+
+        $pekerjaanRows = $this->pekerjaanBreakdownForUser($user, $tahun);
+
+        $totals = [
+            'pekerjaan_count' => $pekerjaanRows->count(),
+            'foto_count' => (int) $pekerjaanRows->sum('foto_count'),
+            'penerima_count' => (int) $pekerjaanRows->sum('penerima_count'),
+            'output_count' => (int) $pekerjaanRows->sum('output_count'),
+            'fisik_count' => (int) $pekerjaanRows->sum('fisik_count'),
+            'score' => round((float) $pekerjaanRows->sum('score'), 1),
+        ];
+
+        $totals['score_per_pekerjaan'] = $totals['pekerjaan_count'] > 0
+            ? round($totals['score'] / $totals['pekerjaan_count'], 1)
+            : 0.0;
+
+        return response()->json([
+            'user' => [
+                'id' => $user->id,
+                'nama' => $user->name,
+                'nip' => $user->nip,
+            ],
+            'tahun' => $tahun,
+            'pekerjaan' => $pekerjaanRows->values(),
+            'summary' => $totals,
+        ]);
+    }
+
+    private function buildResults(int $tahun, ?string $search): array
+    {
+        Role::firstOrCreate(['name' => 'pengawas']);
+
+        $assignedUserIds = DB::table('user_pekerjaan')->distinct()->pluck('user_id');
+
+        if ($assignedUserIds->isNotEmpty()) {
+            $usersToGrant = User::whereIn('id', $assignedUserIds)
+                ->get()
+                ->filter(fn ($u) => ! $u->hasRole('pengawas'));
+
+            foreach ($usersToGrant as $u) {
+                $u->assignRole('pengawas');
+            }
+        }
+
+        $userQuery = User::whereHas('roles', function ($q) {
+            $q->where('name', 'pengawas');
+        });
+
+        if ($search) {
+            $userQuery->where(function ($q) use ($search) {
+                $q->where('name', 'like', "%{$search}%")
+                    ->orWhere('nip', 'like', "%{$search}%")
+                    ->orWhere('email', 'like', "%{$search}%");
+            });
+        }
+
+        $users = $userQuery->get();
+        $results = [];
+
+        foreach ($users as $u) {
+            $pekerjaanRows = $this->pekerjaanBreakdownForUser($u, $tahun);
+
+            if ($pekerjaanRows->isEmpty()) {
+                continue;
+            }
+
+            $pekerjaanCount = $pekerjaanRows->count();
+            $fotoCount = (int) $pekerjaanRows->sum('foto_count');
+            $penerimaCount = (int) $pekerjaanRows->sum('penerima_count');
+            $outputCount = (int) $pekerjaanRows->sum('output_count');
+            $fisikCount = (int) $pekerjaanRows->sum('fisik_count');
+            $score = round((float) $pekerjaanRows->sum('score'), 1);
+            $scorePerPekerjaan = $pekerjaanCount > 0
+                ? round($score / $pekerjaanCount, 1)
+                : 0.0;
+
+            $results[] = [
+                'id' => $u->id,
+                'nama' => $u->name,
+                'nip' => $u->nip,
+                'jabatan' => $u->jabatan,
+                'pekerjaan_count' => $pekerjaanCount,
+                'foto_count' => $fotoCount,
+                'penerima_count' => $penerimaCount,
+                'output_count' => $outputCount,
+                'fisik_count' => $fisikCount,
+                'score' => $score,
+                'score_per_pekerjaan' => $scorePerPekerjaan,
+            ];
+        }
+
+        usort($results, function ($a, $b) {
+            if ($b['score_per_pekerjaan'] === $a['score_per_pekerjaan']) {
+                if ($b['score'] === $a['score']) {
+                    return $b['pekerjaan_count'] <=> $a['pekerjaan_count'];
+                }
+
+                return $b['score'] <=> $a['score'];
+            }
+
+            return $b['score_per_pekerjaan'] <=> $a['score_per_pekerjaan'];
+        });
+
+        foreach ($results as $index => &$row) {
+            $row['rank'] = $index + 1;
+        }
+
+        return $results;
+    }
+
+    private function pekerjaanBreakdownForUser(User $user, int $tahun): Collection
+    {
+        $pekerjaanList = $user->assignedPekerjaan()
+            ->whereHas('kegiatan', function ($q) use ($tahun) {
+                $q->where('tahun_anggaran', $tahun);
+            })
+            ->select('tbl_pekerjaan.id', 'tbl_pekerjaan.nama_paket', 'tbl_pekerjaan.kode_rekening')
+            ->get();
+
+        return $pekerjaanList->map(function ($pekerjaan) {
+            $pekerjaanId = $pekerjaan->id;
+
+            $fotoCount = DB::table('tbl_foto')->where('pekerjaan_id', $pekerjaanId)->count();
+            $penerimaCount = DB::table('tbl_penerima')->where('pekerjaan_id', $pekerjaanId)->count();
+            $outputCount = DB::table('tbl_output')->where('pekerjaan_id', $pekerjaanId)->count();
+            $fisikCount = DB::table('tbl_progress')->where('pekerjaan_id', $pekerjaanId)->count();
+
+            $score = ($fotoCount * 1) +
+                ($penerimaCount * 1) +
+                ($outputCount * 2) +
+                ($fisikCount * 2);
+
+            return [
+                'id' => $pekerjaanId,
+                'nama_paket' => $pekerjaan->nama_paket,
+                'kode_rekening' => $pekerjaan->kode_rekening,
+                'foto_count' => $fotoCount,
+                'penerima_count' => $penerimaCount,
+                'output_count' => $outputCount,
+                'fisik_count' => $fisikCount,
+                'score' => round($score, 1),
+            ];
+        })->sortByDesc('score')->values();
     }
 }

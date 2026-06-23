@@ -72,6 +72,12 @@ class UserPekerjaanController extends Controller
         // Sync pekerjaan (this will add new ones and remove unselected)
         $user->assignedPekerjaan()->syncWithoutDetaching($request->pekerjaan_ids);
 
+        // Automatically grant the 'pengawas' role if not already present.
+        // The Puspen /pengawas-kpi feature only shows users who have this role + assignments.
+        if (!$user->hasRole('pengawas')) {
+            $user->assignRole('pengawas');
+        }
+
         // Notify User
         $pekerjaanNames = Pekerjaan::whereIn('id', $request->pekerjaan_ids)->pluck('nama_paket')->toArray();
         $user->notify(new AppNotification(

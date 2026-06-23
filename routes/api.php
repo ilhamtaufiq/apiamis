@@ -240,6 +240,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('puspen/progress-fisik', [PuspenProgressFisikController::class, 'index']);
     Route::post('puspen/progress-fisik/bulk-update', [PuspenProgressFisikController::class, 'bulkUpdate']);
     Route::get('puspen/pengawas-kpi', [PuspenPengawasKpiController::class, 'index']);
+    Route::get('puspen/pengawas-kpi/{user}', [PuspenPengawasKpiController::class, 'show']);
     Route::get('puspen/media-library', [PuspenMediaShareController::class, 'mediaLibrary']);
     Route::apiResource('puspen/media-shares', PuspenMediaShareController::class)
         ->parameters(['media-shares' => 'puspenMediaShare'])
