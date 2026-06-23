@@ -57,10 +57,10 @@ class SearchController extends Controller
             $this->searchPenyedia($query),
             $this->searchKegiatan($query),
             $this->searchDesa($query),
-            $this->searchFoto($query),
-            $this->searchPenerima($query),
-            $this->searchOutput($query),
-            $this->searchProgress($query)
+            $this->searchFoto($query, $tahun),
+            $this->searchPenerima($query, $tahun),
+            $this->searchOutput($query, $tahun),
+            $this->searchProgress($query, $tahun)
         );
 
         return response()->json([
@@ -178,7 +178,7 @@ class SearchController extends Controller
             ])->toArray();
     }
 
-    private function searchFoto(string $query): array
+    private function searchFoto(string $query, ?string $tahun): array
     {
         return Foto::where(function ($q) use ($query) {
             $q->where('keterangan', 'like', "%{$query}%")
@@ -186,7 +186,12 @@ class SearchController extends Controller
                     $pq->byUserRole()->where('nama_paket', 'LIKE', "%{$query}%");
                 });
         })
-            ->with('pekerjaan')
+            ->whereHas('pekerjaan.kegiatan', function ($q) use ($tahun) {
+                if ($tahun) {
+                    $q->where('tahun_anggaran', $tahun);
+                }
+            })
+            ->with(['pekerjaan.kegiatan'])
             ->limit(10)
             ->get()
             ->map(fn (Foto $item) => [
@@ -194,12 +199,13 @@ class SearchController extends Controller
                 'type' => 'Dokumentasi',
                 'title' => 'Dokumentasi: '.($item->keterangan ?? 'Tanpa Keterangan'),
                 'subtitle' => 'Pekerjaan: '.($item->pekerjaan->nama_paket ?? ''),
+                'tahun' => $item->pekerjaan->kegiatan->tahun_anggaran ?? null,
                 'image_url' => $item->getFirstMediaUrl('foto/pekerjaan'),
                 'url' => "/pekerjaan/{$item->pekerjaan_id}",
             ])->toArray();
     }
 
-    private function searchPenerima(string $query): array
+    private function searchPenerima(string $query, ?string $tahun): array
     {
         return Penerima::where(function ($q) use ($query) {
             $q->whereRaw('MATCH(nama, nik, alamat) AGAINST(? IN BOOLEAN MODE)', [$query])
@@ -207,7 +213,12 @@ class SearchController extends Controller
                     $pq->byUserRole()->where('nama_paket', 'LIKE', "%{$query}%");
                 });
         })
-            ->with('pekerjaan')
+            ->whereHas('pekerjaan.kegiatan', function ($q) use ($tahun) {
+                if ($tahun) {
+                    $q->where('tahun_anggaran', $tahun);
+                }
+            })
+            ->with(['pekerjaan.kegiatan'])
             ->limit(10)
             ->get()
             ->map(fn ($item) => [
@@ -215,11 +226,12 @@ class SearchController extends Controller
                 'type' => 'Penerima Manfaat',
                 'title' => 'Penerima: '.$item->nama,
                 'subtitle' => 'Alamat: '.($item->alamat ?? '').' | Pekerjaan: '.($item->pekerjaan->nama_paket ?? ''),
+                'tahun' => $item->pekerjaan->kegiatan->tahun_anggaran ?? null,
                 'url' => "/pekerjaan/{$item->pekerjaan_id}",
             ])->toArray();
     }
 
-    private function searchOutput(string $query): array
+    private function searchOutput(string $query, ?string $tahun): array
     {
         return Output::where(function ($q) use ($query) {
             $q->whereRaw('MATCH(komponen, satuan) AGAINST(? IN BOOLEAN MODE)', [$query])
@@ -227,7 +239,12 @@ class SearchController extends Controller
                     $pq->byUserRole()->where('nama_paket', 'LIKE', "%{$query}%");
                 });
         })
-            ->with('pekerjaan')
+            ->whereHas('pekerjaan.kegiatan', function ($q) use ($tahun) {
+                if ($tahun) {
+                    $q->where('tahun_anggaran', $tahun);
+                }
+            })
+            ->with(['pekerjaan.kegiatan'])
             ->limit(10)
             ->get()
             ->map(fn ($item) => [
@@ -235,11 +252,12 @@ class SearchController extends Controller
                 'type' => 'Output',
                 'title' => 'Output: '.$item->komponen,
                 'subtitle' => 'Volume: '.$item->volume.' '.$item->satuan.' | Pekerjaan: '.($item->pekerjaan->nama_paket ?? ''),
+                'tahun' => $item->pekerjaan->kegiatan->tahun_anggaran ?? null,
                 'url' => "/pekerjaan/{$item->pekerjaan_id}",
             ])->toArray();
     }
 
-    private function searchProgress(string $query): array
+    private function searchProgress(string $query, ?string $tahun): array
     {
         return Progress::where(function ($q) use ($query) {
             $q->where('content', 'like', "%{$query}%")
@@ -247,7 +265,12 @@ class SearchController extends Controller
                     $pq->byUserRole()->where('nama_paket', 'LIKE', "%{$query}%");
                 });
         })
-            ->with('pekerjaan')
+            ->whereHas('pekerjaan.kegiatan', function ($q) use ($tahun) {
+                if ($tahun) {
+                    $q->where('tahun_anggaran', $tahun);
+                }
+            })
+            ->with(['pekerjaan.kegiatan'])
             ->limit(10)
             ->get()
             ->map(fn ($item) => [
@@ -255,6 +278,7 @@ class SearchController extends Controller
                 'type' => 'Progress',
                 'title' => 'Progress Log Entry',
                 'subtitle' => 'Pekerjaan: '.($item->pekerjaan->nama_paket ?? ''),
+                'tahun' => $item->pekerjaan->kegiatan->tahun_anggaran ?? null,
                 'url' => "/pekerjaan/{$item->pekerjaan_id}",
             ])->toArray();
     }

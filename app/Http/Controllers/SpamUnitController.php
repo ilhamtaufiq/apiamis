@@ -7,6 +7,7 @@ use App\Models\Desa;
 use App\Models\Kecamatan;
 use App\Models\Pengelola;
 use App\Models\SpamAchievement;
+use App\Services\SpamPekerjaanIntegrationService;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
@@ -15,6 +16,10 @@ use Illuminate\Support\Facades\Storage;
 
 class SpamUnitController extends Controller
 {
+    public function __construct(
+        private readonly SpamPekerjaanIntegrationService $integrationService
+    ) {
+    }
     public function import(Request $request): JsonResponse
     {
         $request->validate([
@@ -216,53 +221,71 @@ class SpamUnitController extends Controller
         $simspamCount = UnitSpam::where('is_simspam', true)->count();
         $nonSimspamCount = $totalUnits - $simspamCount;
 
-        // Target population and achievements summary
-        $latestYear = SpamAchievement::max('tahun') ?: '2024';
+        $tahunScope = $request->filled('tahun') ? $request->input('tahun') : null;
+        $targetYear = $tahunScope ?? 's/d '.$this->integrationService->manualCapTahun();
+        $manualScopeLabel = $this->integrationService->manualScopeLabel($tahunScope);
+        $manualCapTahun = $this->integrationService->manualCapTahun();
 
         // Filter by kecamatan if present
-        $kecamatanId = $request->kecamatan_id;
+        $kecamatanId = $request->kecamatan_id ? (int) $request->kecamatan_id : null;
+
+        $integrationSummary = $this->integrationService->integrationSummary(
+            $tahunScope,
+            $kecamatanId
+        );
+
+        $manualGlobal = $this->integrationService->aggregateManualGlobal($tahunScope, $kecamatanId);
 
         $targetQuery = Desa::query();
         $achievementQuery = SpamAchievement::query();
 
+        if ($tahunScope) {
+            $achievementQuery->where('tahun', $tahunScope);
+        } else {
+            $achievementQuery->where('tahun', '<=', $manualCapTahun);
+        }
+
         if ($kecamatanId) {
             $targetQuery->where('kecamatan_id', $kecamatanId);
-            $achievementQuery->whereHas('unitSpam.desa', function($q) use ($kecamatanId) {
+            $achievementQuery->whereHas('unitSpam.desa', function ($q) use ($kecamatanId) {
                 $q->where('kecamatan_id', $kecamatanId);
             });
         }
 
-        if ($request->filled('tahun')) {
-            $achievementQuery->where('tahun', $request->tahun);
-        }
+        $totalTarget = (int) $targetQuery->sum('target');
 
-        $totalTarget = (int)$targetQuery->sum('target');
-        
-        $totalSR = (int)$achievementQuery->sum('jumlah_sr');
-        $totalKK = $totalSR; // Total KK (JP) matches Total SR exactly
-        $totalJiwa = $totalKK * 5; // JP Jiwa is KK * 5, which matches 265,655 perfectly!
-        
-        $totalBjpKK = (int)$targetQuery->sum('bjp_master') + (int)$achievementQuery->sum('jumlah_bjp_kk');
+        $totalSR = $manualGlobal['sr'];
+        $totalKK = $manualGlobal['kk'];
+        $totalJiwa = $manualGlobal['jiwa'];
+
+        $totalBjpKK = (int) $targetQuery->sum('bjp_master') + (int) $achievementQuery->sum('jumlah_bjp_kk');
         $totalBjpJiwa = $totalBjpKK * 5;
 
-        // Funding distribution
+        // Funding distribution (all years when no filter; scoped year when filtered)
         $fundingQuery = \App\Models\SpamBudget::select('sumber_dana', DB::raw('count(DISTINCT unit_spam_id) as count'));
+        if ($tahunScope) {
+            $fundingQuery->where('tahun', $tahunScope);
+        } else {
+            $fundingQuery->where('tahun', '<=', $manualCapTahun);
+        }
         if ($kecamatanId) {
-            $fundingQuery->whereHas('unitSpam.desa', function($q) use ($kecamatanId) {
+            $fundingQuery->whereHas('unitSpam.desa', function ($q) use ($kecamatanId) {
                 $q->where('kecamatan_id', $kecamatanId);
             });
         }
         $fundingDist = $fundingQuery->groupBy('sumber_dana')
-                                    ->orderBy('count', 'desc')
-                                    ->get();
+            ->orderBy('count', 'desc')
+            ->get();
 
         return response()->json([
             'success' => true,
-            'data' => [
+            'data' => array_merge([
                 'total_units' => $totalUnits,
                 'simspam_count' => $simspamCount,
                 'non_simspam_count' => $nonSimspamCount,
-                'target_year' => $latestYear,
+                'target_year' => $targetYear,
+                'manual_scope_label' => $manualScopeLabel,
+                'manual_cap_tahun' => $manualCapTahun,
                 'total_target' => $totalTarget,
                 'total_sr' => $totalSR,
                 'total_kk' => $totalKK,
@@ -270,8 +293,73 @@ class SpamUnitController extends Controller
                 'total_bjp_kk' => $totalBjpKK,
                 'total_bjp_jiwa' => $totalBjpJiwa,
                 'funding_distribution' => $fundingDist,
-                'coverage_percentage' => $totalTarget > 0 ? round((($totalKK + $totalBjpKK) / $totalTarget) * 100, 2) : 0
-            ]
+                'coverage_percentage' => $totalTarget > 0 ? round((($totalKK + $totalBjpKK) / $totalTarget) * 100, 2) : 0,
+            ], $integrationSummary, [
+                'manual_sr' => $manualGlobal['sr'],
+                'manual_kk' => $manualGlobal['kk'],
+                'manual_jiwa' => $manualGlobal['jiwa'],
+                'manual_nilai_kontrak' => $manualGlobal['nilai_kontrak'],
+                'total_sr' => $totalSR,
+                'total_kk' => $totalKK,
+                'total_jiwa' => $totalJiwa,
+            ]),
+        ]);
+    }
+
+    public function integration(Request $request): JsonResponse
+    {
+        $request->validate([
+            'sync_status' => 'nullable|in:matched,partial,no_unit,no_pekerjaan',
+        ]);
+
+        $result = $this->integrationService->paginateIntegration(
+            $request->filled('tahun') ? $request->input('tahun') : null,
+            $request->filled('kecamatan_id') ? $request->integer('kecamatan_id') : null,
+            $request->filled('desa_id') ? $request->integer('desa_id') : null,
+            $request->filled('search') ? $request->input('search') : null,
+            $request->filled('sync_status') ? $request->input('sync_status') : null,
+            $request->integer('per_page', 15),
+            $request->integer('page', 1)
+        );
+
+        return response()->json([
+            'success' => true,
+            'data' => $result['data'],
+            'meta' => $result['meta'],
+            'summary' => $result['summary'],
+        ]);
+    }
+
+    public function integrationByDesa(int $desaId, Request $request): JsonResponse
+    {
+        $desa = Desa::with('kecamatan')->findOrFail($desaId);
+
+        return response()->json([
+            'success' => true,
+            'data' => $this->integrationService->buildDesaIntegrationRow(
+                $desa,
+                $request->filled('tahun') ? $request->input('tahun') : null
+            ),
+        ]);
+    }
+
+    public function syncPekerjaan(Request $request, UnitSpam $unitSpam): JsonResponse
+    {
+        $validated = $request->validate([
+            'tahun' => 'required|string|max:4',
+            'mode' => 'required|in:achievement,budget,all',
+        ]);
+
+        $data = $this->integrationService->syncToUnit(
+            $unitSpam,
+            $validated['tahun'],
+            $validated['mode']
+        );
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Data pekerjaan berhasil disinkronkan ke unit SPAM',
+            'data' => $data,
         ]);
     }
 

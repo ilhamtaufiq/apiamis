@@ -145,6 +145,9 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // API Resources
     Route::get('spam-units/stats', [SpamUnitController::class, 'stats']);
+    Route::get('spam-units/integration', [SpamUnitController::class, 'integration']);
+    Route::get('spam-units/integration/desa/{desaId}', [SpamUnitController::class, 'integrationByDesa']);
+    Route::post('spam-units/{unitSpam}/sync-pekerjaan', [SpamUnitController::class, 'syncPekerjaan']);
     Route::post('spam-units/{unitSpam}/achievements', [SpamUnitController::class, 'addAchievement']);
     Route::post('spam-units/{unitSpam}/budgets', [SpamUnitController::class, 'addBudget']);
     Route::delete('spam-units/{unitSpam}/budgets/{budgetId}', [SpamUnitController::class, 'deleteBudget']);

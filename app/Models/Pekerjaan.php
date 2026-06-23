@@ -215,4 +215,76 @@ class Pekerjaan extends Model
     {
         return $this->hasMany(Tiket::class, 'pekerjaan_id');
     }
+
+    /**
+     * @return array{foto_status: string|null, foto_count: int|null, foto_required_count: int|null}
+     */
+    public function resolveFotoMetrics(): array
+    {
+        $fotoActualCount = $this->relationLoaded('foto')
+            ? $this->foto->count()
+            : (isset($this->foto_count) ? (int) $this->foto_count : null);
+
+        if (! $this->relationLoaded('output') || ! $this->relationLoaded('foto')) {
+            $count = (int) ($fotoActualCount ?? 0);
+
+            return [
+                'foto_status' => $count > 0 ? 'belum_selesai' : 'belum_ada_foto',
+                'foto_count' => $fotoActualCount,
+                'foto_required_count' => null,
+            ];
+        }
+
+        $fotoActualCount = $this->foto->count();
+        $fotoRequiredCount = 0;
+        $isComplete = true;
+        $fotoByOutput = $this->foto->groupBy('komponen_id');
+
+        if ($this->output->isEmpty()) {
+            return [
+                'foto_status' => $fotoActualCount > 0 ? 'belum_selesai' : 'belum_ada_foto',
+                'foto_count' => $fotoActualCount,
+                'foto_required_count' => 0,
+            ];
+        }
+
+        foreach ($this->output as $output) {
+            $outputPhotos = $fotoByOutput->get($output->id, collect());
+            $outputPhotoCount = $outputPhotos->count();
+
+            $requiredUnits = $output->penerima_is_optional
+                ? 1
+                : max(1, (int) ceil((float) ($output->volume ?? 0)));
+            $requiredPhotos = $requiredUnits * 5;
+            $fotoRequiredCount += $requiredPhotos;
+
+            $distinctRecipients = $outputPhotos
+                ->pluck('penerima_id')
+                ->filter()
+                ->unique()
+                ->count();
+
+            if ($outputPhotoCount < $requiredPhotos) {
+                $isComplete = false;
+            }
+
+            if (! $output->penerima_is_optional && $distinctRecipients < $requiredUnits) {
+                $isComplete = false;
+            }
+        }
+
+        if ($fotoActualCount <= 0) {
+            $fotoStatus = 'belum_ada_foto';
+        } elseif (! $isComplete) {
+            $fotoStatus = 'belum_selesai';
+        } else {
+            $fotoStatus = 'selesai';
+        }
+
+        return [
+            'foto_status' => $fotoStatus,
+            'foto_count' => $fotoActualCount,
+            'foto_required_count' => $fotoRequiredCount,
+        ];
+    }
 }

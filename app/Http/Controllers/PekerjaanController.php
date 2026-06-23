@@ -89,6 +89,15 @@ class PekerjaanController extends Controller
             $query->where('kecamatan_id', $request->kecamatan_id);
         }
 
+        if ($request->has('desa_id') && ! empty($request->desa_id)) {
+            $query->where('desa_id', $request->desa_id);
+        }
+        if ($request->filled('sub_bidang')) {
+            $query->whereHas('kegiatan', function ($q) use ($request) {
+                $q->where('sub_bidang', $request->sub_bidang);
+            });
+        }
+
         if ($request->has('kegiatan_id') && ! empty($request->kegiatan_id)) {
             $query->where('kegiatan_id', $request->kegiatan_id);
         }

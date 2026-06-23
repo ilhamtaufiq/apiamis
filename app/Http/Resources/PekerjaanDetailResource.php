@@ -23,6 +23,8 @@ class PekerjaanDetailResource extends JsonResource
      */
     public function toArray(Request $request): array
     {
+        $fotoMetrics = $this->resource->resolveFotoMetrics();
+
         return [
             'id' => $this->id,
             'kode_rekening' => $this->kode_rekening,
@@ -73,7 +75,9 @@ class PekerjaanDetailResource extends JsonResource
             'penerima' => PenerimaResource::collection($this->whenLoaded('penerima')),
             'tags' => TagResource::collection($this->whenLoaded('tags')),
             'progress' => new ProgressResource($this->whenLoaded('progress')),
-
+            'foto_count' => $fotoMetrics['foto_count'],
+            'foto_required_count' => $fotoMetrics['foto_required_count'],
+            'foto_status' => $fotoMetrics['foto_status'],
 
             'created_at' => $this->created_at?->toIso8601String(),
             'updated_at' => $this->updated_at?->toIso8601String(),
