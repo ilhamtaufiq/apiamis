@@ -97,13 +97,9 @@ class PuspenPengawasKpiController extends Controller
         $assignedUserIds = DB::table('user_pekerjaan')->distinct()->pluck('user_id');
 
         if ($assignedUserIds->isNotEmpty()) {
-            $usersToGrant = User::whereIn('id', $assignedUserIds)
+            User::whereIn('id', $assignedUserIds)
                 ->get()
-                ->filter(fn ($u) => ! $u->hasRole('pengawas'));
-
-            foreach ($usersToGrant as $u) {
-                $u->assignRole('pengawas');
-            }
+                ->each(fn (User $u) => $u->grantPengawasRoleIfEligible());
         }
 
         $roleFilter = $this->resolveRoleFilter($peran);

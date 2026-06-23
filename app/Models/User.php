@@ -62,4 +62,18 @@ class User extends Authenticatable
         return $this->belongsToMany(Pekerjaan::class, 'user_pekerjaan', 'user_id', 'pekerjaan_id')
             ->withTimestamps();
     }
+
+    /**
+     * Default pengawas role for pekerjaan assignments — skipped when user is konsultan-only.
+     */
+    public function grantPengawasRoleIfEligible(): bool
+    {
+        if ($this->hasRole('pengawas') || $this->hasRole('konsultan_pengawas')) {
+            return false;
+        }
+
+        $this->assignRole('pengawas');
+
+        return true;
+    }
 }

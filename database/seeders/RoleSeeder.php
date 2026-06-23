@@ -41,8 +41,7 @@ class RoleSeeder extends Seeder
             $pengawasUsers = User::whereIn('id', $assignedUserIds)->get();
             $count = 0;
             foreach ($pengawasUsers as $u) {
-                if (!$u->hasRole('pengawas')) {
-                    $u->assignRole('pengawas');
+                if ($u->grantPengawasRoleIfEligible()) {
                     $count++;
                 }
             }
