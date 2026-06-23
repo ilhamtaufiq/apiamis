@@ -17,7 +17,7 @@ class RoleSeeder extends Seeder
     {
         // Create default roles
         // 'pengawas' = user with role pengawas lapangan (used for Puspen KPI and assignments)
-        $roles = ['admin', 'tfl', 'pengawas'];
+        $roles = ['admin', 'tfl', 'pengawas', 'konsultan_pengawas'];
         
         foreach ($roles as $roleName) {
             Role::firstOrCreate(['name' => $roleName]);

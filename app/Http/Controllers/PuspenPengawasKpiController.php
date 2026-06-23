@@ -10,19 +10,24 @@ use Spatie\Permission\Models\Role;
 
 class PuspenPengawasKpiController extends Controller
 {
+    /** @var list<string> */
+    private const KPI_ROLES = ['pengawas', 'konsultan_pengawas'];
+
     public function index(Request $request)
     {
         $validated = $request->validate([
             'tahun' => 'nullable|integer|min:2000|max:2100',
             'search' => 'nullable|string|max:100',
+            'peran' => 'nullable|string|in:pengawas,konsultan_pengawas',
             'per_page' => 'nullable|integer|min:1|max:100',
         ]);
 
         $tahun = (int) ($validated['tahun'] ?? now()->year);
         $search = $validated['search'] ?? null;
+        $peran = $validated['peran'] ?? null;
         $perPage = (int) ($validated['per_page'] ?? 20);
 
-        $results = $this->buildResults($tahun, $search);
+        $results = $this->buildResults($tahun, $search, $peran);
 
         $total = count($results);
         $page = max(1, (int) $request->get('page', 1));
@@ -40,6 +45,7 @@ class PuspenPengawasKpiController extends Controller
             'summary' => [
                 'total_pengawas' => count($results),
                 'tahun' => $tahun,
+                'peran' => $peran,
             ],
         ]);
     }
@@ -53,7 +59,7 @@ class PuspenPengawasKpiController extends Controller
         $tahun = (int) ($validated['tahun'] ?? now()->year);
 
         $user = User::whereHas('roles', function ($q) {
-            $q->where('name', 'pengawas');
+            $q->whereIn('name', self::KPI_ROLES);
         })->findOrFail($userId);
 
         $pekerjaanRows = $this->pekerjaanBreakdownForUser($user, $tahun);
@@ -76,6 +82,7 @@ class PuspenPengawasKpiController extends Controller
                 'id' => $user->id,
                 'nama' => $user->name,
                 'nip' => $user->nip,
+                'roles' => $this->getUserKpiRoles($user),
             ],
             'tahun' => $tahun,
             'pekerjaan' => $pekerjaanRows->values(),
@@ -83,9 +90,9 @@ class PuspenPengawasKpiController extends Controller
         ]);
     }
 
-    private function buildResults(int $tahun, ?string $search): array
+    private function buildResults(int $tahun, ?string $search, ?string $peran): array
     {
-        Role::firstOrCreate(['name' => 'pengawas']);
+        $this->ensureKpiRoles();
 
         $assignedUserIds = DB::table('user_pekerjaan')->distinct()->pluck('user_id');
 
@@ -99,8 +106,10 @@ class PuspenPengawasKpiController extends Controller
             }
         }
 
-        $userQuery = User::whereHas('roles', function ($q) {
-            $q->where('name', 'pengawas');
+        $roleFilter = $this->resolveRoleFilter($peran);
+
+        $userQuery = User::whereHas('roles', function ($q) use ($roleFilter) {
+            $q->whereIn('name', $roleFilter);
         });
 
         if ($search) {
@@ -136,6 +145,7 @@ class PuspenPengawasKpiController extends Controller
                 'nama' => $u->name,
                 'nip' => $u->nip,
                 'jabatan' => $u->jabatan,
+                'roles' => $this->getUserKpiRoles($u),
                 'pekerjaan_count' => $pekerjaanCount,
                 'foto_count' => $fotoCount,
                 'penerima_count' => $penerimaCount,
@@ -198,5 +208,31 @@ class PuspenPengawasKpiController extends Controller
                 'score' => round($score, 1),
             ];
         })->sortByDesc('score')->values();
+    }
+
+    private function ensureKpiRoles(): void
+    {
+        foreach (self::KPI_ROLES as $roleName) {
+            Role::firstOrCreate(['name' => $roleName]);
+        }
+    }
+
+    /** @return list<string> */
+    private function resolveRoleFilter(?string $peran): array
+    {
+        if ($peran === 'pengawas' || $peran === 'konsultan_pengawas') {
+            return [$peran];
+        }
+
+        return self::KPI_ROLES;
+    }
+
+    /** @return list<string> */
+    private function getUserKpiRoles(User $user): array
+    {
+        return array_values(array_intersect(
+            $user->getRoleNames()->toArray(),
+            self::KPI_ROLES
+        ));
     }
 }
