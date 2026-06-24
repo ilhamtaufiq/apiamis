@@ -179,10 +179,19 @@ class UserPekerjaanController extends Controller
      *     @OA\Response(response=200, description="Successful operation")
      * )
      */
-    public function availableUsers()
+    public function availableUsers(Request $request)
     {
+        $search = $request->query('search');
+
         $users = User::whereDoesntHave('roles', function ($query) {
                 $query->where('name', 'admin');
+            })
+            ->when($search, function ($query, $search) {
+                $term = '%' . $search . '%';
+                $query->where(function ($q) use ($term) {
+                    $q->where('name', 'like', $term)
+                        ->orWhere('email', 'like', $term);
+                });
             })
             ->select('id', 'name', 'email')
             ->orderBy('name')
