@@ -16,19 +16,27 @@ class PuspenMediaShareController extends Controller
 {
     public function index(Request $request)
     {
+        $validated = $request->validate([
+            'search' => 'nullable|string|max:100',
+            'page' => 'nullable|integer|min:1',
+            'per_page' => 'nullable|integer|min:1|max:100',
+        ]);
+
         $query = PuspenMediaShare::ownedBy($request->user()->id)
             ->with('media')
             ->orderByDesc('created_at');
 
-        if ($request->filled('search')) {
-            $search = $request->search;
+        if (! empty($validated['search'] ?? null)) {
+            $search = $validated['search'];
             $query->where(function ($builder) use ($search) {
                 $builder->where('title', 'like', "%{$search}%")
                     ->orWhere('description', 'like', "%{$search}%");
             });
         }
 
-        return PuspenMediaShareResource::collection($query->get());
+        $perPage = (int) ($validated['per_page'] ?? 10);
+
+        return PuspenMediaShareResource::collection($query->paginate($perPage));
     }
 
     public function mediaLibrary(Request $request): JsonResponse
