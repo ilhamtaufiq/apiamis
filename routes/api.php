@@ -101,6 +101,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::apiResource('pekerjaan', PekerjaanController::class);
     Route::get('pekerjaan/{pekerjaan}/media', [PekerjaanController::class, 'media']);
     Route::get('pekerjaan/{pekerjaan}/download-all-berkas', [PekerjaanController::class, 'downloadAllBerkas']);
+    Route::post('pekerjaan/{pekerjaan}/berkas/quick-share', [BerkasController::class, 'quickShareForPekerjaan']);
 
     // Menu permissions - user menus
     Route::get('menu-permissions/user/menus', [MenuPermissionController::class, 'getUserMenus']);

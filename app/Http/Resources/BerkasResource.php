@@ -13,6 +13,7 @@ class BerkasResource extends JsonResource
             'jenis_dokumen' => $this->jenis_dokumen,
             'pekerjaan_id' => $this->pekerjaan_id,
             'berkas_url' => $this->getFirstMediaUrl('berkas/dokumen'),
+            'media_id' => $this->getFirstMedia('berkas/dokumen')?->id,
             'pekerjaan' => $this->whenLoaded('pekerjaan', function () {
                 return [
                     'id' => $this->pekerjaan->id,

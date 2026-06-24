@@ -3,10 +3,15 @@
 namespace App\Http\Controllers;
 
 use App\Models\Berkas;
+use App\Models\Pekerjaan;
+use App\Models\PuspenMediaShare;
 use App\Http\Resources\BerkasResource;
+use App\Http\Resources\PuspenMediaShareResource;
 use App\Services\DocumentPdfConverter;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+
 
 class BerkasController extends Controller
 {
@@ -178,6 +183,69 @@ class BerkasController extends Controller
         ])->deleteFileAfterSend($deleteAfterSend);
     }
 
+    public function quickShareForPekerjaan(Request $request, Pekerjaan $pekerjaan)
+    {
+        $validated = $request->validate([
+            'berkas_ids' => 'nullable|array',
+            'berkas_ids.*' => 'integer|exists:tbl_berkas,id',
+            'title' => 'nullable|string|max:255',
+            'description' => 'nullable|string|max:2000',
+        ]);
+
+        $berkasQuery = Berkas::query()
+            ->where('pekerjaan_id', $pekerjaan->id);
+
+        if (! empty($validated['berkas_ids'])) {
+            $berkasQuery->whereIn('id', $validated['berkas_ids']);
+        }
+
+        $berkasItems = $berkasQuery->get();
+        $attachedCount = 0;
+
+        $share = DB::transaction(function () use ($request, $pekerjaan, $validated, $berkasItems, &$attachedCount) {
+            $share = PuspenMediaShare::create([
+                'user_id' => $request->user()->id,
+                'title' => $validated['title'] ?? ('Berkas: '.$pekerjaan->nama_paket),
+                'description' => $validated['description'] ?? 'Berbagi dokumen pekerjaan melalui Puspen Media Sharing.',
+                'share_token' => $this->makeShareToken(),
+                'is_public' => true,
+            ]);
+
+            foreach ($berkasItems as $berkas) {
+                $media = $berkas->getFirstMedia('berkas/dokumen');
+
+                if (! $media || ! file_exists($media->getPath())) {
+                    continue;
+                }
+
+                $folderPath = $this->cleanFolderPath($berkas->jenis_dokumen);
+
+                $share->addMedia($media->getPath())
+                    ->preservingOriginal()
+                    ->usingName($berkas->jenis_dokumen)
+                    ->usingFileName($media->file_name)
+                    ->withCustomProperties([
+                        'source_media_id' => $media->id,
+                        'source_model_type' => $media->model_type,
+                        'source_model_id' => $media->model_id,
+                        'folder_path' => $folderPath,
+                        'berkas_id' => $berkas->id,
+                    ])
+                    ->toMediaCollection('shared-media');
+
+                $attachedCount++;
+            }
+
+            return $share->load('media');
+        });
+
+        abort_unless($attachedCount > 0, 422, 'Tidak ada berkas yang dapat dibagikan.');
+
+        return (new PuspenMediaShareResource($share))
+            ->response()
+            ->setStatusCode(201);
+    }
+
     public function uploadFromUrl(Request $request)
     {
         $validated = $request->validate([
@@ -201,5 +269,26 @@ class BerkasController extends Controller
 
         $berkas->load('pekerjaan');
         return new BerkasResource($berkas);
+    }
+
+    private function makeShareToken(): string
+    {
+        do {
+            $token = Str::random(32);
+        } while (PuspenMediaShare::where('share_token', $token)->exists());
+
+        return $token;
+    }
+
+    private function cleanFolderPath(string $folderPath): string
+    {
+        $segments = collect(explode('/', str_replace('\\', '/', $folderPath)))
+            ->map(fn ($segment) => trim($segment))
+            ->filter(fn ($segment) => $segment !== '' && $segment !== '.' && $segment !== '..')
+            ->map(fn ($segment) => Str::slug($segment, '-'))
+            ->filter()
+            ->values();
+
+        return $segments->implode('/');
     }
 }
