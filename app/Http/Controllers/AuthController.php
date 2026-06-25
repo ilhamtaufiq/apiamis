@@ -2,9 +2,12 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\AuditLog;
 use App\Models\User;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use App\Http\Resources\UserResource;
 use Laravel\Socialite\Facades\Socialite;
@@ -82,11 +85,18 @@ class AuthController extends Controller
             $user->load('roles', 'permissions');
             $token = $user->createToken('auth-token')->plainTextToken;
             
-            // Redirect to frontend with token
-            return redirect()->away(rtrim($frontendUrl, '/') . '/oauth-callback?token=' . $token);
+            // Token in URL fragment — not sent to server logs or Referer headers.
+            return redirect()->away(
+                rtrim($frontendUrl, '/') . '/oauth-callback#token=' . rawurlencode($token)
+            );
         } catch (\Exception $e) {
-            // Redirect to frontend with error
-            return redirect()->away(rtrim($frontendUrl, '/') . '/oauth-callback?error=' . urlencode('Google authentication failed: ' . $e->getMessage()));
+            \Illuminate\Support\Facades\Log::warning('Google OAuth failed', [
+                'message' => $e->getMessage(),
+            ]);
+
+            return redirect()->away(
+                rtrim($frontendUrl, '/') . '/oauth-callback#error=' . rawurlencode('Google authentication failed. Please try again.')
+            );
         }
     }
 
@@ -233,10 +243,80 @@ class AuthController extends Controller
         // Create token for the target user
         $token = $user->createToken('impersonation-token')->plainTextToken;
 
+        AuditLog::create([
+            'user_id' => $request->user()->id,
+            'event' => 'impersonation_started',
+            'auditable_type' => User::class,
+            'auditable_id' => $user->id,
+            'old_values' => null,
+            'new_values' => [
+                'impersonator_id' => $request->user()->id,
+                'impersonator_email' => $request->user()->email,
+                'target_user_id' => $user->id,
+                'target_user_email' => $user->email,
+            ],
+            'url' => $request->fullUrl(),
+            'ip_address' => $request->ip(),
+            'user_agent' => (string) $request->userAgent(),
+        ]);
+
         return response()->json([
             'user' => new UserResource($user),
             'token' => $token,
             'message' => "Now impersonating {$user->name}"
         ]);
+    }
+
+    public function createHandoff(Request $request)
+    {
+        $token = $request->user()->currentAccessToken();
+        if (! $token) {
+            return response()->json(['message' => 'Unauthenticated.'], 401);
+        }
+
+        $plainToken = $request->bearerToken();
+        if (! $plainToken) {
+            return response()->json(['message' => 'Bearer token required.'], 400);
+        }
+
+        $code = Str::random(48);
+        Cache::put($this->handoffCacheKey($code), [
+            'token' => $plainToken,
+            'user_id' => $request->user()->id,
+        ], now()->addMinute());
+
+        return response()->json([
+            'code' => $code,
+            'expires_in' => 60,
+        ]);
+    }
+
+    public function exchangeHandoff(Request $request)
+    {
+        $request->validate([
+            'code' => 'required|string|size:48',
+        ]);
+
+        $payload = Cache::pull($this->handoffCacheKey($request->input('code')));
+        if (! $payload || empty($payload['token'])) {
+            return response()->json(['message' => 'Handoff code invalid or expired.'], 410);
+        }
+
+        $user = User::find($payload['user_id'] ?? null);
+        if (! $user) {
+            return response()->json(['message' => 'Handoff code invalid or expired.'], 410);
+        }
+
+        $user->load('roles', 'permissions');
+
+        return response()->json([
+            'user' => new UserResource($user),
+            'token' => $payload['token'],
+        ]);
+    }
+
+    private function handoffCacheKey(string $code): string
+    {
+        return 'auth_handoff:' . $code;
     }
 }

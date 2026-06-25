@@ -530,4 +530,73 @@ class OpenRouterService
             return $this->runLangChainAttempt($provider, $message, $context, $history, $attemptOptions);
         }, $options);
     }
+
+    /**
+     * Stream chat completion chunks for SSE consumers.
+     *
+     * @return \Generator<int, string>
+     */
+    public function streamChatCompletion(array $messages): \Generator
+    {
+        $provider = $this->provider === 'auto' ? 'openrouter' : $this->provider;
+        $providerConfig = $this->getProviderConfig($provider);
+        $apiKey = $this->resolveApiKey($provider, $providerConfig);
+        $baseUrl = $providerConfig['base_url'] ?? $this->baseUrl;
+        $model = $providerConfig['default_model'] ?? $this->model;
+
+        $payload = [
+            'model' => $model,
+            'messages' => $messages,
+            'stream' => true,
+            'temperature' => 0.7,
+        ];
+
+        $headers = array_merge(
+            ['Content-Type' => 'application/json', 'Accept' => 'text/event-stream'],
+            $this->resolveHeaders($providerConfig, $apiKey)
+        );
+
+        try {
+            $response = Http::withHeaders($headers)
+                ->timeout(120)
+                ->withOptions(['stream' => true])
+                ->post(rtrim($baseUrl, '/') . '/chat/completions', $payload);
+
+            if ($response->failed()) {
+                yield 'Maaf, layanan ringkasan AI sedang tidak tersedia.';
+
+                return;
+            }
+
+            $body = $response->toPsrResponse()->getBody();
+            $buffer = '';
+
+            while (! $body->eof()) {
+                $buffer .= $body->read(1024);
+
+                while (($pos = strpos($buffer, "\n")) !== false) {
+                    $line = trim(substr($buffer, 0, $pos));
+                    $buffer = substr($buffer, $pos + 1);
+
+                    if (! str_starts_with($line, 'data:')) {
+                        continue;
+                    }
+
+                    $dataStr = trim(substr($line, 5));
+                    if ($dataStr === '[DONE]') {
+                        return;
+                    }
+
+                    $parsed = json_decode($dataStr, true);
+                    $content = $parsed['choices'][0]['delta']['content'] ?? null;
+                    if (is_string($content) && $content !== '') {
+                        yield $content;
+                    }
+                }
+            }
+        } catch (\Throwable $e) {
+            Log::error('OpenRouter stream error', ['message' => $e->getMessage()]);
+            yield 'Maaf, terjadi kesalahan saat menghasilkan ringkasan.';
+        }
+    }
 }

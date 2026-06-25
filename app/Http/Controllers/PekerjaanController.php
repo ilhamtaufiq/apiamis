@@ -74,7 +74,7 @@ class PekerjaanController extends Controller
             ->byUserRole();  // Aman karena sudah check auth
 
         if ($request->boolean('summary')) {
-            $query->with(['output', 'foto']);
+            $query->with(['output', 'foto', 'progressEstimasiHistory']);
         }
 
         // Filter by tahun via kegiatan

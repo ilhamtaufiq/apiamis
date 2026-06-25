@@ -159,6 +159,16 @@ class Pekerjaan extends Model
         return $this->hasOne(Progress::class, 'pekerjaan_id');
     }
 
+    public function progressEstimasi(): HasMany
+    {
+        return $this->hasMany(PekerjaanProgressEstimasi::class, 'pekerjaan_id');
+    }
+
+    public function progressEstimasiHistory(): HasMany
+    {
+        return $this->hasMany(PekerjaanProgressEstimasiHistory::class, 'pekerjaan_id');
+    }
+
 
 
     /**

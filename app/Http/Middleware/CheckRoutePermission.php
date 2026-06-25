@@ -26,6 +26,53 @@ class CheckRoutePermission
     ];
 
     /**
+     * Known API resource prefixes allowed to mutate without an explicit DB rule.
+     */
+    private const MUTATION_RESOURCE_PREFIXES = [
+        '/pekerjaan',
+        '/kontrak',
+        '/kontrak-addendums',
+        '/kegiatan',
+        '/penyedia',
+        '/desa',
+        '/kecamatan',
+        '/foto',
+        '/progress',
+        '/berita-acara',
+        '/berkas',
+        '/output',
+        '/penerima',
+        '/draft-pekerjaan',
+        '/tiket',
+        '/chat',
+        '/notifications',
+        '/puspen',
+        '/simulation-networks',
+        '/tool-pdfs',
+        '/analyze-rab',
+        '/blog',
+        '/events',
+        '/tags',
+        '/spam-units',
+        '/checklist-items',
+        '/pekerjaan-checklist',
+        '/rka',
+        '/pengawas',
+        '/master-fase-pekerjaan',
+        '/signature-library',
+        '/koordinat',
+        '/client-error-reports',
+        '/auth/logout',
+        '/auth/handoff',
+        '/auth/impersonate',
+        '/search',
+        '/menu-permissions/check-access',
+        '/route-permissions/check-access',
+        '/dashboard',
+        '/app-settings',
+    ];
+
+    /**
      * Check if a route is in the admin-only list
      */
     private function isAdminOnlyRoute(string $path): bool
@@ -116,7 +163,31 @@ class CheckRoutePermission
             ], 403);
         }
 
-        // For non-admin-only routes without rules, allow access
+        if ($this->isMutatingMethod($method) && ! $this->isAllowedMutationWithoutRule($path)) {
+            return response()->json([
+                'message' => 'Akses ditolak. Route mutasi ini memerlukan permission eksplisit.',
+                'route' => "$method $path",
+                'your_roles' => $user->roles->pluck('name'),
+            ], 403);
+        }
+
+        // For read-only routes without rules, allow access
         return $next($request);
+    }
+
+    private function isMutatingMethod(string $method): bool
+    {
+        return in_array(strtoupper($method), ['POST', 'PUT', 'PATCH', 'DELETE'], true);
+    }
+
+    private function isAllowedMutationWithoutRule(string $path): bool
+    {
+        foreach (self::MUTATION_RESOURCE_PREFIXES as $prefix) {
+            if ($path === $prefix || str_starts_with($path, $prefix . '/')) {
+                return true;
+            }
+        }
+
+        return false;
     }
 }

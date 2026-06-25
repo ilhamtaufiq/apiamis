@@ -26,6 +26,7 @@ use App\Http\Controllers\MenuPermissionController;
 use App\Http\Controllers\OutputController;
 use App\Http\Controllers\PekerjaanChecklistController;
 use App\Http\Controllers\PekerjaanController;
+use App\Http\Controllers\PekerjaanProgressEstimasiController;
 use App\Http\Controllers\PenerimaController;
 use App\Http\Controllers\PenyediaController;
 use App\Http\Controllers\PermissionController;
@@ -51,7 +52,9 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
 // Authentication Routes
-Route::post('auth/login', [AuthController::class, 'login']);
+Route::post('auth/login', [AuthController::class, 'login'])->middleware('throttle:login');
+Route::post('auth/handoff', [AuthController::class, 'createHandoff'])->middleware(['auth:sanctum', 'throttle:10,1']);
+Route::post('auth/handoff/exchange', [AuthController::class, 'exchangeHandoff'])->middleware('throttle:handoff-exchange');
 
 // Google OAuth Routes
 Route::get('auth/google', [AuthController::class, 'redirectToGoogle']);
@@ -66,7 +69,7 @@ Route::post('app-settings', [AppSettingController::class, 'store'])->middleware(
 Route::get('blog', [\App\Http\Controllers\BlogController::class, 'index']);
 Route::get('blog/{blog}', [\App\Http\Controllers\BlogController::class, 'show']);
 Route::get('public/puspen/progress-fisik', [PuspenProgressFisikController::class, 'publicIndex']);
-Route::post('public/puspen/progress-fisik/bulk-update', [PuspenProgressFisikController::class, 'publicBulkUpdate']);
+
 Route::get('public/puspen/media-shares/{shareToken}', [PuspenMediaShareController::class, 'publicShow']);
 Route::get('public/puspen/media-shares/{shareToken}/preview/{media}', [PuspenMediaShareController::class, 'publicPreview']);
 Route::get('public/puspen/media-shares/{shareToken}/download', [PuspenMediaShareController::class, 'publicDownload']);
@@ -143,6 +146,8 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // Global Search
     Route::get('search', [\App\Http\Controllers\SearchController::class, 'index']);
+    Route::post('search/ai-summary', [\App\Http\Controllers\SearchAiSummaryController::class, 'stream'])
+        ->middleware('throttle:30,1');
 
     // API Resources
     Route::get('spam-units/stats', [SpamUnitController::class, 'stats']);
@@ -243,6 +248,8 @@ Route::middleware('auth:sanctum')->group(function () {
     // Progress routes
     Route::get('progress/pekerjaan/{pekerjaanId}', [ProgressController::class, 'report']);
     Route::post('progress/pekerjaan/{pekerjaanId}', [ProgressController::class, 'store']);
+    Route::get('pekerjaan/{pekerjaanId}/progress-estimasi', [PekerjaanProgressEstimasiController::class, 'show']);
+    Route::put('pekerjaan/{pekerjaanId}/progress-estimasi', [PekerjaanProgressEstimasiController::class, 'update']);
     Route::get('puspen/progress-fisik', [PuspenProgressFisikController::class, 'index']);
     Route::post('puspen/progress-fisik/bulk-update', [PuspenProgressFisikController::class, 'bulkUpdate']);
     Route::get('puspen/pengawas-kpi', [PuspenPengawasKpiController::class, 'index']);

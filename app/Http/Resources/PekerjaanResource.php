@@ -2,6 +2,7 @@
 
 namespace App\Http\Resources;
 
+use App\Services\PekerjaanProgressEstimasiSummaryService;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -112,6 +113,22 @@ class PekerjaanResource extends JsonResource
             $deviasi = $progressTotal - $progressRencana;
         }
 
+        $progressEstimasiFisik = null;
+        $progressEstimasiKeuangan = null;
+        $deviasiEstimasiFisik = null;
+        $deviasiEstimasiKeuangan = null;
+
+        if ($this->relationLoaded('progressEstimasiHistory')) {
+            $tahunAnggaran = (int) ($this->kegiatan?->tahun_anggaran ?? now()->year);
+            $estimasiSummary = app(PekerjaanProgressEstimasiSummaryService::class)
+                ->summarize($this->progressEstimasiHistory, $tahunAnggaran);
+
+            $progressEstimasiFisik = $estimasiSummary['fisik_realisasi'];
+            $progressEstimasiKeuangan = $estimasiSummary['keuangan_realisasi'];
+            $deviasiEstimasiFisik = $estimasiSummary['fisik_deviasi'];
+            $deviasiEstimasiKeuangan = $estimasiSummary['keuangan_deviasi'];
+        }
+
         return [
             'id' => $this->id,
             'kode_rekening' => $this->kode_rekening,
@@ -119,6 +136,10 @@ class PekerjaanResource extends JsonResource
             'pagu' => $this->pagu,
             'progress_total' => round($progressTotal, 2),
             'deviasi' => round($deviasi, 2),
+            'progress_estimasi_fisik' => $progressEstimasiFisik,
+            'progress_estimasi_keuangan' => $progressEstimasiKeuangan,
+            'deviasi_estimasi_fisik' => $deviasiEstimasiFisik,
+            'deviasi_estimasi_keuangan' => $deviasiEstimasiKeuangan,
             'foto_count' => $this->foto_count ?? $fotoActualCount,
             'foto_required_count' => $fotoRequiredCount,
             'foto_status' => $fotoStatus,

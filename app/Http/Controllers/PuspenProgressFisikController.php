@@ -6,6 +6,7 @@ use App\Http\Resources\PuspenProgressFisikResource;
 use App\Models\AppSetting;
 use App\Models\Kontrak;
 use App\Models\PuspenProgressFisik;
+use App\Services\PekerjaanProgressEstimasiSyncService;
 use Illuminate\Http\Request;
 
 class PuspenProgressFisikController extends Controller
@@ -131,7 +132,7 @@ class PuspenProgressFisikController extends Controller
         return $names->isEmpty() ? ['Tanpa Sub Kegiatan'] : $names->all();
     }
 
-    public function bulkUpdate(Request $request)
+    public function bulkUpdate(Request $request, PekerjaanProgressEstimasiSyncService $syncService)
     {
         $validated = $this->validateProgressPayload($request, true);
 
@@ -146,31 +147,12 @@ class PuspenProgressFisikController extends Controller
                     'realisasi' => $item['realisasi'] ?? null,
                 ]
             );
-        }
 
-        return response()->json(['message' => 'Progress fisik berhasil disimpan']);
-    }
-
-    public function publicBulkUpdate(Request $request)
-    {
-        if (AppSetting::getValue('puspen_progress_fisik_public', '0') !== '1') {
-            return response()->json(['message' => 'Halaman progress fisik Puspen sedang dikunci'], 403);
-        }
-
-        $validated = $this->validateProgressPayload($request, false);
-
-        $tahun = (int) (AppSetting::getValue('tahun_anggaran') ?: now()->year);
-
-        foreach ($validated['items'] as $item) {
-            PuspenProgressFisik::updateOrCreate(
-                [
-                    'kontrak_id' => $item['kontrak_id'],
-                    'tahun_anggaran' => $tahun,
-                ],
-                [
-                    'rencana' => $item['rencana'] ?? null,
-                    'realisasi' => $item['realisasi'] ?? null,
-                ]
+            $syncService->syncFromPuspenKontrak(
+                (int) $item['kontrak_id'],
+                (int) $validated['tahun'],
+                $item['rencana'] ?? null,
+                $item['realisasi'] ?? null,
             );
         }
 
