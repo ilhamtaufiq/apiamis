@@ -6,6 +6,7 @@ use App\Models\AppSetting;
 use App\Http\Resources\AppSettingResource;
 use App\Services\OpenRouterService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
 
 class AppSettingController extends Controller
@@ -56,6 +57,7 @@ class AppSettingController extends Controller
             'chat_provider' => 'nullable|string|max:64',
             'chat_base_url' => 'nullable|string|max:255',
             'chat_model' => 'nullable|string|max:128',
+            'chat_api_key' => 'nullable|string|max:2000',
             'landing_page_active' => 'nullable|string|in:0,1',
             'puspen_progress_fisik_public' => 'nullable|string|in:0,1',
             'logo' => 'nullable|file|mimes:jpg,jpeg,png,svg|max:2048',
@@ -101,6 +103,11 @@ class AppSettingController extends Controller
 
         if ($request->has('chat_model')) {
             $setting = AppSetting::setValue('chat_model', $request->chat_model, 'text');
+            $updatedSettings[] = $setting;
+        }
+
+        if ($request->has('chat_api_key') && filled($request->input('chat_api_key'))) {
+            $setting = AppSetting::setValue('chat_api_key_local', $request->input('chat_api_key'), 'secret');
             $updatedSettings[] = $setting;
         }
 
@@ -151,6 +158,91 @@ class AppSettingController extends Controller
         // Return all settings
         $allSettings = AppSetting::all();
         return AppSettingResource::collection($allSettings);
+    }
+
+    /**
+     * Test AI endpoint using stored settings (API key read from database unless overridden).
+     */
+    public function testAiConnection(Request $request)
+    {
+        $request->validate([
+            'base_url' => 'nullable|string|max:255',
+            'model' => 'nullable|string|max:128',
+            'api_key' => 'nullable|string|max:2000',
+        ]);
+
+        $baseUrl = rtrim(
+            (string) ($request->input('base_url') ?: AppSetting::getValue('chat_base_url', '')),
+            '/'
+        );
+        $model = (string) ($request->input('model') ?: AppSetting::getValue('chat_model', 'gc/gemini-2.5-flash'));
+        $apiKey = $request->input('api_key') ?: AppSetting::getValue('chat_api_key_local');
+
+        if ($baseUrl === '' || !filter_var($baseUrl, FILTER_VALIDATE_URL)) {
+            return response()->json(['ok' => false, 'error' => 'URL tidak valid.'], 400);
+        }
+
+        if (!filled($apiKey)) {
+            return response()->json([
+                'ok' => false,
+                'error' => 'API key belum tersimpan. Isi field API Key lalu klik Simpan.',
+            ], 400);
+        }
+
+        $headers = [
+            'Accept' => 'application/json',
+            'Content-Type' => 'application/json',
+            'Authorization' => 'Bearer ' . $apiKey,
+        ];
+
+        try {
+            $modelsResponse = Http::withHeaders($headers)
+                ->timeout(10)
+                ->get($baseUrl . '/models');
+
+            if (!$modelsResponse->successful()) {
+                return response()->json([
+                    'ok' => false,
+                    'stage' => 'models',
+                    'error' => 'HTTP ' . $modelsResponse->status() . ': ' . substr($modelsResponse->body(), 0, 120),
+                ], 422);
+            }
+
+            if ($model === '') {
+                return response()->json(['ok' => true, 'stage' => 'models', 'used_stored_key' => !$request->filled('api_key')]);
+            }
+
+            $chatResponse = Http::withHeaders($headers)
+                ->timeout(20)
+                ->post($baseUrl . '/chat/completions', [
+                    'model' => $model,
+                    'messages' => [['role' => 'user', 'content' => 'ping']],
+                    'max_tokens' => 1,
+                    'stream' => false,
+                ]);
+
+            if ($chatResponse->successful()) {
+                return response()->json([
+                    'ok' => true,
+                    'stage' => 'chat',
+                    'model' => $model,
+                    'used_stored_key' => !$request->filled('api_key'),
+                ]);
+            }
+
+            return response()->json([
+                'ok' => false,
+                'stage' => 'chat',
+                'model' => $model,
+                'error' => $this->formatAiGatewayError($chatResponse->body(), $model),
+                'used_stored_key' => !$request->filled('api_key'),
+            ], 422);
+        } catch (\Throwable $e) {
+            return response()->json([
+                'ok' => false,
+                'error' => 'Gagal terhubung: ' . $e->getMessage(),
+            ], 502);
+        }
     }
 
     /**
@@ -223,5 +315,26 @@ class AppSettingController extends Controller
     private function chatApiKeySettingKey(string $providerId): string
     {
         return 'chat_api_key_' . str_replace('-', '_', $providerId);
+    }
+
+    private function formatAiGatewayError(string $raw, string $model): string
+    {
+        $decoded = json_decode($raw, true);
+        if (is_array($decoded)) {
+            $message = $decoded['message'] ?? $decoded['error'] ?? null;
+            $payloadModel = is_string($decoded['model'] ?? null) ? $decoded['model'] : $model;
+
+            if (is_string($message) && stripos($message, 'blocked') !== false) {
+                return 'Model "' . $payloadModel . '" diblokir gateway AI. Ganti ke gc/gemini-2.5-flash.';
+            }
+
+            if (is_string($message) && $message !== '') {
+                return 'Model "' . $payloadModel . '": ' . $message;
+            }
+        }
+
+        $trimmed = trim($raw);
+
+        return $trimmed !== '' ? substr($trimmed, 0, 200) : 'Model "' . $model . '" gagal diuji.';
     }
 }

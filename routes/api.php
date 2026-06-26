@@ -64,6 +64,7 @@ Route::get('auth/google/callback', [AuthController::class, 'handleGoogleCallback
 Route::get('app-settings', [AppSettingController::class, 'index']);
 Route::get('app-settings/storage-stats', [AppSettingController::class, 'storageStats'])->middleware('auth:sanctum');
 Route::post('app-settings', [AppSettingController::class, 'store'])->middleware('auth:sanctum');
+Route::post('app-settings/test-ai-connection', [AppSettingController::class, 'testAiConnection'])->middleware('auth:sanctum');
 
 // Public Blog Routes
 Route::get('blog', [\App\Http\Controllers\BlogController::class, 'index']);
