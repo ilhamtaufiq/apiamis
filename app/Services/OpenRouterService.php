@@ -451,6 +451,8 @@ class OpenRouterService
             'history' => $history,
             'tools' => $options['tools'] ?? null,
             'tool_history' => $options['tool_history'] ?? null,
+            'few_shot_examples' => $options['few_shot_examples'] ?? [],
+            'knowledge_base' => $options['knowledge_base'] ?? null,
         ];
 
         try {

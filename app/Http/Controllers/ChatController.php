@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use App\Services\OpenRouterService;
 use App\Services\ChatDataToolService;
+use App\Services\ChatRagContextService;
 use App\Models\Pekerjaan;
 use App\Models\Kontrak;
 use App\Models\Penyedia;
@@ -27,11 +28,16 @@ class ChatController extends Controller
 {
     protected $openRouter;
     protected $chatDataTools;
+    protected $ragContextService;
 
-    public function __construct(OpenRouterService $openRouter, ChatDataToolService $chatDataTools)
-    {
+    public function __construct(
+        OpenRouterService $openRouter,
+        ChatDataToolService $chatDataTools,
+        ChatRagContextService $ragContextService,
+    ) {
         $this->openRouter = $openRouter;
         $this->chatDataTools = $chatDataTools;
+        $this->ragContextService = $ragContextService;
     }
 
     // ── Session CRUD ────────────────────────────────────────────────
@@ -191,8 +197,12 @@ class ChatController extends Controller
 
         $contextCacheKey = 'chat_ctx_' . md5($userMessage) . '_' . $user->id;
         $context = Cache::remember($contextCacheKey, 300, function () use ($userMessage) {
-            return $this->getDatabaseContext($userMessage);
+            return $this->ragContextService->buildContext($userMessage);
         });
+
+        $fewShotExamples = $this->isDynamicDataQuery($userMessage)
+            ? []
+            : $this->ragContextService->getFewShotExamples();
 
         $formattedHistory = $dbHistory->map(fn($msg) => [
             'role' => $msg->role,
@@ -218,6 +228,7 @@ class ChatController extends Controller
                     'provider' => $requestedProvider,
                     'tools' => $tools,
                     'tool_history' => $toolHistory,
+                    'few_shot_examples' => $fewShotExamples,
                 ]
             );
 
@@ -308,22 +319,6 @@ class ChatController extends Controller
             'cached' => false,
             'usage' => $finalResult['usage'] ?? null,
         ]);
-    }
-
-    private function getDatabaseContext($query)
-    {
-        $context = "";
-        $queryLower = strtolower($query);
-        $isExecutiveSummary = str_contains($queryLower, 'laporan pagi') || str_contains($queryLower, 'ringkasan eksekutif');
-        
-        if ($isExecutiveSummary) {
-            $context .= "### EXECUTIVE SUMMARY (REAL-TIME):\n";
-            $totalPagu = Pekerjaan::byUserRole()->sum('pagu');
-            $context .= "- Total Pagu Terkelola: Rp " . number_format($totalPagu, 0, ',', '.') . "\n";
-            $context .= "- Tiket Open: " . Tiket::where('status', 'open')->count() . "\n\n";
-        }
-
-        return $context;
     }
 
     private function getToolsDefinition()

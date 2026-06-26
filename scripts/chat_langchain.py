@@ -2,7 +2,11 @@ import sys
 import json
 import os
 from pathlib import Path
-import re
+
+scripts_dir = Path(__file__).resolve().parent
+sys.path.insert(0, str(scripts_dir))
+
+from rag_retriever import retrieve_relevant_docs
 
 # Determine project root (2 levels up from /scripts)
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -17,41 +21,21 @@ from langchain_openai import ChatOpenAI
 from langchain_core.messages import HumanMessage, SystemMessage, AIMessage, ToolMessage
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 
-def get_relevant_docs(query, api_key):
-    """Retrieve relevant Markdown chunks from pre-built knowledge index (B1 perf fix)."""
-    index_path = Path(project_root) / 'storage' / 'ai' / 'knowledge_index.json'
+def format_few_shot_examples(examples):
+    if not examples:
+        return 'Tidak ada contoh jawaban tersimpan.'
 
-    if not index_path.exists():
-        return "Pengetahuan sistem belum tersedia (jalankan `python scripts/index_knowledge.py` dulu)."
+    blocks = []
+    for idx, example in enumerate(examples, start=1):
+        query = example.get('query', '').strip()
+        response = example.get('response', '').strip()
+        if not query or not response:
+            continue
+        blocks.append(
+            f"Contoh {idx}:\nPertanyaan: {query}\nJawaban: {response}"
+        )
 
-    query_terms = {
-        term for term in re.findall(r"\w+", query.lower())
-        if len(term) >= 4
-    }
-    if not query_terms:
-        return ""
-
-    try:
-        entries = json.loads(index_path.read_text(encoding='utf-8'))
-    except Exception:
-        return "Gagal membaca index pengetahuan."
-
-    scored = []
-    for entry in entries:
-        lowered = entry['content'].lower()
-        score = sum(1 for term in query_terms if term in lowered)
-        if score > 0:
-            scored.append((score, entry['source'], entry['content'][:1500]))
-
-    if not scored:
-        return "Tidak ada potongan dokumen yang relevan ditemukan."
-
-    scored.sort(key=lambda item: item[0], reverse=True)
-    content = ""
-    for i, (_, source, chunk) in enumerate(scored[:12]):
-        content += f"\n\n--- SUMBER {i+1} ({source}) ---\n"
-        content += chunk
-    return content
+    return '\n\n'.join(blocks) if blocks else 'Tidak ada contoh jawaban tersimpan.'
 
 def run_chat():
     try:
@@ -71,12 +55,14 @@ def run_chat():
         history_raw = input_data.get('history', [])
         tools_def = input_data.get('tools')
         tool_history = input_data.get('tool_history', [])
+        few_shot_examples = input_data.get('few_shot_examples', [])
+        knowledge_base = input_data.get('knowledge_base')
         
         if not api_key:
             raise ValueError("API Key is required")
 
-        # Load Knowledge Base from local Markdown docs
-        kb = get_relevant_docs(user_message, api_key)
+        kb = knowledge_base if isinstance(knowledge_base, str) and knowledge_base.strip() else retrieve_relevant_docs(user_message)
+        few_shot = format_few_shot_examples(few_shot_examples)
 
         # 1. Initialize LLM
         llm = ChatOpenAI(
@@ -111,6 +97,9 @@ STRATEGI ANALISA DATA:
 5. Jika hasil pencarian ambigu, tampilkan kandidat yang relevan dan jelaskan filter yang dipakai.
 
 KONTEKS WILAYAH: Fokus pada desa/kecamatan di Kabupaten Cianjur.
+
+CONTOH JAWABAN TERBAIK (FEW-SHOT):
+{few_shot_examples}
 
 PENGETAHUAN SISTEM (RETRIEVED):
 {knowledge_base}
@@ -153,6 +142,7 @@ KONTEKS DATA AWAL (STATIC):
             "input": user_message,
             "context": context,
             "knowledge_base": kb,
+            "few_shot_examples": few_shot,
             "history": formatted_history
         }
         
