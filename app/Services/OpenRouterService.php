@@ -149,7 +149,7 @@ class OpenRouterService
         ],
     ];
 
-    private const LOCAL_PROVIDER = 'local';
+    public const LOCAL_PROVIDER = 'local';
 
     private const DEFAULT_LOCAL_MODEL = 'gc/gemini-2.5-flash';
 
@@ -386,7 +386,7 @@ class OpenRouterService
 
                 return [
                     'success' => false,
-                    'message' => 'AI service error: ' . ($response->json('error.message') ?? 'Unknown error'),
+                    'message' => $this->formatHttpErrorMessage($response->body(), $model),
                 ];
             }
 
@@ -590,6 +590,198 @@ class OpenRouterService
         return $this->runWithRotation($requestedProvider, function (string $provider, array $attemptOptions) use ($message, $context, $history) {
             return $this->runLangChainAttempt($provider, $message, $context, $history, $attemptOptions);
         }, $options);
+    }
+
+    /**
+     * @param  array<int, array{role: string, content: string}>  $history
+     * @return array<int, array{role: string, content: string}>
+     */
+    public function buildChatMessages(string $systemPrompt, array $history, string $userMessage): array
+    {
+        $messages = [];
+
+        if (trim($systemPrompt) !== '') {
+            $messages[] = ['role' => 'system', 'content' => $systemPrompt];
+        }
+
+        foreach ($history as $msg) {
+            if (!isset($msg['role'], $msg['content'])) {
+                continue;
+            }
+
+            $messages[] = [
+                'role' => (string) $msg['role'],
+                'content' => (string) $msg['content'],
+            ];
+        }
+
+        $messages[] = ['role' => 'user', 'content' => $userMessage];
+
+        return $messages;
+    }
+
+    /**
+     * Direct HTTP chat (same path as settings test-connection). Used for local/9router provider.
+     *
+     * @param  array<int, array{role: string, content: string}>  $messages
+     */
+    public function chatDirect(string $provider, array $messages, array $options = []): array
+    {
+        return $this->runHttpAttempt($provider, $messages, $options);
+    }
+
+    /**
+     * Stream direct HTTP chat completion tokens.
+     *
+     * @param  array<int, array{role: string, content: string}>  $messages
+     * @param  callable(string): void  $onToken
+     */
+    public function streamDirect(string $provider, array $messages, callable $onToken, array $options = []): array
+    {
+        if (in_array($provider, self::UNSUPPORTED_PROVIDERS, true)) {
+            return [
+                'success' => false,
+                'message' => 'Provider AI "' . $provider . '" belum didukung.',
+            ];
+        }
+
+        $runtime = $this->resolveProviderRuntime($provider, $options);
+        $model = $runtime['model'];
+        $baseUrl = $runtime['base_url'];
+        $apiKey = $runtime['api_key'];
+        $headers = $runtime['headers'];
+
+        if ($runtime['requires_api_key'] && empty($apiKey)) {
+            return [
+                'success' => false,
+                'message' => $provider === self::LOCAL_PROVIDER
+                    ? 'API key AI lokal belum diset di pengaturan aplikasi.'
+                    : 'API key untuk provider "' . $provider . '" belum diset.',
+            ];
+        }
+
+        $payload = [
+            'model' => $model,
+            'messages' => $messages,
+            'stream' => true,
+            'temperature' => $options['temperature'] ?? 0.7,
+        ];
+
+        $requestHeaders = array_merge(
+            ['Content-Type' => 'application/json', 'Accept' => 'text/event-stream'],
+            $headers
+        );
+
+        if (!empty($apiKey)) {
+            $requestHeaders['Authorization'] = 'Bearer ' . $apiKey;
+        }
+
+        $content = '';
+        $usage = [];
+        $responseModel = $model;
+
+        try {
+            $response = Http::withHeaders($requestHeaders)
+                ->timeout(180)
+                ->withOptions(['stream' => true])
+                ->post(rtrim($baseUrl, '/') . '/chat/completions', $payload);
+
+            if ($response->failed()) {
+                return [
+                    'success' => false,
+                    'message' => $this->formatHttpErrorMessage($response->body(), $model),
+                ];
+            }
+
+            $body = $response->toPsrResponse()->getBody();
+            $buffer = '';
+
+            while (! $body->eof()) {
+                $buffer .= $body->read(1024);
+
+                while (($pos = strpos($buffer, "\n")) !== false) {
+                    $line = trim(substr($buffer, 0, $pos));
+                    $buffer = substr($buffer, $pos + 1);
+
+                    if ($line === '' || ! str_starts_with($line, 'data:')) {
+                        continue;
+                    }
+
+                    $dataStr = trim(substr($line, 5));
+                    if ($dataStr === '[DONE]') {
+                        break 2;
+                    }
+
+                    $parsed = json_decode($dataStr, true);
+                    if (! is_array($parsed)) {
+                        continue;
+                    }
+
+                    if (is_string($parsed['model'] ?? null)) {
+                        $responseModel = $parsed['model'];
+                    }
+
+                    if (is_array($parsed['usage'] ?? null)) {
+                        $usage = $parsed['usage'];
+                    }
+
+                    $delta = $parsed['choices'][0]['delta']['content']
+                        ?? $parsed['choices'][0]['message']['content']
+                        ?? null;
+
+                    if (is_string($delta) && $delta !== '') {
+                        $content .= $delta;
+                        $onToken($delta);
+                    }
+                }
+            }
+
+            if (trim($content) === '') {
+                return [
+                    'success' => false,
+                    'message' => 'Model "' . $model . '" tidak mengembalikan teks. Coba model lain atau periksa log 9router.',
+                ];
+            }
+
+            return [
+                'success' => true,
+                'content' => $content,
+                'model' => $responseModel,
+                'usage' => $usage,
+            ];
+        } catch (\Throwable $e) {
+            Log::error('Direct stream error', ['provider' => $provider, 'message' => $e->getMessage()]);
+
+            return [
+                'success' => false,
+                'message' => 'Streaming gagal: ' . $e->getMessage(),
+            ];
+        }
+    }
+
+    private function formatHttpErrorMessage(string $raw, string $model): string
+    {
+        $decoded = json_decode($raw, true);
+        if (is_array($decoded)) {
+            $message = $decoded['message'] ?? $decoded['error'] ?? null;
+            if (is_array($message)) {
+                $message = $message['message'] ?? json_encode($message);
+            }
+
+            $payloadModel = is_string($decoded['model'] ?? null) ? $decoded['model'] : $model;
+
+            if (is_string($message) && stripos($message, 'blocked') !== false) {
+                return 'Model "' . $payloadModel . '" diblokir gateway AI.';
+            }
+
+            if (is_string($message) && $message !== '') {
+                return 'Model "' . $payloadModel . '": ' . $message;
+            }
+        }
+
+        $trimmed = trim($raw);
+
+        return $trimmed !== '' ? substr($trimmed, 0, 200) : 'AI service error';
     }
 
     /**

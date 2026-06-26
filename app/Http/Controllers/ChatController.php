@@ -220,10 +220,11 @@ class ChatController extends Controller
         $toolHistory = [];
         $requestedProvider = $request->input('provider')
             ?? AppSetting::getValue('chat_provider')
-            ?? 'local';
+            ?? OpenRouterService::LOCAL_PROVIDER;
 
         $knowledgeBase = $this->ragContextService->retrieveKnowledge($userMessage);
         $systemPrompt = $this->ragContextService->buildSystemPrompt($knowledgeBase, $context, $fewShotExamples);
+        $chatMessages = $this->openRouter->buildChatMessages($systemPrompt, $formattedHistory, $userMessage);
         $generationOptions = $this->buildGenerationOptions(
             $requestedProvider,
             $tools,
@@ -235,7 +236,11 @@ class ChatController extends Controller
 
         $finalResult = null;
 
-        while ($loopCount < $maxLoops) {
+        if ($requestedProvider === OpenRouterService::LOCAL_PROVIDER) {
+            $finalResult = $this->openRouter->chatDirect($requestedProvider, $chatMessages);
+        }
+
+        while (($finalResult === null || !($finalResult['success'] ?? false)) && $loopCount < $maxLoops) {
             $result = $this->openRouter->chatWithLangChain(
                 $userMessage,
                 $context,
@@ -406,72 +411,87 @@ class ChatController extends Controller
             $toolHistory = [];
             $requestedProvider = $request->input('provider')
                 ?? AppSetting::getValue('chat_provider')
-                ?? 'local';
+                ?? OpenRouterService::LOCAL_PROVIDER;
 
             $knowledgeBase = $this->ragContextService->retrieveKnowledge($userMessage);
             $systemPrompt = $this->ragContextService->buildSystemPrompt($knowledgeBase, $context, $fewShotExamples);
-            $runtime = $this->openRouter->providerRuntime($requestedProvider);
-            $generationOptions = $this->buildGenerationOptions(
-                $requestedProvider,
-                $tools,
-                $toolHistory,
-                $fewShotExamples,
-                $knowledgeBase,
-                $systemPrompt,
-            );
-
-            $payload = array_merge($generationOptions, [
-                'api_key' => $runtime['api_key'],
-                'model' => $runtime['model'],
-                'base_url' => $runtime['base_url'],
-                'headers' => $runtime['headers'],
-                'message' => $userMessage,
-                'context' => $context,
-                'history' => $formattedHistory,
-            ]);
-
+            $chatMessages = $this->openRouter->buildChatMessages($systemPrompt, $formattedHistory, $userMessage);
             $finalResult = null;
-            $loopCount = 0;
-            $maxLoops = 3;
 
-            while ($loopCount < $maxLoops) {
-                $streamResult = $this->langChainBridge->stream($payload, function (array $event) use ($emit): void {
-                    if (($event['type'] ?? null) === 'token' && !empty($event['content'])) {
-                        $emit(['type' => 'token', 'content' => $event['content']]);
+            if ($requestedProvider === OpenRouterService::LOCAL_PROVIDER) {
+                $finalResult = $this->openRouter->streamDirect(
+                    $requestedProvider,
+                    $chatMessages,
+                    function (string $token) use ($emit): void {
+                        $emit(['type' => 'token', 'content' => $token]);
                     }
-                });
+                );
+            }
 
-                $isToolCallStep = ($streamResult['type'] ?? null) === 'tool_calls'
-                    || !empty($streamResult['tool_calls']);
+            if ($finalResult === null || !($finalResult['success'] ?? false)) {
+                $runtime = $this->openRouter->providerRuntime($requestedProvider);
+                $generationOptions = $this->buildGenerationOptions(
+                    $requestedProvider,
+                    $tools,
+                    $toolHistory,
+                    $fewShotExamples,
+                    $knowledgeBase,
+                    $systemPrompt,
+                );
 
-                if (!($streamResult['success'] ?? false) && !$isToolCallStep) {
-                    $emit([
-                        'type' => 'error',
-                        'message' => $streamResult['message'] ?? $streamResult['error'] ?? 'Streaming gagal',
-                    ]);
-                    return;
+                $payload = array_merge($generationOptions, [
+                    'api_key' => $runtime['api_key'],
+                    'model' => $runtime['model'],
+                    'base_url' => $runtime['base_url'],
+                    'headers' => $runtime['headers'],
+                    'message' => $userMessage,
+                    'context' => $context,
+                    'history' => $formattedHistory,
+                ]);
+
+                $loopCount = 0;
+                $maxLoops = 3;
+                $finalResult = null;
+
+                while ($loopCount < $maxLoops) {
+                    $streamResult = $this->langChainBridge->stream($payload, function (array $event) use ($emit): void {
+                        if (($event['type'] ?? null) === 'token' && !empty($event['content'])) {
+                            $emit(['type' => 'token', 'content' => $event['content']]);
+                        }
+                    });
+
+                    $isToolCallStep = ($streamResult['type'] ?? null) === 'tool_calls'
+                        || !empty($streamResult['tool_calls']);
+
+                    if (!($streamResult['success'] ?? false) && !$isToolCallStep) {
+                        $emit([
+                            'type' => 'error',
+                            'message' => $streamResult['message'] ?? $streamResult['error'] ?? 'Streaming gagal',
+                        ]);
+                        return;
+                    }
+
+                    if ($isToolCallStep) {
+                        $emit(['type' => 'status', 'message' => 'Mengambil data dari database...']);
+                        $currentToolResults = $this->resolveToolResults($streamResult['tool_calls']);
+                        $toolHistory[] = [
+                            'assistant' => [
+                                'role' => 'assistant',
+                                'content' => $streamResult['content'] ?? '',
+                                'tool_calls' => $streamResult['tool_calls'],
+                            ],
+                            'results' => $currentToolResults,
+                        ];
+
+                        $payload['tool_history'] = $toolHistory;
+                        $generationOptions['tool_history'] = $toolHistory;
+                        $loopCount++;
+                        continue;
+                    }
+
+                    $finalResult = $streamResult;
+                    break;
                 }
-
-                if ($isToolCallStep) {
-                    $emit(['type' => 'status', 'message' => 'Mengambil data dari database...']);
-                    $currentToolResults = $this->resolveToolResults($streamResult['tool_calls']);
-                    $toolHistory[] = [
-                        'assistant' => [
-                            'role' => 'assistant',
-                            'content' => $streamResult['content'] ?? '',
-                            'tool_calls' => $streamResult['tool_calls'],
-                        ],
-                        'results' => $currentToolResults,
-                    ];
-
-                    $payload['tool_history'] = $toolHistory;
-                    $generationOptions['tool_history'] = $toolHistory;
-                    $loopCount++;
-                    continue;
-                }
-
-                $finalResult = $streamResult;
-                break;
             }
 
             if (!$finalResult || !($finalResult['success'] ?? false)) {
