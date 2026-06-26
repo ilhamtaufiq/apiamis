@@ -9,7 +9,8 @@ class ChatLangChainBridge
 {
     public function run(array $input): array
     {
-        $result = Process::input(json_encode($input))
+        $result = Process::env(['PYTHONUNBUFFERED' => '1'])
+            ->input(json_encode($input))
             ->timeout(120)
             ->run($this->command());
 
@@ -42,7 +43,8 @@ class ChatLangChainBridge
     public function stream(array $input, callable $onEvent): array
     {
         $input['stream'] = true;
-        $process = Process::input(json_encode($input))
+        $process = Process::env(['PYTHONUNBUFFERED' => '1'])
+            ->input(json_encode($input))
             ->timeout(180)
             ->start($this->command());
 
@@ -86,7 +88,7 @@ class ChatLangChainBridge
             ? base_path('venv/Scripts/python.exe')
             : base_path('venv/bin/python');
 
-        return [$pythonPath, base_path('scripts/chat_langchain.py')];
+        return [$pythonPath, '-u', base_path('scripts/chat_langchain.py')];
     }
 
     /**

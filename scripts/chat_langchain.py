@@ -42,6 +42,27 @@ def emit_event(event):
     print(json.dumps(event, ensure_ascii=False), flush=True)
 
 
+def extract_message_text(content) -> str:
+    if content is None:
+        return ''
+
+    if isinstance(content, str):
+        return content
+
+    if isinstance(content, list):
+        parts = []
+        for block in content:
+            if isinstance(block, str):
+                parts.append(block)
+            elif isinstance(block, dict):
+                text = block.get('text')
+                if isinstance(text, str):
+                    parts.append(text)
+        return ''.join(parts)
+
+    return str(content)
+
+
 def normalize_tool_calls(response):
     if hasattr(response, 'additional_kwargs') and response.additional_kwargs.get('tool_calls'):
         return response.additional_kwargs['tool_calls']
@@ -176,19 +197,22 @@ def run_chat():
             gathered = None
             for chunk in llm.stream(full_prompt):
                 gathered = chunk if gathered is None else gathered + chunk
-                if chunk.content:
-                    emit_event({'type': 'token', 'content': chunk.content})
+                text = extract_message_text(chunk.content)
+                if text:
+                    emit_event({'type': 'token', 'content': text})
 
             tool_calls = normalize_tool_calls(gathered) if gathered is not None else None
             usage = {}
             if gathered is not None and hasattr(gathered, 'response_metadata'):
                 usage = gathered.response_metadata.get('token_usage', {}) or {}
 
+            final_text = extract_message_text(gathered.content if gathered is not None else '')
+
             if tool_calls:
                 emit_event({
                     'type': 'tool_calls',
                     'success': True,
-                    'content': gathered.content if gathered is not None else '',
+                    'content': final_text,
                     'tool_calls': tool_calls,
                     'model': model,
                     'usage': usage,
@@ -198,7 +222,7 @@ def run_chat():
             emit_event({
                 'type': 'done',
                 'success': True,
-                'content': gathered.content if gathered is not None else '',
+                'content': final_text,
                 'model': model,
                 'usage': usage,
             })
@@ -207,7 +231,7 @@ def run_chat():
         response = llm.invoke(full_prompt)
         output = {
             "success": True,
-            "content": response.content,
+            "content": extract_message_text(response.content),
             "model": model,
             "usage": response.response_metadata.get('token_usage', {})
         }
