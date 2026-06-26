@@ -42,6 +42,34 @@ def emit_event(event):
     print(json.dumps(event, ensure_ascii=False), flush=True)
 
 
+def format_ai_error(exc: Exception, model: str) -> dict:
+    raw = str(exc)
+    payload = {
+        'success': False,
+        'error': raw,
+        'message': raw,
+        'model': model,
+    }
+
+    try:
+        parsed = json.loads(raw)
+        if isinstance(parsed, dict):
+            message = parsed.get('message') or parsed.get('error') or raw
+            payload['error'] = message
+            payload['message'] = message
+            if isinstance(parsed.get('model'), str):
+                payload['model'] = parsed['model']
+    except (json.JSONDecodeError, TypeError):
+        if 'blocked' in raw.lower():
+            payload['message'] = (
+                f'Model "{model}" diblokir gateway AI. '
+                'Ganti chat_model ke gc/gemini-2.5-flash di Pengaturan.'
+            )
+            payload['error'] = payload['message']
+
+    return payload
+
+
 def extract_message_text(content) -> str:
     if content is None:
         return ''
@@ -243,11 +271,7 @@ def run_chat():
         print(json.dumps(output, ensure_ascii=False))
 
     except Exception as e:
-        payload = {
-            "success": False,
-            "error": str(e),
-            "message": str(e),
-        }
+        payload = format_ai_error(e, locals().get('model', 'unknown'))
         if locals().get('stream_mode'):
             emit_event({'type': 'error', **payload})
         else:
