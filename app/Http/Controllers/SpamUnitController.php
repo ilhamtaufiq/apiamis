@@ -214,6 +214,21 @@ class SpamUnitController extends Controller
         ]);
     }
 
+    public function publicStats(Request $request): JsonResponse
+    {
+        return $this->stats($request);
+    }
+
+    public function publicMapStats(Request $request): JsonResponse
+    {
+        $tahun = $request->filled('tahun') ? $request->input('tahun') : null;
+
+        return response()->json([
+            'success' => true,
+            'data' => $this->integrationService->desaMapStats($tahun),
+        ]);
+    }
+
     public function stats(Request $request): JsonResponse
     {
         // Simple aggregate calculations

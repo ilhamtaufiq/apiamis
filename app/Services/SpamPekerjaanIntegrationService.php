@@ -544,4 +544,67 @@ class SpamPekerjaanIntegrationService
 
         return round($progressTotal, 2);
     }
+
+    /**
+     * @return array<int, array{
+     *     desa_id: int,
+     *     desa: string,
+     *     kecamatan: ?string,
+     *     target: int,
+     *     unit_count: int,
+     *     sr: int,
+     *     kk: int,
+     *     jiwa: int
+     * }>
+     */
+    public function desaMapStats(?string $tahun = null): array
+    {
+        $capTahun = $this->manualCapTahun();
+
+        $unitCounts = UnitSpam::query()
+            ->select('desa_id', DB::raw('COUNT(*) as unit_count'))
+            ->groupBy('desa_id')
+            ->pluck('unit_count', 'desa_id');
+
+        $achievementQuery = SpamAchievement::query()
+            ->select(
+                'tbl_unit_spam.desa_id',
+                DB::raw('SUM(tbl_spam_achievements.jumlah_sr) as sr'),
+                DB::raw('SUM(tbl_spam_achievements.jumlah_kk) as kk'),
+                DB::raw('SUM(tbl_spam_achievements.jumlah_jiwa) as jiwa')
+            )
+            ->join('tbl_unit_spam', 'tbl_spam_achievements.unit_spam_id', '=', 'tbl_unit_spam.id');
+
+        if ($tahun) {
+            $achievementQuery->where('tbl_spam_achievements.tahun', $tahun);
+        } else {
+            $achievementQuery->where('tbl_spam_achievements.tahun', '<=', $capTahun);
+        }
+
+        $achievements = $achievementQuery
+            ->groupBy('tbl_unit_spam.desa_id')
+            ->get()
+            ->keyBy('desa_id');
+
+        return Desa::query()
+            ->with('kecamatan:id,n_kec')
+            ->orderBy('n_desa')
+            ->get(['id', 'n_desa', 'kecamatan_id', 'target'])
+            ->map(function (Desa $desa) use ($unitCounts, $achievements) {
+                $row = $achievements->get($desa->id);
+
+                return [
+                    'desa_id' => $desa->id,
+                    'desa' => $desa->n_desa,
+                    'kecamatan' => $desa->kecamatan?->n_kec,
+                    'target' => (int) $desa->target,
+                    'unit_count' => (int) ($unitCounts[$desa->id] ?? 0),
+                    'sr' => (int) ($row->sr ?? 0),
+                    'kk' => (int) ($row->kk ?? 0),
+                    'jiwa' => (int) ($row->jiwa ?? 0),
+                ];
+            })
+            ->values()
+            ->all();
+    }
 }
