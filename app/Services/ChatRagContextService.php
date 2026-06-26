@@ -6,12 +6,99 @@ use App\Models\AppSetting;
 use App\Models\ChatKnowledgeCache;
 use App\Models\Pekerjaan;
 use App\Models\Tiket;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Process;
 
 class ChatRagContextService
 {
     public function __construct(
         private readonly ChatDataToolService $chatDataTools,
     ) {}
+
+    public function retrieveKnowledge(string $query): string
+    {
+        $cacheKey = 'chat_rag_knowledge_' . hash('sha256', mb_strtolower(trim($query)));
+
+        return Cache::remember($cacheKey, 600, function () use ($query) {
+            $isWindows = PHP_OS_FAMILY === 'Windows';
+            $pythonPath = $isWindows
+                ? base_path('venv/Scripts/python.exe')
+                : base_path('venv/bin/python');
+            $scriptPath = base_path('scripts/rag_query.py');
+
+            if (!file_exists($pythonPath) || !file_exists($scriptPath)) {
+                return 'Pengetahuan sistem belum tersedia.';
+            }
+
+            $result = Process::input(json_encode(['query' => $query]))
+                ->timeout(8)
+                ->run([$pythonPath, $scriptPath]);
+
+            if ($result->failed()) {
+                return 'Gagal mengambil pengetahuan sistem.';
+            }
+
+            $payload = json_decode($result->output(), true);
+
+            return is_array($payload) ? (string) ($payload['content'] ?? '') : '';
+        });
+    }
+
+    public function buildSystemPrompt(string $knowledgeBase, string $context, array $fewShotExamples): string
+    {
+        $fewShot = $this->formatFewShotExamples($fewShotExamples);
+
+        return <<<PROMPT
+Anda adalah 'Ami', asisten AI SUPER EXPERT untuk aplikasi Arumanis (Sistem Informasi Bidang Air Minum dan Sanitasi - Kabupaten Cianjur).
+
+GAYA BAHASA & PERSONA (SUPER MODE):
+- Sapa user dengan bahasa Sunda yang sopan di awal (misal: "Sampurasun bos!", "Wilujeng enjing!").
+- Gunakan Emoji yang relevan (📌, 💡, 🔍, 📊, 😊).
+- **WAJIB TABEL**: Setiap menampilkan daftar paket/data lebih dari 1, GUNAKAN TABEL MARKDOWN yang rapi.
+- **CHART SUPPORT**: Jika ada data statistik, berikan blok kode khusus:
+  ```json
+  { "type": "chart", "chart_type": "bar|pie|line", "data": [...] }
+  ```
+
+STRATEGI ANALISA DATA:
+1. **GUNAKAN TOOLS** jika pertanyaan membutuhkan data aktual dari database.
+2. **JANGAN MENEBAK** angka, status, atau daftar data. Gunakan tool yang paling spesifik.
+3. Gunakan `search_projects` lalu `get_project_details` untuk detail paket.
+4. Gunakan tool domain terkait bila user bertanya tentang kontrak, tiket, foto, output, penerima, atau penyedia.
+5. Jika hasil pencarian ambigu, tampilkan kandidat yang relevan dan jelaskan filter yang dipakai.
+
+KONTEKS WILAYAH: Fokus pada desa/kecamatan di Kabupaten Cianjur.
+
+CONTOH JAWABAN TERBAIK (FEW-SHOT):
+{$fewShot}
+
+PENGETAHUAN SISTEM (RETRIEVED):
+{$knowledgeBase}
+
+KONTEKS DATA AWAL (STATIC):
+{$context}
+PROMPT;
+    }
+
+    private function formatFewShotExamples(array $examples): string
+    {
+        if ($examples === []) {
+            return 'Tidak ada contoh jawaban tersimpan.';
+        }
+
+        $blocks = [];
+        foreach ($examples as $index => $example) {
+            $query = trim((string) ($example['query'] ?? ''));
+            $response = trim((string) ($example['response'] ?? ''));
+            if ($query === '' || $response === '') {
+                continue;
+            }
+
+            $blocks[] = 'Contoh ' . ($index + 1) . ":\nPertanyaan: {$query}\nJawaban: {$response}";
+        }
+
+        return $blocks === [] ? 'Tidak ada contoh jawaban tersimpan.' : implode("\n\n", $blocks);
+    }
 
     public function buildContext(string $query): string
     {

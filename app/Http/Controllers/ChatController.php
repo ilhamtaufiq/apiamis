@@ -6,6 +6,8 @@ use Illuminate\Http\Request;
 use App\Services\OpenRouterService;
 use App\Services\ChatDataToolService;
 use App\Services\ChatRagContextService;
+use App\Services\ChatLangChainBridge;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 use App\Models\Pekerjaan;
 use App\Models\Kontrak;
 use App\Models\Penyedia;
@@ -29,15 +31,18 @@ class ChatController extends Controller
     protected $openRouter;
     protected $chatDataTools;
     protected $ragContextService;
+    protected $langChainBridge;
 
     public function __construct(
         OpenRouterService $openRouter,
         ChatDataToolService $chatDataTools,
         ChatRagContextService $ragContextService,
+        ChatLangChainBridge $langChainBridge,
     ) {
         $this->openRouter = $openRouter;
         $this->chatDataTools = $chatDataTools;
         $this->ragContextService = $ragContextService;
+        $this->langChainBridge = $langChainBridge;
     }
 
     // ── Session CRUD ────────────────────────────────────────────────
@@ -212,24 +217,30 @@ class ChatController extends Controller
         $tools = $this->getToolsDefinition();
         $loopCount = 0;
         $maxLoops = 3;
-        $toolHistory = []; 
+        $toolHistory = [];
         $requestedProvider = $request->input('provider')
             ?? AppSetting::getValue('chat_provider')
             ?? 'local';
+
+        $knowledgeBase = $this->ragContextService->retrieveKnowledge($userMessage);
+        $systemPrompt = $this->ragContextService->buildSystemPrompt($knowledgeBase, $context, $fewShotExamples);
+        $generationOptions = $this->buildGenerationOptions(
+            $requestedProvider,
+            $tools,
+            $toolHistory,
+            $fewShotExamples,
+            $knowledgeBase,
+            $systemPrompt,
+        );
 
         $finalResult = null;
 
         while ($loopCount < $maxLoops) {
             $result = $this->openRouter->chatWithLangChain(
-                $userMessage, 
-                $context, 
+                $userMessage,
+                $context,
                 $formattedHistory,
-                [
-                    'provider' => $requestedProvider,
-                    'tools' => $tools,
-                    'tool_history' => $toolHistory,
-                    'few_shot_examples' => $fewShotExamples,
-                ]
+                $generationOptions
             );
 
             if (!$result['success']) {
@@ -243,34 +254,7 @@ class ChatController extends Controller
                 break;
             }
 
-            $currentToolResults = [];
-            foreach ($result['tool_calls'] as $toolCall) {
-                // Determine format (OpenAI vs LangChain native)
-                $name = null;
-                $args = [];
-                $callId = $toolCall['id'] ?? ($toolCall['tool_call_id'] ?? null);
-
-                if (isset($toolCall['function'])) {
-                    // OpenAI Format
-                    $name = $toolCall['function']['name'];
-                    $argsRaw = $toolCall['function']['arguments'];
-                    $args = is_string($argsRaw) ? json_decode($argsRaw, true) : $argsRaw;
-                } elseif (isset($toolCall['name'])) {
-                    // LangChain/Direct Format
-                    $name = $toolCall['name'];
-                    $args = $toolCall['args'] ?? [];
-                }
-
-                if (!$name) continue;
-                
-                $toolOutput = $this->executeTool($name, $args ?: []);
-                $currentToolResults[] = [
-                    'tool_call_id' => $callId,
-                    'role' => 'tool',
-                    'name' => $name,
-                    'content' => json_encode($toolOutput),
-                ];
-            }
+            $currentToolResults = $this->resolveToolResults($result['tool_calls']);
 
             $toolHistory[] = [
                 'assistant' => [
@@ -280,7 +264,8 @@ class ChatController extends Controller
                 ],
                 'results' => $currentToolResults
             ];
-            
+
+            $generationOptions['tool_history'] = $toolHistory;
             $loopCount++;
         }
 
@@ -319,6 +304,270 @@ class ChatController extends Controller
             'cached' => false,
             'usage' => $finalResult['usage'] ?? null,
         ]);
+    }
+
+    public function chatStream(Request $request): StreamedResponse
+    {
+        $request->validate([
+            'message' => 'required|string',
+            'session_id' => 'nullable|integer',
+            'history' => 'nullable|array',
+            'provider' => 'nullable|string|max:64',
+        ]);
+
+        $userMessage = $request->input('message');
+        $user = $request->user();
+
+        return response()->stream(function () use ($request, $userMessage, $user) {
+            $emit = function (array $payload): void {
+                echo 'data: ' . json_encode($payload, JSON_UNESCAPED_UNICODE) . "\n\n";
+                if (ob_get_level() > 0) {
+                    ob_flush();
+                }
+                flush();
+            };
+
+            $sessionId = $request->input('session_id');
+            $session = $sessionId
+                ? ChatSession::where('user_id', $user->id)->find($sessionId)
+                : null;
+            $isNewSession = false;
+
+            if (!$session) {
+                $isNewSession = true;
+                $session = ChatSession::create([
+                    'user_id' => $user->id,
+                    'title' => 'Percakapan Baru',
+                ]);
+            }
+
+            ChatMessage::create([
+                'chat_session_id' => $session->id,
+                'role' => 'user',
+                'content' => $userMessage,
+            ]);
+
+            $emit(['type' => 'meta', 'session_id' => $session->id]);
+
+            if (!$this->isDynamicDataQuery($userMessage)) {
+                $cached = ChatKnowledgeCache::findSimilar($userMessage);
+                if ($cached && strlen($cached->response) > 50) {
+                    foreach (preg_split('/(\s+)/u', $cached->response, -1, PREG_SPLIT_DELIM_CAPTURE) as $chunk) {
+                        if ($chunk === '') {
+                            continue;
+                        }
+                        $emit(['type' => 'token', 'content' => $chunk]);
+                    }
+
+                    ChatMessage::create([
+                        'chat_session_id' => $session->id,
+                        'role' => 'assistant',
+                        'content' => $cached->response,
+                        'tokens_used' => 0,
+                    ]);
+
+                    if ($isNewSession) {
+                        $session->generateTitle($userMessage);
+                    }
+
+                    $emit([
+                        'type' => 'done',
+                        'success' => true,
+                        'reply' => $cached->response,
+                        'session_id' => $session->id,
+                        'cached' => true,
+                    ]);
+                    return;
+                }
+            }
+
+            $dbHistory = $session->messages()
+                ->orderByDesc('id')
+                ->limit(20)
+                ->get()
+                ->reverse()
+                ->values();
+
+            $contextCacheKey = 'chat_ctx_' . md5($userMessage) . '_' . $user->id;
+            $context = Cache::remember($contextCacheKey, 300, function () use ($userMessage) {
+                return $this->ragContextService->buildContext($userMessage);
+            });
+
+            $fewShotExamples = $this->isDynamicDataQuery($userMessage)
+                ? []
+                : $this->ragContextService->getFewShotExamples();
+
+            $formattedHistory = $dbHistory->map(fn($msg) => [
+                'role' => $msg->role,
+                'content' => $msg->content,
+            ])->toArray();
+
+            $tools = $this->getToolsDefinition();
+            $toolHistory = [];
+            $requestedProvider = $request->input('provider')
+                ?? AppSetting::getValue('chat_provider')
+                ?? 'local';
+
+            $knowledgeBase = $this->ragContextService->retrieveKnowledge($userMessage);
+            $systemPrompt = $this->ragContextService->buildSystemPrompt($knowledgeBase, $context, $fewShotExamples);
+            $runtime = $this->openRouter->providerRuntime($requestedProvider);
+            $generationOptions = $this->buildGenerationOptions(
+                $requestedProvider,
+                $tools,
+                $toolHistory,
+                $fewShotExamples,
+                $knowledgeBase,
+                $systemPrompt,
+            );
+
+            $payload = array_merge($generationOptions, [
+                'api_key' => $runtime['api_key'],
+                'model' => $runtime['model'],
+                'base_url' => $runtime['base_url'],
+                'headers' => $runtime['headers'],
+                'message' => $userMessage,
+                'context' => $context,
+                'history' => $formattedHistory,
+            ]);
+
+            $finalResult = null;
+            $loopCount = 0;
+            $maxLoops = 3;
+
+            while ($loopCount < $maxLoops) {
+                $streamResult = $this->langChainBridge->stream($payload, function (array $event) use ($emit): void {
+                    if (($event['type'] ?? null) === 'token' && !empty($event['content'])) {
+                        $emit(['type' => 'token', 'content' => $event['content']]);
+                    }
+                });
+
+                $isToolCallStep = ($streamResult['type'] ?? null) === 'tool_calls'
+                    || !empty($streamResult['tool_calls']);
+
+                if (!($streamResult['success'] ?? false) && !$isToolCallStep) {
+                    $emit([
+                        'type' => 'error',
+                        'message' => $streamResult['message'] ?? $streamResult['error'] ?? 'Streaming gagal',
+                    ]);
+                    return;
+                }
+
+                if ($isToolCallStep) {
+                    $emit(['type' => 'status', 'message' => 'Mengambil data dari database...']);
+                    $currentToolResults = $this->resolveToolResults($streamResult['tool_calls']);
+                    $toolHistory[] = [
+                        'assistant' => [
+                            'role' => 'assistant',
+                            'content' => $streamResult['content'] ?? '',
+                            'tool_calls' => $streamResult['tool_calls'],
+                        ],
+                        'results' => $currentToolResults,
+                    ];
+
+                    $payload['tool_history'] = $toolHistory;
+                    $generationOptions['tool_history'] = $toolHistory;
+                    $loopCount++;
+                    continue;
+                }
+
+                $finalResult = $streamResult;
+                break;
+            }
+
+            if (!$finalResult || !($finalResult['success'] ?? false)) {
+                $emit([
+                    'type' => 'error',
+                    'message' => $finalResult['message'] ?? $finalResult['error'] ?? 'Streaming gagal',
+                ]);
+                return;
+            }
+
+            $aiReply = (string) ($finalResult['content'] ?? '');
+            $tokensUsed = $finalResult['usage']['total_tokens'] ?? 0;
+
+            ChatMessage::create([
+                'chat_session_id' => $session->id,
+                'role' => 'assistant',
+                'content' => $aiReply,
+                'tool_calls' => $finalResult['tool_calls'] ?? null,
+                'tokens_used' => $tokensUsed,
+            ]);
+
+            ChatKnowledgeCache::learn($userMessage, $context, $aiReply, $tokensUsed);
+
+            if ($isNewSession) {
+                $session->generateTitle($userMessage);
+            }
+
+            $session->touch();
+
+            $emit([
+                'type' => 'done',
+                'success' => true,
+                'reply' => $aiReply,
+                'session_id' => $session->id,
+                'model' => $finalResult['model'] ?? 'ami-ai',
+                'cached' => false,
+                'usage' => $finalResult['usage'] ?? null,
+            ]);
+        }, 200, [
+            'Content-Type' => 'text/event-stream',
+            'Cache-Control' => 'no-cache, no-transform',
+            'Connection' => 'keep-alive',
+            'X-Accel-Buffering' => 'no',
+        ]);
+    }
+
+    private function buildGenerationOptions(
+        string $provider,
+        array $tools,
+        array $toolHistory,
+        array $fewShotExamples,
+        string $knowledgeBase,
+        string $systemPrompt,
+    ): array {
+        return [
+            'provider' => $provider,
+            'tools' => $tools,
+            'tool_history' => $toolHistory,
+            'few_shot_examples' => $fewShotExamples,
+            'knowledge_base' => $knowledgeBase,
+            'system_prompt' => $systemPrompt,
+        ];
+    }
+
+    private function resolveToolResults(array $toolCalls): array
+    {
+        $currentToolResults = [];
+
+        foreach ($toolCalls as $toolCall) {
+            $name = null;
+            $args = [];
+            $callId = $toolCall['id'] ?? ($toolCall['tool_call_id'] ?? null);
+
+            if (isset($toolCall['function'])) {
+                $name = $toolCall['function']['name'];
+                $argsRaw = $toolCall['function']['arguments'];
+                $args = is_string($argsRaw) ? json_decode($argsRaw, true) : $argsRaw;
+            } elseif (isset($toolCall['name'])) {
+                $name = $toolCall['name'];
+                $args = $toolCall['args'] ?? [];
+            }
+
+            if (!$name) {
+                continue;
+            }
+
+            $toolOutput = $this->executeTool($name, $args ?: []);
+            $currentToolResults[] = [
+                'tool_call_id' => $callId,
+                'role' => 'tool',
+                'name' => $name,
+                'content' => json_encode($toolOutput),
+            ];
+        }
+
+        return $currentToolResults;
     }
 
     private function getToolsDefinition()

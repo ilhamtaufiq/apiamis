@@ -44,6 +44,8 @@ DOMAIN_SYNONYMS: dict[str, list[str]] = {
 
 BM25_K1 = 1.2
 BM25_B = 0.75
+HYBRID_BM25_WEIGHT = 0.55
+HYBRID_TFIDF_WEIGHT = 0.45
 TOP_K = 6
 MAX_CONTEXT_CHARS = 4500
 MIN_TERM_LEN = 3
@@ -117,6 +119,60 @@ def _bm25_score(
     return score
 
 
+def _build_query_tfidf(query_terms: list[str], idf_map: dict[str, float]) -> tuple[dict[str, float], float]:
+    tf_counts: dict[str, int] = {}
+    for term in query_terms:
+        tf_counts[term] = tf_counts.get(term, 0) + 1
+
+    weights: dict[str, float] = {}
+    for term, tf in tf_counts.items():
+        weights[term] = (1 + math.log(tf)) * idf_map.get(term, 0.0)
+
+    norm = math.sqrt(sum(value * value for value in weights.values()))
+    return weights, norm
+
+
+def _cosine_sparse(
+    left: dict[str, float],
+    left_norm: float,
+    right: dict[str, float],
+    right_norm: float,
+) -> float:
+    if left_norm <= 0 or right_norm <= 0:
+        return 0.0
+
+    score = 0.0
+    for term, left_weight in left.items():
+        right_weight = right.get(term)
+        if right_weight:
+            score += left_weight * right_weight
+
+    return score / (left_norm * right_norm)
+
+
+def _attach_tfidf(index: dict) -> dict:
+    if index.get('idf'):
+        return index
+
+    total_docs = int(index.get('chunk_count') or len(index.get('chunks', [])) or 1)
+    doc_freq = index.get('doc_freq', {})
+    idf = {
+        term: math.log((total_docs + 1) / (df + 1)) + 1
+        for term, df in doc_freq.items()
+    }
+
+    for chunk in index.get('chunks', []):
+        tfidf: dict[str, float] = {}
+        for term, tf in chunk.get('term_freqs', {}).items():
+            tfidf[term] = (1 + math.log(tf)) * idf.get(term, 0.0)
+        chunk['tfidf'] = tfidf
+        chunk['tfidf_norm'] = math.sqrt(sum(value * value for value in tfidf.values()))
+
+    index['idf'] = idf
+    index['version'] = max(int(index.get('version') or 2), 3)
+    return index
+
+
 @lru_cache(maxsize=1)
 def _load_index() -> dict | None:
     if not INDEX_PATH.exists():
@@ -130,8 +186,8 @@ def _load_index() -> dict | None:
     if isinstance(payload, list):
         return _upgrade_legacy_index(payload)
 
-    if isinstance(payload, dict) and payload.get('version') == 2:
-        return payload
+    if isinstance(payload, dict) and int(payload.get('version') or 0) >= 2:
+        return _attach_tfidf(payload)
 
     return None
 
@@ -167,14 +223,14 @@ def _upgrade_legacy_index(entries: list[dict]) -> dict:
         })
 
     count = len(chunks) or 1
-    return {
-        'version': 2,
+    return _attach_tfidf({
+        'version': 3,
         'chunk_count': len(chunks),
         'avg_doc_len': total_len / count,
         'chunks': chunks,
         'inverted': inverted,
         'doc_freq': doc_freq,
-    }
+    })
 
 
 def retrieve_relevant_docs(query: str) -> str:
@@ -200,7 +256,10 @@ def retrieve_relevant_docs(query: str) -> str:
     if not candidate_ids:
         return 'Tidak ada potongan dokumen yang relevan ditemukan.'
 
-    scored: list[tuple[float, dict]] = []
+    idf_map = index.get('idf', {})
+    query_tfidf, query_norm = _build_query_tfidf(query_terms, idf_map)
+
+    scored: list[tuple[float, float, float, dict]] = []
     chunk_map = {chunk['id']: chunk for chunk in chunks}
 
     for chunk_id in candidate_ids:
@@ -208,7 +267,7 @@ def retrieve_relevant_docs(query: str) -> str:
         if not chunk:
             continue
 
-        score = _bm25_score(
+        bm25 = _bm25_score(
             chunk.get('term_freqs', {}),
             int(chunk.get('length') or 0),
             avg_doc_len,
@@ -216,13 +275,27 @@ def retrieve_relevant_docs(query: str) -> str:
             doc_freq,
             total_docs,
         )
-        if score > 0:
-            scored.append((score, chunk))
+        tfidf = _cosine_sparse(
+            query_tfidf,
+            query_norm,
+            chunk.get('tfidf', {}),
+            float(chunk.get('tfidf_norm') or 0),
+        )
+        if bm25 > 0 or tfidf > 0:
+            scored.append((bm25, tfidf, 0.0, chunk))
 
     if not scored:
         return 'Tidak ada potongan dokumen yang relevan ditemukan.'
 
-    scored.sort(key=lambda item: item[0], reverse=True)
+    max_bm25 = max(item[0] for item in scored) or 1.0
+    hybrid_scored: list[tuple[float, dict]] = []
+    for bm25, tfidf, _, chunk in scored:
+        bm25_norm = bm25 / max_bm25
+        hybrid = (HYBRID_BM25_WEIGHT * bm25_norm) + (HYBRID_TFIDF_WEIGHT * tfidf)
+        hybrid_scored.append((hybrid, chunk))
+
+    hybrid_scored.sort(key=lambda item: item[0], reverse=True)
+    scored = hybrid_scored
 
     content = ''
     used_sources: set[str] = set()

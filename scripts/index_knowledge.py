@@ -6,7 +6,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from rag_retriever import _chunk_title, tokenize
+from rag_retriever import _attach_tfidf, _chunk_title, tokenize
 
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -99,15 +99,15 @@ def build_index() -> dict:
 
     count = len(chunks) or 1
 
-    return {
-        'version': 2,
+    return _attach_tfidf({
+        'version': 3,
         'built_at': datetime.now(timezone.utc).isoformat(),
         'chunk_count': len(chunks),
         'avg_doc_len': total_len / count,
         'chunks': chunks,
         'inverted': inverted,
         'doc_freq': doc_freq,
-    }
+    })
 
 
 def index_docs() -> None:

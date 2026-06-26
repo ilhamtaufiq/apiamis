@@ -348,6 +348,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // Chat AI (with sessions, cache, and learning)
     Route::post('chat', [\App\Http\Controllers\ChatController::class, 'chat']);
+    Route::post('chat/stream', [\App\Http\Controllers\ChatController::class, 'chatStream']);
     Route::get('chat/sessions', [\App\Http\Controllers\ChatController::class, 'sessions']);
     Route::post('chat/sessions', [\App\Http\Controllers\ChatController::class, 'createSession']);
     Route::delete('chat/sessions/{id}', [\App\Http\Controllers\ChatController::class, 'deleteSession']);

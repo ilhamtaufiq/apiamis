@@ -181,6 +181,11 @@ class OpenRouterService
         return self::PROVIDERS;
     }
 
+    public function providerRuntime(string $provider, array $options = []): array
+    {
+        return $this->resolveProviderRuntime($provider, $options);
+    }
+
     private function providerSettingKey(string $provider): string
     {
         return 'chat_api_key_' . str_replace('-', '_', $provider);
@@ -453,6 +458,8 @@ class OpenRouterService
             'tool_history' => $options['tool_history'] ?? null,
             'few_shot_examples' => $options['few_shot_examples'] ?? [],
             'knowledge_base' => $options['knowledge_base'] ?? null,
+            'system_prompt' => $options['system_prompt'] ?? null,
+            'stream' => (bool) ($options['stream'] ?? false),
         ];
 
         try {
@@ -590,13 +597,13 @@ class OpenRouterService
      *
      * @return \Generator<int, string>
      */
-    public function streamChatCompletion(array $messages): \Generator
+    public function streamChatCompletion(array $messages, array $options = []): \Generator
     {
-        $provider = $this->provider === 'auto' ? 'openrouter' : $this->provider;
-        $providerConfig = $this->getProviderConfig($provider);
-        $apiKey = $this->resolveApiKey($provider, $providerConfig);
-        $baseUrl = $providerConfig['base_url'] ?? $this->baseUrl;
-        $model = $providerConfig['default_model'] ?? $this->model;
+        $provider = $options['provider'] ?? ($this->provider === 'auto' ? 'openrouter' : $this->provider);
+        $runtime = $this->resolveProviderRuntime($provider, $options);
+        $apiKey = $runtime['api_key'];
+        $baseUrl = $runtime['base_url'];
+        $model = $runtime['model'];
 
         $payload = [
             'model' => $model,
@@ -605,13 +612,17 @@ class OpenRouterService
             'temperature' => 0.7,
         ];
 
-        $headers = array_merge(
+        $requestHeaders = array_merge(
             ['Content-Type' => 'application/json', 'Accept' => 'text/event-stream'],
-            $this->resolveHeaders($providerConfig, $apiKey)
+            $runtime['headers']
         );
 
+        if (!empty($apiKey)) {
+            $requestHeaders['Authorization'] = 'Bearer ' . $apiKey;
+        }
+
         try {
-            $response = Http::withHeaders($headers)
+            $response = Http::withHeaders($requestHeaders)
                 ->timeout(120)
                 ->withOptions(['stream' => true])
                 ->post(rtrim($baseUrl, '/') . '/chat/completions', $payload);
