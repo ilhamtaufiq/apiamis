@@ -10,7 +10,10 @@ class AppSettingResource extends JsonResource
     {
         $value = $this->value;
 
+        $isConfigured = false;
+
         if (str_starts_with((string) $this->key, 'chat_api_key_')) {
+            $isConfigured = filled($this->value);
             $value = null;
         }
 
@@ -25,6 +28,7 @@ class AppSettingResource extends JsonResource
             'key' => $this->key,
             'value' => $value,
             'type' => $this->type,
+            'is_configured' => $isConfigured,
             'updated_at' => $this->updated_at?->toIso8601String(),
         ];
     }

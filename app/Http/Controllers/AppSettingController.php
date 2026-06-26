@@ -62,7 +62,9 @@ class AppSettingController extends Controller
             'favicon' => 'nullable|file|mimes:jpg,jpeg,png,svg,ico|max:1024',
         ]);
 
-        foreach (OpenRouterService::providerOptions() as $providerId => $providerConfig) {
+        $apiKeyProviders = array_merge(array_keys(OpenRouterService::providerOptions()), ['local']);
+
+        foreach ($apiKeyProviders as $providerId) {
             $settingKey = $this->chatApiKeySettingKey($providerId);
             $request->validate([
                 $settingKey => 'nullable|string|max:2000',
@@ -102,10 +104,10 @@ class AppSettingController extends Controller
             $updatedSettings[] = $setting;
         }
 
-        foreach (OpenRouterService::providerOptions() as $providerId => $providerConfig) {
+        foreach ($apiKeyProviders as $providerId) {
             $settingKey = $this->chatApiKeySettingKey($providerId);
 
-            if ($request->has($settingKey)) {
+            if ($request->has($settingKey) && filled($request->input($settingKey))) {
                 $setting = AppSetting::setValue($settingKey, $request->input($settingKey), 'secret');
                 $updatedSettings[] = $setting;
             }
