@@ -236,8 +236,11 @@ class ChatController extends Controller
 
         $finalResult = null;
 
-        if ($requestedProvider === OpenRouterService::LOCAL_PROVIDER) {
-            $finalResult = $this->openRouter->chatDirect($requestedProvider, $chatMessages);
+        if ($this->shouldUseDirectHttp($requestedProvider, $userMessage)) {
+            $directResult = $this->openRouter->chatDirect($requestedProvider, $chatMessages);
+            if ($this->isUsableDirectResult($directResult)) {
+                $finalResult = $directResult;
+            }
         }
 
         while (($finalResult === null || !($finalResult['success'] ?? false)) && $loopCount < $maxLoops) {
@@ -418,14 +421,17 @@ class ChatController extends Controller
             $chatMessages = $this->openRouter->buildChatMessages($systemPrompt, $formattedHistory, $userMessage);
             $finalResult = null;
 
-            if ($requestedProvider === OpenRouterService::LOCAL_PROVIDER) {
-                $finalResult = $this->openRouter->streamDirect(
+            if ($this->shouldUseDirectHttp($requestedProvider, $userMessage)) {
+                $directResult = $this->openRouter->streamDirect(
                     $requestedProvider,
                     $chatMessages,
                     function (string $token) use ($emit): void {
                         $emit(['type' => 'token', 'content' => $token]);
                     }
                 );
+                if ($this->isUsableDirectResult($directResult)) {
+                    $finalResult = $directResult;
+                }
             }
 
             if ($finalResult === null || !($finalResult['success'] ?? false)) {
@@ -604,6 +610,30 @@ class ChatController extends Controller
         }
     }
 
+    private function shouldUseDirectHttp(string $provider, string $userMessage): bool
+    {
+        return $provider === OpenRouterService::LOCAL_PROVIDER
+            && !$this->isDynamicDataQuery($userMessage);
+    }
+
+    private function isUsableDirectResult(?array $result): bool
+    {
+        if ($result === null || !($result['success'] ?? false)) {
+            return false;
+        }
+
+        return !$this->containsFakeToolCallSyntax($result['content'] ?? null);
+    }
+
+    private function containsFakeToolCallSyntax(?string $content): bool
+    {
+        if ($content === null || trim($content) === '') {
+            return false;
+        }
+
+        return (bool) preg_match('/<tool_call>|<function\s*=/i', $content);
+    }
+
     private function isDynamicDataQuery(string $query): bool
     {
         $query = strtolower($query);
@@ -611,6 +641,7 @@ class ChatController extends Controller
             'berapa', 'total', 'jumlah', 'data', 'pekerjaan', 'paket', 'kontrak', 'spk',
             'penyedia', 'progress', 'progres', 'tiket', 'foto', 'output', 'penerima',
             'kecamatan', 'desa', 'tahun', 'hari ini', 'terbaru',
+            'cek', 'cari', 'lihat', 'tampilkan', 'spam', 'status', 'detail', 'info',
         ];
 
         foreach ($keywords as $keyword) {
