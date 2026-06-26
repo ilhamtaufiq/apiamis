@@ -18,6 +18,7 @@ use App\Models\Event;
 use App\Models\ChatSession;
 use App\Models\ChatMessage;
 use App\Models\ChatKnowledgeCache;
+use App\Models\AppSetting;
 use App\Models\Foto;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Cache;
@@ -202,7 +203,9 @@ class ChatController extends Controller
         $loopCount = 0;
         $maxLoops = 3;
         $toolHistory = []; 
-        $requestedProvider = $request->input('provider', 'auto');
+        $requestedProvider = $request->input('provider')
+            ?? AppSetting::getValue('chat_provider')
+            ?? 'local';
 
         $finalResult = null;
 

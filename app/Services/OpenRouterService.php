@@ -149,6 +149,10 @@ class OpenRouterService
         ],
     ];
 
+    private const LOCAL_PROVIDER = 'local';
+
+    private const DEFAULT_LOCAL_MODEL = 'gc/gemini-2.5-flash';
+
     private const UNSUPPORTED_PROVIDERS = ['cohere', 'cloudflare-workers-ai', 'ollama'];
 
     protected $apiKey;
@@ -161,15 +165,15 @@ class OpenRouterService
     {
         $this->provider = AppSetting::getValue('chat_provider')
             ?? AppSetting::getValue('openrouter_provider')
-            ?? 'auto';
+            ?? self::LOCAL_PROVIDER;
 
-        $providerConfig = $this->getProviderConfig($this->provider);
-
-        $this->baseUrl = AppSetting::getValue('chat_base_url') ?: ($providerConfig['base_url'] ?? 'https://openrouter.ai/api/v1');
-        $this->apiKey = $this->resolveApiKey($this->provider, $providerConfig);
-
-        $this->model = $providerConfig['default_model'] ?? config('services.openrouter.model', 'openai/gpt-oss-120b:free');
-        $this->fallbackModel = config('services.openrouter.fallback_model', 'z-ai/glm-4.5-air:free');
+        $runtime = $this->resolveProviderRuntime($this->provider);
+        $this->baseUrl = $runtime['base_url'];
+        $this->apiKey = $runtime['api_key'];
+        $this->model = $runtime['model'];
+        $this->fallbackModel = $this->provider === self::LOCAL_PROVIDER
+            ? $runtime['model']
+            : config('services.openrouter.fallback_model', 'z-ai/glm-4.5-air:free');
     }
 
     public static function providerOptions(): array
@@ -184,6 +188,15 @@ class OpenRouterService
 
     private function getProviderConfig(string $provider): array
     {
+        if ($provider === self::LOCAL_PROVIDER) {
+            return [
+                'label' => 'Lokal',
+                'base_url' => null,
+                'api_key_env' => null,
+                'default_model' => null,
+            ];
+        }
+
         if ($provider === 'auto') {
             return self::PROVIDERS['openrouter'];
         }
@@ -193,6 +206,49 @@ class OpenRouterService
         }
 
         return self::PROVIDERS[$provider] ?? self::PROVIDERS['openrouter'];
+    }
+
+    /**
+     * @return array{base_url: string, api_key: ?string, model: string, headers: array<string, string>, requires_api_key: bool}
+     */
+    private function resolveProviderRuntime(string $provider, array $options = []): array
+    {
+        $providerConfig = $this->getProviderConfig($provider);
+
+        if ($provider === self::LOCAL_PROVIDER) {
+            $baseUrl = $options['base_url']
+                ?? AppSetting::getValue('chat_base_url')
+                ?? 'http://localhost:11434/v1';
+            $apiKey = $options['api_key'] ?? AppSetting::getValue($this->providerSettingKey(self::LOCAL_PROVIDER));
+            $model = $options['model']
+                ?? AppSetting::getValue('chat_model')
+                ?? self::DEFAULT_LOCAL_MODEL;
+
+            return [
+                'base_url' => rtrim((string) $baseUrl, '/'),
+                'api_key' => $apiKey ?: null,
+                'model' => (string) $model,
+                'headers' => $options['headers'] ?? [],
+                'requires_api_key' => true,
+            ];
+        }
+
+        $baseUrl = $options['base_url']
+            ?? ($providerConfig['base_url'] ?? $this->baseUrl ?? 'https://openrouter.ai/api/v1');
+        $apiKey = $options['api_key'] ?? $this->resolveApiKey($provider, $providerConfig);
+        $model = $options['model']
+            ?? ($providerConfig['default_model'] ?? $this->model ?? config('services.openrouter.model', 'openai/gpt-oss-120b:free'));
+
+        return [
+            'base_url' => rtrim((string) $baseUrl, '/'),
+            'api_key' => $apiKey ?: null,
+            'model' => (string) $model,
+            'headers' => array_merge(
+                $this->resolveHeaders($providerConfig, $apiKey),
+                $options['headers'] ?? []
+            ),
+            'requires_api_key' => ($providerConfig['api_key_env'] ?? null) !== null,
+        ];
     }
 
     private function resolveApiKey(string $provider, array $providerConfig): ?string
@@ -235,7 +291,7 @@ class OpenRouterService
         $eligible = [];
 
         foreach (array_keys(self::PROVIDERS) as $provider) {
-            if (in_array($provider, self::UNSUPPORTED_PROVIDERS, true)) {
+            if ($provider === self::LOCAL_PROVIDER || in_array($provider, self::UNSUPPORTED_PROVIDERS, true)) {
                 continue;
             }
 
@@ -272,8 +328,6 @@ class OpenRouterService
 
     private function runHttpAttempt(string $provider, array $messages, array $options = []): array
     {
-        $providerConfig = $this->getProviderConfig($provider);
-
         if (in_array($provider, self::UNSUPPORTED_PROVIDERS, true)) {
             return [
                 'success' => false,
@@ -281,18 +335,18 @@ class OpenRouterService
             ];
         }
 
-        $model = $options['model'] ?? ($providerConfig['default_model'] ?? $this->model);
-        $baseUrl = $options['base_url'] ?? ($providerConfig['base_url'] ?? $this->baseUrl);
-        $apiKey = $options['api_key'] ?? $this->resolveApiKey($provider, $providerConfig);
-        $headers = array_merge(
-            $this->resolveHeaders($providerConfig, $apiKey),
-            $options['headers'] ?? []
-        );
+        $runtime = $this->resolveProviderRuntime($provider, $options);
+        $model = $runtime['model'];
+        $baseUrl = $runtime['base_url'];
+        $apiKey = $runtime['api_key'];
+        $headers = $runtime['headers'];
 
-        if (($providerConfig['api_key_env'] ?? null) !== null && empty($apiKey)) {
+        if ($runtime['requires_api_key'] && empty($apiKey)) {
             return [
                 'success' => false,
-                'message' => 'API key untuk provider "' . $provider . '" belum diset.',
+                'message' => $provider === self::LOCAL_PROVIDER
+                    ? 'API key AI lokal belum diset di pengaturan aplikasi.'
+                    : 'API key untuk provider "' . $provider . '" belum diset.',
             ];
         }
 
@@ -350,8 +404,6 @@ class OpenRouterService
 
     private function runLangChainAttempt(string $provider, string $message, string $context, array $history, array $options = []): array
     {
-        $providerConfig = $this->getProviderConfig($provider);
-
         if (in_array($provider, self::UNSUPPORTED_PROVIDERS, true)) {
             return [
                 'success' => false,
@@ -359,17 +411,17 @@ class OpenRouterService
             ];
         }
 
-        $apiKey = $options['api_key'] ?? $this->resolveApiKey($provider, $providerConfig);
-        $baseUrl = $options['base_url'] ?? ($providerConfig['base_url'] ?? $this->baseUrl);
-        $headers = array_merge(
-            $this->resolveHeaders($providerConfig, $apiKey),
-            $options['headers'] ?? []
-        );
+        $runtime = $this->resolveProviderRuntime($provider, $options);
+        $apiKey = $runtime['api_key'];
+        $baseUrl = $runtime['base_url'];
+        $headers = $runtime['headers'];
 
-        if (($providerConfig['api_key_env'] ?? null) !== null && empty($apiKey)) {
+        if ($runtime['requires_api_key'] && empty($apiKey)) {
             return [
                 'success' => false,
-                'message' => 'API key untuk provider "' . $provider . '" belum diset.',
+                'message' => $provider === self::LOCAL_PROVIDER
+                    ? 'API key AI lokal belum diset di pengaturan aplikasi.'
+                    : 'API key untuk provider "' . $provider . '" belum diset.',
             ];
         }
 
@@ -386,7 +438,7 @@ class OpenRouterService
             ];
         }
 
-        $model = $options['model'] ?? ($providerConfig['default_model'] ?? $this->model);
+        $model = $runtime['model'];
 
         $input = [
             'api_key' => $apiKey,

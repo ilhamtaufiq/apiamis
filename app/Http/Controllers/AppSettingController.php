@@ -55,6 +55,7 @@ class AppSettingController extends Controller
             'tahun_anggaran' => 'nullable|string|max:4',
             'chat_provider' => 'nullable|string|max:64',
             'chat_base_url' => 'nullable|string|max:255',
+            'chat_model' => 'nullable|string|max:128',
             'landing_page_active' => 'nullable|string|in:0,1',
             'puspen_progress_fisik_public' => 'nullable|string|in:0,1',
             'logo' => 'nullable|file|mimes:jpg,jpeg,png,svg|max:2048',
@@ -93,6 +94,11 @@ class AppSettingController extends Controller
 
         if ($request->has('chat_base_url')) {
             $setting = AppSetting::setValue('chat_base_url', $request->chat_base_url, 'text');
+            $updatedSettings[] = $setting;
+        }
+
+        if ($request->has('chat_model')) {
+            $setting = AppSetting::setValue('chat_model', $request->chat_model, 'text');
             $updatedSettings[] = $setting;
         }
 
