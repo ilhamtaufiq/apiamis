@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Foto;
+use App\Models\Pekerjaan;
 use App\Models\UnitSpam;
 use App\Models\Desa;
 use App\Models\Kecamatan;
@@ -309,6 +311,12 @@ class SpamUnitController extends Controller
                 'total_bjp_jiwa' => $totalBjpJiwa,
                 'funding_distribution' => $fundingDist,
                 'coverage_percentage' => $totalTarget > 0 ? round((($totalKK + $totalBjpKK) / $totalTarget) * 100, 2) : 0,
+                'wilayah_total_desa' => Desa::count(),
+                'wilayah_total_kecamatan' => Kecamatan::count(),
+                'achievement_records' => SpamAchievement::count(),
+                'total_pekerjaan_all' => Pekerjaan::count(),
+                'total_foto_dokumentasi' => Foto::count(),
+                'stats_generated_at' => now()->toIso8601String(),
             ], $integrationSummary, [
                 'manual_sr' => $manualGlobal['sr'],
                 'manual_kk' => $manualGlobal['kk'],
