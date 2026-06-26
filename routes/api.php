@@ -19,6 +19,7 @@ use App\Http\Controllers\FotoController;
 use App\Http\Controllers\KoordinatValidationController;
 use App\Http\Controllers\KecamatanController;
 use App\Http\Controllers\KegiatanController;
+use App\Http\Controllers\KanbanController;
 use App\Http\Controllers\KegiatanRoleController;
 use App\Http\Controllers\KontrakAddendumController;
 use App\Http\Controllers\KontrakController;
@@ -30,6 +31,7 @@ use App\Http\Controllers\PekerjaanProgressEstimasiController;
 use App\Http\Controllers\PenerimaController;
 use App\Http\Controllers\PenyediaController;
 use App\Http\Controllers\PermissionController;
+use App\Http\Controllers\PostPekerjaanChecklistController;
 use App\Http\Controllers\ProgressController;
 use App\Http\Controllers\PuspenProgressFisikController;
 use App\Http\Controllers\PuspenMediaShareController;
@@ -231,6 +233,9 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('pekerjaan-checklist', [PekerjaanChecklistController::class, 'index']);
     Route::post('pekerjaan-checklist/toggle', [PekerjaanChecklistController::class, 'toggle']);
 
+    // Post Pekerjaan Checklist (pekerjaan berkontrak)
+    Route::get('post-pekerjaan-checklist', [PostPekerjaanChecklistController::class, 'index']);
+
     // Custom routes
     Route::get('desa/kecamatan/{kecamatanId}', [DesaController::class, 'byKecamatan']);
     Route::get('kegiatan/tahun/{tahun}', [KegiatanController::class, 'byTahun']);
@@ -238,6 +243,14 @@ Route::middleware('auth:sanctum')->group(function () {
     // Output
     Route::get('output/summary', [OutputController::class, 'summary']);
     Route::apiResource('output', OutputController::class);
+
+    // Kanban
+    Route::get('kanban/board', [KanbanController::class, 'board']);
+    Route::post('kanban/cards', [KanbanController::class, 'storeCard']);
+    Route::post('kanban/cards/from-tiket', [KanbanController::class, 'importFromTiket']);
+    Route::put('kanban/cards/{card}', [KanbanController::class, 'updateCard']);
+    Route::patch('kanban/cards/{card}/move', [KanbanController::class, 'moveCard']);
+    Route::delete('kanban/cards/{card}', [KanbanController::class, 'destroyCard']);
 
     // Tiket
     Route::post('tiket/bulk-update', [TiketController::class, 'bulkUpdate']);

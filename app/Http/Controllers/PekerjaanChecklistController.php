@@ -24,7 +24,7 @@ class PekerjaanChecklistController extends Controller
     public function index(Request $request)
     {
         // Get all checklist items (columns)
-        $checklistItems = ChecklistItem::orderBy('sort_order')->get();
+        $checklistItems = ChecklistItem::where('context', 'pekerjaan')->orderBy('sort_order')->get();
 
         // Build query for pekerjaan
         $query = Pekerjaan::with(['kegiatan'])

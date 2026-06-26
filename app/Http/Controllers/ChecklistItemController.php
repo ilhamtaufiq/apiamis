@@ -16,9 +16,15 @@ class ChecklistItemController extends Controller
      *     @OA\Response(response=200, description="Successful operation")
      * )
      */
-    public function index()
+    public function index(Request $request)
     {
-        $items = ChecklistItem::orderBy('sort_order')->get();
+        $context = $request->query('context', 'pekerjaan');
+
+        $items = ChecklistItem::query()
+            ->where('context', $context)
+            ->orderBy('sort_order')
+            ->get();
+
         return ChecklistItemResource::collection($items);
     }
 
@@ -44,10 +50,15 @@ class ChecklistItemController extends Controller
         $validated = $request->validate([
             'name' => 'required|string|max:100',
             'description' => 'nullable|string|max:255',
+            'context' => 'nullable|in:pekerjaan,post_pekerjaan',
         ]);
 
-        // Auto-set sort order to last position
-        $maxOrder = ChecklistItem::max('sort_order') ?? 0;
+        $context = $validated['context'] ?? 'pekerjaan';
+        unset($validated['context']);
+
+        // Auto-set sort order to last position within the same context
+        $maxOrder = ChecklistItem::where('context', $context)->max('sort_order') ?? 0;
+        $validated['context'] = $context;
         $validated['sort_order'] = $maxOrder + 1;
 
         $item = ChecklistItem::create($validated);

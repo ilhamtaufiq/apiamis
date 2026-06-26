@@ -15,6 +15,7 @@ class ChecklistItem extends Model
         'name',
         'description',
         'sort_order',
+        'context',
     ];
 
     protected $casts = [

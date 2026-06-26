@@ -17,6 +17,7 @@ class ChecklistItemResource extends JsonResource
             'name' => $this->name,
             'description' => $this->description,
             'sort_order' => $this->sort_order,
+            'context' => $this->context,
             'created_at' => $this->created_at?->toIso8601String(),
             'updated_at' => $this->updated_at?->toIso8601String(),
         ];
