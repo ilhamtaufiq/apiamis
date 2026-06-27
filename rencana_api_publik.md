@@ -72,7 +72,6 @@ Endpoint berikut tetap tidak dibuka untuk akses publik:
 - user, role, permission
 - audit log
 - backup/restore
-- WhatsApp bridge
 - debug endpoint
 - endpoint AI/chat internal
 

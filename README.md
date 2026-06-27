@@ -111,7 +111,6 @@ Frontend **tidak** menyimpan logika bisnis final — semua validasi dan akses da
 ### Integrasi
 - Notifikasi in-app
 - Blog/publikasi dan endpoint publik terbatas
-- WhatsApp bridge (via frontend Arumanis)
 - OpenRouter untuk fitur AI (opsional)
 
 ---

@@ -41,11 +41,6 @@ return [
         'redirect' => env('GOOGLE_REDIRECT_URI'),
     ],
 
-    'whatsapp_bridge' => [
-        'url' => env('WHATSAPP_BRIDGE_URL', 'http://127.0.0.1:4000'),
-        'key' => env('WHATSAPP_BRIDGE_KEY'),
-    ],
-
     'minimax' => [
         'api_key' => env('VITE_MINIMAX_API_KEY'),
     ],

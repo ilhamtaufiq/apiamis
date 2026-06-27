@@ -48,7 +48,6 @@ use App\Http\Controllers\TiketCommentController;
 use App\Http\Controllers\TiketController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\UserPekerjaanController;
-use App\Http\Controllers\WhatsAppController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
@@ -313,17 +312,6 @@ Route::middleware('auth:sanctum')->group(function () {
             'pekerjaan_relation_test' => $pekerjaanRelation,
         ]);
     });
-
-    // WhatsApp bridge
-    Route::prefix('whatsapp')
-        ->middleware('role:admin')
-        ->group(function () {
-            Route::get('status', [WhatsAppController::class, 'status']);
-            Route::post('start', [WhatsAppController::class, 'start']);
-            Route::post('stop', [WhatsAppController::class, 'stop']);
-            Route::post('send', [WhatsAppController::class, 'send']);
-            Route::post('send-bulk', [WhatsAppController::class, 'sendBulk']);
-        });
 
     // Notifications
     Route::get('/notifications', [\App\Http\Controllers\NotificationController::class, 'index']);
