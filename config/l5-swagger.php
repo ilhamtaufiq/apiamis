@@ -65,16 +65,18 @@ return [
              * Middleware allows to prevent unexpected access to API documentation
              */
             'middleware' => [
-                'api' => [],
-                'asset' => [],
-                'docs' => [],
-                'oauth2_callback' => [],
+                'api' => ['swagger.admin'],
+                'asset' => ['swagger.admin'],
+                'docs' => ['swagger.admin'],
+                'oauth2_callback' => ['swagger.admin'],
             ],
 
             /*
              * Route Group options
              */
-            'group_options' => [],
+            'group_options' => [
+                'middleware' => ['web'],
+            ],
         ],
 
         'paths' => [

@@ -21,8 +21,8 @@ use Illuminate\Routing\Controller as BaseController;
  *      type="http",
  *      securityScheme="bearerAuth",
  *      scheme="bearer",
- *      bearerFormat="JWT",
- *      description="Enter token in format: Bearer <token>"
+ *      bearerFormat="Sanctum",
+ *      description="Token dari POST /api/auth/login. Format header: Bearer <token>"
  * )
  *
  * @OA\SecurityScheme(

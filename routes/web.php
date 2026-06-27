@@ -3,11 +3,16 @@
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', function () {
-    return response()->json([
+    $payload = [
         'service' => config('app.name', 'Arumanis API'),
         'status' => 'ok',
-        'docs' => url('/api/documentation'),
         'health' => url('/up'),
         'api' => url('/api'),
-    ]);
+    ];
+
+    if (! app()->environment('production')) {
+        $payload['docs'] = url('/api/documentation');
+    }
+
+    return response()->json($payload);
 });
