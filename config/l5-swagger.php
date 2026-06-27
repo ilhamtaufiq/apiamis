@@ -312,7 +312,10 @@ return [
          * Constants which can be used in annotations
          */
         'constants' => [
-            'L5_SWAGGER_CONST_HOST' => env('L5_SWAGGER_CONST_HOST', 'https://apiamis.test'),
+            'L5_SWAGGER_CONST_HOST' => env(
+                'L5_SWAGGER_CONST_HOST',
+                rtrim((string) env('APP_URL', 'http://localhost'), '/').'/api',
+            ),
         ],
     ],
 ];
