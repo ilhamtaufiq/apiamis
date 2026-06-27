@@ -103,6 +103,7 @@ class BlogController extends Controller
     {
         $request->validate([
             'file' => 'required|file|mimetypes:video/mp4,video/webm,video/quicktime|max:102400',
+            'poster' => 'nullable|image|mimes:jpeg,jpg,png,webp|max:5120',
         ]);
 
         $asset = BlogAsset::create([
@@ -112,9 +113,19 @@ class BlogController extends Controller
         $media = $asset->addMediaFromRequest('file')
             ->toMediaCollection('blog/videos');
 
+        $posterUrl = null;
+
+        if ($request->hasFile('poster')) {
+            $posterMedia = $asset->addMediaFromRequest('poster')
+                ->toMediaCollection('blog/video-posters');
+
+            $posterUrl = $posterMedia->getFullUrl();
+        }
+
         return response()->json([
             'url' => $media->getFullUrl(),
             'media_id' => $media->id,
+            'poster_url' => $posterUrl,
             'message' => 'Video berhasil diunggah',
         ]);
     }

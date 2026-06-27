@@ -26,5 +26,6 @@ class BlogAsset extends Model implements HasMedia
     public function registerMediaCollections(): void
     {
         $this->addMediaCollection('blog/videos');
+        $this->addMediaCollection('blog/video-posters');
     }
 }
