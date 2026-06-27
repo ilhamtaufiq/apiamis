@@ -206,4 +206,52 @@ class SpmSanitasiCapaianService
             ->when($jenis, fn (Builder $q) => $q->where('jenis', $jenis))
             ->whereNotNull('desa_id');
     }
+
+    /**
+     * @return array<int, array{
+     *     desa_id: int,
+     *     desa: string,
+     *     kecamatan: string|null,
+     *     jumlah_penduduk: int,
+     *     target_kk: int,
+     *     unit_count: int,
+     *     pemanfaat_kk: int,
+     *     pemanfaat_jiwa: int
+     * }>
+     */
+    public function mapStats(?string $jenis = null): array
+    {
+        return Desa::query()
+            ->with('kecamatan:id,n_kec')
+            ->withSum(['spmSanitasi as pemanfaat_kk_total' => function (Builder $q) use ($jenis) {
+                if ($jenis) {
+                    $q->where('jenis', $jenis);
+                }
+            }], 'jumlah_pemanfaat_kk')
+            ->withCount(['spmSanitasi as unit_count' => function (Builder $q) use ($jenis) {
+                if ($jenis) {
+                    $q->where('jenis', $jenis);
+                }
+            }])
+            ->orderBy('n_desa')
+            ->get(['id', 'n_desa', 'kecamatan_id', 'jumlah_penduduk'])
+            ->map(function (Desa $desa) {
+                $penduduk = (int) ($desa->jumlah_penduduk ?? 0);
+                $targetKk = $penduduk > 0 ? (int) round($penduduk / self::JIWA_PER_KK) : 0;
+                $pemanfaatKk = (int) ($desa->pemanfaat_kk_total ?? 0);
+
+                return [
+                    'desa_id' => $desa->id,
+                    'desa' => $desa->n_desa,
+                    'kecamatan' => $desa->kecamatan?->n_kec,
+                    'jumlah_penduduk' => $penduduk,
+                    'target_kk' => $targetKk,
+                    'unit_count' => (int) ($desa->unit_count ?? 0),
+                    'pemanfaat_kk' => $pemanfaatKk,
+                    'pemanfaat_jiwa' => $pemanfaatKk * self::JIWA_PER_KK,
+                ];
+            })
+            ->values()
+            ->all();
+    }
 }

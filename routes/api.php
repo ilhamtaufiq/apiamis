@@ -73,6 +73,8 @@ Route::get('blog/{blog}', [\App\Http\Controllers\BlogController::class, 'show'])
 Route::get('public/puspen/progress-fisik', [PuspenProgressFisikController::class, 'publicIndex']);
 Route::get('public/spam-units/stats', [SpamUnitController::class, 'publicStats']);
 Route::get('public/spam-units/map-stats', [SpamUnitController::class, 'publicMapStats']);
+Route::get('public/spm-sanitasi/stats', [SpmSanitasiController::class, 'publicStats']);
+Route::get('public/spm-sanitasi/map-stats', [SpmSanitasiController::class, 'publicMapStats']);
 
 Route::get('public/puspen/media-shares/{shareToken}', [PuspenMediaShareController::class, 'publicShow']);
 Route::get('public/puspen/media-shares/{shareToken}/preview/{media}', [PuspenMediaShareController::class, 'publicPreview']);

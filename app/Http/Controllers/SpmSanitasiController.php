@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Exports\SpmSanitasiExport;
+use App\Models\Desa;
 use App\Models\SpmSanitasi;
 use App\Services\SpmSanitasiCapaianService;
 use App\Services\SpmSanitasiImportService;
@@ -55,6 +56,21 @@ class SpmSanitasiController extends Controller
                 'per_page' => $items->perPage(),
                 'total' => $items->total(),
             ],
+        ]);
+    }
+
+    public function publicStats(Request $request): JsonResponse
+    {
+        return $this->publicStatsPayload($request);
+    }
+
+    public function publicMapStats(Request $request): JsonResponse
+    {
+        $jenis = $request->filled('jenis') ? $request->string('jenis')->toString() : null;
+
+        return response()->json([
+            'success' => true,
+            'data' => $this->capaianService->mapStats($jenis),
         ]);
     }
 
@@ -379,5 +395,35 @@ class SpmSanitasiController extends Controller
         ];
 
         return $request->validate($rules);
+    }
+
+    private function publicStatsPayload(Request $request): JsonResponse
+    {
+        $jenis = $request->filled('jenis') ? $request->string('jenis')->toString() : null;
+        $capaian = $this->capaianService->summary(null, $jenis);
+
+        $baseQuery = SpmSanitasi::query()
+            ->when($jenis, fn ($q) => $q->where('jenis', $jenis))
+            ->whereNotNull('desa_id');
+
+        $counts = (clone $baseQuery)
+            ->selectRaw('jenis, COUNT(*) as total')
+            ->groupBy('jenis')
+            ->pluck('total', 'jenis');
+
+        return response()->json([
+            'success' => true,
+            'data' => array_merge($capaian, [
+                'total_count' => (clone $baseQuery)->count(),
+                'berfungsi_count' => (clone $baseQuery)->where('status_keberfungsian', 'Berfungsi')->count(),
+                'total_investasi' => (float) (clone $baseQuery)->sum('pembiayaan_total'),
+                'wilayah_total_kecamatan' => (int) Desa::query()->distinct('kecamatan_id')->count('kecamatan_id'),
+                'spaldt_count' => (int) ($counts['spaldt'] ?? 0),
+                'spalds_count' => (int) ($counts['spalds'] ?? 0),
+                'iplt_count' => (int) ($counts['iplt'] ?? 0),
+                'mck_individu_count' => (int) ($counts['mck_individu'] ?? 0),
+                'mck_komunal_count' => (int) ($counts['mck_komunal'] ?? 0),
+            ]),
+        ]);
     }
 }
