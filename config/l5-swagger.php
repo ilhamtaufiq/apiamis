@@ -5,7 +5,7 @@ return [
     'documentations' => [
         'default' => [
             'api' => [
-                'title' => 'API Disperkim',
+                'title' => 'apiamis',
             ],
 
             'routes' => [

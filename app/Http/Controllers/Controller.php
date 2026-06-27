@@ -10,7 +10,7 @@ use Illuminate\Routing\Controller as BaseController;
 /**
  * @OA\Info(
  *      version="1.0.0",
- *      title="API Disperkim",
+ *      title="apiamis",
  *      description="API Documentation untuk Sistem Manajemen Kegiatan & Pekerjaan",
  *      @OA\Contact(
  *          email="support@disperkim.id"
