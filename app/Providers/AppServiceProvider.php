@@ -34,5 +34,11 @@ class AppServiceProvider extends ServiceProvider
         RateLimiter::for('handoff-exchange', function (Request $request) {
             return Limit::perMinute(20)->by($request->ip());
         });
+
+        RateLimiter::for('blog-comments', function (Request $request) {
+            $userId = $request->user()?->id;
+
+            return Limit::perMinute(10)->by($userId ? 'user:' . $userId : $request->ip());
+        });
     }
 }

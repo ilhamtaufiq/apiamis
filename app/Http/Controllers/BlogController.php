@@ -16,6 +16,10 @@ class BlogController extends Controller
     {
         $query = Blog::with('user');
 
+        if (auth('sanctum')->check()) {
+            $query->withCount('comments');
+        }
+
         if (!auth('sanctum')->check()) {
             $query->where('is_published', true)
                   ->where('is_internal', false);

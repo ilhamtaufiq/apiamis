@@ -27,6 +27,10 @@ class BlogResource extends JsonResource
                 'avatar' => $this->user?->avatar,
                 'jabatan' => $this->user?->jabatan,
             ],
+            'comments_count' => $this->when(
+                auth('sanctum')->check(),
+                fn () => (int) ($this->comments_count ?? $this->comments()->count()),
+            ),
             'created_at' => $this->created_at?->toIso8601String(),
             'updated_at' => $this->updated_at?->toIso8601String(),
         ];

@@ -44,6 +44,7 @@ use App\Http\Controllers\SpamUnitController;
 use App\Http\Controllers\SpmSanitasiController;
 use App\Http\Controllers\TagController;
 use App\Http\Controllers\ToolPdfController;
+use App\Http\Controllers\BlogCommentController;
 use App\Http\Controllers\TiketCommentController;
 use App\Http\Controllers\TiketController;
 use App\Http\Controllers\UserController;
@@ -68,7 +69,11 @@ Route::post('app-settings/test-ai-connection', [AppSettingController::class, 'te
 
 // Public Blog Routes
 Route::get('blog', [\App\Http\Controllers\BlogController::class, 'index']);
+Route::get('blog/comments', [BlogCommentController::class, 'adminIndex'])->middleware('auth:sanctum');
 Route::get('blog/{blog}', [\App\Http\Controllers\BlogController::class, 'show']);
+Route::get('blog/{blog}/comments', [BlogCommentController::class, 'index']);
+Route::get('blog/{blog}/comments/thread/{comment}', [BlogCommentController::class, 'thread']);
+Route::get('blog/{blog}/comments/count', [BlogCommentController::class, 'count']);
 Route::get('public/puspen/progress-fisik', [PuspenProgressFisikController::class, 'publicIndex']);
 Route::get('public/spam-units/stats', [SpamUnitController::class, 'publicStats']);
 Route::get('public/spam-units/map-stats', [SpamUnitController::class, 'publicMapStats']);
@@ -226,6 +231,11 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('route-permissions/user/accessible', [RoutePermissionController::class, 'accessible']);
     Route::apiResource('route-permissions', RoutePermissionController::class);
     Route::apiResource('menu-permissions', MenuPermissionController::class);
+    Route::post('blog/{blog}/comments', [BlogCommentController::class, 'store'])
+        ->middleware('throttle:blog-comments');
+    Route::put('blog/comments/{comment}', [BlogCommentController::class, 'update'])
+        ->middleware('throttle:blog-comments');
+    Route::delete('blog/comments/{comment}', [BlogCommentController::class, 'destroy']);
     Route::post('blog/upload-video', [\App\Http\Controllers\BlogController::class, 'uploadVideo']);
     Route::post('blog/{blog}/feature', [\App\Http\Controllers\BlogController::class, 'feature']);
     Route::delete('blog/{blog}/feature', [\App\Http\Controllers\BlogController::class, 'unfeature']);
