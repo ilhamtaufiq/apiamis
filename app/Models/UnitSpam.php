@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
@@ -52,5 +53,12 @@ class UnitSpam extends Model
     public function budgets(): HasMany
     {
         return $this->hasMany(SpamBudget::class, 'unit_spam_id');
+    }
+
+    public function pekerjaan(): BelongsToMany
+    {
+        return $this->belongsToMany(Pekerjaan::class, 'tbl_unit_spam_pekerjaan', 'unit_spam_id', 'pekerjaan_id')
+            ->withPivot(['output_id', 'capaian_metric'])
+            ->withTimestamps();
     }
 }

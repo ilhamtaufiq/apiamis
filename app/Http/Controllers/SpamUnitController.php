@@ -113,11 +113,20 @@ class SpamUnitController extends Controller
     {
         return response()->json([
             'success' => true,
-            'data' => $spamUnit->load(['desa.kecamatan', 'pengelola', 'budgets' => function($q) {
-                $q->orderBy('tahun', 'desc');
-            }, 'achievements' => function($q) {
-                $q->orderBy('tahun', 'desc');
-            }, 'checklists'])
+            'data' => $spamUnit->load([
+                'desa.kecamatan',
+                'pengelola',
+                'pekerjaan.kegiatan',
+                'pekerjaan.output',
+                'pekerjaan.kontrak',
+                'budgets' => function ($q) {
+                    $q->orderBy('tahun', 'desc');
+                },
+                'achievements' => function ($q) {
+                    $q->orderBy('tahun', 'desc');
+                },
+                'checklists',
+            ]),
         ]);
     }
 
@@ -251,6 +260,8 @@ class SpamUnitController extends Controller
             $kecamatanId
         );
 
+        $statsEnrichment = $this->integrationService->buildStatsEnrichment($tahunScope, $kecamatanId);
+
         $manualGlobal = $this->integrationService->aggregateManualGlobal($tahunScope, $kecamatanId);
 
         $targetQuery = Desa::query();
@@ -270,12 +281,14 @@ class SpamUnitController extends Controller
         }
 
         $totalTarget = (int) $targetQuery->sum('target');
+        $bjpMasterKk = (int) $targetQuery->sum('bjp_master');
+        $bjpUnitKk = (int) $achievementQuery->sum('jumlah_bjp_kk');
 
         $totalSR = $manualGlobal['sr'];
         $totalKK = $manualGlobal['kk'];
         $totalJiwa = $manualGlobal['jiwa'];
 
-        $totalBjpKK = (int) $targetQuery->sum('bjp_master') + (int) $achievementQuery->sum('jumlah_bjp_kk');
+        $totalBjpKK = $bjpMasterKk + $bjpUnitKk;
         $totalBjpJiwa = $totalBjpKK * 5;
 
         // Funding distribution (all years when no filter; scoped year when filtered)
@@ -317,7 +330,7 @@ class SpamUnitController extends Controller
                 'total_pekerjaan_all' => Pekerjaan::count(),
                 'total_foto_dokumentasi' => Foto::count(),
                 'stats_generated_at' => now()->toIso8601String(),
-            ], $integrationSummary, [
+            ], $integrationSummary, $statsEnrichment, [
                 'manual_sr' => $manualGlobal['sr'],
                 'manual_kk' => $manualGlobal['kk'],
                 'manual_jiwa' => $manualGlobal['jiwa'],
@@ -325,14 +338,97 @@ class SpamUnitController extends Controller
                 'total_sr' => $totalSR,
                 'total_kk' => $totalKK,
                 'total_jiwa' => $totalJiwa,
+                'total_linked' => $integrationSummary['total_linked'] ?? 0,
+                'ringkasan' => [
+                    'scope_label' => $manualScopeLabel,
+                    'baseline_cap_tahun' => $statsEnrichment['baseline_cap_tahun'],
+                    'accumulation_start_tahun' => $statsEnrichment['accumulation_start_tahun'],
+                    'baseline' => [
+                        'label' => 'Acuan master s/d '.$statsEnrichment['baseline_cap_tahun'],
+                        'keterangan' => 'Data awal unit SPAM (import). Tidak ditimpa oleh integrasi pekerjaan.',
+                        'sr' => $statsEnrichment['capaian_baseline_sr'],
+                        'kk' => $statsEnrichment['capaian_baseline_kk'],
+                        'jiwa' => $statsEnrichment['capaian_baseline_jiwa'],
+                        'nilai_kontrak' => $statsEnrichment['capaian_baseline_nilai_kontrak'],
+                    ],
+                    'capaian' => [
+                        'label' => 'Capaian unit SPAM tercatat (total)',
+                        'keterangan' => 'Acuan s/d '.$statsEnrichment['baseline_cap_tahun'].' + capaian integrasi '.$statsEnrichment['accumulation_start_tahun'].' ke atas',
+                        'sr' => $statsEnrichment['capaian_sr'],
+                        'kk' => $statsEnrichment['capaian_kk'],
+                        'jiwa' => $statsEnrichment['capaian_jiwa'],
+                        'nilai_kontrak' => $statsEnrichment['capaian_nilai_kontrak'],
+                    ],
+                    'integrasi' => [
+                        'label' => 'Status tautan pekerjaan',
+                        'paket_tertaut' => $statsEnrichment['linked_pekerjaan_count'],
+                        'paket_tersedia' => $integrationSummary['pekerjaan_air_minum_count'] ?? 0,
+                        'paket_belum_tertaut' => $statsEnrichment['paket_belum_tertaut'],
+                        'unit_dengan_tautan' => $statsEnrichment['linked_units_count'],
+                        'desa_terintegrasi' => $integrationSummary['matched_count'] ?? 0,
+                        'desa_partial' => $integrationSummary['partial_count'] ?? 0,
+                        'desa_tanpa_unit' => $integrationSummary['no_unit_count'] ?? 0,
+                        'desa_tanpa_pekerjaan' => $integrationSummary['no_pekerjaan_count'] ?? 0,
+                    ],
+                    'capaian_integrasi' => [
+                        'label' => 'Capaian integrasi '.$statsEnrichment['accumulation_start_tahun'].' ke atas',
+                        'keterangan' => 'Hanya tahun integrasi; dipakai untuk perbandingan dengan potensi pekerjaan',
+                        'sr' => $statsEnrichment['capaian_integrasi_sr'],
+                        'kk' => $statsEnrichment['capaian_integrasi_kk'],
+                        'jiwa' => $statsEnrichment['capaian_integrasi_jiwa'],
+                        'nilai_kontrak' => $statsEnrichment['capaian_integrasi_nilai_kontrak'],
+                    ],
+                    'potensi' => [
+                        'label' => 'Potensi pekerjaan AM ('.$statsEnrichment['accumulation_start_tahun'].' ke atas)',
+                        'keterangan' => 'Paket sub bidang air minum tahun '.$statsEnrichment['accumulation_start_tahun'].' ke atas (belum tentu sudah ditaut)',
+                        'sr' => $statsEnrichment['potensi_sr'],
+                        'kk' => $statsEnrichment['potensi_kk'],
+                        'jiwa' => $statsEnrichment['potensi_jiwa'],
+                        'nilai_kontrak' => $statsEnrichment['potensi_nilai_kontrak'],
+                    ],
+                    'dari_tautan' => [
+                        'label' => 'Akumulasi paket yang sudah ditaut',
+                        'sr' => $statsEnrichment['linked_sr'],
+                        'kk' => $statsEnrichment['linked_kk'],
+                        'jiwa' => $statsEnrichment['linked_jiwa'],
+                        'nilai_kontrak' => $statsEnrichment['linked_nilai_kontrak'],
+                    ],
+                    'selisih_potensi_capaian' => [
+                        'sr' => $statsEnrichment['selisih_sr'],
+                        'kk' => $statsEnrichment['selisih_kk'],
+                        'jiwa' => $statsEnrichment['selisih_jiwa'],
+                        'nilai_kontrak' => $statsEnrichment['selisih_nilai_kontrak'],
+                    ],
+                    'spm' => [
+                        'target_kk' => $totalTarget,
+                        'jp_kk' => $totalKK,
+                        'bjp_master_kk' => $bjpMasterKk,
+                        'bjp_unit_kk' => $bjpUnitKk,
+                        'total_bjp_kk' => $totalBjpKK,
+                        'coverage_percentage' => $totalTarget > 0 ? round((($totalKK + $totalBjpKK) / $totalTarget) * 100, 2) : 0,
+                    ],
+                ],
             ]),
+        ]);
+    }
+
+    public function integrationOutputOptions(Request $request): JsonResponse
+    {
+        return response()->json([
+            'success' => true,
+            'data' => $this->integrationService->listIntegrationOutputOptions(
+                $request->filled('tahun') ? $request->input('tahun') : null,
+                $request->filled('kecamatan_id') ? $request->integer('kecamatan_id') : null,
+            ),
         ]);
     }
 
     public function integration(Request $request): JsonResponse
     {
         $request->validate([
-            'sync_status' => 'nullable|in:matched,partial,no_unit,no_pekerjaan',
+            'sync_status' => 'nullable|in:matched,partial,no_unit,no_pekerjaan,no_data',
+            'output_type' => 'nullable|in:sambungan_rumah,pipa_jaringan,reservoir,sumber_air,bjp',
+            'komponen' => 'nullable|string|max:255',
         ]);
 
         $result = $this->integrationService->paginateIntegration(
@@ -341,6 +437,8 @@ class SpamUnitController extends Controller
             $request->filled('desa_id') ? $request->integer('desa_id') : null,
             $request->filled('search') ? $request->input('search') : null,
             $request->filled('sync_status') ? $request->input('sync_status') : null,
+            $request->filled('output_type') ? $request->input('output_type') : null,
+            $request->filled('komponen') ? $request->input('komponen') : null,
             $request->integer('per_page', 15),
             $request->integer('page', 1)
         );
@@ -355,14 +453,105 @@ class SpamUnitController extends Controller
 
     public function integrationByDesa(int $desaId, Request $request): JsonResponse
     {
+        $request->validate([
+            'output_type' => 'nullable|in:sambungan_rumah,pipa_jaringan,reservoir,sumber_air,bjp',
+            'komponen' => 'nullable|string|max:255',
+        ]);
+
         $desa = Desa::with('kecamatan')->findOrFail($desaId);
 
         return response()->json([
             'success' => true,
             'data' => $this->integrationService->buildDesaIntegrationRow(
                 $desa,
-                $request->filled('tahun') ? $request->input('tahun') : null
+                $request->filled('tahun') ? $request->input('tahun') : null,
+                $request->filled('output_type') ? $request->input('output_type') : null,
+                $request->filled('komponen') ? $request->input('komponen') : null,
             ),
+        ]);
+    }
+
+    public function airMinumPekerjaan(Request $request): JsonResponse
+    {
+        $request->validate([
+            'output_type' => 'nullable|in:sambungan_rumah,pipa_jaringan,reservoir,sumber_air,bjp',
+        ]);
+
+        $result = $this->integrationService->paginateAirMinumPekerjaan(
+            $request->filled('tahun') ? $request->input('tahun') : null,
+            $request->filled('kecamatan_id') ? $request->integer('kecamatan_id') : null,
+            $request->filled('desa_id') ? $request->integer('desa_id') : null,
+            $request->filled('search') ? $request->input('search') : null,
+            $request->filled('output_type') ? $request->input('output_type') : null,
+            $request->filled('unit_spam_id') ? $request->integer('unit_spam_id') : null,
+            $request->boolean('unlinked_only') ?: null,
+            $request->integer('per_page', 15),
+            $request->integer('page', 1),
+        );
+
+        return response()->json([
+            'success' => true,
+            'data' => $result['data'],
+            'meta' => $result['meta'],
+        ]);
+    }
+
+    public function attachPekerjaan(Request $request, UnitSpam $unitSpam): JsonResponse
+    {
+        $validated = $request->validate([
+            'pekerjaan_id' => 'required|exists:tbl_pekerjaan,id',
+            'output_id' => 'nullable|exists:tbl_output,id',
+            'capaian_metric' => 'nullable|in:jp,bjp',
+        ]);
+
+        try {
+            $this->integrationService->attachPekerjaan(
+                $unitSpam,
+                (int) $validated['pekerjaan_id'],
+                isset($validated['output_id']) ? (int) $validated['output_id'] : null,
+                $validated['capaian_metric'] ?? null,
+            );
+        } catch (\InvalidArgumentException $e) {
+            return response()->json(['success' => false, 'message' => $e->getMessage()], 422);
+        }
+
+        $unitSpam->refresh()->load([
+            'desa.kecamatan',
+            'pengelola',
+            'pekerjaan.kegiatan',
+            'pekerjaan.output',
+            'pekerjaan.kontrak',
+            'achievements',
+            'budgets',
+        ]);
+
+        $pekerjaan = Pekerjaan::query()
+            ->with('kegiatan')
+            ->find((int) $validated['pekerjaan_id']);
+        $tahunAnggaran = (string) ($pekerjaan?->kegiatan?->tahun_anggaran ?? '');
+        $startTahun = $this->integrationService->accumulationStartTahun();
+
+        $message = SpamPekerjaanIntegrationService::isAccumulationTahun($tahunAnggaran)
+            ? "Pekerjaan berhasil ditautkan. Capaian SR/KK/jiwa dan anggaran tahun {$tahunAnggaran} diakumulasi ke unit (kontrak, atau pagu jika kontrak kosong)."
+            : "Pekerjaan berhasil ditautkan sebagai referensi. Capaian unit s/d {$this->integrationService->baselineCapTahun()} tidak diubah; akumulasi otomatis berlaku mulai tahun {$startTahun}.";
+
+        return response()->json([
+            'success' => true,
+            'message' => $message,
+            'data' => $unitSpam,
+        ]);
+    }
+
+    public function detachPekerjaan(UnitSpam $unitSpam, int $pekerjaanId): JsonResponse
+    {
+        $this->integrationService->detachPekerjaan($unitSpam, $pekerjaanId);
+
+        $unitSpam->refresh();
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Tautan pekerjaan berhasil dihapus. Akumulasi capaian dan anggaran disesuaikan ulang.',
+            'data' => $unitSpam,
         ]);
     }
 

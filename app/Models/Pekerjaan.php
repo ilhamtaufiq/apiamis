@@ -174,6 +174,20 @@ class Pekerjaan extends Model
     /**
      * Relasi Many-to-Many dengan Tags
      */
+    public function spmSanitasi(): BelongsToMany
+    {
+        return $this->belongsToMany(SpmSanitasi::class, 'tbl_spm_sanitasi_pekerjaan', 'pekerjaan_id', 'spm_sanitasi_id')
+            ->withPivot('output_id')
+            ->withTimestamps();
+    }
+
+    public function unitSpam(): BelongsToMany
+    {
+        return $this->belongsToMany(UnitSpam::class, 'tbl_unit_spam_pekerjaan', 'pekerjaan_id', 'unit_spam_id')
+            ->withPivot(['output_id', 'capaian_metric'])
+            ->withTimestamps();
+    }
+
     public function tags(): BelongsToMany
     {
         return $this->belongsToMany(Tag::class, 'pekerjaan_tag', 'pekerjaan_id', 'tag_id')

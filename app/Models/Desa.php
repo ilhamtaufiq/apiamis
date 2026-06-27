@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 use App\Traits\NotifiesAdminsOnChanges;
 use App\Traits\Auditable;
@@ -35,5 +36,10 @@ class Desa extends Model
     public function kecamatan(): BelongsTo
     {
         return $this->belongsTo(Kecamatan::class, 'kecamatan_id');
+    }
+
+    public function spmSanitasi(): HasMany
+    {
+        return $this->hasMany(SpmSanitasi::class, 'desa_id');
     }
 }

@@ -36,13 +36,12 @@ use App\Http\Controllers\ProgressController;
 use App\Http\Controllers\PuspenProgressFisikController;
 use App\Http\Controllers\PuspenMediaShareController;
 use App\Http\Controllers\PuspenPengawasKpiController;
-use App\Http\Controllers\RABAnalyzerController;
-use App\Http\Controllers\RkaController;
 use App\Http\Controllers\RoleController;
 use App\Http\Controllers\RoutePermissionController;
 use App\Http\Controllers\SignatureLibraryController;
 use App\Http\Controllers\SimulationNetworkController;
 use App\Http\Controllers\SpamUnitController;
+use App\Http\Controllers\SpmSanitasiController;
 use App\Http\Controllers\TagController;
 use App\Http\Controllers\ToolPdfController;
 use App\Http\Controllers\TiketCommentController;
@@ -156,22 +155,33 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // API Resources
     Route::get('spam-units/stats', [SpamUnitController::class, 'stats']);
+    Route::get('spam-units/integration/output-options', [SpamUnitController::class, 'integrationOutputOptions']);
     Route::get('spam-units/integration', [SpamUnitController::class, 'integration']);
     Route::get('spam-units/integration/desa/{desaId}', [SpamUnitController::class, 'integrationByDesa']);
+    Route::get('spam-units/air-minum-pekerjaan', [SpamUnitController::class, 'airMinumPekerjaan']);
+    Route::post('spam-units/{unitSpam}/pekerjaan', [SpamUnitController::class, 'attachPekerjaan']);
+    Route::delete('spam-units/{unitSpam}/pekerjaan/{pekerjaanId}', [SpamUnitController::class, 'detachPekerjaan']);
     Route::post('spam-units/{unitSpam}/sync-pekerjaan', [SpamUnitController::class, 'syncPekerjaan']);
     Route::post('spam-units/{unitSpam}/achievements', [SpamUnitController::class, 'addAchievement']);
     Route::post('spam-units/{unitSpam}/budgets', [SpamUnitController::class, 'addBudget']);
     Route::delete('spam-units/{unitSpam}/budgets/{budgetId}', [SpamUnitController::class, 'deleteBudget']);
     Route::post('spam-units/import', [SpamUnitController::class, 'import']);
     Route::apiResource('spam-units', SpamUnitController::class);
+    Route::get('spm-sanitasi/stats', [SpmSanitasiController::class, 'stats']);
+    Route::get('spm-sanitasi/capaian', [SpmSanitasiController::class, 'capaian']);
+    Route::get('spm-sanitasi/integration', [SpmSanitasiController::class, 'integration']);
+    Route::get('spm-sanitasi/integration/desa/{desaId}', [SpmSanitasiController::class, 'integrationByDesa']);
+    Route::get('spm-sanitasi/mck-pekerjaan', [SpmSanitasiController::class, 'mckPekerjaan']);
+    Route::post('spm-sanitasi/{spmSanitasi}/pekerjaan', [SpmSanitasiController::class, 'attachPekerjaan']);
+    Route::delete('spm-sanitasi/{spmSanitasi}/pekerjaan/{pekerjaanId}', [SpmSanitasiController::class, 'detachPekerjaan']);
+    Route::get('spm-sanitasi/export', [SpmSanitasiController::class, 'export']);
+    Route::get('spm-sanitasi/import/template', [SpmSanitasiController::class, 'downloadTemplate']);
+    Route::post('spm-sanitasi/import', [SpmSanitasiController::class, 'import']);
+    Route::apiResource('spm-sanitasi', SpmSanitasiController::class);
     Route::apiResource('kecamatan', KecamatanController::class);
     Route::apiResource('desa', DesaController::class);
     Route::apiResource('penyedia', PenyediaController::class)->parameters(['penyedia' => 'penyedia']);
     Route::apiResource('kegiatan', KegiatanController::class);
-    Route::get('rka', [RkaController::class, 'index']);
-    Route::post('rka/import', [RkaController::class, 'import']);
-    Route::get('rka/{rkaDocument}', [RkaController::class, 'show']);
-    Route::delete('rka/{rkaDocument}', [RkaController::class, 'destroy']);
     // Custom routes - Kontrak
     Route::get('kontrak/export/excel', [KontrakController::class, 'exportExcel']);
 
@@ -345,9 +355,6 @@ Route::middleware('auth:sanctum')->group(function () {
             Route::delete('{filename}', [BackupController::class, 'destroy'])->where('filename', '.*\.zip');
             Route::post('restore', [BackupController::class, 'restore']);
         });
-
-    // RAB Analysis
-    Route::post('analyze-rab', [RABAnalyzerController::class, 'analyze']);
 
     // Tools PDFs
     Route::get('tool-pdfs/{toolPdf}/download', [ToolPdfController::class, 'download']);
