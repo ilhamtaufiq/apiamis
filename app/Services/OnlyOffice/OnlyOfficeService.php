@@ -78,6 +78,9 @@ class OnlyOfficeService
                     'forcesave' => $canEdit,
                     'compactToolbar' => ! $canEdit,
                     'toolbarNoTabs' => ! $canEdit,
+                    'feedback' => false,
+                    'help' => false,
+                    'compactHeader' => true,
                 ],
             ],
         ];
@@ -88,7 +91,7 @@ class OnlyOfficeService
         }
 
         return [
-            'documentServerUrl' => config('onlyoffice.document_server_url'),
+            'documentServerUrl' => rtrim((string) config('onlyoffice.document_server_url'), '/').'/',
             'config' => $config,
             'mode' => $canEdit ? 'edit' : 'view',
             'media' => [
