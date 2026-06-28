@@ -59,6 +59,7 @@ class AppSettingController extends Controller
             'chat_model' => 'nullable|string|max:128',
             'chat_api_key' => 'nullable|string|max:2000',
             'landing_page_active' => 'nullable|string|in:0,1',
+            'spm_detail_page_active' => 'nullable|string|in:0,1',
             'puspen_progress_fisik_public' => 'nullable|string|in:0,1',
             'logo' => 'nullable|file|mimes:jpg,jpeg,png,svg|max:2048',
             'favicon' => 'nullable|file|mimes:jpg,jpeg,png,svg,ico|max:1024',
@@ -122,6 +123,11 @@ class AppSettingController extends Controller
 
         if ($request->has('landing_page_active')) {
             $setting = AppSetting::setValue('landing_page_active', $request->landing_page_active, 'text');
+            $updatedSettings[] = $setting;
+        }
+
+        if ($request->has('spm_detail_page_active')) {
+            $setting = AppSetting::setValue('spm_detail_page_active', $request->spm_detail_page_active, 'text');
             $updatedSettings[] = $setting;
         }
 
