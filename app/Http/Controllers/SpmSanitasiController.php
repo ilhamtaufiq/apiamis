@@ -67,10 +67,11 @@ class SpmSanitasiController extends Controller
     public function publicMapStats(Request $request): JsonResponse
     {
         $jenis = $request->filled('jenis') ? $request->string('jenis')->toString() : null;
+        $tahun = $request->filled('tahun') ? $request->string('tahun')->toString() : null;
 
         return response()->json([
             'success' => true,
-            'data' => $this->capaianService->mapStats($jenis),
+            'data' => $this->capaianService->mapStats($jenis, $tahun),
         ]);
     }
 
@@ -400,10 +401,12 @@ class SpmSanitasiController extends Controller
     private function publicStatsPayload(Request $request): JsonResponse
     {
         $jenis = $request->filled('jenis') ? $request->string('jenis')->toString() : null;
-        $capaian = $this->capaianService->summary(null, $jenis);
+        $tahun = $request->filled('tahun') ? $request->string('tahun')->toString() : null;
+        $capaian = $this->capaianService->summary(null, $jenis, $tahun);
 
         $baseQuery = SpmSanitasi::query()
             ->when($jenis, fn ($q) => $q->where('jenis', $jenis))
+            ->when($tahun, fn ($q) => $q->where('tahun_konstruksi', (int) $tahun))
             ->whereNotNull('desa_id');
 
         $counts = (clone $baseQuery)
@@ -414,6 +417,8 @@ class SpmSanitasiController extends Controller
         return response()->json([
             'success' => true,
             'data' => array_merge($capaian, [
+                'scope_label' => $this->capaianService->scopeLabel($tahun),
+                'stats_generated_at' => now()->toIso8601String(),
                 'total_count' => (clone $baseQuery)->count(),
                 'berfungsi_count' => (clone $baseQuery)->where('status_keberfungsian', 'Berfungsi')->count(),
                 'total_investasi' => (float) (clone $baseQuery)->sum('pembiayaan_total'),

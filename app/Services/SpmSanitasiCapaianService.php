@@ -11,30 +11,31 @@ class SpmSanitasiCapaianService
 {
     public const JIWA_PER_KK = 5;
 
-    public function summary(?int $kecamatanId = null, ?string $jenis = null): array
+    public function scopeLabel(?string $tahun = null): string
+    {
+        return $tahun
+            ? "Infrastruktur tahun konstruksi {$tahun}"
+            : 'Semua infrastruktur terdata';
+    }
+
+    public function summary(?int $kecamatanId = null, ?string $jenis = null, ?string $tahun = null): array
     {
         $desaQuery = $this->desaBaseQuery($kecamatanId);
         $totalPenduduk = (int) $desaQuery->sum('jumlah_penduduk');
         $totalDesa = (int) $desaQuery->count();
         $targetKk = $totalPenduduk > 0 ? (int) round($totalPenduduk / self::JIWA_PER_KK) : 0;
 
-        $pemanfaatQuery = $this->pemanfaatBaseQuery($kecamatanId, $jenis);
+        $pemanfaatQuery = $this->pemanfaatBaseQuery($kecamatanId, $jenis, $tahun);
         $totalPemanfaatKk = (int) $pemanfaatQuery->sum('jumlah_pemanfaat_kk');
         $totalPemanfaatJiwa = $totalPemanfaatKk * self::JIWA_PER_KK;
 
-        $byJenis = SpmSanitasi::query()
+        $byJenis = $this->infrastrukturBaseQuery($kecamatanId, $jenis, $tahun)
             ->selectRaw('jenis, SUM(jumlah_pemanfaat_kk) as total_kk, COUNT(*) as unit_count')
-            ->when($kecamatanId, fn (Builder $q) => $q->whereHas('desa', fn (Builder $dq) => $dq->where('kecamatan_id', $kecamatanId)))
-            ->when($jenis, fn (Builder $q) => $q->where('jenis', $jenis))
-            ->whereNotNull('desa_id')
             ->groupBy('jenis')
             ->get()
             ->keyBy('jenis');
 
-        $desaWithInfrastruktur = (int) SpmSanitasi::query()
-            ->when($kecamatanId, fn (Builder $q) => $q->whereHas('desa', fn (Builder $dq) => $dq->where('kecamatan_id', $kecamatanId)))
-            ->when($jenis, fn (Builder $q) => $q->where('jenis', $jenis))
-            ->whereNotNull('desa_id')
+        $desaWithInfrastruktur = (int) $this->infrastrukturBaseQuery($kecamatanId, $jenis, $tahun)
             ->distinct('desa_id')
             ->count('desa_id');
 
@@ -199,12 +200,28 @@ class SpmSanitasiCapaianService
         return Desa::query()->when($kecamatanId, fn (Builder $q) => $q->where('kecamatan_id', $kecamatanId));
     }
 
-    private function pemanfaatBaseQuery(?int $kecamatanId, ?string $jenis): Builder
+    private function infrastrukturBaseQuery(?int $kecamatanId, ?string $jenis, ?string $tahun = null): Builder
     {
         return SpmSanitasi::query()
             ->when($kecamatanId, fn (Builder $q) => $q->whereHas('desa', fn (Builder $dq) => $dq->where('kecamatan_id', $kecamatanId)))
             ->when($jenis, fn (Builder $q) => $q->where('jenis', $jenis))
+            ->when($tahun, fn (Builder $q) => $q->where('tahun_konstruksi', (int) $tahun))
             ->whereNotNull('desa_id');
+    }
+
+    private function pemanfaatBaseQuery(?int $kecamatanId, ?string $jenis, ?string $tahun = null): Builder
+    {
+        return $this->infrastrukturBaseQuery($kecamatanId, $jenis, $tahun);
+    }
+
+    private function applyRelationTahunScope(Builder $query, ?string $jenis, ?string $tahun): void
+    {
+        if ($jenis) {
+            $query->where('jenis', $jenis);
+        }
+        if ($tahun) {
+            $query->where('tahun_konstruksi', (int) $tahun);
+        }
     }
 
     /**
@@ -219,19 +236,15 @@ class SpmSanitasiCapaianService
      *     pemanfaat_jiwa: int
      * }>
      */
-    public function mapStats(?string $jenis = null): array
+    public function mapStats(?string $jenis = null, ?string $tahun = null): array
     {
         return Desa::query()
             ->with('kecamatan:id,n_kec')
-            ->withSum(['spmSanitasi as pemanfaat_kk_total' => function (Builder $q) use ($jenis) {
-                if ($jenis) {
-                    $q->where('jenis', $jenis);
-                }
+            ->withSum(['spmSanitasi as pemanfaat_kk_total' => function (Builder $q) use ($jenis, $tahun) {
+                $this->applyRelationTahunScope($q, $jenis, $tahun);
             }], 'jumlah_pemanfaat_kk')
-            ->withCount(['spmSanitasi as unit_count' => function (Builder $q) use ($jenis) {
-                if ($jenis) {
-                    $q->where('jenis', $jenis);
-                }
+            ->withCount(['spmSanitasi as unit_count' => function (Builder $q) use ($jenis, $tahun) {
+                $this->applyRelationTahunScope($q, $jenis, $tahun);
             }])
             ->orderBy('n_desa')
             ->get(['id', 'n_desa', 'kecamatan_id', 'jumlah_penduduk'])

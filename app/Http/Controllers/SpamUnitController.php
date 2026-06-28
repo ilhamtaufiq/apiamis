@@ -248,8 +248,9 @@ class SpamUnitController extends Controller
         $nonSimspamCount = $totalUnits - $simspamCount;
 
         $tahunScope = $request->filled('tahun') ? $request->input('tahun') : null;
-        $targetYear = $tahunScope ?? 's/d '.$this->integrationService->manualCapTahun();
-        $manualScopeLabel = $this->integrationService->manualScopeLabel($tahunScope);
+        $scopeLabel = $this->integrationService->combinedScopeLabel($tahunScope);
+        $targetYear = $scopeLabel;
+        $manualScopeLabel = $scopeLabel;
         $manualCapTahun = $this->integrationService->manualCapTahun();
 
         // Filter by kecamatan if present
@@ -270,7 +271,10 @@ class SpamUnitController extends Controller
         if ($tahunScope) {
             $achievementQuery->where('tahun', $tahunScope);
         } else {
-            $achievementQuery->where('tahun', '<=', $manualCapTahun);
+            $achievementQuery->where(function ($query) {
+                $query->where('tahun', '<=', SpamPekerjaanIntegrationService::BASELINE_CAP_TAHUN)
+                    ->orWhere('tahun', '>=', SpamPekerjaanIntegrationService::ACCUMULATION_START_TAHUN);
+            });
         }
 
         if ($kecamatanId) {
@@ -284,19 +288,33 @@ class SpamUnitController extends Controller
         $bjpMasterKk = (int) $targetQuery->sum('bjp_master');
         $bjpUnitKk = (int) $achievementQuery->sum('jumlah_bjp_kk');
 
-        $totalSR = $manualGlobal['sr'];
-        $totalKK = $manualGlobal['kk'];
-        $totalJiwa = $manualGlobal['jiwa'];
+        if ($tahunScope) {
+            $totalSR = $manualGlobal['sr'];
+            $totalKK = $manualGlobal['kk'];
+            $totalJiwa = $manualGlobal['jiwa'];
+            $displayNilaiKontrak = $manualGlobal['nilai_kontrak'];
+        } else {
+            $totalSR = $statsEnrichment['capaian_sr'];
+            $totalKK = $statsEnrichment['capaian_kk'];
+            $totalJiwa = $statsEnrichment['capaian_jiwa'];
+            $displayNilaiKontrak = $statsEnrichment['capaian_nilai_kontrak'];
+        }
 
         $totalBjpKK = $bjpMasterKk + $bjpUnitKk;
         $totalBjpJiwa = $totalBjpKK * 5;
+        $coveragePercentage = $totalTarget > 0
+            ? round((($totalKK + $totalBjpKK) / $totalTarget) * 100, 2)
+            : 0;
 
         // Funding distribution (all years when no filter; scoped year when filtered)
         $fundingQuery = \App\Models\SpamBudget::select('sumber_dana', DB::raw('count(DISTINCT unit_spam_id) as count'));
         if ($tahunScope) {
             $fundingQuery->where('tahun', $tahunScope);
         } else {
-            $fundingQuery->where('tahun', '<=', $manualCapTahun);
+            $fundingQuery->where(function ($query) {
+                $query->where('tahun', '<=', SpamPekerjaanIntegrationService::BASELINE_CAP_TAHUN)
+                    ->orWhere('tahun', '>=', SpamPekerjaanIntegrationService::ACCUMULATION_START_TAHUN);
+            });
         }
         if ($kecamatanId) {
             $fundingQuery->whereHas('unitSpam.desa', function ($q) use ($kecamatanId) {
@@ -323,7 +341,7 @@ class SpamUnitController extends Controller
                 'total_bjp_kk' => $totalBjpKK,
                 'total_bjp_jiwa' => $totalBjpJiwa,
                 'funding_distribution' => $fundingDist,
-                'coverage_percentage' => $totalTarget > 0 ? round((($totalKK + $totalBjpKK) / $totalTarget) * 100, 2) : 0,
+                'coverage_percentage' => $coveragePercentage,
                 'wilayah_total_desa' => Desa::count(),
                 'wilayah_total_kecamatan' => Kecamatan::count(),
                 'achievement_records' => SpamAchievement::count(),
@@ -334,13 +352,13 @@ class SpamUnitController extends Controller
                 'manual_sr' => $manualGlobal['sr'],
                 'manual_kk' => $manualGlobal['kk'],
                 'manual_jiwa' => $manualGlobal['jiwa'],
-                'manual_nilai_kontrak' => $manualGlobal['nilai_kontrak'],
+                'manual_nilai_kontrak' => $displayNilaiKontrak,
                 'total_sr' => $totalSR,
                 'total_kk' => $totalKK,
                 'total_jiwa' => $totalJiwa,
                 'total_linked' => $integrationSummary['total_linked'] ?? 0,
                 'ringkasan' => [
-                    'scope_label' => $manualScopeLabel,
+                    'scope_label' => $scopeLabel,
                     'baseline_cap_tahun' => $statsEnrichment['baseline_cap_tahun'],
                     'accumulation_start_tahun' => $statsEnrichment['accumulation_start_tahun'],
                     'baseline' => [
@@ -405,7 +423,7 @@ class SpamUnitController extends Controller
                         'bjp_master_kk' => $bjpMasterKk,
                         'bjp_unit_kk' => $bjpUnitKk,
                         'total_bjp_kk' => $totalBjpKK,
-                        'coverage_percentage' => $totalTarget > 0 ? round((($totalKK + $totalBjpKK) / $totalTarget) * 100, 2) : 0,
+                        'coverage_percentage' => $coveragePercentage,
                     ],
                 ],
             ]),

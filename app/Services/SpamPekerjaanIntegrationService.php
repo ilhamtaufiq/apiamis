@@ -186,6 +186,15 @@ class SpamPekerjaanIntegrationService
         return 's/d tahun '.$this->manualCapTahun();
     }
 
+    public function combinedScopeLabel(?string $tahun = null): string
+    {
+        if ($tahun) {
+            return "Tahun {$tahun}";
+        }
+
+        return 'Terakumulasi (acuan s/d '.self::BASELINE_CAP_TAHUN.' + integrasi '.self::ACCUMULATION_START_TAHUN.'+)';
+    }
+
     public function airMinumQuery(
         ?string $tahun = null,
         ?int $kecamatanId = null,
@@ -1259,15 +1268,14 @@ class SpamPekerjaanIntegrationService
      *     jiwa: int
      * }>
      */
-    public function desaMapStats(?string $tahun = null): array
-    {
-        $capTahun = $this->manualCapTahun();
-
-        $unitCounts = UnitSpam::query()
-            ->select('desa_id', DB::raw('COUNT(*) as unit_count'))
-            ->groupBy('desa_id')
-            ->pluck('unit_count', 'desa_id');
-
+    /**
+     * @return Collection<int|string, object{desa_id: int, sr: int|string, kk: int|string, jiwa: int|string}>
+     */
+    private function groupedAchievementsByDesa(
+        ?string $tahun = null,
+        ?int $maxTahun = null,
+        ?int $minTahun = null,
+    ): Collection {
         $achievementQuery = SpamAchievement::query()
             ->select(
                 'tbl_unit_spam.desa_id',
@@ -1280,20 +1288,54 @@ class SpamPekerjaanIntegrationService
         if ($tahun) {
             $achievementQuery->where('tbl_spam_achievements.tahun', $tahun);
         } else {
-            $achievementQuery->where('tbl_spam_achievements.tahun', '<=', $capTahun);
+            if ($maxTahun !== null) {
+                $achievementQuery->where('tbl_spam_achievements.tahun', '<=', (string) $maxTahun);
+            }
+            if ($minTahun !== null) {
+                $achievementQuery->where('tbl_spam_achievements.tahun', '>=', (string) $minTahun);
+            }
         }
 
-        $achievements = $achievementQuery
+        return $achievementQuery
             ->groupBy('tbl_unit_spam.desa_id')
             ->get()
             ->keyBy('desa_id');
+    }
+
+    public function desaMapStats(?string $tahun = null): array
+    {
+        $unitCounts = UnitSpam::query()
+            ->select('desa_id', DB::raw('COUNT(*) as unit_count'))
+            ->groupBy('desa_id')
+            ->pluck('unit_count', 'desa_id');
+
+        if ($tahun) {
+            $achievements = $this->groupedAchievementsByDesa($tahun);
+            $baselineByDesa = null;
+            $integrasiByDesa = null;
+        } else {
+            $baselineByDesa = $this->groupedAchievementsByDesa(null, (int) self::BASELINE_CAP_TAHUN);
+            $integrasiByDesa = $this->groupedAchievementsByDesa(null, null, (int) self::ACCUMULATION_START_TAHUN);
+            $achievements = null;
+        }
 
         return Desa::query()
             ->with('kecamatan:id,n_kec')
             ->orderBy('n_desa')
             ->get(['id', 'n_desa', 'kecamatan_id', 'target'])
-            ->map(function (Desa $desa) use ($unitCounts, $achievements) {
-                $row = $achievements->get($desa->id);
+            ->map(function (Desa $desa) use ($unitCounts, $achievements, $baselineByDesa, $integrasiByDesa) {
+                if ($achievements !== null) {
+                    $row = $achievements->get($desa->id);
+                    $sr = (int) ($row->sr ?? 0);
+                    $kk = (int) ($row->kk ?? 0);
+                    $jiwa = (int) ($row->jiwa ?? 0);
+                } else {
+                    $baselineRow = $baselineByDesa?->get($desa->id);
+                    $integrasiRow = $integrasiByDesa?->get($desa->id);
+                    $sr = (int) ($baselineRow->sr ?? 0) + (int) ($integrasiRow->sr ?? 0);
+                    $kk = (int) ($baselineRow->kk ?? 0) + (int) ($integrasiRow->kk ?? 0);
+                    $jiwa = (int) ($baselineRow->jiwa ?? 0) + (int) ($integrasiRow->jiwa ?? 0);
+                }
 
                 return [
                     'desa_id' => $desa->id,
@@ -1301,9 +1343,9 @@ class SpamPekerjaanIntegrationService
                     'kecamatan' => $desa->kecamatan?->n_kec,
                     'target' => (int) $desa->target,
                     'unit_count' => (int) ($unitCounts[$desa->id] ?? 0),
-                    'sr' => (int) ($row->sr ?? 0),
-                    'kk' => (int) ($row->kk ?? 0),
-                    'jiwa' => (int) ($row->jiwa ?? 0),
+                    'sr' => $sr,
+                    'kk' => $kk,
+                    'jiwa' => $jiwa,
                 ];
             })
             ->values()
