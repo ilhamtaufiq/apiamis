@@ -63,9 +63,9 @@ Route::get('auth/google/callback', [AuthController::class, 'handleGoogleCallback
 
 // App Settings (public read, authenticated write)
 Route::get('app-settings', [AppSettingController::class, 'index']);
-Route::get('app-settings/storage-stats', [AppSettingController::class, 'storageStats'])->middleware('auth:sanctum');
-Route::post('app-settings', [AppSettingController::class, 'store'])->middleware('auth:sanctum');
-Route::post('app-settings/test-ai-connection', [AppSettingController::class, 'testAiConnection'])->middleware('auth:sanctum');
+Route::get('app-settings/storage-stats', [AppSettingController::class, 'storageStats'])->middleware(['auth:sanctum', 'role:admin']);
+Route::post('app-settings', [AppSettingController::class, 'store'])->middleware(['auth:sanctum', 'role:admin']);
+Route::post('app-settings/test-ai-connection', [AppSettingController::class, 'testAiConnection'])->middleware(['auth:sanctum', 'role:admin']);
 
 // Public Blog Routes
 Route::get('blog', [\App\Http\Controllers\BlogController::class, 'index']);
@@ -143,9 +143,15 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('audit-logs/{auditLog}', [AuditLogController::class, 'show']);
         // Frontend Error Logs
         Route::get('error-logs', [ClientErrorReportController::class, 'index']);
-        Route::get('error-logs/{errorLog}', [ClientErrorReportController::class, 'show']);
-        Route::post('error-logs/{errorLog}/resolve', [ClientErrorReportController::class, 'resolve']);
-        Route::post('error-logs/{errorLog}/reopen', [ClientErrorReportController::class, 'reopen']);
+        Route::post('error-logs/bulk/resolve', [ClientErrorReportController::class, 'bulkResolve']);
+        Route::post('error-logs/bulk/reopen', [ClientErrorReportController::class, 'bulkReopen']);
+        Route::post('error-logs/bulk/delete', [ClientErrorReportController::class, 'bulkDestroy']);
+        Route::post('error-logs/empty', [ClientErrorReportController::class, 'destroyAll']);
+        Route::delete('error-logs/bulk', [ClientErrorReportController::class, 'bulkDestroy']);
+        Route::delete('error-logs/empty', [ClientErrorReportController::class, 'destroyAll']);
+        Route::get('error-logs/{errorLog}', [ClientErrorReportController::class, 'show'])->whereNumber('errorLog');
+        Route::post('error-logs/{errorLog}/resolve', [ClientErrorReportController::class, 'resolve'])->whereNumber('errorLog');
+        Route::post('error-logs/{errorLog}/reopen', [ClientErrorReportController::class, 'reopen'])->whereNumber('errorLog');
     });
 
     Route::get('/user', function (Request $request) {
