@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Services\OnlyOffice\OnlyOfficeDownloadToken;
 use App\Services\OnlyOffice\OnlyOfficeJwt;
 use App\Services\OnlyOffice\OnlyOfficeMediaAuthorizer;
 use App\Services\OnlyOffice\OnlyOfficeService;
@@ -40,7 +41,17 @@ class OnlyOfficeController extends Controller
 
     public function download(Request $request, Media $media): BinaryFileResponse
     {
-        abort_unless($request->hasValidSignature(), 403, 'Tautan unduhan tidak valid atau kedaluwarsa.');
+        $expiresAt = (int) $request->query('expires', 0);
+        $token = (string) $request->query('token', '');
+
+        $hasOnlyOfficeToken = OnlyOfficeDownloadToken::valid($media->id, $expiresAt, $token);
+        $hasLegacySignature = $request->hasValidSignature();
+
+        abort_unless(
+            $hasOnlyOfficeToken || $hasLegacySignature,
+            403,
+            'Tautan unduhan tidak valid atau kedaluwarsa.',
+        );
         abort_unless(file_exists($media->getPath()), 404, 'File tidak ditemukan.');
 
         return response()->file($media->getPath(), [

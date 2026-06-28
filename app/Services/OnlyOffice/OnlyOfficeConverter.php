@@ -4,7 +4,6 @@ namespace App\Services\OnlyOffice;
 
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\URL;
 use Illuminate\Support\Str;
 use Spatie\MediaLibrary\MediaCollections\Models\Media;
 
@@ -37,11 +36,7 @@ class OnlyOfficeConverter
             return null;
         }
 
-        $downloadUrl = URL::temporarySignedRoute(
-            'onlyoffice.media.download',
-            now()->addMinutes((int) config('onlyoffice.download_token_ttl_minutes', 120)),
-            ['media' => $media->id],
-        );
+        $downloadUrl = OnlyOfficeDownloadToken::buildDownloadUrl($media->id);
 
         return $this->convertRemoteFileToPdf(
             $downloadUrl,

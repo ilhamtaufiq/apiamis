@@ -3,7 +3,6 @@
 namespace App\Services\OnlyOffice;
 
 use App\Models\User;
-use Illuminate\Support\Facades\URL;
 use Spatie\MediaLibrary\MediaCollections\Models\Media;
 
 class OnlyOfficeService
@@ -44,11 +43,7 @@ class OnlyOfficeService
         $extension = strtolower($media->extension ?: pathinfo($media->file_name, PATHINFO_EXTENSION));
         $documentKey = $this->buildDocumentKey($media);
 
-        $downloadUrl = URL::temporarySignedRoute(
-            'onlyoffice.media.download',
-            now()->addMinutes((int) config('onlyoffice.download_token_ttl_minutes', 120)),
-            ['media' => $media->id],
-        );
+        $downloadUrl = OnlyOfficeDownloadToken::buildDownloadUrl($media->id);
 
         $config = [
             'document' => [
