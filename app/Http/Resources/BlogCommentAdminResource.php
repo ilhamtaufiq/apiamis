@@ -37,6 +37,7 @@ class BlogCommentAdminResource extends JsonResource
                 'id' => $this->user?->id,
                 'name' => $this->user?->name,
                 'avatar' => $this->user?->avatar,
+                'gender' => $this->user?->gender,
                 'jabatan' => $this->user?->jabatan,
             ],
             'can_delete' => $access->canDeleteComment($this->resource, $user),

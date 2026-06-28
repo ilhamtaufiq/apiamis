@@ -67,6 +67,7 @@ class UserController extends Controller
             'password' => 'required|string|min:6',
             'nip' => 'nullable|string|max:50',
             'jabatan' => 'nullable|string|max:255',
+            'gender' => 'nullable|string|in:male,female,other',
             'roles' => 'sometimes|array',
             'permissions' => 'sometimes|array',
         ]);
@@ -77,6 +78,7 @@ class UserController extends Controller
             'password' => bcrypt($validated['password']),
             'nip' => $validated['nip'] ?? null,
             'jabatan' => $validated['jabatan'] ?? null,
+            'gender' => $validated['gender'] ?? null,
         ]);
 
         if (isset($validated['roles'])) {
@@ -123,6 +125,7 @@ class UserController extends Controller
             'password' => 'nullable|string|min:6',
             'nip' => 'nullable|string|max:50',
             'jabatan' => 'nullable|string|max:255',
+            'gender' => 'nullable|string|in:male,female,other',
             'roles' => 'sometimes|array',
             'permissions' => 'sometimes|array',
         ]);
@@ -132,6 +135,7 @@ class UserController extends Controller
         if (!empty($validated['password'])) $user->password = bcrypt($validated['password']);
         if (array_key_exists('nip', $validated)) $user->nip = $validated['nip'];
         if (array_key_exists('jabatan', $validated)) $user->jabatan = $validated['jabatan'];
+        if (array_key_exists('gender', $validated)) $user->gender = $validated['gender'];
         $user->save();
 
         if (isset($validated['roles'])) {

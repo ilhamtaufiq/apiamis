@@ -25,6 +25,7 @@ class BlogResource extends JsonResource
                 'id' => $this->user_id,
                 'name' => $this->user?->name,
                 'avatar' => $this->user?->avatar,
+                'gender' => $this->user?->gender,
                 'jabatan' => $this->user?->jabatan,
             ],
             'comments_count' => $this->when(

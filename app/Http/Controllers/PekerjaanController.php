@@ -114,6 +114,10 @@ class PekerjaanController extends Controller
             $query->where('pengawas_id', $request->pengawas_id);
         }
 
+        if ($request->has('pendamping_id') && ! empty($request->pendamping_id)) {
+            $query->where('pendamping_id', $request->pendamping_id);
+        }
+
         // Search functionality
         if ($request->has('search') && ! empty($request->search)) {
             $searchTerm = $request->search;
