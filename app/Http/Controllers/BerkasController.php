@@ -169,8 +169,8 @@ class BerkasController extends Controller
 
             return response()->json([
                 'message' => match ($extension) {
-                    'doc', 'docx', 'ppt', 'pptx', 'odt', 'odp' => 'Gagal mengonversi dokumen ke PDF. Untuk format office ini, pasang LibreOffice di server atau set LIBREOFFICE_PATH.',
-                    default => 'Gagal mengonversi berkas ke PDF. Format file tidak didukung atau file rusak.',
+                    'pdf' => 'Berkas sudah berformat PDF.',
+                    default => 'Gagal mengonversi berkas ke PDF melalui ONLYOFFICE. Pastikan Document Server aktif dan format file didukung.',
                 },
             ], 500);
         }

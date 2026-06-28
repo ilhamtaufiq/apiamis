@@ -24,14 +24,12 @@ class OnlyOfficeController extends Controller
         if (! $this->onlyOffice->isEnabled()) {
             return response()->json([
                 'message' => 'ONLYOFFICE Document Server belum dikonfigurasi.',
-                'fallback' => true,
             ], 503);
         }
 
         if (! $this->onlyOffice->supportsMedia($media)) {
             return response()->json([
                 'message' => 'Format file tidak didukung ONLYOFFICE.',
-                'fallback' => true,
             ], 422);
         }
 
