@@ -143,6 +143,11 @@ class Pekerjaan extends Model
             ->withTimestamps();
     }
 
+    public function beritaAcara(): \Illuminate\Database\Eloquent\Relations\HasOne
+    {
+        return $this->hasOne(BeritaAcara::class, 'pekerjaan_id');
+    }
+
     /**
      * Alias backward-compatible untuk pemanggilan lama.
      */

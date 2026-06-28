@@ -32,6 +32,7 @@ class UserResource extends JsonResource
             'jabatan' => $this->jabatan,
             'roles' => RoleResource::collection($this->whenLoaded('roles')),
             'permissions' => PermissionResource::collection($this->whenLoaded('permissions')),
+            'is_protected_from_deletion' => $this->isProtectedFromDeletion(),
             'created_at' => $this->created_at,
             'updated_at' => $this->updated_at,
         ];

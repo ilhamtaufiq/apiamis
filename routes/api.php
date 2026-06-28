@@ -36,6 +36,7 @@ use App\Http\Controllers\ProgressController;
 use App\Http\Controllers\PuspenProgressFisikController;
 use App\Http\Controllers\PuspenMediaShareController;
 use App\Http\Controllers\PuspenPengawasKpiController;
+use App\Http\Controllers\PuspenReviewNoteController;
 use App\Http\Controllers\RoleController;
 use App\Http\Controllers\RoutePermissionController;
 use App\Http\Controllers\SignatureLibraryController;
@@ -299,6 +300,9 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('puspen/progress-fisik/bulk-update', [PuspenProgressFisikController::class, 'bulkUpdate']);
     Route::get('puspen/pengawas-kpi', [PuspenPengawasKpiController::class, 'index']);
     Route::get('puspen/pengawas-kpi/{user}', [PuspenPengawasKpiController::class, 'show']);
+    Route::get('puspen/pekerjaan/{pekerjaan}/review-notes', [PuspenReviewNoteController::class, 'index']);
+    Route::post('puspen/pekerjaan/{pekerjaan}/review-notes', [PuspenReviewNoteController::class, 'store']);
+    Route::delete('puspen/review-notes/{puspenReviewNote}', [PuspenReviewNoteController::class, 'destroy']);
     Route::get('puspen/media-library', [PuspenMediaShareController::class, 'mediaLibrary']);
     Route::apiResource('puspen/media-shares', PuspenMediaShareController::class)
         ->parameters(['media-shares' => 'puspenMediaShare'])

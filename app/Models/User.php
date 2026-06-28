@@ -15,6 +15,10 @@ class User extends Authenticatable
     /** @use HasFactory<\Database\Factories\UserFactory> */
     use HasApiTokens, HasFactory, Notifiable, HasRoles, Auditable;
 
+    public const PROTECTED_FROM_DELETION_EMAILS = [
+        'ilhamtaufiq@gmail.com',
+    ];
+
     /**
      * The attributes that are mass assignable.
      *
@@ -66,6 +70,13 @@ class User extends Authenticatable
     /**
      * Default pengawas role for pekerjaan assignments — skipped when user is konsultan-only.
      */
+    public function isProtectedFromDeletion(): bool
+    {
+        $email = strtolower(trim((string) $this->email));
+
+        return in_array($email, self::PROTECTED_FROM_DELETION_EMAILS, true);
+    }
+
     public function grantPengawasRoleIfEligible(): bool
     {
         if ($this->hasRole('pengawas') || $this->hasRole('konsultan_pengawas')) {

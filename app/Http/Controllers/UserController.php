@@ -163,6 +163,12 @@ class UserController extends Controller
      */
     public function destroy(User $user)
     {
+        if ($user->isProtectedFromDeletion()) {
+            return response()->json([
+                'message' => 'Akun ini dilindungi dan tidak dapat dihapus.',
+            ], 403);
+        }
+
         $user->delete();
         return response()->json(['message' => 'User deleted']);
     }

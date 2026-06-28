@@ -188,18 +188,14 @@ class AppSettingController extends Controller
             return response()->json(['ok' => false, 'error' => 'URL tidak valid.'], 400);
         }
 
-        if (!filled($apiKey)) {
-            return response()->json([
-                'ok' => false,
-                'error' => 'API key belum tersimpan. Isi field API Key lalu klik Simpan.',
-            ], 400);
-        }
-
         $headers = [
             'Accept' => 'application/json',
             'Content-Type' => 'application/json',
-            'Authorization' => 'Bearer ' . $apiKey,
         ];
+
+        if (filled($apiKey)) {
+            $headers['Authorization'] = 'Bearer ' . $apiKey;
+        }
 
         try {
             $modelsResponse = Http::withHeaders($headers)

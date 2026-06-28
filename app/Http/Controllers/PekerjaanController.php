@@ -210,6 +210,8 @@ class PekerjaanController extends Controller
             'pagu' => 'required|numeric|min:0',
             'pengawas_id' => 'nullable|integer|exists:pengawas,id',
             'pendamping_id' => 'nullable|integer|exists:pengawas,id',
+            'tag_ids' => 'nullable|array',
+            'tag_ids.*' => 'integer|exists:tbl_tags,id',
         ]);
 
         $pekerjaan = Pekerjaan::create($validated);
@@ -324,6 +326,8 @@ class PekerjaanController extends Controller
             'pagu' => 'nullable|numeric|min:0',
             'pengawas_id' => 'nullable|integer|exists:pengawas,id',
             'pendamping_id' => 'nullable|integer|exists:pengawas,id',
+            'tag_ids' => 'nullable|array',
+            'tag_ids.*' => 'integer|exists:tbl_tags,id',
         ]);
 
         $pekerjaan->update($validated);
@@ -727,29 +731,13 @@ class PekerjaanController extends Controller
     {
         try {
             $query = Pekerjaan::has('kontrak')
-                ->with([
-                    'kontrak.penyedia',
-                    'kontrak.registers.type',
-                    'kegiatan',
-                    'output:id,pekerjaan_id,komponen,volume,satuan,penerima_is_optional',
-                    'berkas:id,pekerjaan_id,jenis_dokumen',
-                ])
+                ->with($this->documentRegisterEagerLoads())
                 ->withCount(['foto', 'penerima'])
                 ->byUserRole();
 
-            if ($request->has('tahun') && $request->tahun) {
-                $query->whereHas('kegiatan', function ($q) use ($request) {
-                    $q->where('tahun_anggaran', $request->tahun);
-                });
-            }
+            $this->applyDocumentRegisterFilters($query, $request);
 
-            if ($request->has('search') && ! empty($request->search)) {
-                $searchTerm = $request->search;
-                $query->where(function ($q) use ($searchTerm) {
-                    $q->where('nama_paket', 'LIKE', '%'.$searchTerm.'%');
-                });
-            }
-
+            $summary = $this->computeDocumentRegisterSummary($query);
             $perPage = (int) $request->get('per_page', 20);
 
             if ($perPage === -1) {
@@ -759,6 +747,7 @@ class PekerjaanController extends Controller
                     'data' => $data,
                     'meta' => [
                         'total' => $data->count(),
+                        'summary' => $summary,
                     ],
                 ]);
             }
@@ -775,6 +764,7 @@ class PekerjaanController extends Controller
                     'total' => $data->total(),
                     'from' => $data->firstItem(),
                     'to' => $data->lastItem(),
+                    'summary' => $summary,
                 ],
             ]);
 
@@ -786,6 +776,92 @@ class PekerjaanController extends Controller
                 'line' => $e->getLine(),
             ], 500);
         }
+    }
+
+    private function documentRegisterEagerLoads(): array
+    {
+        return [
+            'kontrak' => function ($query) {
+                $query->orderBy('tbl_kontrak.id')
+                    ->with(['penyedia', 'registers.type']);
+            },
+            'kegiatan',
+            'beritaAcara',
+            'output:id,pekerjaan_id,komponen,volume,satuan,penerima_is_optional',
+            'berkas:id,pekerjaan_id,jenis_dokumen',
+        ];
+    }
+
+    private function applyDocumentRegisterFilters($query, Request $request): void
+    {
+        if ($request->filled('tahun')) {
+            $query->whereHas('kegiatan', function ($q) use ($request) {
+                $q->where('tahun_anggaran', $request->tahun);
+            });
+        }
+
+        if ($request->filled('search')) {
+            $searchTerm = $request->search;
+            $query->where(function ($q) use ($searchTerm) {
+                $q->where('nama_paket', 'LIKE', '%'.$searchTerm.'%')
+                    ->orWhere('kode_rekening', 'LIKE', '%'.$searchTerm.'%')
+                    ->orWhereHas('kontrak', function ($kontrakQuery) use ($searchTerm) {
+                        $kontrakQuery
+                            ->where('sppbj', 'LIKE', '%'.$searchTerm.'%')
+                            ->orWhere('spk', 'LIKE', '%'.$searchTerm.'%')
+                            ->orWhere('spmk', 'LIKE', '%'.$searchTerm.'%')
+                            ->orWhereHas('penyedia', function ($penyediaQuery) use ($searchTerm) {
+                                $penyediaQuery->where('nama', 'LIKE', '%'.$searchTerm.'%');
+                            })
+                            ->orWhereHas('registers', function ($registerQuery) use ($searchTerm) {
+                                $registerQuery
+                                    ->where('nomor', 'LIKE', '%'.$searchTerm.'%')
+                                    ->orWhere('description', 'LIKE', '%'.$searchTerm.'%');
+                            });
+                    });
+            });
+        }
+    }
+
+    private function computeDocumentRegisterSummary($query): array
+    {
+        $items = (clone $query)
+            ->with([
+                'kontrak:id,sppbj,spk,spmk',
+                'beritaAcara:id,pekerjaan_id,data',
+            ])
+            ->get(['id']);
+
+        $spkMissing = 0;
+        $spmkMissing = 0;
+        $phoCompleted = 0;
+
+        foreach ($items as $pekerjaan) {
+            $kontraks = $pekerjaan->kontrak;
+            $hasSpk = $kontraks->contains(fn ($kontrak) => filled($kontrak->spk));
+            $hasSpmk = $kontraks->contains(fn ($kontrak) => filled($kontrak->spmk));
+
+            if (! $hasSpk) {
+                $spkMissing++;
+            }
+
+            if (! $hasSpmk) {
+                $spmkMissing++;
+            }
+
+            $beritaAcara = $pekerjaan->beritaAcara;
+            $data = $beritaAcara?->data;
+
+            if (is_array($data) && ! empty($data['serah_terima_pertama'])) {
+                $phoCompleted++;
+            }
+        }
+
+        return [
+            'spk_missing' => $spkMissing,
+            'spmk_missing' => $spmkMissing,
+            'pho_completed' => $phoCompleted,
+        ];
     }
 
     public function downloadAllBerkas(Pekerjaan $pekerjaan, Request $request)

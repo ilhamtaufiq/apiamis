@@ -119,6 +119,8 @@ class AuditLogResource extends JsonResource
                 'id' => $this->user->id,
                 'name' => $this->user->name,
                 'email' => $this->user->email,
+                'avatar' => $this->user->avatar,
+                'gender' => $this->user->gender,
             ]),
             'pekerjaan' => $this->resolvePekerjaanContext(),
         ];

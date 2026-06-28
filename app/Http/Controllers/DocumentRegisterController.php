@@ -85,50 +85,62 @@ class DocumentRegisterController extends Controller
             'type_id' => 'required|exists:tbl_document_types,id',
             'tanggal' => 'required|date',
             'description' => 'nullable|string',
-            'sequence_number' => 'nullable|integer',
+            'sequence_number' => 'nullable|integer|min:1',
         ]);
+
+        if (DocumentRegister::where('kontrak_id', $validated['kontrak_id'])
+            ->where('type_id', $validated['type_id'])
+            ->exists()) {
+            return response()->json([
+                'message' => 'Kontrak ini sudah memiliki registrasi untuk tipe dokumen tersebut.',
+            ], 422);
+        }
 
         $type = DocumentType::findOrFail($validated['type_id']);
         $date = new \DateTime($validated['tanggal']);
-        $year = $date->format('Y');
+        $year = (int) $date->format('Y');
 
-        // Sequence logic - Using global sequence (tbl_document_sequences)
-        if ($request->has('sequence_number') && !empty($request->sequence_number)) {
-            $sequence = (int) $request->sequence_number;
-        } else {
-            // Ambil nomor urut dari pool global per tahun
-            $seq = DB::table('tbl_document_sequences')
-                ->where('year', $year)
-                ->where('type', 'berita-acara')
-                ->first();
+        try {
+            $register = DB::transaction(function () use ($validated, $type, $date, $year, $request) {
+            if ($request->filled('sequence_number')) {
+                $sequence = (int) $request->sequence_number;
+            } else {
+                $seq = DB::table('tbl_document_sequences')
+                    ->where('year', $year)
+                    ->where('type', 'berita-acara')
+                    ->lockForUpdate()
+                    ->first();
 
-            $sequence = $seq ? $seq->last_number + 1 : 1;
+                $sequence = $seq ? ((int) $seq->last_number + 1) : 1;
+            }
+
+            DB::table('tbl_document_sequences')
+                ->updateOrInsert(
+                    ['year' => $year, 'type' => 'berita-acara'],
+                    ['last_number' => $sequence]
+                );
+
+            $nomor = $this->generateNumber($type, $sequence, $date, $validated['kontrak_id']);
+
+            if (DocumentRegister::where('nomor', $nomor)->exists()) {
+                throw new \RuntimeException("Nomor dokumen $nomor sudah terdaftar. Gunakan urutan manual jika ingin menggunakan nomor lain.");
+            }
+
+            return DocumentRegister::create([
+                'kontrak_id' => $validated['kontrak_id'],
+                'type_id' => $validated['type_id'],
+                'nomor' => $nomor,
+                'tanggal' => $validated['tanggal'],
+                'sequence_number' => $sequence,
+                'year' => $year,
+                'description' => $validated['description'] ?? null,
+            ]);
+            });
+        } catch (\RuntimeException $exception) {
+            return response()->json(['message' => $exception->getMessage()], 422);
         }
 
-        // Update pool global dengan nomor urut terbaru
-        DB::table('tbl_document_sequences')
-            ->updateOrInsert(
-                ['year' => $year, 'type' => 'berita-acara'],
-                ['last_number' => $sequence]
-            );
-
-        $nomor = $this->generateNumber($type, $sequence, $date, $validated['kontrak_id']);
-
-        if (DocumentRegister::where('nomor', $nomor)->exists()) {
-            return response()->json(['message' => "Nomor dokumen $nomor sudah terdaftar. Gunakan urutan manual jika ingin menggunakan nomor lain."], 422);
-        }
-
-        $register = DocumentRegister::create([
-            'kontrak_id' => $validated['kontrak_id'],
-            'type_id' => $validated['type_id'],
-            'nomor' => $nomor,
-            'tanggal' => $validated['tanggal'],
-            'sequence_number' => $sequence,
-            'year' => $year,
-            'description' => $validated['description'],
-        ]);
-
-        return response()->json($register, 201);
+        return response()->json($register->load('type'), 201);
     }
 
     public function update(Request $request, $id)
@@ -136,12 +148,21 @@ class DocumentRegisterController extends Controller
         $register = DocumentRegister::findOrFail($id);
         $validated = $request->validate([
             'tanggal' => 'required|date',
-            'nomor' => 'required|string',
+            'nomor' => 'required|string|max:255',
             'description' => 'nullable|string',
         ]);
 
+        if (DocumentRegister::where('nomor', $validated['nomor'])
+            ->where('id', '!=', $register->id)
+            ->exists()) {
+            return response()->json([
+                'message' => 'Nomor dokumen sudah digunakan oleh registrasi lain.',
+            ], 422);
+        }
+
         $register->update($validated);
-        return response()->json($register);
+
+        return response()->json($register->load('type'));
     }
 
     public function destroy($id)
