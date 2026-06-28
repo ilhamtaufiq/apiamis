@@ -126,6 +126,7 @@ class UserController extends Controller
             'nip' => 'nullable|string|max:50',
             'jabatan' => 'nullable|string|max:255',
             'gender' => 'nullable|string|in:male,female,other',
+            'avatar' => 'nullable|string|max:2048',
             'roles' => 'sometimes|array',
             'permissions' => 'sometimes|array',
         ]);
@@ -136,6 +137,7 @@ class UserController extends Controller
         if (array_key_exists('nip', $validated)) $user->nip = $validated['nip'];
         if (array_key_exists('jabatan', $validated)) $user->jabatan = $validated['jabatan'];
         if (array_key_exists('gender', $validated)) $user->gender = $validated['gender'];
+        if (array_key_exists('avatar', $validated)) $user->avatar = $validated['avatar'];
         $user->save();
 
         if (isset($validated['roles'])) {
