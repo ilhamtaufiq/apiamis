@@ -132,6 +132,8 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('user-pekerjaan/user/{userId}', [UserPekerjaanController::class, 'byUser']);
         Route::get('user-pekerjaan/pekerjaan/{pekerjaanId}', [UserPekerjaanController::class, 'byPekerjaan']);
         Route::get('user-pekerjaan/available-users', [UserPekerjaanController::class, 'availableUsers']);
+        Route::get('user-pekerjaan/completeness-gaps', [UserPekerjaanController::class, 'completenessGaps']);
+        Route::post('user-pekerjaan/broadcast-reminders', [UserPekerjaanController::class, 'broadcastReminders']);
 
         // Data Quality Diagnostic
         Route::get('data-quality/stats', [DataQualityController::class, 'getStats']);

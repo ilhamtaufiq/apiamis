@@ -2,9 +2,11 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\BroadcastHistory;
 use App\Models\Pekerjaan;
 use App\Models\User;
 use App\Notifications\AppNotification;
+use App\Services\UserPekerjaanCompletenessService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -200,6 +202,103 @@ class UserPekerjaanController extends Controller
         return response()->json([
             'status' => 'success',
             'data' => $users
+        ]);
+    }
+
+    public function completenessGaps(Request $request, UserPekerjaanCompletenessService $service)
+    {
+        $request->validate([
+            'gaps' => 'nullable|array',
+            'gaps.*' => 'in:foto,penerima,progress',
+            'tahun' => 'nullable|integer|min:2000|max:2100',
+        ]);
+
+        $result = $service->analyze(
+            $request->query('gaps'),
+            $request->query('tahun') ? (int) $request->query('tahun') : null,
+        );
+
+        return response()->json([
+            'status' => 'success',
+            'data' => $result,
+        ]);
+    }
+
+    public function broadcastReminders(Request $request, UserPekerjaanCompletenessService $service)
+    {
+        $request->validate([
+            'gaps' => 'nullable|array',
+            'gaps.*' => 'in:foto,penerima,progress',
+            'tahun' => 'nullable|integer|min:2000|max:2100',
+            'user_ids' => 'nullable|array',
+            'user_ids.*' => 'exists:users,id',
+            'title' => 'nullable|string|max:255',
+            'message_prefix' => 'nullable|string|max:1000',
+            'notification_type' => 'nullable|in:info,success,warning,error',
+        ]);
+
+        $analysis = $service->analyze(
+            $request->input('gaps'),
+            $request->input('tahun') ? (int) $request->input('tahun') : null,
+        );
+
+        $users = $analysis['users'];
+        if ($request->filled('user_ids')) {
+            $allowedIds = collect($request->input('user_ids'))->map(fn ($id) => (int) $id)->all();
+            $users = array_values(array_filter(
+                $users,
+                fn (array $row) => in_array($row['user_id'], $allowedIds, true),
+            ));
+        }
+
+        if ($users === []) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Tidak ada pengawas dengan data belum lengkap untuk dikirimi pengingat',
+            ], 404);
+        }
+
+        $title = $request->input('title') ?? 'Pengingat Kelengkapan Data Pekerjaan';
+        $notificationType = $request->input('notification_type') ?? 'warning';
+        $messagePrefix = $request->input('message_prefix');
+        $sentCount = 0;
+
+        foreach ($users as $userRow) {
+            $recipient = User::find($userRow['user_id']);
+            if (! $recipient) {
+                continue;
+            }
+
+            $message = $service->buildReminderMessage($userRow, $messagePrefix);
+            $firstPekerjaanId = $userRow['pekerjaan'][0]['pekerjaan_id'] ?? null;
+            $url = $firstPekerjaanId ? "/pekerjaan/{$firstPekerjaanId}" : '/pekerjaan';
+
+            $history = BroadcastHistory::create([
+                'title' => $title,
+                'message' => $message,
+                'type' => 'single',
+                'notification_type' => $notificationType,
+                'url' => $url,
+                'is_banner' => false,
+                'recipient_count' => 1,
+            ]);
+
+            $recipient->notify(new AppNotification(
+                $title,
+                $message,
+                $url,
+                $notificationType,
+                false,
+                $history->id,
+            ));
+
+            $sentCount++;
+        }
+
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Pengingat kelengkapan berhasil dikirim',
+            'recipient_count' => $sentCount,
         ]);
     }
 }
