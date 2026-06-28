@@ -1,0 +1,37 @@
+# ONLYOFFICE Document Server — deploy via Coolify (tanpa bind port host)
+#
+# Coolify:
+# 1. Resource "Docker Compose" → path: docker/onlyoffice/docker-compose.coolify.yml
+# 2. Assign domain ke service ini, mis. https://office.domain.com
+# 3. Env Coolify:
+#      OO_JWT_SECRET=<random-panjang>
+# 4. apiamis/.env (backend terpisah atau sama server):
+#      ONLYOFFICE_DOCUMENT_SERVER_URL=https://office.domain.com
+#      ONLYOFFICE_JWT_SECRET=<sama persis dengan OO_JWT_SECRET>
+#      APP_URL=https://api.domain.com   # HARUS publik & reachable dari container ONLYOFFICE
+
+services:
+  onlyoffice-documentserver:
+    image: onlyoffice/documentserver:9.4
+    restart: unless-stopped
+    expose:
+      - '80'
+    environment:
+      JWT_ENABLED: 'true'
+      JWT_SECRET: ${OO_JWT_SECRET:?set OO_JWT_SECRET}
+      JWT_HEADER: Authorization
+    volumes:
+      - oo_ds_data:/var/www/onlyoffice/Data
+      - oo_ds_logs:/var/log/onlyoffice
+      - oo_ds_lib:/var/lib/onlyoffice
+    healthcheck:
+      test: ['CMD', 'curl', '-f', 'http://localhost:8000/info/info.json']
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 90s
+
+volumes:
+  oo_ds_data:
+  oo_ds_logs:
+  oo_ds_lib:

@@ -1,0 +1,51 @@
+<?php
+
+namespace App\Services\OnlyOffice;
+
+use App\Models\Berkas;
+use App\Models\KontrakAddendum;
+use App\Models\Pekerjaan;
+use App\Models\PuspenMediaShare;
+use App\Models\User;
+use Spatie\MediaLibrary\MediaCollections\Models\Media;
+
+class OnlyOfficeMediaAuthorizer
+{
+    public function canAccess(?User $user, Media $media): bool
+    {
+        if (! $user) {
+            return false;
+        }
+
+        if ($user->hasRole('admin')) {
+            return true;
+        }
+
+        $owner = $media->model;
+        if (! $owner) {
+            return false;
+        }
+
+        if ($owner instanceof Berkas) {
+            return Pekerjaan::query()
+                ->byUserRole()
+                ->whereKey($owner->pekerjaan_id)
+                ->exists();
+        }
+
+        if ($owner instanceof KontrakAddendum) {
+            $owner->loadMissing('kontrak.pekerjaan');
+
+            return Pekerjaan::query()
+                ->byUserRole()
+                ->whereKey($owner->kontrak?->pekerjaan_id)
+                ->exists();
+        }
+
+        if ($owner instanceof PuspenMediaShare) {
+            return $owner->user_id === $user->id;
+        }
+
+        return false;
+    }
+}

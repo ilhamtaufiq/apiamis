@@ -1,0 +1,39 @@
+# ONLYOFFICE Document Server — Community Edition (minimal, 1 container)
+# Docs: https://github.com/ONLYOFFICE/Docker-DocumentServer
+#
+# Jalankan dari folder ini:
+#   docker compose up -d
+#
+# Wiring ke Laravel (apiamis/.env):
+#   ONLYOFFICE_DOCUMENT_SERVER_URL=http://localhost:8088
+#   ONLYOFFICE_JWT_SECRET=<sama dengan OO_JWT_SECRET di bawah>
+#   APP_URL=http://host.docker.internal:8000   # Windows/Mac: agar ONLYOFFICE bisa unduh file dari Laragon
+
+services:
+  onlyoffice-documentserver:
+    image: onlyoffice/documentserver:9.4
+    restart: unless-stopped
+    ports:
+      - '${OO_DS_PORT:-8088}:80'
+    environment:
+      JWT_ENABLED: 'true'
+      JWT_SECRET: ${OO_JWT_SECRET:-change_me_onlyoffice_jwt_secret}
+      JWT_HEADER: Authorization
+      # Izinkan fetch file dari IP privat (dev: Laragon, jaringan Docker internal)
+      ALLOW_PRIVATE_IP_ADDRESS: 'true'
+      ALLOW_META_IP_ADDRESS: 'true'
+    volumes:
+      - oo_ds_data:/var/www/onlyoffice/Data
+      - oo_ds_logs:/var/log/onlyoffice
+      - oo_ds_lib:/var/lib/onlyoffice
+    healthcheck:
+      test: ['CMD', 'curl', '-f', 'http://localhost:8000/info/info.json']
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 90s
+
+volumes:
+  oo_ds_data:
+  oo_ds_logs:
+  oo_ds_lib:

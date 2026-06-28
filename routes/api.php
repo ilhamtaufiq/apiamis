@@ -24,6 +24,7 @@ use App\Http\Controllers\KegiatanRoleController;
 use App\Http\Controllers\KontrakAddendumController;
 use App\Http\Controllers\KontrakController;
 use App\Http\Controllers\MenuPermissionController;
+use App\Http\Controllers\OnlyOfficeController;
 use App\Http\Controllers\OutputController;
 use App\Http\Controllers\PekerjaanChecklistController;
 use App\Http\Controllers\PekerjaanController;
@@ -84,6 +85,10 @@ Route::get('public/spm-sanitasi/map-stats', [SpmSanitasiController::class, 'publ
 Route::get('public/puspen/media-shares/{shareToken}', [PuspenMediaShareController::class, 'publicShow']);
 Route::get('public/puspen/media-shares/{shareToken}/preview/{media}', [PuspenMediaShareController::class, 'publicPreview']);
 Route::get('public/puspen/media-shares/{shareToken}/download', [PuspenMediaShareController::class, 'publicDownload']);
+
+// ONLYOFFICE Document Server (public — signed download & save callback)
+Route::post('onlyoffice/callback', [OnlyOfficeController::class, 'callback'])->name('onlyoffice.callback');
+Route::get('onlyoffice/media/{media}/download', [OnlyOfficeController::class, 'download'])->name('onlyoffice.media.download');
 
 Route::middleware('auth:sanctum')->group(function () {
     Route::get('/', function () {
@@ -378,6 +383,9 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('signature-libraries', [SignatureLibraryController::class, 'index']);
     Route::post('signature-libraries', [SignatureLibraryController::class, 'store']);
     Route::delete('signature-libraries/{id}', [SignatureLibraryController::class, 'destroy']);
+
+    // ONLYOFFICE editor config (authenticated)
+    Route::get('onlyoffice/media/{media}/config', [OnlyOfficeController::class, 'config']);
 
     // Chat AI (with sessions, cache, and learning)
     Route::post('chat', [\App\Http\Controllers\ChatController::class, 'chat']);
