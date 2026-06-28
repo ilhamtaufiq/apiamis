@@ -107,4 +107,67 @@ class ClientErrorReportController extends Controller
             'data' => $errorLog->fresh('user'),
         ]);
     }
+
+    public function bulkResolve(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'ids' => ['required', 'array', 'min:1'],
+            'ids.*' => ['integer', 'exists:error_logs,id'],
+        ]);
+
+        $affected = ErrorLog::query()
+            ->whereIn('id', $validated['ids'])
+            ->whereNull('resolved_at')
+            ->update(['resolved_at' => now()]);
+
+        return response()->json([
+            'success' => true,
+            'affected' => $affected,
+        ]);
+    }
+
+    public function bulkReopen(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'ids' => ['required', 'array', 'min:1'],
+            'ids.*' => ['integer', 'exists:error_logs,id'],
+        ]);
+
+        $affected = ErrorLog::query()
+            ->whereIn('id', $validated['ids'])
+            ->whereNotNull('resolved_at')
+            ->update(['resolved_at' => null]);
+
+        return response()->json([
+            'success' => true,
+            'affected' => $affected,
+        ]);
+    }
+
+    public function bulkDestroy(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'ids' => ['required', 'array', 'min:1'],
+            'ids.*' => ['integer', 'exists:error_logs,id'],
+        ]);
+
+        $affected = ErrorLog::query()
+            ->whereIn('id', $validated['ids'])
+            ->delete();
+
+        return response()->json([
+            'success' => true,
+            'affected' => $affected,
+        ]);
+    }
+
+    public function destroyAll(): JsonResponse
+    {
+        $affected = ErrorLog::query()->delete();
+
+        return response()->json([
+            'success' => true,
+            'affected' => $affected,
+        ]);
+    }
 }
