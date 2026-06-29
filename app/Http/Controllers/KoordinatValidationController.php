@@ -12,7 +12,7 @@ class KoordinatValidationController extends Controller
         private readonly KoordinatValidationService $koordinatValidationService,
     ) {}
 
-    public function validate(Request $request)
+    public function validateKoordinat(Request $request)
     {
         $validated = $request->validate([
             'pekerjaan_id' => 'required|exists:tbl_pekerjaan,id',

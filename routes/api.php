@@ -234,7 +234,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::apiResource('berkas', BerkasController::class)->parameters(['berkas' => 'berkas']);
     Route::post('berkas/upload-from-url', [BerkasController::class, 'uploadFromUrl']);
     Route::get('berkas/{berkas}/export-pdf', [BerkasController::class, 'convertToPdf']);
-    Route::post('koordinat/validate', [KoordinatValidationController::class, 'validate']);
+    Route::post('koordinat/validate', [KoordinatValidationController::class, 'validateKoordinat']);
     Route::apiResource('foto', FotoController::class);
     Route::apiResource('users', UserController::class);
     Route::apiResource('roles', RoleController::class);
