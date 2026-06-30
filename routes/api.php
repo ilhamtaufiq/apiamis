@@ -52,6 +52,7 @@ use App\Http\Controllers\TiketCommentController;
 use App\Http\Controllers\TiketController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\UserPekerjaanController;
+use App\Http\Controllers\UserPresenceController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
@@ -175,6 +176,8 @@ Route::middleware('auth:sanctum')->group(function () {
     // Dashboard
     Route::get('dashboard/stats', [DashboardController::class, 'stats']);
     Route::get('dashboard/analytics', [AnalyticsController::class, 'stats']);
+    Route::post('presence/heartbeat', [UserPresenceController::class, 'heartbeat']);
+    Route::get('presence/online', [UserPresenceController::class, 'index']);
 
     // Global Search
     Route::get('search', [\App\Http\Controllers\SearchController::class, 'index']);
@@ -251,6 +254,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('route-permissions/check-access', [RoutePermissionController::class, 'check']);
     Route::get('route-permissions/rules', [RoutePermissionController::class, 'rules']);
     Route::get('route-permissions/user/accessible', [RoutePermissionController::class, 'accessible']);
+    Route::post('route-permissions/sync', [RoutePermissionController::class, 'sync'])->middleware('role:admin');
     Route::apiResource('route-permissions', RoutePermissionController::class);
     Route::apiResource('menu-permissions', MenuPermissionController::class);
     Route::post('blog/{blog}/comments', [BlogCommentController::class, 'store'])

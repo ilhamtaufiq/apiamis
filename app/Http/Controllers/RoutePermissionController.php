@@ -3,6 +3,8 @@
 namespace App\Http\Controllers;
 
 use App\Models\RoutePermission;
+use App\Services\RoutePermissionSyncService;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 class RoutePermissionController extends Controller
@@ -230,6 +232,26 @@ class RoutePermissionController extends Controller
      *     @OA\Response(response=200, description="Successful operation")
      * )
      */
+    public function sync(Request $request, RoutePermissionSyncService $syncService): JsonResponse
+    {
+        $validated = $request->validate([
+            'prefix' => 'sometimes|string|max:50',
+            'default_role' => 'sometimes|string|exists:roles,name',
+            'clean' => 'sometimes|boolean',
+        ]);
+
+        $result = $syncService->sync(
+            $validated['prefix'] ?? 'api',
+            $validated['default_role'] ?? 'admin',
+            $validated['clean'] ?? false,
+        );
+
+        return response()->json([
+            'message' => 'Route permission berhasil disinkronkan.',
+            'data' => $result,
+        ]);
+    }
+
     public function rules()
     {
         $rules = RoutePermission::where('is_active', true)
