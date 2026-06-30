@@ -1320,6 +1320,7 @@ class SpamPekerjaanIntegrationService
         }
 
         return Desa::query()
+            ->realWilayah()
             ->with('kecamatan:id,n_kec')
             ->orderBy('n_desa')
             ->get(['id', 'n_desa', 'kecamatan_id', 'target'])

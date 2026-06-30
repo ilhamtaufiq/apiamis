@@ -265,7 +265,7 @@ class SpamUnitController extends Controller
 
         $manualGlobal = $this->integrationService->aggregateManualGlobal($tahunScope, $kecamatanId);
 
-        $targetQuery = Desa::query();
+        $targetQuery = Desa::query()->realWilayah();
         $achievementQuery = SpamAchievement::query();
 
         if ($tahunScope) {
@@ -342,8 +342,8 @@ class SpamUnitController extends Controller
                 'total_bjp_jiwa' => $totalBjpJiwa,
                 'funding_distribution' => $fundingDist,
                 'coverage_percentage' => $coveragePercentage,
-                'wilayah_total_desa' => Desa::count(),
-                'wilayah_total_kecamatan' => Kecamatan::count(),
+                'wilayah_total_desa' => Desa::query()->realWilayah()->count(),
+                'wilayah_total_kecamatan' => Kecamatan::query()->realWilayah()->count(),
                 'achievement_records' => SpamAchievement::count(),
                 'total_pekerjaan_all' => Pekerjaan::count(),
                 'total_foto_dokumentasi' => Foto::count(),

@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -41,5 +42,15 @@ class Desa extends Model
     public function spmSanitasi(): HasMany
     {
         return $this->hasMany(SpmSanitasi::class, 'desa_id');
+    }
+
+    /** Desa/kecamatan placeholder konsultan (NULL / NULLs) — bukan wilayah resmi. */
+    public function scopeRealWilayah(Builder $query): Builder
+    {
+        return $query
+            ->whereNotNull('n_desa')
+            ->where('n_desa', '!=', '')
+            ->whereRaw('LOWER(TRIM(n_desa)) NOT IN (?, ?)', ['null', 'nulls'])
+            ->whereHas('kecamatan', fn (Builder $kecQuery) => $kecQuery->realWilayah());
     }
 }

@@ -74,6 +74,7 @@ class SpmSanitasiCapaianService
         string $direction = 'asc',
     ): LengthAwarePaginator {
         $query = Desa::query()
+            ->realWilayah()
             ->with('kecamatan')
             ->when($kecamatanId, fn (Builder $q) => $q->where('kecamatan_id', $kecamatanId))
             ->when($search, function (Builder $q) use ($search) {
@@ -197,13 +198,16 @@ class SpmSanitasiCapaianService
 
     private function desaBaseQuery(?int $kecamatanId): Builder
     {
-        return Desa::query()->when($kecamatanId, fn (Builder $q) => $q->where('kecamatan_id', $kecamatanId));
+        return Desa::query()
+            ->realWilayah()
+            ->when($kecamatanId, fn (Builder $q) => $q->where('kecamatan_id', $kecamatanId));
     }
 
     private function infrastrukturBaseQuery(?int $kecamatanId, ?string $jenis, ?string $tahun = null): Builder
     {
         return SpmSanitasi::query()
-            ->when($kecamatanId, fn (Builder $q) => $q->whereHas('desa', fn (Builder $dq) => $dq->where('kecamatan_id', $kecamatanId)))
+            ->whereHas('desa', fn (Builder $dq) => $dq->realWilayah()
+                ->when($kecamatanId, fn (Builder $inner) => $inner->where('kecamatan_id', $kecamatanId)))
             ->when($jenis, fn (Builder $q) => $q->where('jenis', $jenis))
             ->when($tahun, fn (Builder $q) => $q->where('tahun_konstruksi', (int) $tahun))
             ->whereNotNull('desa_id');
@@ -239,6 +243,7 @@ class SpmSanitasiCapaianService
     public function mapStats(?string $jenis = null, ?string $tahun = null): array
     {
         return Desa::query()
+            ->realWilayah()
             ->with('kecamatan:id,n_kec')
             ->withSum(['spmSanitasi as pemanfaat_kk_total' => function (Builder $q) use ($jenis, $tahun) {
                 $this->applyRelationTahunScope($q, $jenis, $tahun);

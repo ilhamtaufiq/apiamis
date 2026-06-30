@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Exports\SpmSanitasiExport;
 use App\Models\Desa;
+use App\Models\Kecamatan;
 use App\Models\SpmSanitasi;
 use App\Services\SpmSanitasiCapaianService;
 use App\Services\SpmSanitasiImportService;
@@ -422,7 +423,7 @@ class SpmSanitasiController extends Controller
                 'total_count' => (clone $baseQuery)->count(),
                 'berfungsi_count' => (clone $baseQuery)->where('status_keberfungsian', 'Berfungsi')->count(),
                 'total_investasi' => (float) (clone $baseQuery)->sum('pembiayaan_total'),
-                'wilayah_total_kecamatan' => (int) Desa::query()->distinct('kecamatan_id')->count('kecamatan_id'),
+                'wilayah_total_kecamatan' => (int) Kecamatan::query()->realWilayah()->count(),
                 'spaldt_count' => (int) ($counts['spaldt'] ?? 0),
                 'spalds_count' => (int) ($counts['spalds'] ?? 0),
                 'iplt_count' => (int) ($counts['iplt'] ?? 0),
