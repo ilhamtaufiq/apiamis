@@ -17,7 +17,19 @@ class MailLayoutService
      *     year: string,
      *     primary: string,
      *     primary_dark: string,
-     *     primary_light: string
+     *     primary_light: string,
+     *     primary_fixed: string,
+     *     primary_container: string,
+     *     secondary: string,
+     *     secondary_fixed: string,
+     *     on_secondary: string,
+     *     on_secondary_fixed: string,
+     *     surface: string,
+     *     surface_container: string,
+     *     surface_container_low: string,
+     *     outline_variant: string,
+     *     on_surface: string,
+     *     on_surface_variant: string
      * }
      */
     public static function branding(): array
@@ -43,9 +55,7 @@ class MailLayoutService
             'logo_url' => $logoUrl,
             'frontend_url' => FrontendUrlService::base(),
             'year' => (string) now()->year,
-            'primary' => $palette['primary'],
-            'primary_dark' => $palette['primary_dark'],
-            'primary_light' => $palette['primary_light'],
+            ...$palette,
         ];
 
         return self::$brandingCache;
@@ -58,16 +68,24 @@ class MailLayoutService
         $frontendUrl = htmlspecialchars($brand['frontend_url'], ENT_QUOTES, 'UTF-8');
         $year = htmlspecialchars($brand['year'], ENT_QUOTES, 'UTF-8');
         $preheaderText = htmlspecialchars(trim(strip_tags($preheader ?? '')), ENT_QUOTES, 'UTF-8');
+
         $primary = htmlspecialchars($brand['primary'], ENT_QUOTES, 'UTF-8');
         $primaryDark = htmlspecialchars($brand['primary_dark'], ENT_QUOTES, 'UTF-8');
-        $primaryLight = htmlspecialchars($brand['primary_light'], ENT_QUOTES, 'UTF-8');
+        $primaryFixed = htmlspecialchars($brand['primary_fixed'], ENT_QUOTES, 'UTF-8');
+        $primaryContainer = htmlspecialchars($brand['primary_container'], ENT_QUOTES, 'UTF-8');
+        $secondary = htmlspecialchars($brand['secondary'], ENT_QUOTES, 'UTF-8');
+        $surface = htmlspecialchars($brand['surface'], ENT_QUOTES, 'UTF-8');
+        $surfaceContainerLow = htmlspecialchars($brand['surface_container_low'], ENT_QUOTES, 'UTF-8');
+        $outlineVariant = htmlspecialchars($brand['outline_variant'], ENT_QUOTES, 'UTF-8');
+        $onSurface = htmlspecialchars($brand['on_surface'], ENT_QUOTES, 'UTF-8');
+        $onSurfaceVariant = htmlspecialchars($brand['on_surface_variant'], ENT_QUOTES, 'UTF-8');
 
         $logoBlock = '';
         if ($brand['logo_url']) {
             $logoUrl = htmlspecialchars($brand['logo_url'], ENT_QUOTES, 'UTF-8');
-            $logoBlock = '<img src="'.$logoUrl.'" alt="'.$appName.'" width="140" style="display:block;max-width:140px;height:auto;border:0;" />';
+            $logoBlock = '<img src="'.$logoUrl.'" alt="'.$appName.'" width="160" style="display:block;margin:0 auto;max-width:160px;height:auto;border:0;" />';
         } else {
-            $logoBlock = '<div style="font-size:22px;font-weight:700;color:#ffffff;letter-spacing:0.3px;">'.$appName.'</div>';
+            $logoBlock = '<div style="font-size:28px;font-weight:800;color:'.$primary.';letter-spacing:-0.02em;text-align:center;">'.$appName.'</div>';
         }
 
         return <<<HTML
@@ -77,38 +95,59 @@ class MailLayoutService
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>{$appName}</title>
+<!--[if mso]>
+<style type="text/css">
+body, table, td {font-family: Arial, sans-serif !important;}
+</style>
+<![endif]-->
 </head>
-<body style="margin:0;padding:0;background-color:#f1f5f9;font-family:'Segoe UI',Arial,sans-serif;color:#0f172a;">
+<body style="margin:0;padding:0;background-color:{$surface};font-family:'Segoe UI',Arial,'Plus Jakarta Sans',sans-serif;color:#1f1926;-webkit-font-smoothing:antialiased;">
 <div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent;">{$preheaderText}</div>
-<table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background-color:#f1f5f9;padding:24px 12px;">
+<table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background-color:{$surface};padding:24px 12px;">
 <tr>
 <td align="center">
-<table role="presentation" width="600" cellspacing="0" cellpadding="0" border="0" style="max-width:600px;width:100%;">
+<table role="presentation" width="600" cellspacing="0" cellpadding="0" border="0" style="max-width:600px;width:100%;background-color:{$surface};border-radius:16px;overflow:hidden;box-shadow:0 4px 24px -8px {$primaryContainer};">
 <tr>
-<td style="background:linear-gradient(135deg, {$primary} 0%, {$primaryDark} 100%);border-radius:12px 12px 0 0;padding:24px 28px;">
+<td style="background-color:{$primaryFixed};padding:36px 28px;text-align:center;position:relative;">
 <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
 <tr>
-<td align="left" style="vertical-align:middle;">{$logoBlock}</td>
-<td align="right" style="vertical-align:middle;font-size:12px;color:{$primaryLight};opacity:0.95;">Notifikasi Resmi</td>
+<td align="center" style="padding:0 0 4px;">
+<span style="display:inline-block;font-size:20px;line-height:1;color:{$primary};opacity:0.35;">&#10022;</span>
+</td>
+</tr>
+<tr>
+<td align="center">{$logoBlock}</td>
+</tr>
+<tr>
+<td align="center" style="padding:8px 0 0;">
+<span style="display:inline-block;font-size:11px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:{$onSurfaceVariant};opacity:0.85;">Notifikasi Resmi</span>
+</td>
 </tr>
 </table>
 </td>
 </tr>
 <tr>
-<td style="background-color:#ffffff;border-left:1px solid #e2e8f0;border-right:1px solid #e2e8f0;padding:32px 28px;">
+<td style="background-color:{$surface};padding:28px 24px 24px;">
+<table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background-color:#ffffff;border:1px solid {$outlineVariant};border-radius:16px;">
+<tr>
+<td style="padding:32px 28px;">
 {$innerHtml}
 </td>
 </tr>
+</table>
+</td>
+</tr>
 <tr>
-<td style="background-color:#f8fafc;border:1px solid #e2e8f0;border-top:0;border-radius:0 0 12px 12px;padding:20px 28px;text-align:center;">
-<p style="margin:0 0 10px;font-size:13px;line-height:1.6;color:#64748b;">
-Pesan ini dikirim secara otomatis oleh sistem <strong style="color:#334155;">{$appName}</strong>.
+<td style="background-color:{$surfaceContainerLow};padding:24px 28px;text-align:center;border-top:1px solid {$outlineVariant};">
+<p style="margin:0 0 6px;font-size:16px;line-height:1.4;font-weight:700;color:{$primaryDark};">{$appName}</p>
+<p style="margin:0 0 14px;font-size:13px;line-height:1.6;color:{$onSurface};">
+Pesan ini dikirim secara otomatis oleh sistem <strong style="color:{$primaryDark};">{$appName}</strong>.
 Harap tidak membalas email ini.
 </p>
-<p style="margin:0 0 12px;font-size:12px;line-height:1.6;color:#94a3b8;">
-<a href="{$frontendUrl}" style="color:{$primary};text-decoration:none;font-weight:600;">{$frontendUrl}</a>
+<p style="margin:0 0 14px;font-size:12px;line-height:1.6;">
+<a href="{$frontendUrl}" style="color:{$secondary};text-decoration:none;font-weight:600;">{$frontendUrl}</a>
 </p>
-<p style="margin:0;font-size:11px;line-height:1.5;color:#94a3b8;letter-spacing:0.2px;">
+<p style="margin:0;font-size:11px;line-height:1.5;color:{$onSurfaceVariant};opacity:0.85;letter-spacing:0.2px;">
 © {$year} {$appName}. Seluruh hak cipta dilindungi.
 </p>
 </td>
@@ -138,34 +177,57 @@ HTML;
         ]));
     }
 
-    public static function heading(string $text, ?string $subtitle = null): string
+    public static function badge(string $text): string
     {
+        $brand = self::branding();
+        $bg = htmlspecialchars($brand['secondary_fixed'], ENT_QUOTES, 'UTF-8');
+        $color = htmlspecialchars($brand['on_secondary_fixed'], ENT_QUOTES, 'UTF-8');
+        $label = htmlspecialchars(strtoupper($text), ENT_QUOTES, 'UTF-8');
+
+        return '<p style="margin:0 0 16px;text-align:center;"><span style="display:inline-block;padding:6px 16px;background-color:'.$bg.';color:'.$color.';font-size:11px;font-weight:700;letter-spacing:0.1em;border-radius:9999px;">'.$label.'</span></p>';
+    }
+
+    public static function heading(string $text, ?string $subtitle = null, bool $centered = false): string
+    {
+        $brand = self::branding();
+        $primaryDark = htmlspecialchars($brand['primary_dark'], ENT_QUOTES, 'UTF-8');
         $title = htmlspecialchars($text, ENT_QUOTES, 'UTF-8');
+        $align = $centered ? 'center' : 'left';
         $subtitleHtml = $subtitle
-            ? '<p style="margin:8px 0 0;font-size:15px;line-height:1.6;color:#64748b;">'.htmlspecialchars($subtitle, ENT_QUOTES, 'UTF-8').'</p>'
+            ? '<p style="margin:8px 0 0;font-size:15px;line-height:1.6;color:'.$brand['on_surface_variant'].';text-align:'.$align.';">'.htmlspecialchars($subtitle, ENT_QUOTES, 'UTF-8').'</p>'
             : '';
 
-        return '<h1 style="margin:0 0 20px;font-size:24px;line-height:1.3;font-weight:700;color:#0f172a;">'.$title.'</h1>'.$subtitleHtml;
+        return '<h1 style="margin:0 0 20px;font-size:28px;line-height:1.25;font-weight:800;color:'.$primaryDark.';letter-spacing:-0.02em;text-align:'.$align.';">'.$title.'</h1>'.$subtitleHtml;
     }
 
     public static function greeting(string $name): string
     {
-        return '<p style="margin:0 0 16px;font-size:15px;line-height:1.7;color:#334155;">Halo <strong>'.htmlspecialchars($name, ENT_QUOTES, 'UTF-8').'</strong>,</p>';
+        $color = htmlspecialchars(self::branding()['on_surface'], ENT_QUOTES, 'UTF-8');
+
+        return '<p style="margin:0 0 16px;font-size:16px;line-height:1.7;color:'.$color.';">Halo <strong>'.htmlspecialchars($name, ENT_QUOTES, 'UTF-8').'</strong>,</p>';
     }
 
     public static function paragraph(string $text): string
     {
-        return '<p style="margin:0 0 16px;font-size:15px;line-height:1.7;color:#334155;">'.nl2br(htmlspecialchars($text, ENT_QUOTES, 'UTF-8')).'</p>';
+        $brand = self::branding();
+        $color = htmlspecialchars($brand['on_surface_variant'], ENT_QUOTES, 'UTF-8');
+
+        return '<p style="margin:0 0 16px;font-size:16px;line-height:1.75;color:'.$color.';">'.nl2br(htmlspecialchars($text, ENT_QUOTES, 'UTF-8')).'</p>';
     }
 
     public static function paragraphHtml(string $html): string
     {
-        return '<p style="margin:0 0 16px;font-size:15px;line-height:1.7;color:#334155;">'.$html.'</p>';
+        $brand = self::branding();
+        $color = htmlspecialchars($brand['on_surface_variant'], ENT_QUOTES, 'UTF-8');
+
+        return '<p style="margin:0 0 16px;font-size:16px;line-height:1.75;color:'.$color.';">'.$html.'</p>';
     }
 
     public static function button(string $label, string $url): string
     {
         $brand = self::branding();
+        $secondary = htmlspecialchars($brand['secondary'], ENT_QUOTES, 'UTF-8');
+        $onSecondary = htmlspecialchars($brand['on_secondary'], ENT_QUOTES, 'UTF-8');
         $primary = htmlspecialchars($brand['primary'], ENT_QUOTES, 'UTF-8');
         $safeLabel = htmlspecialchars($label, ENT_QUOTES, 'UTF-8');
         $safeUrl = str_contains($url, '{{')
@@ -173,22 +235,42 @@ HTML;
             : htmlspecialchars($url, ENT_QUOTES, 'UTF-8');
 
         return <<<HTML
-<table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin:24px 0 8px;">
+<table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="margin:28px 0 8px;">
 <tr>
-<td align="center" style="border-radius:8px;background-color:{$primary};">
-<a href="{$safeUrl}" style="display:inline-block;padding:14px 28px;font-size:15px;font-weight:600;color:#ffffff;text-decoration:none;border-radius:8px;">{$safeLabel}</a>
+<td align="center">
+<table role="presentation" cellspacing="0" cellpadding="0" border="0">
+<tr>
+<td align="center" style="border-radius:9999px;background-color:{$secondary};">
+<a href="{$safeUrl}" style="display:inline-block;padding:14px 32px;font-size:16px;font-weight:700;color:{$onSecondary};text-decoration:none;border-radius:9999px;">{$safeLabel}</a>
 </td>
 </tr>
 </table>
-<p style="margin:8px 0 0;font-size:12px;line-height:1.6;color:#94a3b8;word-break:break-all;">Atau salin tautan: <a href="{$safeUrl}" style="color:{$primary};">{$safeUrl}</a></p>
+</td>
+</tr>
+</table>
+<p style="margin:8px 0 0;font-size:12px;line-height:1.6;color:#94a3b8;text-align:center;word-break:break-all;">Atau salin tautan: <a href="{$safeUrl}" style="color:{$primary};">{$safeUrl}</a></p>
 HTML;
     }
 
     public static function infoBox(string $content): string
     {
-        $primary = htmlspecialchars(self::branding()['primary'], ENT_QUOTES, 'UTF-8');
+        $brand = self::branding();
+        $primary = htmlspecialchars($brand['primary'], ENT_QUOTES, 'UTF-8');
+        $bg = htmlspecialchars($brand['surface_container_low'], ENT_QUOTES, 'UTF-8');
+        $border = htmlspecialchars($brand['outline_variant'], ENT_QUOTES, 'UTF-8');
+        $color = htmlspecialchars($brand['on_surface'], ENT_QUOTES, 'UTF-8');
 
-        return '<div style="margin:20px 0;padding:16px 18px;background-color:#f8fafc;border:1px solid #e2e8f0;border-left:4px solid '.$primary.';border-radius:8px;font-size:14px;line-height:1.7;color:#334155;">'.$content.'</div>';
+        return '<div style="margin:20px 0;padding:16px 18px;background-color:'.$bg.';border:1px solid '.$border.';border-left:4px solid '.$primary.';border-radius:12px;font-size:14px;line-height:1.7;color:'.$color.';">'.$content.'</div>';
+    }
+
+    public static function highlightStrip(string $text): string
+    {
+        $brand = self::branding();
+        $primary = htmlspecialchars($brand['primary'], ENT_QUOTES, 'UTF-8');
+        $border = htmlspecialchars($brand['outline_variant'], ENT_QUOTES, 'UTF-8');
+        $safeText = htmlspecialchars($text, ENT_QUOTES, 'UTF-8');
+
+        return '<table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="margin:20px 0;border-top:1px solid '.$border.';border-bottom:1px solid '.$border.';"><tr><td style="padding:16px 0;font-size:18px;line-height:1.5;font-weight:600;font-style:italic;color:'.$primary.';text-align:center;">&#127881; '.$safeText.'</td></tr></table>';
     }
 
     public static function checkItem(string $text): string
@@ -200,9 +282,10 @@ HTML;
 
     public static function bulletList(array $items): string
     {
+        $color = htmlspecialchars(self::branding()['on_surface_variant'], ENT_QUOTES, 'UTF-8');
         $lis = '';
         foreach ($items as $item) {
-            $lis .= '<li style="margin:0 0 8px;font-size:15px;line-height:1.6;color:#334155;">'.$item.'</li>';
+            $lis .= '<li style="margin:0 0 8px;font-size:16px;line-height:1.6;color:'.$color.';">'.$item.'</li>';
         }
 
         return '<ul style="margin:0 0 16px;padding-left:20px;">'.$lis.'</ul>';
@@ -213,6 +296,48 @@ HTML;
         $escaped = htmlspecialchars($message, ENT_QUOTES, 'UTF-8');
 
         return self::infoBox('<div style="white-space:pre-wrap;">'.$escaped.'</div>');
+    }
+
+    /**
+     * @param  array<int, array{icon: string, title: string, description: string}>  $tiles
+     */
+    public static function infoTiles(array $tiles): string
+    {
+        if ($tiles === []) {
+            return '';
+        }
+
+        $brand = self::branding();
+        $bg = htmlspecialchars($brand['surface_container_low'], ENT_QUOTES, 'UTF-8');
+        $border = htmlspecialchars($brand['outline_variant'], ENT_QUOTES, 'UTF-8');
+        $primary = htmlspecialchars($brand['primary'], ENT_QUOTES, 'UTF-8');
+        $descColor = htmlspecialchars($brand['on_surface_variant'], ENT_QUOTES, 'UTF-8');
+
+        $cells = '';
+        foreach ($tiles as $index => $tile) {
+            $icon = htmlspecialchars($tile['icon'], ENT_QUOTES, 'UTF-8');
+            $title = htmlspecialchars($tile['title'], ENT_QUOTES, 'UTF-8');
+            $description = htmlspecialchars($tile['description'], ENT_QUOTES, 'UTF-8');
+            $width = count($tiles) > 1 ? '50%' : '100%';
+            $paddingRight = $index === 0 && count($tiles) > 1 ? ' padding-right:8px;' : '';
+            $paddingLeft = $index > 0 ? ' padding-left:8px;' : '';
+
+            $cells .= <<<HTML
+<td width="{$width}" valign="top" style="width:{$width};{$paddingRight}{$paddingLeft}">
+<table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background-color:{$bg};border:1px solid {$border};border-radius:12px;">
+<tr>
+<td style="padding:16px;">
+<div style="font-size:20px;line-height:1;margin:0 0 8px;">{$icon}</div>
+<div style="font-size:14px;font-weight:600;color:{$primary};margin:0 0 4px;">{$title}</div>
+<div style="font-size:12px;line-height:1.5;color:{$descColor};">{$description}</div>
+</td>
+</tr>
+</table>
+</td>
+HTML;
+        }
+
+        return '<table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="margin:24px 0 0;"><tr>'.$cells.'</tr></table>';
     }
 
     public static function absoluteUrl(string $url): string

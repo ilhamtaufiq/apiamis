@@ -533,18 +533,24 @@ MD,
                 .$L::button('Buat Password Baru', '{{reset_link}}')
                 .$L::infoBox('Tautan berlaku <strong>{{expiry_minutes}} menit</strong>. Jika Anda tidak meminta reset, abaikan email ini.'),
 
-            'welcome' => $L::heading('Selamat Datang!', 'Akun Anda di {{app_name}} telah aktif')
+            'welcome' => $L::badge('Selamat Datang')
+                .$L::heading('Akun Anda Aktif', 'Terima kasih telah bergabung di {{app_name}}', true)
                 .$L::greeting('{{user_name}}')
-                .$L::paragraph('Terima kasih telah bergabung. Berikut ringkasan akun Anda:')
+                .$L::paragraph('Berikut ringkasan akun Anda:')
                 .$L::bulletList([
                     'Email: <strong>{{user_email}}</strong>',
                 ])
                 .$L::button('Masuk ke Aplikasi', '{{login_url}}')
                 .$L::paragraph('Jika Anda tidak merasa mendaftar, hubungi administrator.'),
 
-            'broadcast' => $L::heading('{{title}}', 'Pengumuman dari {{app_name}}')
+            'broadcast' => $L::badge('Pengumuman')
+                .$L::heading('{{title}}', 'Dari {{app_name}}', true)
                 .$L::messageBlock('{{message}}')
-                .$L::button('Buka Aplikasi Pengawasan', '{{action_url}}'),
+                .$L::button('Buka Aplikasi Pengawasan', '{{action_url}}')
+                .$L::infoTiles([
+                    ['icon' => '📍', 'title' => 'Aplikasi Pengawasan', 'description' => 'Kelola pekerjaan dan laporan dari satu tempat.'],
+                    ['icon' => '📋', 'title' => 'Kelengkapan Data', 'description' => 'Pastikan profil dan data pekerjaan Anda selalu mutakhir.'],
+                ]),
 
             'ticket_created' => $L::heading('Tiket Baru Dicatat', 'Nomor tiket #{{ticket_id}}')
                 .$L::greeting('{{user_name}}')
