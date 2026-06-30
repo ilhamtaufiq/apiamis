@@ -10,6 +10,7 @@ use App\Http\Controllers\BeritaAcaraController;
 use App\Http\Controllers\BerkasController;
 use App\Http\Controllers\ChecklistItemController;
 use App\Http\Controllers\ClientErrorReportController;
+use App\Http\Controllers\ContactController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DataQualityController;
 use App\Http\Controllers\DesaController;
@@ -68,6 +69,12 @@ Route::get('app-settings', [AppSettingController::class, 'index']);
 Route::get('app-settings/storage-stats', [AppSettingController::class, 'storageStats'])->middleware(['auth:sanctum', 'role:admin']);
 Route::post('app-settings', [AppSettingController::class, 'store'])->middleware(['auth:sanctum', 'role:admin']);
 Route::post('app-settings/test-ai-connection', [AppSettingController::class, 'testAiConnection'])->middleware(['auth:sanctum', 'role:admin']);
+Route::post('app-settings/test-mail-connection', [AppSettingController::class, 'testMailConnection'])->middleware(['auth:sanctum', 'role:admin']);
+Route::get('app-settings/mail-templates', [AppSettingController::class, 'mailTemplates'])->middleware(['auth:sanctum', 'role:admin']);
+Route::post('app-settings/mail-templates', [AppSettingController::class, 'storeMailTemplates'])->middleware(['auth:sanctum', 'role:admin']);
+Route::post('app-settings/mail-templates/{key}/test', [AppSettingController::class, 'testMailTemplate'])->middleware(['auth:sanctum', 'role:admin']);
+Route::get('app-settings/kontrak-templates', [AppSettingController::class, 'kontrakTemplates'])->middleware(['auth:sanctum', 'role:admin']);
+Route::get('app-settings/kontrak-templates/{key}/download', [AppSettingController::class, 'downloadKontrakTemplate'])->middleware(['auth:sanctum', 'role:admin']);
 
 // Public Blog Routes
 Route::get('blog', [\App\Http\Controllers\BlogController::class, 'index']);
@@ -81,6 +88,7 @@ Route::get('public/spam-units/stats', [SpamUnitController::class, 'publicStats']
 Route::get('public/spam-units/map-stats', [SpamUnitController::class, 'publicMapStats']);
 Route::get('public/spm-sanitasi/stats', [SpmSanitasiController::class, 'publicStats']);
 Route::get('public/spm-sanitasi/map-stats', [SpmSanitasiController::class, 'publicMapStats']);
+Route::post('public/contact', [ContactController::class, 'store'])->middleware('throttle:contact-inquiries');
 
 Route::get('public/puspen/media-shares/{shareToken}', [PuspenMediaShareController::class, 'publicShow']);
 Route::get('public/puspen/media-shares/{shareToken}/preview/{media}', [PuspenMediaShareController::class, 'publicPreview']);

@@ -235,6 +235,7 @@ class UserPekerjaanController extends Controller
             'title' => 'nullable|string|max:255',
             'message_prefix' => 'nullable|string|max:1000',
             'notification_type' => 'nullable|in:info,success,warning,error',
+            'send_email' => 'nullable|boolean',
         ]);
 
         $analysis = $service->analyze(
@@ -261,7 +262,13 @@ class UserPekerjaanController extends Controller
         $title = $request->input('title') ?? 'Pengingat Kelengkapan Data Pekerjaan';
         $notificationType = $request->input('notification_type') ?? 'warning';
         $messagePrefix = $request->input('message_prefix');
+        $sendEmail = $request->boolean('send_email');
         $sentCount = 0;
+        $emailSentCount = 0;
+        $emailFailedCount = 0;
+        $emailSkippedCount = 0;
+        $smtpUnavailable = false;
+        $emailRecipients = [];
 
         foreach ($users as $userRow) {
             $recipient = User::find($userRow['user_id']);
@@ -270,8 +277,11 @@ class UserPekerjaanController extends Controller
             }
 
             $message = $service->buildReminderMessage($userRow, $messagePrefix);
-            $firstPekerjaanId = $userRow['pekerjaan'][0]['pekerjaan_id'] ?? null;
+            $firstPekerjaanId = isset($userRow['pekerjaan'][0]['pekerjaan_id'])
+                ? (int) $userRow['pekerjaan'][0]['pekerjaan_id']
+                : null;
             $url = $firstPekerjaanId ? "/pekerjaan/{$firstPekerjaanId}" : '/pekerjaan';
+            $actionUrl = $service->pengawasActionUrl($firstPekerjaanId);
 
             $history = BroadcastHistory::create([
                 'title' => $title,
@@ -293,12 +303,50 @@ class UserPekerjaanController extends Controller
             ));
 
             $sentCount++;
+
+            if ($sendEmail) {
+                $emailResult = $service->sendReminderEmail($recipient, $userRow, $title, $message, $actionUrl);
+
+                if ($emailResult['sent']) {
+                    $emailSentCount++;
+                    if (! empty($emailResult['email'])) {
+                        $emailRecipients[] = $emailResult['email'];
+                    }
+                } elseif ($emailResult['skipped_reason'] === 'smtp_disabled') {
+                    $smtpUnavailable = true;
+                    $emailSkippedCount++;
+                } elseif ($emailResult['skipped_reason'] === 'send_failed') {
+                    $emailFailedCount++;
+                } else {
+                    $emailSkippedCount++;
+                }
+            }
+        }
+
+        $responseMessage = 'Pengingat kelengkapan berhasil dikirim';
+        if ($sendEmail) {
+            if ($smtpUnavailable && $emailSentCount === 0) {
+                $responseMessage .= '. Email tidak terkirim karena SMTP belum diaktifkan';
+            } elseif ($emailFailedCount > 0) {
+                $responseMessage .= ". Email terkirim ke {$emailSentCount} pengawas, {$emailFailedCount} gagal";
+            } elseif ($emailSentCount > 0) {
+                $responseMessage .= ". Email terkirim ke {$emailSentCount} pengawas";
+            }
         }
 
         return response()->json([
             'status' => 'success',
-            'message' => 'Pengingat kelengkapan berhasil dikirim',
+            'message' => $responseMessage,
             'recipient_count' => $sentCount,
+            'email_sent_count' => $emailSentCount,
+            'email_failed_count' => $emailFailedCount,
+            'email_skipped_count' => $emailSkippedCount,
+            'send_email' => $sendEmail,
+            'smtp_unavailable' => $smtpUnavailable,
+            'email_recipients' => array_values(array_unique($emailRecipients)),
+            'action_url_sample' => $users !== [] ? $service->pengawasActionUrl(
+                isset($users[0]['pekerjaan'][0]['pekerjaan_id']) ? (int) $users[0]['pekerjaan'][0]['pekerjaan_id'] : null
+            ) : null,
         ]);
     }
 }

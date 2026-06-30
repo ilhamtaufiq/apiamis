@@ -3,8 +3,10 @@
 namespace App\Services;
 
 use App\Models\Pekerjaan;
+use App\Models\User;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 class UserPekerjaanCompletenessService
 {
@@ -333,5 +335,61 @@ class UserPekerjaanCompletenessService
             : "Halo {$userRow['user_name']},\n\nBeberapa pekerjaan yang ditugaskan kepada Anda masih belum lengkap:\n\n";
 
         return $prefix . implode("\n", $lines) . "\n\nSilakan lengkapi data di aplikasi pengawasan.";
+    }
+
+    public function pengawasActionUrl(?int $pekerjaanId = null): string
+    {
+        if ($pekerjaanId) {
+            return FrontendUrlService::pengawasApp("pekerjaan/{$pekerjaanId}");
+        }
+
+        return FrontendUrlService::pengawasApp();
+    }
+
+    /**
+     * @param  array{
+     *     user_id: int,
+     *     user_name: string,
+     *     user_email?: string,
+     *     pekerjaan: array<int, array{pekerjaan_id: int, nama_paket: string, gaps: array<int, string>}>
+     * }  $userRow
+     * @return array{sent: bool, skipped_reason: ?string, email: ?string}
+     */
+    public function sendReminderEmail(User $recipient, array $userRow, string $title, string $message, string $actionUrl): array
+    {
+        $email = strtolower(trim((string) $recipient->email));
+        if ($email === '' || ! filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            return ['sent' => false, 'skipped_reason' => 'no_email', 'email' => null];
+        }
+
+        if (! MailConfigService::applyFromSettings()) {
+            return ['sent' => false, 'skipped_reason' => 'smtp_disabled', 'email' => $email];
+        }
+
+        try {
+            $content = MailTemplateService::renderDeliverable('broadcast', [
+                'title' => $title,
+                'message' => $message,
+                'action_url' => $actionUrl,
+            ]);
+
+            MailContentService::sendRendered(
+                $email,
+                $content['subject'],
+                $content['body'],
+                $content['format'],
+                $recipient->name ?: ($userRow['user_name'] ?? null),
+            );
+
+            return ['sent' => true, 'skipped_reason' => null, 'email' => $email];
+        } catch (\Throwable $e) {
+            Log::warning('Gagal mengirim email pengingat kelengkapan', [
+                'user_id' => $recipient->id,
+                'email' => $email,
+                'error' => $e->getMessage(),
+            ]);
+
+            return ['sent' => false, 'skipped_reason' => 'send_failed', 'email' => $email];
+        }
     }
 }

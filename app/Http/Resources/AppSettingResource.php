@@ -12,7 +12,10 @@ class AppSettingResource extends JsonResource
 
         $isConfigured = false;
 
-        if (str_starts_with((string) $this->key, 'chat_api_key_')) {
+        if (
+            str_starts_with((string) $this->key, 'chat_api_key_')
+            || $this->key === 'mail_password'
+        ) {
             $isConfigured = filled($this->value);
             $value = null;
         }
@@ -21,6 +24,7 @@ class AppSettingResource extends JsonResource
         if ($this->type === 'file') {
             $media = $this->getFirstMedia('app-settings');
             $value = $media ? $media->getUrl() : null;
+            $isConfigured = $media !== null;
         }
 
         return [

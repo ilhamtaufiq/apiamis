@@ -11,13 +11,9 @@ class DocumentExportService
     /**
      * Export Kontrak to Word/PDF
      */
-    public function export($kontrak, $format = 'docx', $templateName = 'SPK_Template.docx', $overrideData = [])
+    public function export($kontrak, $format = 'docx', $templateKey = 'kontrak_template_spk', $overrideData = [])
     {
-        $templatePath = storage_path('app/templates/'.$templateName);
-
-        if (! file_exists($templatePath)) {
-            throw new \Exception('Template tidak ditemukan di: '.$templatePath);
-        }
+        $templatePath = KontrakTemplateService::resolvePath($templateKey);
 
         $templateProcessor = new TemplateProcessor($templatePath);
 
@@ -105,12 +101,12 @@ class DocumentExportService
 
     public function exportRingkasan($kontrak, $format = 'docx')
     {
-        return $this->export($kontrak, $format, 'ringkasan_kontrak_template.docx');
+        return $this->export($kontrak, $format, 'kontrak_template_ringkasan');
     }
 
     public function exportBAP($kontrak, $format = 'docx', $overrideData = [])
     {
-        return $this->export($kontrak, $format, 'bap_template.docx', $overrideData);
+        return $this->export($kontrak, $format, 'kontrak_template_bap', $overrideData);
     }
 
     public function exportCover($kontrak, $format = 'docx')
@@ -122,11 +118,11 @@ class DocumentExportService
         ));
 
         if (str_contains($subBidang, 'air minum')) {
-            return $this->export($kontrak, $format, 'cover_kontrak_am.docx');
+            return $this->export($kontrak, $format, 'kontrak_template_cover_am');
         }
 
         if (str_contains($subBidang, 'sanitasi')) {
-            return $this->export($kontrak, $format, 'cover_kontrak_san.docx');
+            return $this->export($kontrak, $format, 'kontrak_template_cover_san');
         }
 
         throw new \Exception('Template cover kontrak untuk sub bidang ini belum tersedia.');

@@ -4,6 +4,11 @@ namespace App\Http\Controllers;
 
 use App\Models\AppSetting;
 use App\Http\Resources\AppSettingResource;
+use App\Services\BrandColorService;
+use App\Services\KontrakTemplateService;
+use App\Services\MailConfigService;
+use App\Services\MailContentService;
+use App\Services\MailTemplateService;
 use App\Services\OpenRouterService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
@@ -61,8 +66,25 @@ class AppSettingController extends Controller
             'landing_page_active' => 'nullable|string|in:0,1',
             'spm_detail_page_active' => 'nullable|string|in:0,1',
             'puspen_progress_fisik_public' => 'nullable|string|in:0,1',
+            'mail_enabled' => 'nullable|string|in:0,1',
+            'mail_host' => 'nullable|string|max:255',
+            'mail_port' => 'nullable|string|max:5',
+            'mail_encryption' => 'nullable|string|in:tls,ssl,none',
+            'mail_username' => 'nullable|email|max:255',
+            'mail_password' => 'nullable|string|max:2000',
+            'mail_from_address' => 'nullable|email|max:255',
+            'mail_from_name' => 'nullable|string|max:255',
+            'contact_email' => 'nullable|email|max:255',
+            'mail_body_format' => 'nullable|string|in:plain,markdown,html',
+            'mail_subject' => 'nullable|string|max:255',
+            'mail_body' => 'nullable|string|max:50000',
             'logo' => 'nullable|file|mimes:jpg,jpeg,png,svg|max:2048',
             'favicon' => 'nullable|file|mimes:jpg,jpeg,png,svg,ico|max:1024',
+            'kontrak_template_spk' => 'nullable|file|mimes:docx|max:10240',
+            'kontrak_template_ringkasan' => 'nullable|file|mimes:docx|max:10240',
+            'kontrak_template_bap' => 'nullable|file|mimes:docx|max:10240',
+            'kontrak_template_cover_am' => 'nullable|file|mimes:docx|max:10240',
+            'kontrak_template_cover_san' => 'nullable|file|mimes:docx|max:10240',
         ]);
 
         $apiKeyProviders = array_merge(array_keys(OpenRouterService::providerOptions()), ['local']);
@@ -136,6 +158,66 @@ class AppSettingController extends Controller
             $updatedSettings[] = $setting;
         }
 
+        if ($request->has('mail_enabled')) {
+            $setting = AppSetting::setValue('mail_enabled', $request->mail_enabled, 'text');
+            $updatedSettings[] = $setting;
+        }
+
+        if ($request->has('mail_host')) {
+            $setting = AppSetting::setValue('mail_host', $request->mail_host, 'text');
+            $updatedSettings[] = $setting;
+        }
+
+        if ($request->has('mail_port')) {
+            $setting = AppSetting::setValue('mail_port', $request->mail_port, 'text');
+            $updatedSettings[] = $setting;
+        }
+
+        if ($request->has('mail_encryption')) {
+            $setting = AppSetting::setValue('mail_encryption', $request->mail_encryption, 'text');
+            $updatedSettings[] = $setting;
+        }
+
+        if ($request->has('mail_username')) {
+            $setting = AppSetting::setValue('mail_username', $request->mail_username, 'text');
+            $updatedSettings[] = $setting;
+        }
+
+        if ($request->has('mail_password') && filled($request->input('mail_password'))) {
+            $setting = AppSetting::setValue('mail_password', $request->input('mail_password'), 'secret');
+            $updatedSettings[] = $setting;
+        }
+
+        if ($request->has('mail_from_address')) {
+            $setting = AppSetting::setValue('mail_from_address', $request->mail_from_address, 'text');
+            $updatedSettings[] = $setting;
+        }
+
+        if ($request->has('mail_from_name')) {
+            $setting = AppSetting::setValue('mail_from_name', $request->mail_from_name, 'text');
+            $updatedSettings[] = $setting;
+        }
+
+        if ($request->has('contact_email')) {
+            $setting = AppSetting::setValue('contact_email', $request->contact_email, 'text');
+            $updatedSettings[] = $setting;
+        }
+
+        if ($request->has('mail_body_format')) {
+            $setting = AppSetting::setValue('mail_body_format', $request->mail_body_format, 'text');
+            $updatedSettings[] = $setting;
+        }
+
+        if ($request->has('mail_subject')) {
+            $setting = AppSetting::setValue('mail_subject', $request->mail_subject, 'text');
+            $updatedSettings[] = $setting;
+        }
+
+        if ($request->has('mail_body')) {
+            $setting = AppSetting::setValue('mail_body', $request->mail_body, 'text');
+            $updatedSettings[] = $setting;
+        }
+
         // Handle file uploads
         if ($request->hasFile('logo')) {
             $setting = AppSetting::updateOrCreate(
@@ -143,9 +225,10 @@ class AppSettingController extends Controller
                 ['type' => 'file', 'value' => null]
             );
             $setting->clearMediaCollection('app-settings');
-            $setting->addMediaFromRequest('logo')
+            $media = $setting->addMediaFromRequest('logo')
                 ->usingFileName('logo_' . Str::uuid() . '.' . $request->file('logo')->getClientOriginalExtension())
                 ->toMediaCollection('app-settings');
+            BrandColorService::syncFromLogoUpload($media);
             $updatedSettings[] = $setting->fresh();
         }
 
@@ -161,9 +244,219 @@ class AppSettingController extends Controller
             $updatedSettings[] = $setting->fresh();
         }
 
+        foreach (KontrakTemplateService::TEMPLATES as $settingKey => $definition) {
+            $field = $definition['form_field'];
+            if (! $request->hasFile($field)) {
+                continue;
+            }
+
+            $setting = AppSetting::updateOrCreate(
+                ['key' => $settingKey],
+                ['type' => 'file', 'value' => null]
+            );
+            $setting->clearMediaCollection('app-settings');
+            $setting->addMediaFromRequest($field)
+                ->usingFileName($settingKey.'_'.Str::uuid().'.docx')
+                ->toMediaCollection('app-settings');
+            $updatedSettings[] = $setting->fresh();
+        }
+
         // Return all settings
         $allSettings = AppSetting::all();
         return AppSettingResource::collection($allSettings);
+    }
+
+    /**
+     * List kontrak document template metadata for settings UI.
+     */
+    public function kontrakTemplates()
+    {
+        $settings = AppSetting::whereIn('key', array_keys(KontrakTemplateService::TEMPLATES))
+            ->get()
+            ->keyBy('key');
+
+        $data = collect(KontrakTemplateService::TEMPLATES)->map(function (array $definition, string $key) use ($settings) {
+            $setting = $settings->get($key);
+            $media = $setting?->getFirstMedia('app-settings');
+
+            return [
+                'key' => $key,
+                'label' => $definition['label'],
+                'description' => $definition['description'],
+                'default_filename' => $definition['default'],
+                'form_field' => $definition['form_field'],
+                'has_custom' => $media !== null,
+                'filename' => $media?->file_name,
+                'updated_at' => $setting?->updated_at?->toIso8601String(),
+            ];
+        })->values();
+
+        return response()->json(['data' => $data]);
+    }
+
+    /**
+     * Download active kontrak template (custom upload or default file).
+     */
+    public function downloadKontrakTemplate(string $key)
+    {
+        if (! KontrakTemplateService::isValidKey($key)) {
+            return response()->json(['message' => 'Template tidak dikenal.'], 404);
+        }
+
+        try {
+            $path = KontrakTemplateService::resolvePath($key);
+            $filename = KontrakTemplateService::downloadFilename($key);
+
+            return response()->download($path, $filename);
+        } catch (\Throwable $e) {
+            return response()->json(['message' => $e->getMessage()], 404);
+        }
+    }
+
+    /**
+     * List recommended mail templates with stored overrides.
+     */
+    public function mailTemplates()
+    {
+        return response()->json(['data' => MailTemplateService::catalog()]);
+    }
+
+    /**
+     * Persist customized mail templates (JSON map keyed by template id).
+     */
+    public function storeMailTemplates(Request $request)
+    {
+        $request->validate([
+            'templates' => 'required|array',
+            'templates.*.format' => 'nullable|string|in:plain,markdown,html',
+            'templates.*.subject' => 'nullable|string|max:255',
+            'templates.*.body' => 'nullable|string|max:50000',
+        ]);
+
+        /** @var array<string, array{format?: string, subject?: string, body?: string}> $templates */
+        $templates = $request->input('templates', []);
+        MailTemplateService::saveMany($templates);
+
+        return response()->json([
+            'data' => MailTemplateService::catalog(),
+            'message' => 'Template email berhasil disimpan.',
+        ]);
+    }
+
+    /**
+     * Send a test email for a specific template key.
+     */
+    public function testMailTemplate(Request $request, string $key)
+    {
+        if (! MailTemplateService::isValidKey($key)) {
+            return response()->json(['ok' => false, 'error' => 'Template email tidak dikenal.'], 404);
+        }
+
+        $request->validate([
+            'to' => 'required|email|max:255',
+            'format' => 'nullable|string|in:plain,markdown,html',
+            'subject' => 'nullable|string|max:255',
+            'body' => 'nullable|string|max:50000',
+            'mail_password' => 'nullable|string|max:2000',
+        ]);
+
+        return $this->sendTestMail(
+            (string) $request->input('to'),
+            array_filter([
+                'template_key' => $key,
+                'format' => $request->input('format'),
+                'subject' => $request->input('subject'),
+                'body' => $request->input('body'),
+                'mail_password' => $request->input('mail_password'),
+            ], static fn ($value) => $value !== null && $value !== ''),
+            $request->filled('mail_password')
+        );
+    }
+
+    /**
+     * Send a test email using stored SMTP settings (password read from database unless overridden).
+     */
+    public function testMailConnection(Request $request)
+    {
+        $request->validate([
+            'to' => 'required|email|max:255',
+            'template_key' => 'nullable|string|max:64',
+            'mail_enabled' => 'nullable|string|in:0,1',
+            'mail_host' => 'nullable|string|max:255',
+            'mail_port' => 'nullable|string|max:5',
+            'mail_encryption' => 'nullable|string|in:tls,ssl,none',
+            'mail_username' => 'nullable|email|max:255',
+            'mail_password' => 'nullable|string|max:2000',
+            'mail_from_address' => 'nullable|email|max:255',
+            'mail_from_name' => 'nullable|string|max:255',
+            'mail_body_format' => 'nullable|string|in:plain,markdown,html',
+            'mail_subject' => 'nullable|string|max:255',
+            'mail_body' => 'nullable|string|max:50000',
+            'format' => 'nullable|string|in:plain,markdown,html',
+            'subject' => 'nullable|string|max:255',
+            'body' => 'nullable|string|max:50000',
+        ]);
+
+        $overrides = array_filter([
+            'template_key' => $request->input('template_key', 'smtp_test'),
+            'mail_enabled' => $request->input('mail_enabled', AppSetting::getValue('mail_enabled', '0')),
+            'mail_host' => $request->input('mail_host'),
+            'mail_port' => $request->input('mail_port'),
+            'mail_encryption' => $request->input('mail_encryption'),
+            'mail_username' => $request->input('mail_username'),
+            'mail_from_address' => $request->input('mail_from_address'),
+            'mail_from_name' => $request->input('mail_from_name'),
+            'mail_body_format' => $request->input('mail_body_format') ?? $request->input('format'),
+            'mail_subject' => $request->input('mail_subject') ?? $request->input('subject'),
+            'mail_body' => $request->input('mail_body') ?? $request->input('body'),
+            'mail_password' => $request->input('mail_password'),
+        ], static fn ($value) => $value !== null && $value !== '');
+
+        $overrides['mail_enabled'] = '1';
+
+        return $this->sendTestMail(
+            (string) $request->input('to'),
+            $overrides,
+            $request->filled('mail_password')
+        );
+    }
+
+    /**
+     * @param  array<string, mixed>  $overrides
+     */
+    private function sendTestMail(string $to, array $overrides, bool $usedFreshPassword): \Illuminate\Http\JsonResponse
+    {
+        if (! MailConfigService::applyFromSettings($overrides)) {
+            return response()->json([
+                'ok' => false,
+                'error' => 'SMTP belum lengkap. Isi host, username Gmail, dan App Password lalu simpan atau kirim saat uji koneksi.',
+            ], 400);
+        }
+
+        $content = MailContentService::resolveTestContent($overrides);
+
+        try {
+            MailContentService::sendRendered(
+                $to,
+                $content['subject'],
+                $content['body'],
+                $content['format']
+            );
+
+            return response()->json([
+                'ok' => true,
+                'to' => $to,
+                'format' => $content['format'],
+                'template_key' => $overrides['template_key'] ?? 'smtp_test',
+                'used_stored_password' => ! $usedFreshPassword,
+            ]);
+        } catch (\Throwable $e) {
+            return response()->json([
+                'ok' => false,
+                'error' => 'Gagal mengirim email: ' . $e->getMessage(),
+                'used_stored_password' => ! $usedFreshPassword,
+            ], 422);
+        }
     }
 
     /**
