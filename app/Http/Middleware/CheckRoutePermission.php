@@ -49,6 +49,7 @@ class CheckRoutePermission
         '/puspen',
         '/simulation-networks',
         '/tool-pdfs',
+        '/user-drive',
         '/blog',
         '/events',
         '/tags',

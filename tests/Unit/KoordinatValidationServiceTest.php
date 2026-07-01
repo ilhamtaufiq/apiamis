@@ -44,6 +44,16 @@ class KoordinatValidationServiceTest extends TestCase
     }
 
     #[Test]
+    public function it_corrects_missing_minus_on_java_latitude_from_ocr(): void
+    {
+        $parsed = $this->service->parseKoordinat('6.794353, 107.228834');
+
+        $this->assertNotNull($parsed);
+        $this->assertEqualsWithDelta(-6.794353, $parsed['lat'], 0.000001);
+        $this->assertEqualsWithDelta(107.228834, $parsed['lng'], 0.000001);
+    }
+
+    #[Test]
     public function it_detects_point_inside_babakancaringin_polygon(): void
     {
         $reflection = new \ReflectionClass($this->service);

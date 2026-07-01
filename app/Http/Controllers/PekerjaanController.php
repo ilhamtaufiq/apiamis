@@ -134,7 +134,7 @@ class PekerjaanController extends Controller
         $sortBy = $request->get('sort_by', 'created_at');
         $sortDirection = $request->get('sort_direction', 'desc');
 
-        $allowedSorts = ['id', 'nama_paket', 'kode_rekening', 'pagu', 'penerima_count', 'created_at'];
+        $allowedSorts = ['id', 'nama_paket', 'kode_rekening', 'pagu', 'penerima_count', 'created_at', 'updated_at'];
 
         if (in_array($sortBy, $allowedSorts)) {
             $query->orderBy($sortBy, $sortDirection);

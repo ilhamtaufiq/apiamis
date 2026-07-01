@@ -8,6 +8,7 @@ use App\Models\KontrakAddendum;
 use App\Models\Pekerjaan;
 use App\Models\PuspenMediaShare;
 use App\Models\User;
+use App\Models\UserDriveItem;
 use Spatie\MediaLibrary\MediaCollections\Models\Media;
 
 class OnlyOfficeMediaAuthorizer
@@ -59,6 +60,10 @@ class OnlyOfficeMediaAuthorizer
 
         if ($owner instanceof PuspenMediaShare) {
             return $owner->user_id === $user->id;
+        }
+
+        if ($owner instanceof UserDriveItem) {
+            return $owner->canManage($user);
         }
 
         return false;

@@ -91,11 +91,31 @@ class KoordinatValidationService
             return null;
         }
 
+        [$lat, $lng] = $this->correctIndonesiaCoordSigns($lat, $lng);
+
         if ($lat < -90 || $lat > 90 || $lng < -180 || $lng > 180) {
             return null;
         }
 
         return ['lat' => $lat, 'lng' => $lng];
+    }
+
+    /**
+     * OCR often drops the minus on Java/Bali latitude (southern hemisphere).
+     *
+     * @return array{0: float, 1: float}
+     */
+    private function correctIndonesiaCoordSigns(float $lat, float $lng): array
+    {
+        if ($lat > 0 && $lat <= 12 && $lng >= 104 && $lng <= 115) {
+            $lat = -$lat;
+        }
+
+        if ($lng < 0 && $lng >= -115 && $lng <= -104) {
+            $lng = -$lng;
+        }
+
+        return [$lat, $lng];
     }
 
     private function normalizeWilayahName(?string $value): string
