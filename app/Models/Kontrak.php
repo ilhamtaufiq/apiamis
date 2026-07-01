@@ -7,10 +7,12 @@ use App\Traits\NotifiesAdminsOnChanges;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Spatie\MediaLibrary\HasMedia;
+use Spatie\MediaLibrary\InteractsWithMedia;
 
-class Kontrak extends Model
+class Kontrak extends Model implements HasMedia
 {
-    use Auditable, HasFactory, NotifiesAdminsOnChanges;
+    use Auditable, HasFactory, InteractsWithMedia, NotifiesAdminsOnChanges;
 
     protected $table = 'tbl_kontrak';
 
@@ -108,5 +110,10 @@ class Kontrak extends Model
             : $this->latestApprovedAddendum()->first();
 
         return $addendum?->tgl_selesai_sesudah ?? $this->tgl_selesai;
+    }
+
+    public function registerMediaCollections(): void
+    {
+        $this->addMediaCollection('kontrak/ringkasan-preview')->singleFile();
     }
 }

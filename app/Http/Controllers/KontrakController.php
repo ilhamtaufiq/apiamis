@@ -9,6 +9,7 @@ use App\Http\Resources\KontrakResource;
 use App\Imports\KontrakImport;
 use App\Models\Kontrak;
 use Illuminate\Http\Request;
+use Illuminate\Support\Str;
 use Maatwebsite\Excel\Facades\Excel;
 
 class KontrakController extends Controller
@@ -174,8 +175,45 @@ class KontrakController extends Controller
 
         try {
             $path = $this->exportService->exportRingkasan($kontrak);
+            $namaPaket = $firstPekerjaan?->nama_paket ?? 'Kontrak';
+            $downloadName = 'Ringkasan_'.Str::slug($namaPaket).'.xlsx';
 
-            return response()->download($path)->deleteFileAfterSend(true);
+            return response()->download($path, $downloadName)->deleteFileAfterSend(true);
+        } catch (\Exception $e) {
+            return response()->json(['message' => $e->getMessage()], 500);
+        }
+    }
+
+    public function previewRingkasan(Kontrak $kontrak)
+    {
+        $kontrak->loadMissing(['kegiatan', 'pekerjaans.kegiatan', 'pekerjaans.kecamatan', 'pekerjaans.desa', 'penyedia', 'approvedAddendums']);
+
+        $firstPekerjaan = $kontrak->pekerjaans->first();
+        if ($firstPekerjaan && ! $firstPekerjaan->isChecklistComplete()) {
+            return response()->json(['message' => 'Checklist pekerjaan belum 100% lengkap bos!'], 403);
+        }
+
+        try {
+            $path = $this->exportService->exportRingkasan($kontrak);
+            $namaPaket = $firstPekerjaan?->nama_paket ?? 'Kontrak';
+            $downloadName = 'Ringkasan_'.Str::slug($namaPaket).'.xlsx';
+
+            $media = $kontrak
+                ->addMedia($path)
+                ->usingFileName($downloadName)
+                ->toMediaCollection('kontrak/ringkasan-preview');
+
+            if (file_exists($path)) {
+                unlink($path);
+            }
+
+            return response()->json([
+                'data' => [
+                    'media_id' => $media->id,
+                    'file_name' => $media->file_name,
+                    'title' => 'Ringkasan Kontrak - '.$namaPaket,
+                ],
+            ]);
         } catch (\Exception $e) {
             return response()->json(['message' => $e->getMessage()], 500);
         }

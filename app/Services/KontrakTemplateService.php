@@ -17,10 +17,11 @@ class KontrakTemplateService
             'description' => 'Template utama generate dokumen kontrak (SPK).',
         ],
         'kontrak_template_ringkasan' => [
-            'default' => 'ringkasan_kontrak_template.docx',
+            'default' => 'ringkasan_kontrak_template.xlsx',
             'label' => 'Ringkasan Kontrak',
             'form_field' => 'kontrak_template_ringkasan',
-            'description' => 'Template ringkasan kontrak.',
+            'description' => 'Template Excel ringkasan kontrak (.xlsx).',
+            'format' => 'xlsx',
         ],
         'kontrak_template_bap' => [
             'default' => 'bap_template.docx',

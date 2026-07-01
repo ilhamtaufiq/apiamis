@@ -3,6 +3,7 @@
 namespace App\Services\OnlyOffice;
 
 use App\Models\Berkas;
+use App\Models\Kontrak;
 use App\Models\KontrakAddendum;
 use App\Models\Pekerjaan;
 use App\Models\PuspenMediaShare;
@@ -30,6 +31,20 @@ class OnlyOfficeMediaAuthorizer
             return Pekerjaan::query()
                 ->byUserRole()
                 ->whereKey($owner->pekerjaan_id)
+                ->exists();
+        }
+
+        if ($owner instanceof Kontrak) {
+            $owner->loadMissing('pekerjaans');
+
+            $pekerjaanIds = $owner->pekerjaans->pluck('id');
+            if ($owner->id_pekerjaan) {
+                $pekerjaanIds->push($owner->id_pekerjaan);
+            }
+
+            return Pekerjaan::query()
+                ->byUserRole()
+                ->whereIn('id', $pekerjaanIds->unique()->filter()->values())
                 ->exists();
         }
 
