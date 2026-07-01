@@ -55,6 +55,8 @@ class AppSettingController extends Controller
      */
     public function store(Request $request)
     {
+        $this->normalizeEmptySettingsInput($request);
+
         $request->validate([
             'app_name' => 'nullable|string|max:255',
             'app_description' => 'nullable|string|max:500',
@@ -81,7 +83,7 @@ class AppSettingController extends Controller
             'logo' => 'nullable|file|mimes:jpg,jpeg,png,svg|max:2048',
             'favicon' => 'nullable|file|mimes:jpg,jpeg,png,svg,ico|max:1024',
             'kontrak_template_spk' => 'nullable|file|mimes:docx|max:10240',
-            'kontrak_template_ringkasan' => 'nullable|file|mimes:xlsx|max:10240',
+            'kontrak_template_ringkasan' => 'nullable|file|mimes:docx,xlsx|max:10240',
             'kontrak_template_bap' => 'nullable|file|mimes:docx|max:10240',
             'kontrak_template_cover_am' => 'nullable|file|mimes:docx|max:10240',
             'kontrak_template_cover_san' => 'nullable|file|mimes:docx|max:10240',
@@ -255,8 +257,11 @@ class AppSettingController extends Controller
                 ['type' => 'file', 'value' => null]
             );
             $setting->clearMediaCollection('app-settings');
+            $uploadedFile = $request->file($field);
+            $extension = strtolower($uploadedFile->getClientOriginalExtension() ?: ($definition['format'] ?? 'docx'));
+
             $setting->addMediaFromRequest($field)
-                ->usingFileName($settingKey.'_'.Str::uuid().'.docx')
+                ->usingFileName($settingKey.'_'.Str::uuid().'.'.$extension)
                 ->toMediaCollection('app-settings');
             $updatedSettings[] = $setting->fresh();
         }
@@ -606,6 +611,42 @@ class AppSettingController extends Controller
             // Handle inaccessible files/directories
         }
         return $size;
+    }
+
+    private function normalizeEmptySettingsInput(Request $request): void
+    {
+        $nullableFields = [
+            'mail_username',
+            'mail_from_address',
+            'contact_email',
+            'mail_from_name',
+            'mail_host',
+            'mail_port',
+            'mail_encryption',
+            'app_name',
+            'app_description',
+            'tahun_anggaran',
+            'chat_provider',
+            'chat_base_url',
+            'chat_model',
+            'chat_api_key',
+        ];
+
+        $normalized = [];
+        foreach ($nullableFields as $field) {
+            if (! $request->has($field)) {
+                continue;
+            }
+
+            $value = $request->input($field);
+            if (is_string($value) && trim($value) === '') {
+                $normalized[$field] = null;
+            }
+        }
+
+        if ($normalized !== []) {
+            $request->merge($normalized);
+        }
     }
 
     private function chatApiKeySettingKey(string $providerId): string
