@@ -5,6 +5,7 @@ namespace App\Http\Resources;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Schema;
 
 class PuspenProgressFisikResource extends JsonResource
 {
@@ -24,7 +25,7 @@ class PuspenProgressFisikResource extends JsonResource
             ->values()
             ->implode(', ');
 
-        return [
+        $payload = [
             'kontrak_id' => $this->id,
             'kode_paket' => $this->kode_paket,
             'nama_paket' => $this->resolveNamaPaket(),
@@ -42,6 +43,12 @@ class PuspenProgressFisikResource extends JsonResource
                 ? null
                 : 'Output pekerjaan belum diinput di master data. Lengkapi komponen output pada menu Pekerjaan terlebih dahulu.',
         ];
+
+        if (Schema::hasColumn('puspen_progress_fisik', 'pho_completed')) {
+            $payload['pho_completed'] = (bool) ($this->progress_fisik?->pho_completed ?? false);
+        }
+
+        return $payload;
     }
 
     private function resolveNamaPaket(): string

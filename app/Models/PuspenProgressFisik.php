@@ -17,6 +17,7 @@ class PuspenProgressFisik extends Model
         'tahun_anggaran',
         'rencana',
         'realisasi',
+        'pho_completed',
     ];
 
     protected $casts = [
@@ -24,6 +25,7 @@ class PuspenProgressFisik extends Model
         'tahun_anggaran' => 'integer',
         'rencana' => 'float',
         'realisasi' => 'float',
+        'pho_completed' => 'boolean',
     ];
 
     public function kontrak(): BelongsTo

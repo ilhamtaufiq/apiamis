@@ -138,13 +138,21 @@ class PuspenProgressFisikController extends Controller
             ->filter(fn ($item) => $this->collectLinkedOutputs($item)->isEmpty())
             ->count();
 
-        return [
+        $summary = [
             ...$total,
             'latest_updated_at' => $latestUpdatedAt?->toISOString(),
             'per_sub_kegiatan' => $perSubKegiatan,
             'per_sub_kegiatan_output' => $this->calculateOutputSummaryPerSubKegiatan($items),
             'kontrak_tanpa_output' => $withoutOutputs,
         ];
+
+        if (Schema::hasColumn('puspen_progress_fisik', 'pho_completed')) {
+            $summary['pho_completed'] = $items
+                ->filter(fn ($item) => (bool) ($item->progress_fisik?->pho_completed ?? false))
+                ->count();
+        }
+
+        return $summary;
     }
 
     private function calculateOutputSummaryPerSubKegiatan($items): array
@@ -296,16 +304,24 @@ class PuspenProgressFisikController extends Controller
 
             $rencana = array_key_exists('rencana', $item) ? $item['rencana'] : null;
             $realisasi = array_key_exists('realisasi', $item) ? $item['realisasi'] : null;
+            $progressPayload = [
+                'rencana' => $rencana,
+                'realisasi' => $realisasi,
+            ];
+
+            if (
+                Schema::hasColumn('puspen_progress_fisik', 'pho_completed')
+                && array_key_exists('pho_completed', $item)
+            ) {
+                $progressPayload['pho_completed'] = (bool) $item['pho_completed'];
+            }
 
             PuspenProgressFisik::updateOrCreate(
                 [
                     'kontrak_id' => $kontrakId,
                     'tahun_anggaran' => $validated['tahun'],
                 ],
-                [
-                    'rencana' => $rencana,
-                    'realisasi' => $realisasi,
-                ]
+                $progressPayload
             );
 
             $syncService->syncFromPuspenKontrak(
@@ -324,6 +340,10 @@ class PuspenProgressFisikController extends Controller
      */
     private function persistOutputRealisasi(int $kontrakId, int $tahun, array $outputItems): void
     {
+        if (! Schema::hasTable('puspen_progress_fisik_output')) {
+            return;
+        }
+
         foreach ($outputItems as $outputItem) {
             $outputId = (int) $outputItem['output_id'];
             $realisasi = $outputItem['realisasi'] ?? null;
@@ -362,6 +382,7 @@ class PuspenProgressFisikController extends Controller
             'items.*.realisasi' => ['nullable', function ($attribute, $value, $fail) {
                 $this->validatePercentInput($attribute, $value, $fail);
             }],
+            'items.*.pho_completed' => 'nullable|boolean',
             'items.*.outputs' => 'nullable|array',
             'items.*.outputs.*.output_id' => 'required_with:items.*.outputs|integer|exists:tbl_output,id',
             'items.*.outputs.*.realisasi' => ['nullable', function ($attribute, $value, $fail) {
