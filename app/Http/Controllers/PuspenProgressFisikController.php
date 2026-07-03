@@ -6,8 +6,10 @@ use App\Http\Resources\PuspenProgressFisikResource;
 use App\Models\AppSetting;
 use App\Models\Kontrak;
 use App\Models\PuspenProgressFisik;
+use App\Models\PuspenProgressFisikOutput;
 use App\Services\PekerjaanProgressEstimasiSyncService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 
 class PuspenProgressFisikController extends Controller
 {
@@ -16,12 +18,19 @@ class PuspenProgressFisikController extends Controller
         $validated = $request->validate([
             'tahun' => 'nullable|integer|min:2000|max:2100',
             'search' => 'nullable|string|max:100',
+            'sub_kegiatan' => 'nullable|string|max:255',
             'page' => 'nullable|integer|min:1',
             'per_page' => 'nullable|integer|min:1|max:1000',
         ]);
 
         $tahun = (int) ($validated['tahun'] ?? now()->year);
-        return $this->progressResponse($request, $tahun, $validated['search'] ?? null, (int) ($validated['per_page'] ?? 15));
+        return $this->progressResponse(
+            $request,
+            $tahun,
+            $validated['search'] ?? null,
+            $validated['sub_kegiatan'] ?? null,
+            (int) ($validated['per_page'] ?? 15),
+        );
     }
 
     public function publicIndex(Request $request)
@@ -32,24 +41,34 @@ class PuspenProgressFisikController extends Controller
 
         $validated = $request->validate([
             'search' => 'nullable|string|max:100',
+            'sub_kegiatan' => 'nullable|string|max:255',
             'page' => 'nullable|integer|min:1',
             'per_page' => 'nullable|integer|min:1|max:1000',
         ]);
 
         $tahun = (int) (AppSetting::getValue('tahun_anggaran') ?: now()->year);
-        return $this->progressResponse($request, $tahun, $validated['search'] ?? null, (int) ($validated['per_page'] ?? 15));
+        return $this->progressResponse(
+            $request,
+            $tahun,
+            $validated['search'] ?? null,
+            $validated['sub_kegiatan'] ?? null,
+            (int) ($validated['per_page'] ?? 15),
+        );
     }
 
-    private function progressResponse(Request $request, int $tahun, ?string $search, int $perPage)
+    private function progressResponse(Request $request, int $tahun, ?string $search, ?string $subKegiatan, int $perPage)
     {
         $request->merge(['tahun' => $tahun]);
 
         $query = Kontrak::query()
             ->with([
                 'kegiatan:id,nama_sub_kegiatan',
+                'pekerjaan.output:id,pekerjaan_id,komponen,satuan,volume',
                 'pekerjaans.kegiatan:id,nama_sub_kegiatan',
+                'pekerjaans.output:id,pekerjaan_id,komponen,satuan,volume',
                 'pekerjaans:id,nama_paket,kegiatan_id',
                 'progress_fisik' => fn ($q) => $q->where('tahun_anggaran', $tahun),
+                'progress_fisik_outputs' => fn ($q) => $q->where('tahun_anggaran', $tahun),
             ])
             ->where(function ($q) use ($tahun) {
                 $q->whereHas('kegiatan', fn ($k) => $k->where('tahun_anggaran', $tahun))
@@ -63,7 +82,15 @@ class PuspenProgressFisikController extends Controller
                 $q->where('kode_paket', 'like', "%{$search}%")
                     ->orWhereHas('kegiatan', fn ($k) => $k->where('nama_sub_kegiatan', 'like', "%{$search}%"))
                     ->orWhereHas('pekerjaans', fn ($p) => $p->where('nama_paket', 'like', "%{$search}%"))
-                    ->orWhereHas('pekerjaans.kegiatan', fn ($k) => $k->where('nama_sub_kegiatan', 'like', "%{$search}%"));
+                    ->orWhereHas('pekerjaans.kegiatan', fn ($k) => $k->where('nama_sub_kegiatan', 'like', "%{$search}%"))
+                    ->orWhereHas('pekerjaans.output', fn ($o) => $o->where('komponen', 'like', "%{$search}%"));
+            });
+        }
+
+        if ($subKegiatan) {
+            $query->where(function ($q) use ($subKegiatan) {
+                $q->whereHas('kegiatan', fn ($k) => $k->where('nama_sub_kegiatan', $subKegiatan))
+                    ->orWhereHas('pekerjaans.kegiatan', fn ($k) => $k->where('nama_sub_kegiatan', $subKegiatan));
             });
         }
 
@@ -104,7 +131,111 @@ class PuspenProgressFisikController extends Controller
             ...$total,
             'latest_updated_at' => $latestUpdatedAt?->toISOString(),
             'per_sub_kegiatan' => $perSubKegiatan,
+            'per_sub_kegiatan_output' => $this->calculateOutputSummaryPerSubKegiatan($items),
         ];
+    }
+
+    private function calculateOutputSummaryPerSubKegiatan($items): array
+    {
+        $perSub = [];
+
+        foreach ($items as $kontrak) {
+            $names = $this->subKegiatanNames($kontrak);
+            $outputs = $this->collectLinkedOutputs($kontrak);
+            $saved = $kontrak->relationLoaded('progress_fisik_outputs')
+                ? $kontrak->progress_fisik_outputs->keyBy('output_id')
+                : collect();
+
+            foreach ($names as $name) {
+                $perSub[$name] ??= [
+                    'output_count' => 0,
+                    'volume_target' => 0.0,
+                    'volume_realisasi' => 0.0,
+                    'komponen' => [],
+                ];
+
+                foreach ($outputs as $output) {
+                    $volume = (float) $output->volume;
+                    $realisasi = $saved->get($output->id)?->realisasi;
+                    $komponenKey = mb_strtolower(trim((string) $output->komponen))
+                        .'||'
+                        .mb_strtolower(trim((string) $output->satuan));
+
+                    $perSub[$name]['output_count']++;
+                    $perSub[$name]['volume_target'] += $volume;
+
+                    if ($realisasi !== null) {
+                        $perSub[$name]['volume_realisasi'] += (float) $realisasi;
+                    }
+
+                    $perSub[$name]['komponen'][$komponenKey] ??= [
+                        'komponen' => $output->komponen,
+                        'satuan' => $output->satuan,
+                        'output_count' => 0,
+                        'volume_target' => 0.0,
+                        'volume_realisasi' => 0.0,
+                    ];
+
+                    $perSub[$name]['komponen'][$komponenKey]['output_count']++;
+                    $perSub[$name]['komponen'][$komponenKey]['volume_target'] += $volume;
+
+                    if ($realisasi !== null) {
+                        $perSub[$name]['komponen'][$komponenKey]['volume_realisasi'] += (float) $realisasi;
+                    }
+                }
+            }
+        }
+
+        return collect($perSub)
+            ->map(function (array $stats, string $name) {
+                $komponen = collect($stats['komponen'])
+                    ->map(fn (array $row) => [
+                        'komponen' => $row['komponen'],
+                        'satuan' => $row['satuan'],
+                        'output_count' => $row['output_count'],
+                        'volume_target' => round($row['volume_target'], 2),
+                        'volume_realisasi' => round($row['volume_realisasi'], 2),
+                        'capaian' => $row['volume_target'] > 0
+                            ? round(($row['volume_realisasi'] / $row['volume_target']) * 100, 2)
+                            : null,
+                    ])
+                    ->sortBy('komponen')
+                    ->values()
+                    ->all();
+
+                return [
+                    'sub_kegiatan' => $name,
+                    'output_count' => $stats['output_count'],
+                    'volume_target' => round($stats['volume_target'], 2),
+                    'volume_realisasi' => round($stats['volume_realisasi'], 2),
+                    'capaian' => $stats['volume_target'] > 0
+                        ? round(($stats['volume_realisasi'] / $stats['volume_target']) * 100, 2)
+                        : null,
+                    'komponen' => $komponen,
+                ];
+            })
+            ->sortBy('sub_kegiatan')
+            ->values()
+            ->all();
+    }
+
+    private function collectLinkedOutputs(Kontrak $kontrak): Collection
+    {
+        $outputs = collect();
+
+        if ($kontrak->relationLoaded('pekerjaan') && $kontrak->pekerjaan?->relationLoaded('output')) {
+            $outputs = $outputs->merge($kontrak->pekerjaan->output);
+        }
+
+        if ($kontrak->relationLoaded('pekerjaans')) {
+            foreach ($kontrak->pekerjaans as $pekerjaan) {
+                if ($pekerjaan->relationLoaded('output')) {
+                    $outputs = $outputs->merge($pekerjaan->output);
+                }
+            }
+        }
+
+        return $outputs->unique('id')->values();
     }
 
     private function calculateAverage($items): array
@@ -137,26 +268,68 @@ class PuspenProgressFisikController extends Controller
         $validated = $this->validateProgressPayload($request, true);
 
         foreach ($validated['items'] as $item) {
+            $kontrakId = (int) $item['kontrak_id'];
+            $outputItems = $item['outputs'] ?? [];
+
+            if (! empty($outputItems)) {
+                $this->persistOutputRealisasi($kontrakId, (int) $validated['tahun'], $outputItems);
+            }
+
+            $rencana = array_key_exists('rencana', $item) ? $item['rencana'] : null;
+            $realisasi = array_key_exists('realisasi', $item) ? $item['realisasi'] : null;
+
             PuspenProgressFisik::updateOrCreate(
                 [
-                    'kontrak_id' => $item['kontrak_id'],
+                    'kontrak_id' => $kontrakId,
                     'tahun_anggaran' => $validated['tahun'],
                 ],
                 [
-                    'rencana' => $item['rencana'] ?? null,
-                    'realisasi' => $item['realisasi'] ?? null,
+                    'rencana' => $rencana,
+                    'realisasi' => $realisasi,
                 ]
             );
 
             $syncService->syncFromPuspenKontrak(
-                (int) $item['kontrak_id'],
+                $kontrakId,
                 (int) $validated['tahun'],
-                $item['rencana'] ?? null,
-                $item['realisasi'] ?? null,
+                $rencana,
+                $realisasi,
             );
         }
 
         return response()->json(['message' => 'Progress fisik berhasil disimpan']);
+    }
+
+    /**
+     * @param  array<int, array<string, mixed>>  $outputItems
+     */
+    private function persistOutputRealisasi(int $kontrakId, int $tahun, array $outputItems): void
+    {
+        foreach ($outputItems as $outputItem) {
+            $outputId = (int) $outputItem['output_id'];
+            $realisasi = $outputItem['realisasi'] ?? null;
+
+            if ($realisasi === null || $realisasi === '') {
+                PuspenProgressFisikOutput::query()
+                    ->where('kontrak_id', $kontrakId)
+                    ->where('output_id', $outputId)
+                    ->where('tahun_anggaran', $tahun)
+                    ->delete();
+
+                continue;
+            }
+
+            PuspenProgressFisikOutput::updateOrCreate(
+                [
+                    'kontrak_id' => $kontrakId,
+                    'output_id' => $outputId,
+                    'tahun_anggaran' => $tahun,
+                ],
+                [
+                    'realisasi' => $realisasi,
+                ]
+            );
+        }
     }
 
     private function validateProgressPayload(Request $request, bool $needsYear): array
@@ -165,10 +338,15 @@ class PuspenProgressFisikController extends Controller
             'items' => 'required|array',
             'items.*.kontrak_id' => 'required|integer|exists:tbl_kontrak,id',
             'items.*.rencana' => ['nullable', function ($attribute, $value, $fail) {
-                $this->validateDecimalInput($attribute, $value, $fail);
+                $this->validatePercentInput($attribute, $value, $fail);
             }],
             'items.*.realisasi' => ['nullable', function ($attribute, $value, $fail) {
-                $this->validateDecimalInput($attribute, $value, $fail);
+                $this->validatePercentInput($attribute, $value, $fail);
+            }],
+            'items.*.outputs' => 'nullable|array',
+            'items.*.outputs.*.output_id' => 'required_with:items.*.outputs|integer|exists:tbl_output,id',
+            'items.*.outputs.*.realisasi' => ['nullable', function ($attribute, $value, $fail) {
+                $this->validateVolumeInput($attribute, $value, $fail);
             }],
         ];
 
@@ -176,10 +354,55 @@ class PuspenProgressFisikController extends Controller
             $rules['tahun'] = 'required|integer|min:2000|max:2100';
         }
 
-        return $request->validate($rules);
+        $validated = $request->validate($rules);
+
+        foreach ($validated['items'] as $index => $item) {
+            if (empty($item['outputs'])) {
+                continue;
+            }
+
+            $kontrak = Kontrak::query()
+                ->with(['pekerjaan.output:id,pekerjaan_id', 'pekerjaans.output:id,pekerjaan_id'])
+                ->find($item['kontrak_id']);
+
+            if (! $kontrak) {
+                continue;
+            }
+
+            $allowedOutputIds = $this->resolveAllowedOutputIds($kontrak);
+            foreach ($item['outputs'] as $outputIndex => $outputItem) {
+                $outputId = (int) $outputItem['output_id'];
+                if (! $allowedOutputIds->contains($outputId)) {
+                    throw \Illuminate\Validation\ValidationException::withMessages([
+                        "items.{$index}.outputs.{$outputIndex}.output_id" => 'Output tidak terhubung dengan kontrak ini.',
+                    ]);
+                }
+            }
+        }
+
+        return $validated;
     }
 
-    private function validateDecimalInput(string $attribute, mixed $value, \Closure $fail): void
+    private function resolveAllowedOutputIds(Kontrak $kontrak): Collection
+    {
+        $outputs = collect();
+
+        if ($kontrak->relationLoaded('pekerjaan') && $kontrak->pekerjaan?->relationLoaded('output')) {
+            $outputs = $outputs->merge($kontrak->pekerjaan->output->pluck('id'));
+        }
+
+        if ($kontrak->relationLoaded('pekerjaans')) {
+            foreach ($kontrak->pekerjaans as $pekerjaan) {
+                if ($pekerjaan->relationLoaded('output')) {
+                    $outputs = $outputs->merge($pekerjaan->output->pluck('id'));
+                }
+            }
+        }
+
+        return $outputs->unique()->values();
+    }
+
+    private function validatePercentInput(string $attribute, mixed $value, \Closure $fail): void
     {
         if ($value === null || $value === '') {
             return;
@@ -201,6 +424,30 @@ class PuspenProgressFisikController extends Controller
         $numeric = (float) $normalized;
         if ($numeric < 0 || $numeric > 100) {
             $fail("Field {$attribute} harus berada antara 0 dan 100.");
+        }
+    }
+
+    private function validateVolumeInput(string $attribute, mixed $value, \Closure $fail): void
+    {
+        if ($value === null || $value === '') {
+            return;
+        }
+
+        $stringValue = trim((string) $value);
+
+        if (preg_match('/^\d+([.,]\d{1,2})?$/', $stringValue) !== 1) {
+            $fail("Field {$attribute} harus berupa angka desimal dengan maksimal 2 angka di belakang koma.");
+            return;
+        }
+
+        $normalized = str_replace(',', '.', $stringValue);
+        if (! is_numeric($normalized)) {
+            $fail("Field {$attribute} harus berupa angka desimal.");
+            return;
+        }
+
+        if ((float) $normalized < 0) {
+            $fail("Field {$attribute} tidak boleh kurang dari 0.");
         }
     }
 }
