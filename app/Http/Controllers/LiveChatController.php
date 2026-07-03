@@ -13,8 +13,10 @@ use App\Models\User;
 use App\Notifications\AppNotification;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Validator;
+use Throwable;
 
 class LiveChatController extends Controller
 {
@@ -124,8 +126,8 @@ class LiveChatController extends Controller
 
         $this->notifyRecipients($thread, $user, $message);
 
-        broadcast(new MessageSent($message));
-        broadcast(new InboxUpdated($thread->id));
+        $this->safeBroadcast(new MessageSent($message));
+        $this->safeBroadcast(new InboxUpdated($thread->id));
 
         return response()->json([
             'success' => true,
@@ -144,13 +146,25 @@ class LiveChatController extends Controller
         $thread->update(['status' => 'closed']);
         $thread->load(['user', 'latestMessage.user']);
 
-        broadcast(new ThreadStatusUpdated($thread));
-        broadcast(new InboxUpdated($thread->id));
+        $this->safeBroadcast(new ThreadStatusUpdated($thread));
+        $this->safeBroadcast(new InboxUpdated($thread->id));
 
         return response()->json([
             'success' => true,
             'data' => new LiveChatThreadResource($thread),
         ]);
+    }
+
+    private function safeBroadcast(object $event): void
+    {
+        try {
+            broadcast($event);
+        } catch (Throwable $exception) {
+            Log::warning('Live chat broadcast failed', [
+                'event' => $event::class,
+                'message' => $exception->getMessage(),
+            ]);
+        }
     }
 
     private function canAccessThread(User $user, LiveChatThread $thread): bool
