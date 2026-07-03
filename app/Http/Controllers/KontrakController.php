@@ -141,7 +141,9 @@ class KontrakController extends Controller
     {
         $kontrak->load([
             'kegiatan',
-            'pekerjaans',
+            'pekerjaans.kecamatan',
+            'pekerjaans.desa',
+            'pekerjaans.kegiatan',
             'penyedia',
             'latestApprovedAddendum',
             'addendums.items',

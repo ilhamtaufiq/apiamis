@@ -131,7 +131,7 @@ class Kontrak extends Model implements HasMedia
             return null;
         }
 
-        $spseNama = trim((string) ProcurementStagingPaket::query()
+        $spseNama = $this->sanitizeSpsePaketName((string) ProcurementStagingPaket::query()
             ->where('kode_paket', $kodePaket)
             ->orderByDesc('fetched_at')
             ->value('nama_paket'));
@@ -154,9 +154,18 @@ class Kontrak extends Model implements HasMedia
         return $spseNama;
     }
 
+    private function sanitizeSpsePaketName(string $value): string
+    {
+        $value = html_entity_decode($value, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        $value = preg_replace('/\s+/u', ' ', strip_tags($value)) ?? $value;
+
+        return trim($value);
+    }
+
     private function normalizePaketNameForCompare(?string $value): string
     {
-        $value = preg_replace('/[^\pL\pN]+/u', '', trim((string) $value));
+        $value = $this->sanitizeSpsePaketName((string) $value);
+        $value = preg_replace('/[^\pL\pN]+/u', '', $value);
 
         return mb_strtolower($value ?? '');
     }
