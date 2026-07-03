@@ -76,7 +76,8 @@ class SpseKontrakPushService
                 return ['rekanan_id' => $rekananId];
             });
 
-            $steps[] = $this->runStep('simpan_sppbj', function () use ($session, $token, $plId, $kontrak, $rekananId, $sppbjFormPath) {
+            $sppbjSaveResult = null;
+            $steps[] = $this->runStep('simpan_sppbj', function () use ($session, $token, $plId, $kontrak, $rekananId, $sppbjFormPath, &$sppbjSaveResult) {
                 $fields = [
                     'authenticityToken' => $token,
                     'sppbj.sppbj_no' => (string) ($kontrak->sppbj ?? ''),
@@ -90,20 +91,21 @@ class SpseKontrakPushService
                     'sppbj.masa_berlaku_jaminan' => '0',
                 ];
 
-                $result = $this->httpClient->postMultipart(
+                $sppbjSaveResult = $this->httpClient->postMultipart(
                     $session,
                     '/sppbj-pl/simpansppbjpl?plId='.$plId,
                     $fields,
                     $sppbjFormPath,
                 );
-                $this->assertSaveOk($result, 'SPPBJ');
+                $this->assertSaveOk($sppbjSaveResult, 'SPPBJ');
 
-                return ['status_code' => $result['status']];
+                return [
+                    'status_code' => $sppbjSaveResult['status'],
+                    'location' => $sppbjSaveResult['location'],
+                ];
             });
 
-            $listHtml = $this->httpClient->fetchPage($session, $listPath, '/beranda/nontender');
-            $parsed = $this->htmlParser->extractIdsFromListHtml($listHtml);
-            $sppbjId = $parsed['sppbj_id'] ?? $ids['sppbj_id'];
+            $sppbjId = $this->resolveSppbjIdAfterSave($session, $sppbjSaveResult, $listPath, $ids);
             if (! $sppbjId) {
                 throw new \RuntimeException('sppbjId tidak ditemukan setelah simpan SPPBJ.');
             }
@@ -292,6 +294,60 @@ class SpseKontrakPushService
             'nilai_kontrak_spse' => $spkNilaiSpse,
             'steps' => $steps,
         ];
+    }
+
+    /**
+     * @param  array{status: int, body: string, headers: array<string, mixed>, location: ?string}|null  $saveResult
+     * @param  array{pl_id: string, sppbj_id: ?string, spk_id: ?string, rekanan_id: ?string}  $ids
+     */
+    private function resolveSppbjIdAfterSave(
+        SpseSession $session,
+        ?array $saveResult,
+        string $listPath,
+        array $ids,
+    ): ?string {
+        if ($saveResult) {
+            $fromLocation = $this->htmlParser->extractQueryParam((string) ($saveResult['location'] ?? ''), 'sppbjId');
+            if ($fromLocation) {
+                return $fromLocation;
+            }
+        }
+
+        $listHtml = $this->httpClient->fetchPage($session, $listPath, '/beranda/nontender');
+        $parsed = $this->htmlParser->extractIdsFromListHtml($listHtml);
+        if ($parsed['sppbj_id']) {
+            return $parsed['sppbj_id'];
+        }
+
+        if ($ids['sppbj_id']) {
+            return $ids['sppbj_id'];
+        }
+
+        $redirectPath = $this->pathFromSpseUrl((string) ($saveResult['location'] ?? ''));
+        if ($redirectPath) {
+            $fromRedirect = $this->htmlParser->extractQueryParam($redirectPath, 'sppbjId');
+            if ($fromRedirect) {
+                return $fromRedirect;
+            }
+
+            $formHtml = $this->httpClient->fetchPage($session, $redirectPath, $listPath);
+
+            return $this->htmlParser->extractHiddenValue($formHtml, 'sppbj.sppbj_id');
+        }
+
+        return null;
+    }
+
+    private function pathFromSpseUrl(string $url): ?string
+    {
+        $parts = parse_url($url);
+        if (! is_array($parts) || empty($parts['path'])) {
+            return null;
+        }
+
+        $query = isset($parts['query']) ? '?'.$parts['query'] : '';
+
+        return $parts['path'].$query;
     }
 
     private function assertPushable(Kontrak $kontrak): void

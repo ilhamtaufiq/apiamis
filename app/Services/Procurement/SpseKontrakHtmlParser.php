@@ -93,6 +93,13 @@ class SpseKontrakHtmlParser
         return $this->extractInputValue($html, $name);
     }
 
+    public function extractQueryParam(string $urlOrText, string $param): ?string
+    {
+        $pattern = '/[?&]'.preg_quote($param, '/').'=(\d+)/i';
+
+        return preg_match($pattern, $urlOrText, $match) ? $match[1] : null;
+    }
+
     public function extractInputValue(string $html, string $name): ?string
     {
         $escaped = preg_quote($name, '/');

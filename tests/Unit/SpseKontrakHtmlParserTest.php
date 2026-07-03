@@ -110,4 +110,11 @@ class SpseKontrakHtmlParserTest extends TestCase
 
         $this->assertSame('149444256,15', $this->parser->extractNilaiKontrak($html));
     }
+
+    public function test_extracts_sppbj_id_from_redirect_location(): void
+    {
+        $location = 'https://spse.inaproc.id/cianjurkab/sppbj-pl/sppbjppkpl?plId=10919928000&sppbjId=10505359000';
+
+        $this->assertSame('10505359000', $this->parser->extractQueryParam($location, 'sppbjId'));
+    }
 }
