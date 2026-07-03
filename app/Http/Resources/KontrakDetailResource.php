@@ -12,6 +12,7 @@ class KontrakDetailResource extends JsonResource
             'id' => $this->id,
             'kode_rup' => $this->kode_rup,
             'kode_paket' => $this->kode_paket,
+            'spse_nama_paket' => $this->spseNamaPaketIfDifferent(),
             'nomor_penawaran' => $this->nomor_penawaran,
             'tanggal_penawaran' => $this->tanggal_penawaran?->format('Y-m-d'),
             'nilai_kontrak' => $this->nilai_kontrak,

@@ -124,6 +124,43 @@ class Kontrak extends Model implements HasMedia
         return $addendum?->tgl_selesai_sesudah ?? $this->tgl_selesai;
     }
 
+    public function spseNamaPaketIfDifferent(): ?string
+    {
+        $kodePaket = trim((string) $this->kode_paket);
+        if ($kodePaket === '') {
+            return null;
+        }
+
+        $spseNama = trim((string) ProcurementStagingPaket::query()
+            ->where('kode_paket', $kodePaket)
+            ->orderByDesc('fetched_at')
+            ->value('nama_paket'));
+
+        if ($spseNama === '') {
+            return null;
+        }
+
+        $spseNormalized = $this->normalizePaketNameForCompare($spseNama);
+        $pekerjaans = $this->relationLoaded('pekerjaans')
+            ? $this->pekerjaans
+            : $this->pekerjaans()->get(['nama_paket']);
+
+        foreach ($pekerjaans as $pekerjaan) {
+            if ($this->normalizePaketNameForCompare($pekerjaan->nama_paket) === $spseNormalized) {
+                return null;
+            }
+        }
+
+        return $spseNama;
+    }
+
+    private function normalizePaketNameForCompare(?string $value): string
+    {
+        $value = preg_replace('/[^\pL\pN]+/u', '', trim((string) $value));
+
+        return mb_strtolower($value ?? '');
+    }
+
     public function registerMediaCollections(): void
     {
         $this->addMediaCollection('kontrak/ringkasan-preview')->singleFile();
