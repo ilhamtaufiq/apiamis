@@ -90,14 +90,14 @@ class SpseKontrakPushService
                 $fields = [
                     'authenticityToken' => $token,
                     'sppbj.sppbj_no' => (string) ($kontrak->sppbj ?? ''),
-                    'sppbj.sppbj_lamp' => '-',
+                    'sppbj.sppbj_lamp' => SpseFieldDefaults::get('sppbj_lamp'),
                     'sppbj.sppbj_tgl_kirim' => $this->formatter->formatDate($kontrak->tgl_sppbj ?? $kontrak->tgl_spk),
-                    'sppbj.sppbj_kota' => config('services.spse.satker_kota', 'Cianjur'),
-                    'sppbj.jabatan_ppk_sppbj' => config('services.spse.ppk_jabatan', 'Kepala Bidang'),
-                    'sppbj.alamat_satker' => config('services.spse.satker_alamat', ''),
+                    'sppbj.sppbj_kota' => SpseFieldDefaults::get('satker_kota'),
+                    'sppbj.jabatan_ppk_sppbj' => SpseFieldDefaults::get('ppk_jabatan'),
+                    'sppbj.alamat_satker' => SpseFieldDefaults::get('satker_alamat'),
                     'rekananId' => $rekananId,
-                    'sppbj.jaminan_pelaksanaan' => $this->formatter->formatJaminan(0),
-                    'sppbj.masa_berlaku_jaminan' => '0',
+                    'sppbj.jaminan_pelaksanaan' => SpseFieldDefaults::get('jaminan_pelaksanaan'),
+                    'sppbj.masa_berlaku_jaminan' => SpseFieldDefaults::get('masa_berlaku_jaminan'),
                 ];
 
                 $sppbjSaveResult = $this->httpClient->postMultipart(
@@ -156,21 +156,24 @@ class SpseKontrakPushService
                 $penyedia,
                 $spkNilaiSpse,
             ) {
+                $bank = trim((string) ($penyedia?->bank ?? ''));
+                $norek = trim((string) ($penyedia?->norek ?? ''));
+
                 $fields = [
                     'authenticityToken' => $token,
-                    'spk.kontrak_lingkup_pekerjaan' => '<p>-</p>',
+                    'spk.kontrak_lingkup_pekerjaan' => SpseFieldDefaults::get('lingkup_pekerjaan'),
                     'spk.spk_id' => (string) ($existingSpkId ?? ''),
                     'spk.spk_no' => (string) ($kontrak->spk ?? ''),
                     'spk.spk_tgl' => $this->formatter->formatDate($kontrak->tgl_spk),
-                    'content.kota_pesanan' => config('services.spse.satker_kota', 'Cianjur'),
-                    'spk.nama_ppk_kontrak' => config('services.spse.ppk_nama', ''),
-                    'spk.nip_ppk_kontrak' => config('services.spse.ppk_nip', ''),
-                    'spk.jabatan_ppk_kontrak' => config('services.spse.ppk_jabatan', ''),
-                    'spk.no_sk_ppk_kontrak' => config('services.spse.ppk_no_sk', ''),
+                    'content.kota_pesanan' => SpseFieldDefaults::get('satker_kota'),
+                    'spk.nama_ppk_kontrak' => SpseFieldDefaults::get('ppk_nama'),
+                    'spk.nip_ppk_kontrak' => SpseFieldDefaults::get('ppk_nip'),
+                    'spk.jabatan_ppk_kontrak' => SpseFieldDefaults::get('ppk_jabatan'),
+                    'spk.no_sk_ppk_kontrak' => SpseFieldDefaults::get('ppk_no_sk'),
                     'spk.spk_wakil_penyedia' => (string) ($penyedia?->direktur ?: $penyedia?->nama ?? ''),
-                    'spk.spk_jabatan_wakil' => 'Direktur',
-                    'spk.spk_nama_bank' => (string) ($penyedia?->bank ?? ''),
-                    'spk.spk_norekening' => (string) ($penyedia?->norek ?? '0'),
+                    'spk.spk_jabatan_wakil' => SpseFieldDefaults::get('jabatan_wakil'),
+                    'spk.spk_nama_bank' => $bank !== '' ? $bank : SpseFieldDefaults::get('bank'),
+                    'spk.spk_norekening' => $norek !== '' ? $norek : SpseFieldDefaults::get('norek'),
                     'spk.spk_nilai' => $spkNilaiSpse,
                     'spk.nilai_pdn' => $spkNilaiSpse,
                     'spk.nilai_umk' => $spkNilaiSpse,
@@ -213,7 +216,7 @@ class SpseKontrakPushService
             $steps[] = $this->runStep('simpan_cara_pembayaran', function () use ($session, $token, $sppbjId, $listPath) {
                 $fields = [
                     'authenticityToken' => $token,
-                    'cara_pembayaran' => config('services.spse.cara_pembayaran', 'Sekaligus'),
+                    'cara_pembayaran' => SpseFieldDefaults::get('cara_pembayaran'),
                     'jumlah_termin' => '',
                     'jumlah_bulan' => '',
                     'simpan' => 'simpan',
@@ -253,11 +256,11 @@ class SpseKontrakPushService
                     'pesanan.pes_no' => (string) ($kontrak->spmk ?? ''),
                     'pesanan.pes_tgl' => $this->formatter->formatDate($tglSpmk),
                     'tgl_diterima' => $this->formatter->formatDate($tglSpmk),
-                    'content.waktu_penyelesaian' => config('services.spse.waktu_penyelesaian', '60 Hari Kalender'),
+                    'content.waktu_penyelesaian' => SpseFieldDefaults::get('waktu_penyelesaian'),
                     'tgl_selesai' => $this->formatter->formatDate($kontrak->tgl_selesai),
-                    'content.kota_pesanan' => config('services.spse.satker_kota', 'Cianjur'),
+                    'content.kota_pesanan' => SpseFieldDefaults::get('satker_kota'),
                     'content.wakil_sah_rekanan' => (string) ($penyedia?->direktur ?: $penyedia?->nama ?? ''),
-                    'content.jabatan_wakil_rekanan' => 'Direktur',
+                    'content.jabatan_wakil_rekanan' => SpseFieldDefaults::get('jabatan_wakil'),
                     'simpan' => '',
                 ];
 
