@@ -21,6 +21,7 @@ use App\Http\Controllers\KoordinatValidationController;
 use App\Http\Controllers\KecamatanController;
 use App\Http\Controllers\KegiatanController;
 use App\Http\Controllers\KanbanController;
+use App\Http\Controllers\LiveChatController;
 use App\Http\Controllers\KegiatanRoleController;
 use App\Http\Controllers\KontrakAddendumController;
 use App\Http\Controllers\KontrakController;
@@ -406,7 +407,14 @@ Route::middleware('auth:sanctum')->group(function () {
     // ONLYOFFICE editor config (authenticated)
     Route::get('onlyoffice/media/{media}/config', [OnlyOfficeController::class, 'config']);
 
-    // Chat AI (with sessions, cache, and learning)
+    // Live chat user ↔ admin
+    Route::get('live-chat/thread', [LiveChatController::class, 'myThread']);
+    Route::get('live-chat/inbox', [LiveChatController::class, 'inbox']);
+    Route::get('live-chat/threads/{thread}/messages', [LiveChatController::class, 'messages']);
+    Route::post('live-chat/threads/{thread}/messages', [LiveChatController::class, 'sendMessage']);
+    Route::patch('live-chat/threads/{thread}/close', [LiveChatController::class, 'closeThread']);
+
+    // Asisten AI (with sessions, cache, and learning)
     Route::post('chat', [\App\Http\Controllers\ChatController::class, 'chat']);
     Route::post('chat/stream', [\App\Http\Controllers\ChatController::class, 'chatStream']);
     Route::get('chat/sessions', [\App\Http\Controllers\ChatController::class, 'sessions']);

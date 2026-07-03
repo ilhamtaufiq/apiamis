@@ -45,6 +45,7 @@ class CheckRoutePermission
         '/draft-pekerjaan',
         '/tiket',
         '/chat',
+        '/live-chat',
         '/notifications',
         '/puspen',
         '/simulation-networks',
