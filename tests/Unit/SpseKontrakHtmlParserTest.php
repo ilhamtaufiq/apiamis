@@ -117,4 +117,11 @@ class SpseKontrakHtmlParserTest extends TestCase
 
         $this->assertSame('10505359000', $this->parser->extractQueryParam($location, 'sppbjId'));
     }
+
+    public function test_extracts_existing_sppbj_id_from_form_html(): void
+    {
+        $html = '<input type="hidden" name="sppbj.sppbj_id" value="10505359000" />';
+
+        $this->assertSame('10505359000', $this->parser->extractHiddenValue($html, 'sppbj.sppbj_id'));
+    }
 }

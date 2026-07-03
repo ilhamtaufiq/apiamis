@@ -45,6 +45,16 @@ class SpseKontrakPushService
         if (! $sppbjId) {
             $sppbjFormPath = '/sppbj-pl/sppbjppkpl?plId='.$plId;
             $sppbjFormHtml = $this->httpClient->fetchPage($session, $sppbjFormPath, $listPath);
+            $sppbjId = $this->htmlParser->extractHiddenValue($sppbjFormHtml, 'sppbj.sppbj_id');
+        }
+
+        if ($sppbjId) {
+            $ids['sppbj_id'] = $sppbjId;
+            $steps[] = $this->skippedStep('pengecekan_blacklist', 'SPPBJ sudah ada di SPSE.');
+            $steps[] = $this->skippedStep('simpan_sppbj', 'SPPBJ sudah ada di SPSE.');
+        } else {
+            $sppbjFormPath = '/sppbj-pl/sppbjppkpl?plId='.$plId;
+            $sppbjFormHtml = $sppbjFormHtml ?? $this->httpClient->fetchPage($session, $sppbjFormPath, $listPath);
             $rekananId = $this->htmlParser->resolveRekananId(
                 $sppbjFormHtml,
                 (string) ($kontrak->penyedia?->nama ?? ''),
@@ -107,13 +117,18 @@ class SpseKontrakPushService
 
             $sppbjId = $this->resolveSppbjIdAfterSave($session, $sppbjSaveResult, $listPath, $ids);
             if (! $sppbjId) {
-                throw new \RuntimeException('sppbjId tidak ditemukan setelah simpan SPPBJ.');
+                $location = (string) ($sppbjSaveResult['location'] ?? '');
+                throw new \RuntimeException(
+                    'sppbjId tidak ditemukan setelah simpan SPPBJ.'
+                    .($location !== '' ? " Redirect SPSE: {$location}" : ''),
+                );
             }
             $ids['sppbj_id'] = $sppbjId;
-        } else {
-            $steps[] = $this->skippedStep('pengecekan_blacklist', 'SPPBJ sudah ada di SPSE.');
-            $steps[] = $this->skippedStep('simpan_sppbj', 'SPPBJ sudah ada di SPSE.');
         }
+
+        $listHtml = $this->httpClient->fetchPage($session, $listPath, '/beranda/nontender');
+        $listStatus = $this->htmlParser->extractKontrakListStatus($listHtml);
+        $ids['spk_id'] = $ids['spk_id'] ?: $listStatus['spk_id'];
 
         $penyedia = $kontrak->penyedia;
         $spkNilaiSpse = null;
