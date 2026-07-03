@@ -10,6 +10,7 @@ use App\Models\PuspenProgressFisikOutput;
 use App\Services\PekerjaanProgressEstimasiSyncService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Schema;
 
 class PuspenProgressFisikController extends Controller
 {
@@ -60,16 +61,22 @@ class PuspenProgressFisikController extends Controller
     {
         $request->merge(['tahun' => $tahun]);
 
+        $relations = [
+            'kegiatan:id,nama_sub_kegiatan',
+            'pekerjaan:id,nama_paket',
+            'pekerjaan.output:id,pekerjaan_id,komponen,satuan,volume',
+            'pekerjaans.kegiatan:id,nama_sub_kegiatan',
+            'pekerjaans.output:id,pekerjaan_id,komponen,satuan,volume',
+            'pekerjaans:id,nama_paket,kegiatan_id',
+            'progress_fisik' => fn ($q) => $q->where('tahun_anggaran', $tahun),
+        ];
+
+        if (Schema::hasTable('puspen_progress_fisik_output')) {
+            $relations['progress_fisik_outputs'] = fn ($q) => $q->where('tahun_anggaran', $tahun);
+        }
+
         $query = Kontrak::query()
-            ->with([
-                'kegiatan:id,nama_sub_kegiatan',
-                'pekerjaan.output:id,pekerjaan_id,komponen,satuan,volume',
-                'pekerjaans.kegiatan:id,nama_sub_kegiatan',
-                'pekerjaans.output:id,pekerjaan_id,komponen,satuan,volume',
-                'pekerjaans:id,nama_paket,kegiatan_id',
-                'progress_fisik' => fn ($q) => $q->where('tahun_anggaran', $tahun),
-                'progress_fisik_outputs' => fn ($q) => $q->where('tahun_anggaran', $tahun),
-            ])
+            ->with($relations)
             ->where(function ($q) use ($tahun) {
                 $q->whereHas('kegiatan', fn ($k) => $k->where('tahun_anggaran', $tahun))
                     ->orWhereHas('pekerjaans.kegiatan', fn ($k) => $k->where('tahun_anggaran', $tahun));
@@ -127,11 +134,16 @@ class PuspenProgressFisikController extends Controller
             ->values()
             ->all();
 
+        $withoutOutputs = $items
+            ->filter(fn ($item) => $this->collectLinkedOutputs($item)->isEmpty())
+            ->count();
+
         return [
             ...$total,
             'latest_updated_at' => $latestUpdatedAt?->toISOString(),
             'per_sub_kegiatan' => $perSubKegiatan,
             'per_sub_kegiatan_output' => $this->calculateOutputSummaryPerSubKegiatan($items),
+            'kontrak_tanpa_output' => $withoutOutputs,
         ];
     }
 
@@ -155,7 +167,11 @@ class PuspenProgressFisikController extends Controller
                 ];
 
                 foreach ($outputs as $output) {
-                    $volume = (float) $output->volume;
+                    if (! $output || ! $output->id) {
+                        continue;
+                    }
+
+                    $volume = (float) ($output->volume ?? 0);
                     $realisasi = $saved->get($output->id)?->realisasi;
                     $komponenKey = mb_strtolower(trim((string) $output->komponen))
                         .'||'
@@ -235,7 +251,10 @@ class PuspenProgressFisikController extends Controller
             }
         }
 
-        return $outputs->unique('id')->values();
+        return $outputs
+            ->filter(fn ($output) => $output && $output->id)
+            ->unique('id')
+            ->values();
     }
 
     private function calculateAverage($items): array
