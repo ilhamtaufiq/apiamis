@@ -1,6 +1,10 @@
 #!/bin/bash
 set -e
 
+log() {
+    echo "[entrypoint] $*"
+}
+
 # Create storage directories if they don't exist
 mkdir -p /var/www/html/storage/framework/{cache/data,sessions,views}
 mkdir -p /var/www/html/storage/logs
@@ -16,7 +20,16 @@ if [ ! -L /var/www/html/public/storage ]; then
     php artisan storage:link
 fi
 
-# Clear and cache config for production
+# Auto-enable Reverb when credentials exist but BROADCAST_CONNECTION was not switched (common Coolify oversight).
+if [ -n "${REVERB_APP_KEY:-}" ] && [ "${BROADCAST_CONNECTION:-}" != "reverb" ]; then
+    log "REVERB_APP_KEY detected — setting BROADCAST_CONNECTION=reverb (was: ${BROADCAST_CONNECTION:-unset})"
+    export BROADCAST_CONNECTION=reverb
+fi
+
+log "Broadcast driver: ${BROADCAST_CONNECTION:-unset}"
+log "Reverb app key: ${REVERB_APP_KEY:+set}${REVERB_APP_KEY:-unset}"
+
+# Clear and cache config for production (after BROADCAST_CONNECTION export above)
 php artisan config:clear
 php artisan config:cache
 php artisan route:cache
@@ -24,23 +37,50 @@ php artisan view:cache
 
 # Run AI Knowledge Indexing
 if [ -f "scripts/index_knowledge.py" ]; then
-    echo "Running AI Knowledge Indexing..."
-    ./venv/bin/python scripts/index_knowledge.py || echo "AI Indexing failed, but continuing..."
+    log "Running AI Knowledge Indexing..."
+    ./venv/bin/python scripts/index_knowledge.py || log "AI Indexing failed, but continuing..."
 fi
 
 REVERB_PID=""
 
-if [ "${BROADCAST_CONNECTION:-null}" = "reverb" ]; then
+start_reverb() {
+    if [ "${DISABLE_REVERB:-false}" = "true" ]; then
+        log "Reverb disabled via DISABLE_REVERB=true"
+        return
+    fi
+
+    if [ -z "${REVERB_APP_KEY:-}" ]; then
+        log "Skipping Reverb: REVERB_APP_KEY is not set"
+        return
+    fi
+
+    if [ "${BROADCAST_CONNECTION:-}" != "reverb" ]; then
+        log "Skipping Reverb: BROADCAST_CONNECTION is not reverb (${BROADCAST_CONNECTION:-unset})"
+        return
+    fi
+
     REVERB_HOST_BIND="${REVERB_SERVER_HOST:-0.0.0.0}"
     REVERB_PORT_BIND="${REVERB_SERVER_PORT:-8080}"
-    echo "Starting Laravel Reverb on ${REVERB_HOST_BIND}:${REVERB_PORT_BIND}..."
+    log "Starting Laravel Reverb on ${REVERB_HOST_BIND}:${REVERB_PORT_BIND}..."
+
     REVERB_ARGS=(--host="${REVERB_HOST_BIND}" --port="${REVERB_PORT_BIND}")
     if [ -n "${REVERB_HOST:-}" ]; then
         REVERB_ARGS+=(--hostname="${REVERB_HOST}")
     fi
-    php artisan reverb:start "${REVERB_ARGS[@]}" &
+
+    php artisan reverb:start "${REVERB_ARGS[@]}" >> /proc/1/fd/2 2>&1 &
     REVERB_PID=$!
-fi
+
+    sleep 2
+    if kill -0 "$REVERB_PID" 2>/dev/null; then
+        log "Reverb started (pid ${REVERB_PID})"
+    else
+        log "ERROR: Reverb process exited immediately — check REVERB_APP_SECRET and storage/logs"
+        REVERB_PID=""
+    fi
+}
+
+start_reverb
 
 apache2-foreground &
 APACHE_PID=$!
