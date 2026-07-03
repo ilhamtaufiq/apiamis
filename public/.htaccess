@@ -11,6 +11,13 @@
 
     RewriteEngine On
 
+    # Reverb WebSocket + HTTP — proxy before Laravel front controller
+    RewriteCond %{HTTP:Upgrade} =websocket [NC,OR]
+    RewriteCond %{HTTP:Upgrade} =WebSocket [NC]
+    RewriteRule ^app/(.*)$ ws://127.0.0.1:8080/app/$1 [P,L]
+    RewriteRule ^app/(.*)$ http://127.0.0.1:8080/app/$1 [P,L]
+    RewriteRule ^apps/(.*)$ http://127.0.0.1:8080/apps/$1 [P,L]
+
     # Handle Authorization Header
     RewriteCond %{HTTP:Authorization} .
     RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]

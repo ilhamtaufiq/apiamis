@@ -70,13 +70,8 @@ RUN rm -rf bootstrap/cache/*.php \
     && rm -rf storage/framework/sessions/* \
     && rm -rf storage/framework/views/*
 
-# Configure Apache document root
-RUN sed -i 's|/var/www/html|/var/www/html/public|g' /etc/apache2/sites-available/000-default.conf
-RUN echo '<Directory /var/www/html/public>\n    AllowOverride All\n</Directory>' >> /etc/apache2/apache2.conf
-
-# Reverb WebSocket reverse proxy (Apache :80 -> Reverb :8080)
-COPY docker/apache-reverb-proxy.conf /etc/apache2/conf-available/reverb-proxy.conf
-RUN a2enconf reverb-proxy
+# Apache vhost: Laravel public/ + Reverb proxy (/app, /apps -> :8080)
+COPY docker/000-default.conf /etc/apache2/sites-available/000-default.conf
 
 # Copy and make entrypoint executable
 COPY docker-entrypoint.sh /usr/local/bin/
