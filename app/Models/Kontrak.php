@@ -32,6 +32,11 @@ class Kontrak extends Model implements HasMedia
         'sppbj',
         'spk',
         'spmk',
+        'spse_sppbj_id',
+        'spse_spk_id',
+        'spse_rekanan_id',
+        'spse_pushed_at',
+        'spse_push_log',
     ];
 
     protected $casts = [
@@ -44,6 +49,8 @@ class Kontrak extends Model implements HasMedia
         'tgl_spmk' => 'date',
         'tgl_selesai' => 'date',
         'nilai_kontrak' => 'float',
+        'spse_pushed_at' => 'datetime',
+        'spse_push_log' => 'array',
     ];
 
     public function kegiatan(): BelongsTo

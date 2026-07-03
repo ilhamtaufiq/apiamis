@@ -51,4 +51,17 @@ return [
         'fallback_model' => env('OPENROUTER_FALLBACK_MODEL', 'z-ai/glm-4.5-air:free'),
     ],
 
+    'spse' => [
+        'base_url' => env('SPSE_BASE_URL', 'https://spse.inaproc.id'),
+        'lpse_slug' => env('SPSE_LPSE_SLUG', 'cianjurkab'),
+        'ppk_nama' => env('SPSE_PPK_NAMA', 'AGUNG DELI SAHPUTRA, ST'),
+        'ppk_nip' => env('SPSE_PPK_NIP', '197711212006041010'),
+        'ppk_jabatan' => env('SPSE_PPK_JABATAN', 'Kepala Bidang'),
+        'ppk_no_sk' => env('SPSE_PPK_NO_SK', '800.1.3.3/Kep.411/BKPSDM/10/2025'),
+        'satker_kota' => env('SPSE_SATKER_KOTA', 'Cianjur'),
+        'satker_alamat' => env('SPSE_SATKER_ALAMAT', 'Jl. Adi Sucipta No. 7 - Cianjur'),
+        'cara_pembayaran' => env('SPSE_CARA_PEMBAYARAN', 'Sekaligus'),
+        'waktu_penyelesaian' => env('SPSE_WAKTU_PENYELESAIAN', '60 Hari Kalender'),
+    ],
+
 ];

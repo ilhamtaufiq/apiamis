@@ -46,6 +46,7 @@ use App\Http\Controllers\SignatureLibraryController;
 use App\Http\Controllers\SimulationNetworkController;
 use App\Http\Controllers\SpamUnitController;
 use App\Http\Controllers\SpmSanitasiController;
+use App\Http\Controllers\SpseProcurementController;
 use App\Http\Controllers\TagController;
 use App\Http\Controllers\ToolPdfController;
 use App\Http\Controllers\BlogCommentController;
@@ -236,6 +237,22 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::post('kontrak/import', [KontrakController::class, 'import']);
     Route::get('kontrak/import/template', [KontrakController::class, 'downloadTemplate']);
+
+    Route::prefix('procurement/spse')->group(function () {
+        Route::get('status', [SpseProcurementController::class, 'sessionStatus']);
+        Route::post('session', [SpseProcurementController::class, 'saveSession']);
+        Route::delete('session', [SpseProcurementController::class, 'revokeSession']);
+        Route::post('sync', [SpseProcurementController::class, 'sync']);
+        Route::get('sync/runs', [SpseProcurementController::class, 'syncRuns']);
+        Route::get('staging', [SpseProcurementController::class, 'staging']);
+        Route::get('staging/{id}', [SpseProcurementController::class, 'stagingDetail'])->whereNumber('id');
+        Route::post('staging/apply', [SpseProcurementController::class, 'applyStaging']);
+        Route::post('staging/map', [SpseProcurementController::class, 'mapStaging']);
+        Route::get('packages/{kode_paket}/documents', [SpseProcurementController::class, 'packageDocuments']);
+        Route::post('packages/import-documents', [SpseProcurementController::class, 'importPackageDocuments']);
+        Route::post('packages/download-zip', [SpseProcurementController::class, 'downloadPackageZip']);
+        Route::post('kontrak/push', [SpseProcurementController::class, 'pushKontrak']);
+    });
 
     Route::apiResource('kontrak', KontrakController::class);
     Route::get('kontrak/{kontrak}/export', [KontrakController::class, 'exportDoc']);
