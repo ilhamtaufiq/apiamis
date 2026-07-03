@@ -24,8 +24,8 @@ RUN npm run build
 FROM php:8.3-apache
 WORKDIR /var/www/html
 
-# Enable Apache rewrite and headers
-RUN a2enmod rewrite headers
+# Enable Apache rewrite, headers, and WebSocket proxy for Reverb (/app/*)
+RUN a2enmod rewrite headers proxy proxy_http proxy_wstunnel
 
 # Install runtime dependencies & PHP Extensions
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
@@ -73,6 +73,10 @@ RUN rm -rf bootstrap/cache/*.php \
 # Configure Apache document root
 RUN sed -i 's|/var/www/html|/var/www/html/public|g' /etc/apache2/sites-available/000-default.conf
 RUN echo '<Directory /var/www/html/public>\n    AllowOverride All\n</Directory>' >> /etc/apache2/apache2.conf
+
+# Reverb WebSocket reverse proxy (Apache :80 -> Reverb :8080)
+COPY docker/apache-reverb-proxy.conf /etc/apache2/conf-available/reverb-proxy.conf
+RUN a2enconf reverb-proxy
 
 # Copy and make entrypoint executable
 COPY docker-entrypoint.sh /usr/local/bin/
