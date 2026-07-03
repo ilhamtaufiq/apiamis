@@ -33,7 +33,9 @@ class SpseKontrakHtmlParser
     {
         $tableHtml = $this->extractElementHtml($html, 'table', 'tblsppbj') ?? $html;
 
-        $sppbjId = $this->firstMatch($tableHtml, '/sppbjId=(\d+)/i');
+        $sppbjId = $this->firstMatch($tableHtml, '/sppbjId=(\d+)/i')
+            ?? $this->firstMatch($tableHtml, '/simpancarapembayaran\?id=(\d+)/i')
+            ?? $this->extractSppbjIdFromHtml($tableHtml);
         $spkId = $this->firstMatch($tableHtml, '/spkId=(\d+)/i');
         $pesananId = $this->firstMatch($tableHtml, '/pesananId=(\d+)/i');
 
@@ -98,6 +100,55 @@ class SpseKontrakHtmlParser
         $pattern = '/[?&]'.preg_quote($param, '/').'=(\d+)/i';
 
         return preg_match($pattern, $urlOrText, $match) ? $match[1] : null;
+    }
+
+    public function extractSppbjIdFromHtml(string $html): ?string
+    {
+        $patterns = [
+            '/name=["\']sppbj\.sppbj_id["\'][^>]*value=["\'](\d+)["\']/i',
+            '/value=["\'](\d+)["\'][^>]*name=["\']sppbj\.sppbj_id["\']/i',
+            '/sppbj-pl\/sppbjppkpl\?[^"\']*sppbjId=(\d+)/i',
+            '/spk-pl\/spkpl\?sppbjId=(\d+)/i',
+            '/sppbjId=(\d+)/i',
+        ];
+
+        foreach ($patterns as $pattern) {
+            $id = $this->firstMatch($html, $pattern);
+            if ($this->isValidSpseId($id)) {
+                return $id;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    public function extractSpseUserMessages(string $html): array
+    {
+        $messages = [];
+
+        $patterns = [
+            '/<div[^>]*class=["\'][^"\']*alert-danger[^"\']*["\'][^>]*>(.*?)<\/div>/is',
+            '/<div[^>]*class=["\'][^"\']*alert-warning[^"\']*["\'][^>]*>(.*?)<\/div>/is',
+            '/<span[^>]*class=["\'][^"\']*error[^"\']*["\'][^>]*>(.*?)<\/span>/is',
+        ];
+
+        foreach ($patterns as $pattern) {
+            if (! preg_match_all($pattern, $html, $matches, PREG_SET_ORDER)) {
+                continue;
+            }
+
+            foreach ($matches as $match) {
+                $text = trim(html_entity_decode(strip_tags($match[1])));
+                if ($text !== '') {
+                    $messages[] = $text;
+                }
+            }
+        }
+
+        return array_values(array_unique($messages));
     }
 
     public function extractInputValue(string $html, string $name): ?string
@@ -250,6 +301,11 @@ class SpseKontrakHtmlParser
     }
 
     private function isValidRekananId(?string $id): bool
+    {
+        return $this->isValidSpseId($id);
+    }
+
+    private function isValidSpseId(?string $id): bool
     {
         $id = trim((string) $id);
 

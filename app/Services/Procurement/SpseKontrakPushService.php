@@ -45,7 +45,7 @@ class SpseKontrakPushService
         if (! $sppbjId) {
             $sppbjFormPath = '/sppbj-pl/sppbjppkpl?plId='.$plId;
             $sppbjFormHtml = $this->httpClient->fetchPage($session, $sppbjFormPath, $listPath);
-            $sppbjId = $this->htmlParser->extractHiddenValue($sppbjFormHtml, 'sppbj.sppbj_id');
+            $sppbjId = $this->htmlParser->extractSppbjIdFromHtml($sppbjFormHtml);
         }
 
         if ($sppbjId) {
@@ -76,8 +76,6 @@ class SpseKontrakPushService
             }
             $ids['rekanan_id'] = $rekananId;
 
-            $token = $this->httpClient->resolveAuthenticityToken($session, $sppbjFormPath);
-
             $steps[] = $this->runStep('pengecekan_blacklist', function () use ($session, $rekananId, $plId, $kontrak, $sppbjFormPath) {
                 $tgl = $this->formatter->formatDate($kontrak->tgl_sppbj ?? $kontrak->tgl_spk ?? now());
                 $path = '/sppbj-pl/pengecekanblacklist?rknId='.$rekananId.'&tglbuat='.$tgl.'&llsId='.$plId;
@@ -87,7 +85,8 @@ class SpseKontrakPushService
             });
 
             $sppbjSaveResult = null;
-            $steps[] = $this->runStep('simpan_sppbj', function () use ($session, $token, $plId, $kontrak, $rekananId, $sppbjFormPath, &$sppbjSaveResult) {
+            $steps[] = $this->runStep('simpan_sppbj', function () use ($session, $plId, $kontrak, $rekananId, $sppbjFormPath, &$sppbjSaveResult) {
+                $token = $this->httpClient->resolveAuthenticityToken($session, $sppbjFormPath);
                 $fields = [
                     'authenticityToken' => $token,
                     'sppbj.sppbj_no' => (string) ($kontrak->sppbj ?? ''),
@@ -116,13 +115,6 @@ class SpseKontrakPushService
             });
 
             $sppbjId = $this->resolveSppbjIdAfterSave($session, $sppbjSaveResult, $listPath, $ids);
-            if (! $sppbjId) {
-                $location = (string) ($sppbjSaveResult['location'] ?? '');
-                throw new \RuntimeException(
-                    'sppbjId tidak ditemukan setelah simpan SPPBJ.'
-                    .($location !== '' ? " Redirect SPSE: {$location}" : ''),
-                );
-            }
             $ids['sppbj_id'] = $sppbjId;
         }
 
@@ -320,37 +312,59 @@ class SpseKontrakPushService
         ?array $saveResult,
         string $listPath,
         array $ids,
-    ): ?string {
+    ): string {
+        $location = (string) ($saveResult['location'] ?? '');
+        $redirectPath = $this->pathFromSpseUrl($location);
+
         if ($saveResult) {
-            $fromLocation = $this->htmlParser->extractQueryParam((string) ($saveResult['location'] ?? ''), 'sppbjId');
+            $fromLocation = $this->htmlParser->extractQueryParam($location, 'sppbjId');
             if ($fromLocation) {
                 return $fromLocation;
             }
+
+            $fromBody = $this->htmlParser->extractSppbjIdFromHtml((string) ($saveResult['body'] ?? ''));
+            if ($fromBody) {
+                return $fromBody;
+            }
         }
 
-        $listHtml = $this->httpClient->fetchPage($session, $listPath, '/beranda/nontender');
-        $parsed = $this->htmlParser->extractIdsFromListHtml($listHtml);
-        if ($parsed['sppbj_id']) {
-            return $parsed['sppbj_id'];
+        $listHtml = $this->httpClient->fetchPage($session, $listPath, $redirectPath ?: '/beranda/nontender');
+        $fromList = $this->htmlParser->extractSppbjIdFromHtml($listHtml);
+        if ($fromList) {
+            return $fromList;
         }
 
         if ($ids['sppbj_id']) {
             return $ids['sppbj_id'];
         }
 
-        $redirectPath = $this->pathFromSpseUrl((string) ($saveResult['location'] ?? ''));
+        $formHtml = null;
         if ($redirectPath) {
-            $fromRedirect = $this->htmlParser->extractQueryParam($redirectPath, 'sppbjId');
-            if ($fromRedirect) {
-                return $fromRedirect;
-            }
-
             $formHtml = $this->httpClient->fetchPage($session, $redirectPath, $listPath);
-
-            return $this->htmlParser->extractHiddenValue($formHtml, 'sppbj.sppbj_id');
+            $fromForm = $this->htmlParser->extractSppbjIdFromHtml($formHtml);
+            if ($fromForm) {
+                return $fromForm;
+            }
         }
 
-        return null;
+        $messages = $formHtml ? $this->htmlParser->extractSpseUserMessages($formHtml) : [];
+        $hint = $messages !== []
+            ? ' Pesan SPSE: '.implode(' | ', $messages)
+            : '';
+
+        if ($location !== '' && ! str_contains($location, 'sppbjId=')) {
+            throw new \InvalidArgumentException(
+                'SPSE mengembalikan form SPPBJ tanpa ID — simpan kemungkinan ditolak.'
+                .$hint
+                ." Periksa nomor/tanggal SPPBJ di SPSE atau buka paket {$ids['pl_id']} di menu kontrak SPSE."
+            );
+        }
+
+        throw new \InvalidArgumentException(
+            'sppbjId tidak ditemukan setelah simpan SPPBJ.'
+            .$hint
+            .($location !== '' ? " Redirect SPSE: {$location}" : ''),
+        );
     }
 
     private function pathFromSpseUrl(string $url): ?string

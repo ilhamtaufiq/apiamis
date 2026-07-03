@@ -122,6 +122,22 @@ class SpseKontrakHtmlParserTest extends TestCase
     {
         $html = '<input type="hidden" name="sppbj.sppbj_id" value="10505359000" />';
 
-        $this->assertSame('10505359000', $this->parser->extractHiddenValue($html, 'sppbj.sppbj_id'));
+        $this->assertSame('10505359000', $this->parser->extractSppbjIdFromHtml($html));
+    }
+
+    public function test_extracts_sppbj_id_from_cara_pembayaran_link(): void
+    {
+        $html = '<a href="/sskk-pl/simpancarapembayaran?id=10505359000">SSKK</a>';
+
+        $status = $this->parser->extractKontrakListStatus($html);
+
+        $this->assertSame('10505359000', $status['sppbj_id']);
+    }
+
+    public function test_extracts_spse_alert_messages(): void
+    {
+        $html = '<div class="alert alert-danger">Nomor SPPBJ sudah digunakan</div>';
+
+        $this->assertSame(['Nomor SPPBJ sudah digunakan'], $this->parser->extractSpseUserMessages($html));
     }
 }
