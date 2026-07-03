@@ -57,6 +57,7 @@ use App\Http\Controllers\UserDriveController;
 use App\Http\Controllers\UserPekerjaanController;
 use App\Http\Controllers\UserPresenceController;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Broadcast;
 use Illuminate\Support\Facades\Route;
 
 // Authentication Routes
@@ -103,6 +104,7 @@ Route::post('onlyoffice/callback', [OnlyOfficeController::class, 'callback'])->n
 Route::get('onlyoffice/media/{media}/download', [OnlyOfficeController::class, 'download'])->name('onlyoffice.media.download');
 
 Route::middleware('auth:sanctum')->group(function () {
+    Broadcast::routes();
     Route::get('/', function () {
         return view('welcome');
     });

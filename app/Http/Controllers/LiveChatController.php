@@ -2,6 +2,9 @@
 
 namespace App\Http\Controllers;
 
+use App\Events\LiveChat\InboxUpdated;
+use App\Events\LiveChat\MessageSent;
+use App\Events\LiveChat\ThreadStatusUpdated;
 use App\Http\Resources\LiveChatMessageResource;
 use App\Http\Resources\LiveChatThreadResource;
 use App\Models\LiveChatMessage;
@@ -121,6 +124,9 @@ class LiveChatController extends Controller
 
         $this->notifyRecipients($thread, $user, $message);
 
+        broadcast(new MessageSent($message));
+        broadcast(new InboxUpdated($thread->id));
+
         return response()->json([
             'success' => true,
             'data' => new LiveChatMessageResource($message),
@@ -136,10 +142,14 @@ class LiveChatController extends Controller
         }
 
         $thread->update(['status' => 'closed']);
+        $thread->load(['user', 'latestMessage.user']);
+
+        broadcast(new ThreadStatusUpdated($thread));
+        broadcast(new InboxUpdated($thread->id));
 
         return response()->json([
             'success' => true,
-            'data' => new LiveChatThreadResource($thread->load(['user', 'latestMessage.user'])),
+            'data' => new LiveChatThreadResource($thread),
         ]);
     }
 

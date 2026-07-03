@@ -127,6 +127,7 @@ class CheckRoutePermission
         $whitelistedRoutes = [
             '/auth/me',
             '/auth/logout',
+            '/broadcasting/auth',
             '/menu-permissions/user/menus',
             '/route-permissions/rules',
             '/route-permissions/user/accessible',
