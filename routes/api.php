@@ -225,8 +225,11 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('kontrak/kegiatan/{kegiatanId}', [KontrakController::class, 'byKegiatan']);
     Route::get('kontrak/penyedia/{penyediaId}', [KontrakController::class, 'byPenyedia']);
     Route::get('kontrak/{id}/export', [KontrakController::class, 'export']);
+    Route::get('kontrak-addendums/register-gaps', [KontrakAddendumController::class, 'registerGaps']);
+    Route::post('kontrak-addendums/register-gaps/{registerId}/notify-pengawas', [KontrakAddendumController::class, 'notifyRegisterGapPengawas']);
     Route::get('kontrak-addendums', [KontrakAddendumController::class, 'all']);
     Route::get('kontrak/{kontrak}/addendums', [KontrakAddendumController::class, 'index']);
+    Route::get('kontrak/{kontrak}/addendum-register-gaps', [KontrakAddendumController::class, 'registerGapsForKontrak']);
     Route::post('kontrak/{kontrak}/addendums', [KontrakAddendumController::class, 'store']);
 
     Route::get('kontrak-addendums/{kontrakAddendum}', [KontrakAddendumController::class, 'show']);
@@ -261,6 +264,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('kontrak/{kontrak}/export-ringkasan', [KontrakController::class, 'exportRingkasan']);
     Route::get('kontrak/{kontrak}/preview-ringkasan', [KontrakController::class, 'previewRingkasan']);
     Route::get('kontrak/{kontrak}/export-cover', [KontrakController::class, 'exportCover']);
+    Route::get('kontrak/{kontrak}/bap-context', [KontrakController::class, 'bapContext']);
     Route::get('kontrak/{kontrak}/export-bap', [KontrakController::class, 'exportBAP']);
     Route::get('penerima/summary', [PenerimaController::class, 'summary']);
     Route::apiResource('penerima', PenerimaController::class);

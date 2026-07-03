@@ -9,7 +9,12 @@ class DocumentRegister extends Model
 {
     use Auditable;
     protected $table = 'tbl_document_registers';
-    protected $fillable = ['kontrak_id', 'type_id', 'nomor', 'tanggal', 'sequence_number', 'year', 'description'];
+    protected $fillable = ['kontrak_id', 'type_id', 'nomor', 'tanggal', 'sequence_number', 'year', 'description', 'nilai'];
+
+    protected $casts = [
+        'tanggal' => 'date',
+        'nilai' => 'float',
+    ];
 
     public function kontrak()
     {

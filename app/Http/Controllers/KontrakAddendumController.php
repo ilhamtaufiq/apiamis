@@ -23,6 +23,31 @@ class KontrakAddendumController extends Controller
         'sk_peneliti_kontrak' => 'SK Peneliti Kontrak',
     ];
 
+    public function registerGaps(\App\Services\KontrakAddendumRegisterGapService $gapService)
+    {
+        $this->authorizeAdmin();
+
+        return response()->json($gapService->findGaps());
+    }
+
+    public function notifyRegisterGapPengawas(
+        int $registerId,
+        \App\Services\KontrakAddendumPengawasInstructionService $instructionService,
+    ) {
+        $this->authorizeAdmin();
+
+        return response()->json($instructionService->notifyByRegisterId($registerId));
+    }
+
+    public function registerGapsForKontrak(
+        Kontrak $kontrak,
+        \App\Services\KontrakAddendumRegisterGapService $gapService,
+    ) {
+        $this->authorizeViewKontrak($kontrak);
+
+        return response()->json($gapService->findGapsForKontrak($kontrak));
+    }
+
     public function all(Request $request)
     {
         $this->authorizeAdmin();
@@ -103,7 +128,14 @@ class KontrakAddendumController extends Controller
         $this->authorizeViewKontrak($kontrakAddendum->kontrak);
 
         return new KontrakAddendumResource(
-            $kontrakAddendum->load(['items', 'creator', 'approver', 'media'])
+            $kontrakAddendum->load([
+                'kontrak.pekerjaan',
+                'kontrak.penyedia',
+                'items',
+                'creator',
+                'approver',
+                'media',
+            ])
         );
     }
 

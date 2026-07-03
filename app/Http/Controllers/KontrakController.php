@@ -18,9 +18,14 @@ class KontrakController extends Controller
 
     protected $exportService;
 
-    public function __construct(\App\Services\DocumentExportService $exportService)
-    {
+    protected $bapContextService;
+
+    public function __construct(
+        \App\Services\DocumentExportService $exportService,
+        \App\Services\KontrakBapContextService $bapContextService,
+    ) {
         $this->exportService = $exportService;
+        $this->bapContextService = $bapContextService;
     }
 
     /**
@@ -234,13 +239,33 @@ class KontrakController extends Controller
         }
     }
 
+    public function bapContext(Kontrak $kontrak)
+    {
+        $kontrak->loadMissing(['pekerjaans']);
+
+        $firstPekerjaan = $kontrak->pekerjaans->first();
+        if ($firstPekerjaan && ! $firstPekerjaan->isChecklistComplete()) {
+            return response()->json(['message' => 'Checklist pekerjaan belum 100% lengkap.'], 403);
+        }
+
+        return response()->json($this->bapContextService->build($kontrak));
+    }
+
     public function exportBAP(Request $request, Kontrak $kontrak)
     {
-        $kontrak->loadMissing(['kegiatan', 'pekerjaans.kegiatan', 'pekerjaans.kecamatan', 'pekerjaans.desa', 'penyedia', 'approvedAddendums']);
+        $kontrak->loadMissing(['kegiatan', 'pekerjaans.kegiatan', 'pekerjaans.kecamatan', 'pekerjaans.desa', 'penyedia', 'approvedAddendums', 'registers.type']);
 
         $firstPekerjaan = $kontrak->pekerjaans->first();
         if ($firstPekerjaan && ! $firstPekerjaan->isChecklistComplete()) {
             return response()->json(['message' => 'Checklist pekerjaan belum 100% lengkap bos!'], 403);
+        }
+
+        $context = $this->bapContextService->build($kontrak);
+        if (! $context['can_generate']) {
+            return response()->json([
+                'message' => 'Register dokumen BASTP belum tersedia untuk kontrak ini.',
+                'missing' => $context['missing'],
+            ], 422);
         }
 
         try {

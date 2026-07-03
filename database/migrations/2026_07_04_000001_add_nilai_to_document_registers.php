@@ -1,0 +1,22 @@
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    public function up(): void
+    {
+        Schema::table('tbl_document_registers', function (Blueprint $table) {
+            $table->decimal('nilai', 18, 2)->nullable()->after('description');
+        });
+    }
+
+    public function down(): void
+    {
+        Schema::table('tbl_document_registers', function (Blueprint $table) {
+            $table->dropColumn('nilai');
+        });
+    }
+};

@@ -25,6 +25,14 @@ class KontrakAddendumResource extends JsonResource
             'created_by' => $this->created_by,
             'approved_by' => $this->approved_by,
             'approved_at' => $this->approved_at?->toIso8601String(),
+            'creator' => $this->whenLoaded('creator', fn () => $this->creator ? [
+                'id' => $this->creator->id,
+                'name' => $this->creator->name,
+            ] : null),
+            'approver' => $this->whenLoaded('approver', fn () => $this->approver ? [
+                'id' => $this->approver->id,
+                'name' => $this->approver->name,
+            ] : null),
             'can_submit' => $this->status === 'draft' || $this->status === 'ditolak',
             'can_edit' => $this->status !== 'disetujui',
             'kontrak' => $this->whenLoaded('kontrak', fn () => [

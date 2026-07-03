@@ -85,6 +85,7 @@ class DocumentRegisterController extends Controller
             'type_id' => 'required|exists:tbl_document_types,id',
             'tanggal' => 'required|date',
             'description' => 'nullable|string',
+            'nilai' => 'nullable|numeric|min:0',
             'sequence_number' => 'nullable|integer|min:1',
         ]);
 
@@ -134,6 +135,7 @@ class DocumentRegisterController extends Controller
                 'sequence_number' => $sequence,
                 'year' => $year,
                 'description' => $validated['description'] ?? null,
+                'nilai' => $validated['nilai'] ?? null,
             ]);
             });
         } catch (\RuntimeException $exception) {
@@ -150,6 +152,7 @@ class DocumentRegisterController extends Controller
             'tanggal' => 'required|date',
             'nomor' => 'required|string|max:255',
             'description' => 'nullable|string',
+            'nilai' => 'nullable|numeric|min:0',
         ]);
 
         if (DocumentRegister::where('nomor', $validated['nomor'])
