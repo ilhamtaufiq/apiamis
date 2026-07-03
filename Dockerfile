@@ -78,6 +78,6 @@ RUN echo '<Directory /var/www/html/public>\n    AllowOverride All\n</Directory>'
 COPY docker-entrypoint.sh /usr/local/bin/
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 
-EXPOSE 80
+EXPOSE 80 8080
 
 CMD ["/usr/local/bin/docker-entrypoint.sh"]

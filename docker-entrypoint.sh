@@ -28,5 +28,32 @@ if [ -f "scripts/index_knowledge.py" ]; then
     ./venv/bin/python scripts/index_knowledge.py || echo "AI Indexing failed, but continuing..."
 fi
 
-# Start Apache
-exec apache2-foreground
+REVERB_PID=""
+
+if [ "${BROADCAST_CONNECTION:-null}" = "reverb" ]; then
+    REVERB_HOST_BIND="${REVERB_SERVER_HOST:-0.0.0.0}"
+    REVERB_PORT_BIND="${REVERB_SERVER_PORT:-8080}"
+    echo "Starting Laravel Reverb on ${REVERB_HOST_BIND}:${REVERB_PORT_BIND}..."
+    REVERB_ARGS=(--host="${REVERB_HOST_BIND}" --port="${REVERB_PORT_BIND}")
+    if [ -n "${REVERB_HOST:-}" ]; then
+        REVERB_ARGS+=(--hostname="${REVERB_HOST}")
+    fi
+    php artisan reverb:start "${REVERB_ARGS[@]}" &
+    REVERB_PID=$!
+fi
+
+apache2-foreground &
+APACHE_PID=$!
+
+shutdown() {
+    kill "$APACHE_PID" 2>/dev/null || true
+    if [ -n "$REVERB_PID" ]; then
+        kill "$REVERB_PID" 2>/dev/null || true
+    fi
+    wait "$APACHE_PID" 2>/dev/null || true
+    exit 0
+}
+
+trap shutdown SIGTERM SIGINT
+
+wait "$APACHE_PID"
