@@ -30,15 +30,22 @@ class SpseFieldDefaults
         'norek' => '0',
     ];
 
+    public static function defaultFor(string $key): string
+    {
+        return self::VALUES[$key] ?? '';
+    }
+
     public static function get(string $key): string
     {
-        $configured = config('services.spse.'.$key);
-        $trimmed = trim((string) ($configured ?? ''));
+        if (function_exists('config')) {
+            $configured = config('services.spse.'.$key);
+            $trimmed = trim((string) ($configured ?? ''));
 
-        if ($trimmed !== '') {
-            return $trimmed;
+            if ($trimmed !== '') {
+                return $trimmed;
+            }
         }
 
-        return self::VALUES[$key] ?? '';
+        return self::defaultFor($key);
     }
 }
