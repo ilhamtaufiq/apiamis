@@ -20,6 +20,7 @@ class PenyediaResource extends JsonResource
             'notaris' => $this->notaris,
             'tanggal_akta' => $this->tanggal_akta?->format('Y-m-d'),
             'alamat' => $this->alamat,
+            'npwp' => $this->npwp,
             'bank' => $this->bank,
             'norek' => $this->norek,
             'dokumen' => $this->getMedia('penyedia/dokumen')->map(function ($media) {

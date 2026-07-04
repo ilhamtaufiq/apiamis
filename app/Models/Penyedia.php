@@ -21,6 +21,7 @@ class Penyedia extends Model implements HasMedia
         'notaris',
         'tanggal_akta',
         'alamat',
+        'npwp',
         'bank',
         'norek'
     ];

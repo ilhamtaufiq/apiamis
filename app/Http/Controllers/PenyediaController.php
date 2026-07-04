@@ -27,7 +27,8 @@ class PenyediaController extends Controller
                 $q->where('nama', 'like', "%{$search}%")
                   ->orWhere('direktur', 'like', "%{$search}%")
                   ->orWhere('alamat', 'like', "%{$search}%")
-                  ->orWhere('notaris', 'like', "%{$search}%");
+                  ->orWhere('notaris', 'like', "%{$search}%")
+                  ->orWhere('npwp', 'like', "%{$search}%");
             });
         }
 
@@ -76,6 +77,7 @@ class PenyediaController extends Controller
             'notaris' => 'required|string|max:255',
             'tanggal_akta' => 'required|date',
             'alamat' => 'required|string|max:255',
+            'npwp' => 'nullable|string|max:32',
             'bank' => 'nullable|string|max:255',
             'norek' => 'nullable|string|max:255',
             'dokumen' => 'nullable|array',
@@ -130,6 +132,7 @@ class PenyediaController extends Controller
             'notaris' => 'required|string|max:255',
             'tanggal_akta' => 'required|date',
             'alamat' => 'required|string|max:255',
+            'npwp' => 'nullable|string|max:32',
             'bank' => 'nullable|string|max:255',
             'norek' => 'nullable|string|max:255',
             'dokumen' => 'nullable|array',
