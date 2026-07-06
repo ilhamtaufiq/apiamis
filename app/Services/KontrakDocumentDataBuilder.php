@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\DocumentRegister;
 use Carbon\Carbon;
 
 class KontrakDocumentDataBuilder
@@ -13,6 +14,8 @@ class KontrakDocumentDataBuilder
 
         $kegiatan = $pekerjaan->kegiatan;
         $penyedia = $kontrak->penyedia;
+        $kontrak->loadMissing(['registers.type']);
+        $bastpRegister = $this->findRegisterByCode($kontrak, 'BASTP');
 
         $data = [
             'nama_paket' => $pekerjaan->nama_paket,
@@ -56,7 +59,10 @@ class KontrakDocumentDataBuilder
             'no_akta' => $penyedia ? $penyedia->no_akta : '-',
             'notaris' => $penyedia ? $penyedia->notaris : '-',
             'tanggal_akta' => $penyedia && $penyedia->tanggal_akta instanceof Carbon ? $penyedia->tanggal_akta->translatedFormat('d F Y') : '-',
-            'tgl_bastp' => $kontrak->tgl_bastp instanceof Carbon ? $kontrak->tgl_bastp->translatedFormat('d F Y') : '-',
+            'nomor_bastp' => $bastpRegister?->nomor ?: '-',
+            'tgl_bastp' => $bastpRegister && $bastpRegister->tanggal instanceof Carbon
+                ? $bastpRegister->tanggal->translatedFormat('d F Y')
+                : '-',
             'masa_hari' => ($kontrak->tgl_spmk instanceof Carbon && $kontrak->tgl_selesai instanceof Carbon)
                 ? (int) $kontrak->tgl_spmk->diffInDays($kontrak->tgl_selesai)
                 : '-',
@@ -122,6 +128,15 @@ class KontrakDocumentDataBuilder
         }
 
         return $data;
+    }
+
+    private function findRegisterByCode($kontrak, string $code): ?DocumentRegister
+    {
+        $normalized = strtoupper($code);
+
+        return $kontrak->registers->first(function (DocumentRegister $register) use ($normalized) {
+            return strtoupper((string) ($register->type?->code ?? '')) === $normalized;
+        });
     }
 
     private function addendumData($kontrak): array
