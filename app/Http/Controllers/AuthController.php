@@ -20,13 +20,16 @@ class AuthController extends Controller
      * 
      * @return \Illuminate\Http\JsonResponse
      */
-    public function redirectToGoogle()
+    public function redirectToGoogle(Request $request)
     {
         /** @var \Laravel\Socialite\Two\AbstractProvider $driver */
         $driver = Socialite::driver('google');
+        $platform = $request->query('platform') === 'mobile' ? 'mobile' : 'web';
+
         // Add gender scope (People API)
         $url = $driver->scopes(['https://www.googleapis.com/auth/user.gender.read'])
                       ->stateless()
+                      ->with(['state' => $platform])
                       ->redirect()
                       ->getTargetUrl();
         return response()->json(['url' => $url]);
@@ -42,6 +45,10 @@ class AuthController extends Controller
     {
         // Get frontend URL from environment or use default
         $frontendUrl = env('FRONTEND_URL', 'http://arumanis.test');
+        $mobileCallbackBase = rtrim((string) env('MOBILE_OAUTH_CALLBACK_URL', 'pengawas://oauth-callback'), '/');
+        $oauthCallbackBase = $request->query('state') === 'mobile'
+            ? $mobileCallbackBase
+            : rtrim($frontendUrl, '/') . '/oauth-callback';
         
         try {
             /** @var \Laravel\Socialite\Two\AbstractProvider $driver */
@@ -88,7 +95,7 @@ class AuthController extends Controller
             
             // Token in URL fragment — not sent to server logs or Referer headers.
             return redirect()->away(
-                rtrim($frontendUrl, '/') . '/oauth-callback#token=' . rawurlencode($token)
+                $oauthCallbackBase . '#token=' . rawurlencode($token)
             );
         } catch (\Exception $e) {
             \Illuminate\Support\Facades\Log::warning('Google OAuth failed', [
@@ -96,7 +103,7 @@ class AuthController extends Controller
             ]);
 
             return redirect()->away(
-                rtrim($frontendUrl, '/') . '/oauth-callback#error=' . rawurlencode('Google authentication failed. Please try again.')
+                $oauthCallbackBase . '#error=' . rawurlencode('Google authentication failed. Please try again.')
             );
         }
     }
