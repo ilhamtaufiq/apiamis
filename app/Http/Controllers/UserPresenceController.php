@@ -12,8 +12,18 @@ class UserPresenceController extends Controller
 
     public function heartbeat(Request $request): JsonResponse
     {
-        $app = (string) $request->input('app', 'portal');
-        $this->presence->heartbeat($request->user(), $app);
+        $validated = $request->validate([
+            'app' => ['sometimes', 'string', 'max:32'],
+            'koordinat' => ['sometimes', 'nullable', 'string', 'max:64', 'regex:/^-?\d+(?:\.\d+)?\s*,\s*-?\d+(?:\.\d+)?$/'],
+        ]);
+
+        $app = (string) ($validated['app'] ?? 'portal');
+        $koordinat = isset($validated['koordinat']) ? trim((string) $validated['koordinat']) : null;
+        if ($koordinat === '') {
+            $koordinat = null;
+        }
+
+        $this->presence->heartbeat($request->user(), $app, $koordinat);
 
         return response()->json([
             'data' => [

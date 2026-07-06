@@ -12,10 +12,10 @@ class UserPresenceService
 
     public const ONLINE_WINDOW_MINUTES = 5;
 
-    public function heartbeat(User $user, string $app = 'portal'): void
+    public function heartbeat(User $user, string $app = 'portal', ?string $koordinat = null): void
     {
         $users = $this->allUsers();
-        $users[$user->id] = $this->serializeUser($user, $app);
+        $users[$user->id] = $this->serializeUser($user, $app, $koordinat);
         $users = $this->pruneStale($users);
 
         $this->persist($users);
@@ -36,7 +36,9 @@ class UserPresenceService
      *     avatar: ?string,
      *     gender: ?string,
      *     app: string,
-     *     last_seen_at: string
+     *     last_seen_at: string,
+     *     koordinat: ?string,
+     *     koordinat_at: ?string
      * }>
      */
     public function listOnline(): array
@@ -69,11 +71,27 @@ class UserPresenceService
      *     avatar: ?string,
      *     gender: ?string,
      *     app: string,
-     *     last_seen_at: string
+     *     last_seen_at: string,
+     *     koordinat: ?string,
+     *     koordinat_at: ?string
      * }
      */
-    private function serializeUser(User $user, string $app = 'portal'): array
+    private function serializeUser(User $user, string $app = 'portal', ?string $koordinat = null): array
     {
+        $users = $this->allUsers();
+        $previous = $users[$user->id] ?? null;
+        $previousKoordinat = is_array($previous) && is_string($previous['koordinat'] ?? null)
+            ? $previous['koordinat']
+            : null;
+        $previousKoordinatAt = is_array($previous) && is_string($previous['koordinat_at'] ?? null)
+            ? $previous['koordinat_at']
+            : null;
+
+        $resolvedKoordinat = $koordinat ?? $previousKoordinat;
+        $resolvedKoordinatAt = $koordinat !== null
+            ? now()->toIso8601String()
+            : $previousKoordinatAt;
+
         return [
             'id' => $user->id,
             'name' => $user->name,
@@ -82,6 +100,8 @@ class UserPresenceService
             'gender' => $user->gender,
             'app' => $this->normalizeApp($app),
             'last_seen_at' => now()->toIso8601String(),
+            'koordinat' => $resolvedKoordinat,
+            'koordinat_at' => $resolvedKoordinatAt,
         ];
     }
 
