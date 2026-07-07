@@ -25,11 +25,18 @@ class AuthController extends Controller
         /** @var \Laravel\Socialite\Two\AbstractProvider $driver */
         $driver = Socialite::driver('google');
         $platform = $request->query('platform') === 'mobile' ? 'mobile' : 'web';
+        $callbackUrl = $this->normalizeOAuthCallbackUrl($request->query('callback_url'));
+
+        $stateToken = Str::random(40);
+        Cache::put("oauth_state:{$stateToken}", [
+            'platform' => $platform,
+            'callback_url' => $callbackUrl,
+        ], now()->addMinutes(10));
 
         // Add gender scope (People API)
         $url = $driver->scopes(['https://www.googleapis.com/auth/user.gender.read'])
                       ->stateless()
-                      ->with(['state' => $platform])
+                      ->with(['state' => $stateToken])
                       ->redirect()
                       ->getTargetUrl();
         return response()->json(['url' => $url]);
@@ -43,12 +50,7 @@ class AuthController extends Controller
      */
     public function handleGoogleCallback(Request $request)
     {
-        // Get frontend URL from environment or use default
-        $frontendUrl = env('FRONTEND_URL', 'http://arumanis.test');
-        $mobileCallbackBase = rtrim((string) env('MOBILE_OAUTH_CALLBACK_URL', 'pengawas://oauth-callback'), '/');
-        $oauthCallbackBase = $request->query('state') === 'mobile'
-            ? $mobileCallbackBase
-            : rtrim($frontendUrl, '/') . '/oauth-callback';
+        $oauthCallbackBase = $this->resolveOAuthCallbackBase($request);
         
         try {
             /** @var \Laravel\Socialite\Two\AbstractProvider $driver */
@@ -329,5 +331,62 @@ class AuthController extends Controller
     private function handoffCacheKey(string $code): string
     {
         return 'auth_handoff:' . $code;
+    }
+
+    private function resolveOAuthCallbackBase(Request $request): string
+    {
+        $frontendUrl = env('FRONTEND_URL', 'http://arumanis.test');
+        $mobileCallbackBase = rtrim((string) env('MOBILE_OAUTH_CALLBACK_URL', 'pengawas://oauth-callback'), '/');
+        $stateToken = (string) $request->query('state', '');
+        $oauthState = $stateToken !== '' ? Cache::pull("oauth_state:{$stateToken}") : null;
+
+        if (is_array($oauthState)) {
+            $platform = ($oauthState['platform'] ?? 'web') === 'mobile' ? 'mobile' : 'web';
+            $callbackOverride = $this->normalizeOAuthCallbackUrl($oauthState['callback_url'] ?? null);
+
+            if ($platform === 'mobile') {
+                return $callbackOverride ?: $mobileCallbackBase;
+            }
+
+            return rtrim($frontendUrl, '/') . '/oauth-callback';
+        }
+
+        // Legacy fallback: plain "mobile" state from older clients.
+        if ($stateToken === 'mobile') {
+            return $mobileCallbackBase;
+        }
+
+        return rtrim($frontendUrl, '/') . '/oauth-callback';
+    }
+
+    private function normalizeOAuthCallbackUrl(mixed $value): ?string
+    {
+        if (! is_string($value)) {
+            return null;
+        }
+
+        $trimmed = trim($value);
+        if ($trimmed === '') {
+            return null;
+        }
+
+        if (str_starts_with($trimmed, 'pengawas://')) {
+            return rtrim($trimmed, '/');
+        }
+
+        if (! filter_var($trimmed, FILTER_VALIDATE_URL)) {
+            return null;
+        }
+
+        $parts = parse_url($trimmed);
+        if (! is_array($parts) || empty($parts['scheme']) || empty($parts['host'])) {
+            return null;
+        }
+
+        if (! in_array(strtolower((string) $parts['scheme']), ['http', 'https'], true)) {
+            return null;
+        }
+
+        return rtrim($trimmed, '/');
     }
 }
