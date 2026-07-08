@@ -36,6 +36,8 @@ class Kegiatan extends Model
         'sumber_dana',
         'pagu',
         'kode_rekening',
+        'nama_pptk',
+        'nip_pptk',
     ];
 
     protected $casts = [

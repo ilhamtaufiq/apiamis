@@ -22,6 +22,8 @@ class KegiatanResource extends JsonResource
             'sumber_dana' => $this->sumber_dana,
             'pagu' => $this->pagu,
             'kode_rekening' => $this->kode_rekening,
+            'nama_pptk' => $this->nama_pptk,
+            'nip_pptk' => $this->nip_pptk,
             'created_at' => $this->created_at?->toIso8601String(),
             'updated_at' => $this->updated_at?->toIso8601String(),
         ];

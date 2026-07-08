@@ -43,6 +43,7 @@ class KontrakDocumentDataBuilder
             : null;
         $limaPersen = (int) round($nilaiKontrakEfektif * 0.05);
         $pejabat = $this->documentSettings->pejabatDefaults();
+        $pptk = $this->documentSettings->resolvePptk($kegiatan);
         $instansi = $this->documentSettings->instansiDefaults();
         $masaPemeliharaanHari = $this->documentSettings->masaPemeliharaanHari();
 
@@ -95,8 +96,8 @@ class KontrakDocumentDataBuilder
             'tanggal_akta' => $penyedia && $penyedia->tanggal_akta instanceof Carbon ? $penyedia->tanggal_akta->translatedFormat('d F Y') : '-',
             'nama_ppk' => $pejabat['nama_ppk'],
             'nip_ppk' => $pejabat['nip_ppk'],
-            'nama_pptk' => $pejabat['nama_pptk'],
-            'nip_pptk' => $pejabat['nip_pptk'],
+            'nama_pptk' => $pptk['nama_pptk'],
+            'nip_pptk' => $pptk['nip_pptk'],
             'skpd' => $instansi['skpd'],
             'nomor_dpa' => $instansi['nomor_dpa'],
             'tanggal_dpa' => $instansi['tanggal_dpa'],

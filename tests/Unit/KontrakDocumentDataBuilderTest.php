@@ -4,6 +4,7 @@ namespace Tests\Unit;
 
 use App\Models\DocumentRegister;
 use App\Models\DocumentType;
+use App\Models\Kegiatan;
 use App\Models\KontrakAddendum;
 use App\Services\KontrakDocumentDataBuilder;
 use App\Services\KontrakDocumentSettingsService;
@@ -26,6 +27,10 @@ class KontrakDocumentDataBuilderTest extends TestCase
         $settings->shouldReceive('pejabatDefaults')->andReturn([
             'nama_ppk' => 'Budi PPK',
             'nip_ppk' => '198001012010011001',
+            'nama_pptk' => 'Ani PPTK',
+            'nip_pptk' => '198002022010011002',
+        ]);
+        $settings->shouldReceive('resolvePptk')->withAnyArgs()->andReturn([
             'nama_pptk' => 'Ani PPTK',
             'nip_pptk' => '198002022010011002',
         ]);
@@ -71,13 +76,13 @@ class KontrakDocumentDataBuilderTest extends TestCase
             'status' => 'disetujui',
         ]);
 
-        $kegiatan = (object) [
+        $kegiatan = new Kegiatan([
             'nama_program' => 'Program Air Minum',
             'nama_kegiatan' => 'Kegiatan SPAM',
             'nama_sub_kegiatan' => 'Sub Kegiatan Pembangunan',
             'tahun_anggaran' => '2026',
             'sumber_dana' => 'DAK',
-        ];
+        ]);
 
         $pekerjaan = (object) [
             'nama_paket' => 'Pembangunan SPAM Desa Sukamaju',
@@ -140,5 +145,92 @@ class KontrakDocumentDataBuilderTest extends TestCase
         $this->assertSame('900/Kep.09/BKAD/2/2026', $data['nomor_dpa']);
         $this->assertSame('☑', $data['check_pembayaran_sekaligus']);
         $this->assertSame('☐', $data['check_pembayaran_termin']);
+    }
+
+    public function test_pptk_comes_from_kegiatan_when_configured(): void
+    {
+        $settings = Mockery::mock(KontrakDocumentSettingsService::class);
+        $settings->shouldReceive('pejabatDefaults')->andReturn([
+            'nama_ppk' => 'Budi PPK',
+            'nip_ppk' => '198001012010011001',
+            'nama_pptk' => 'Fallback PPTK',
+            'nip_pptk' => '111111111111111111',
+        ]);
+        $settings->shouldReceive('resolvePptk')->withAnyArgs()->andReturn([
+            'nama_pptk' => 'Siti PPTK Kegiatan',
+            'nip_pptk' => '198803032010012003',
+        ]);
+        $settings->shouldReceive('masaPemeliharaanHari')->andReturn(180);
+        $settings->shouldReceive('instansiDefaults')->andReturn([
+            'skpd' => 'Dinas Perumahan',
+            'nomor_dpa' => '-',
+            'tanggal_dpa' => '-',
+        ]);
+        $settings->shouldReceive('caraPembayaranCheckboxData')->andReturn([
+            'cara_pembayaran' => 'Sekaligus',
+            'check_pembayaran_sekaligus' => '☑',
+            'check_pembayaran_termin' => '☐',
+            'check_pembayaran_bulan' => '☐',
+        ]);
+
+        $kegiatan = new Kegiatan([
+            'nama_program' => 'Program Air Minum',
+            'nama_kegiatan' => 'Kegiatan SPAM',
+            'nama_sub_kegiatan' => 'Sub Kegiatan Pembangunan',
+            'tahun_anggaran' => '2026',
+            'sumber_dana' => 'DAK',
+            'nama_pptk' => 'Siti PPTK Kegiatan',
+            'nip_pptk' => '198803032010012003',
+        ]);
+
+        $pekerjaan = (object) [
+            'nama_paket' => 'Pembangunan SPAM',
+            'pagu' => 100000000,
+            'kode_rekening' => '5.1.02.01',
+            'kecamatan' => (object) ['nama' => 'Cianjur'],
+            'desa' => (object) ['nama' => 'Sukamaju'],
+            'kegiatan' => $kegiatan,
+        ];
+
+        $penyedia = (object) [
+            'nama' => 'PT Contoh',
+            'direktur' => 'John Doe',
+            'alamat' => 'Jl. Contoh',
+            'npwp' => '123456789012345',
+            'bank' => 'BJB',
+            'norek' => '1234567890',
+            'no_akta' => '-',
+            'notaris' => '-',
+            'tanggal_akta' => null,
+        ];
+
+        $kontrak = Mockery::mock();
+        $kontrak->penyedia = $penyedia;
+        $kontrak->nilai_kontrak = 100000000;
+        $kontrak->tgl_sppbj = Carbon::parse('2026-01-15');
+        $kontrak->tgl_spk = Carbon::parse('2026-01-20');
+        $kontrak->tgl_spmk = Carbon::parse('2026-02-01');
+        $kontrak->tgl_selesai = Carbon::parse('2026-05-31');
+        $kontrak->sppbj = 'SPPBJ/001/2026';
+        $kontrak->spk = 'SPK/001/2026';
+        $kontrak->spmk = 'SPMK/001/2026';
+        $kontrak->kode_rup = '-';
+        $kontrak->kode_paket = '-';
+        $kontrak->nomor_penawaran = '-';
+        $kontrak->tanggal_penawaran = null;
+        $kontrak->shouldReceive('loadMissing')->andReturnSelf();
+        $kontrak->shouldReceive('nilaiKontrakBerjalan')->andReturn(100000000.0);
+        $kontrak->shouldReceive('tglSelesaiBerjalan')->andReturn(Carbon::parse('2026-05-31'));
+        $kontrak->registers = new Collection();
+        $kontrak->latestApprovedAddendum = null;
+        $kontrak->approvedAddendums = new Collection();
+        $kontrak->shouldReceive('relationLoaded')->with('latestApprovedAddendum')->andReturn(true);
+        $kontrak->shouldReceive('relationLoaded')->with('approvedAddendums')->andReturn(true);
+
+        $builder = new KontrakDocumentDataBuilder($settings);
+        $data = $builder->build($pekerjaan, $kontrak);
+
+        $this->assertSame('Siti PPTK Kegiatan', $data['nama_pptk']);
+        $this->assertSame('198803032010012003', $data['nip_pptk']);
     }
 }

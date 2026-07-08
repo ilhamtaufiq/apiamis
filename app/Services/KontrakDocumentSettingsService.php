@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\AppSetting;
+use App\Models\Kegiatan;
 use App\Services\Procurement\SpseFieldDefaults;
 
 class KontrakDocumentSettingsService
@@ -41,6 +42,31 @@ class KontrakDocumentSettingsService
             'nip_ppk' => $this->valueOrFallback(self::SETTING_NIP_PPK, SpseFieldDefaults::get('ppk_nip')),
             'nama_pptk' => $this->valueOrFallback(self::SETTING_NAMA_PPTK, '-'),
             'nip_pptk' => $this->valueOrFallback(self::SETTING_NIP_PPTK, '-'),
+        ];
+    }
+
+    /**
+     * PPTK diambil dari sub kegiatan jika terisi, fallback ke Settings global.
+     *
+     * @return array{nama_pptk: string, nip_pptk: string}
+     */
+    public function resolvePptk(?Kegiatan $kegiatan = null): array
+    {
+        $defaults = $this->pejabatDefaults();
+
+        if ($kegiatan === null) {
+            return [
+                'nama_pptk' => $defaults['nama_pptk'],
+                'nip_pptk' => $defaults['nip_pptk'],
+            ];
+        }
+
+        $nama = trim((string) ($kegiatan->nama_pptk ?? ''));
+        $nip = trim((string) ($kegiatan->nip_pptk ?? ''));
+
+        return [
+            'nama_pptk' => $nama !== '' ? $nama : $defaults['nama_pptk'],
+            'nip_pptk' => $nip !== '' ? $nip : $defaults['nip_pptk'],
         ];
     }
 

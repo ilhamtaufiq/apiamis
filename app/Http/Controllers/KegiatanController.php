@@ -77,6 +77,8 @@ class KegiatanController extends Controller
             'sumber_dana' => ['nullable', 'string', Rule::in(Kegiatan::SUMBER_DANA_OPTIONS)],
             'pagu' => 'nullable|numeric|min:0',
             'kode_rekening' => 'nullable|array',
+            'nama_pptk' => 'nullable|string|max:255',
+            'nip_pptk' => 'nullable|string|max:50',
         ]);
 
         $kegiatan = Kegiatan::create($validated);
@@ -144,6 +146,8 @@ class KegiatanController extends Controller
             'sumber_dana' => ['nullable', 'string', Rule::in(Kegiatan::SUMBER_DANA_OPTIONS)],
             'pagu' => 'nullable|numeric|min:0',
             'kode_rekening' => 'nullable|array',
+            'nama_pptk' => 'nullable|string|max:255',
+            'nip_pptk' => 'nullable|string|max:50',
         ]);
 
         $kegiatan->update($validated);
