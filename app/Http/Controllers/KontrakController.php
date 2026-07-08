@@ -173,7 +173,16 @@ class KontrakController extends Controller
 
     public function exportRingkasan(Kontrak $kontrak)
     {
-        $kontrak->loadMissing(['kegiatan', 'pekerjaans.kegiatan', 'pekerjaans.kecamatan', 'pekerjaans.desa', 'penyedia', 'approvedAddendums']);
+        $kontrak->loadMissing([
+            'kegiatan',
+            'pekerjaans.kegiatan',
+            'pekerjaans.kecamatan',
+            'pekerjaans.desa',
+            'penyedia',
+            'approvedAddendums',
+            'latestApprovedAddendum',
+            'registers.type',
+        ]);
 
         $firstPekerjaan = $kontrak->pekerjaans->first();
         if ($firstPekerjaan && ! $firstPekerjaan->isChecklistComplete()) {
@@ -193,7 +202,16 @@ class KontrakController extends Controller
 
     public function previewRingkasan(Kontrak $kontrak)
     {
-        $kontrak->loadMissing(['kegiatan', 'pekerjaans.kegiatan', 'pekerjaans.kecamatan', 'pekerjaans.desa', 'penyedia', 'approvedAddendums']);
+        $kontrak->loadMissing([
+            'kegiatan',
+            'pekerjaans.kegiatan',
+            'pekerjaans.kecamatan',
+            'pekerjaans.desa',
+            'penyedia',
+            'approvedAddendums',
+            'latestApprovedAddendum',
+            'registers.type',
+        ]);
 
         $firstPekerjaan = $kontrak->pekerjaans->first();
         if ($firstPekerjaan && ! $firstPekerjaan->isChecklistComplete()) {

@@ -87,6 +87,15 @@ class AppSettingController extends Controller
             'kontrak_template_bap' => 'nullable|file|mimes:docx|max:10240',
             'kontrak_template_cover_am' => 'nullable|file|mimes:docx|max:10240',
             'kontrak_template_cover_san' => 'nullable|file|mimes:docx|max:10240',
+            'kontrak_nama_ppk' => 'nullable|string|max:255',
+            'kontrak_nip_ppk' => 'nullable|string|max:32',
+            'kontrak_nama_pptk' => 'nullable|string|max:255',
+            'kontrak_nip_pptk' => 'nullable|string|max:32',
+            'kontrak_masa_pemeliharaan_hari' => 'nullable|integer|min:1|max:3650',
+            'kontrak_skpd' => 'nullable|string|max:255',
+            'kontrak_nomor_dpa' => 'nullable|string|max:255',
+            'kontrak_tanggal_dpa' => 'nullable|string|max:255',
+            'kontrak_cara_pembayaran' => 'nullable|string|in:sekaligus,termin,bulan',
         ]);
 
         $apiKeyProviders = array_merge(array_keys(OpenRouterService::providerOptions()), ['local']);
@@ -217,6 +226,35 @@ class AppSettingController extends Controller
 
         if ($request->has('mail_body')) {
             $setting = AppSetting::setValue('mail_body', $request->mail_body, 'text');
+            $updatedSettings[] = $setting;
+        }
+
+        foreach ([
+            'kontrak_nama_ppk',
+            'kontrak_nip_ppk',
+            'kontrak_nama_pptk',
+            'kontrak_nip_pptk',
+            'kontrak_skpd',
+            'kontrak_nomor_dpa',
+            'kontrak_tanggal_dpa',
+            'kontrak_cara_pembayaran',
+        ] as $kontrakSettingKey) {
+            if ($request->has($kontrakSettingKey)) {
+                $setting = AppSetting::setValue(
+                    $kontrakSettingKey,
+                    $request->input($kontrakSettingKey),
+                    'text'
+                );
+                $updatedSettings[] = $setting;
+            }
+        }
+
+        if ($request->has('kontrak_masa_pemeliharaan_hari')) {
+            $setting = AppSetting::setValue(
+                'kontrak_masa_pemeliharaan_hari',
+                $request->input('kontrak_masa_pemeliharaan_hari'),
+                'text'
+            );
             $updatedSettings[] = $setting;
         }
 
@@ -630,6 +668,15 @@ class AppSettingController extends Controller
             'chat_base_url',
             'chat_model',
             'chat_api_key',
+            'kontrak_nama_ppk',
+            'kontrak_nip_ppk',
+            'kontrak_nama_pptk',
+            'kontrak_nip_pptk',
+            'kontrak_masa_pemeliharaan_hari',
+            'kontrak_skpd',
+            'kontrak_nomor_dpa',
+            'kontrak_tanggal_dpa',
+            'kontrak_cara_pembayaran',
         ];
 
         $normalized = [];

@@ -3,10 +3,22 @@
 namespace App\Services;
 
 use App\Models\DocumentRegister;
+use App\Models\KontrakAddendum;
 use Carbon\Carbon;
 
 class KontrakDocumentDataBuilder
 {
+    private const REGISTER_CODES = [
+        'bastp' => 'BASTP',
+        'jaminan_uang_muka' => 'JAMINAN_UM',
+        'jaminan_pemeliharaan' => 'JAMINAN_PEM',
+        'bap' => 'BAP',
+    ];
+
+    public function __construct(
+        private readonly KontrakDocumentSettingsService $documentSettings,
+    ) {}
+
     public function build($pekerjaan, $kontrak, array $overrideData = []): array
     {
         Carbon::setLocale('id');
@@ -14,8 +26,25 @@ class KontrakDocumentDataBuilder
 
         $kegiatan = $pekerjaan->kegiatan;
         $penyedia = $kontrak->penyedia;
-        $kontrak->loadMissing(['registers.type']);
-        $bastpRegister = $this->findRegisterByCode($kontrak, 'BASTP');
+        $kontrak->loadMissing(['registers.type', 'latestApprovedAddendum', 'approvedAddendums']);
+
+        $bastpRegister = $this->findRegisterByCode($kontrak, self::REGISTER_CODES['bastp']);
+        $jaminanUangMukaRegister = $this->findRegisterByCode($kontrak, self::REGISTER_CODES['jaminan_uang_muka']);
+        $jaminanPemeliharaanRegister = $this->findRegisterByCode($kontrak, self::REGISTER_CODES['jaminan_pemeliharaan']);
+        $bapRegister = $this->findRegisterByCode($kontrak, self::REGISTER_CODES['bap']);
+        $latestAddendum = $kontrak->relationLoaded('latestApprovedAddendum')
+            ? $kontrak->latestApprovedAddendum
+            : $kontrak->latestApprovedAddendum()->first();
+
+        $nilaiKontrakEfektif = $kontrak->nilaiKontrakBerjalan() ?? $kontrak->nilai_kontrak;
+        $tglSelesaiEfektif = $kontrak->tglSelesaiBerjalan();
+        $masaHari = ($kontrak->tgl_spmk instanceof Carbon && $tglSelesaiEfektif instanceof Carbon)
+            ? (int) $kontrak->tgl_spmk->diffInDays($tglSelesaiEfektif)
+            : null;
+        $limaPersen = (int) round($nilaiKontrakEfektif * 0.05);
+        $pejabat = $this->documentSettings->pejabatDefaults();
+        $instansi = $this->documentSettings->instansiDefaults();
+        $masaPemeliharaanHari = $this->documentSettings->masaPemeliharaanHari();
 
         $data = [
             'nama_paket' => $pekerjaan->nama_paket,
@@ -31,15 +60,20 @@ class KontrakDocumentDataBuilder
             'nama_sub_kegiatan' => $kegiatan ? $kegiatan->nama_sub_kegiatan : '-',
             'tahun' => $kegiatan ? $kegiatan->tahun_anggaran : '-',
             'nilai_kontrak' => 'Rp. '.number_format($kontrak->nilai_kontrak, 0, ',', '.'),
+            'nilai_kontrak_efektif' => 'Rp. '.number_format($nilaiKontrakEfektif, 0, ',', '.'),
+            'nilai_kontrak_addendum' => $latestAddendum?->nilai_kontrak_sesudah
+                ? 'Rp. '.number_format($latestAddendum->nilai_kontrak_sesudah, 0, ',', '.')
+                : '-',
+            'nilai_kontrak_5persen' => 'Rp. '.number_format($limaPersen, 0, ',', '.'),
             'nilai_kontrak_terbilang' => $this->terbilang($kontrak->nilai_kontrak),
             'terbilang_nilai_kontrak' => $this->terbilang($kontrak->nilai_kontrak),
             'tgl_sppbj' => $kontrak->tgl_sppbj instanceof Carbon ? $kontrak->tgl_sppbj->translatedFormat('d F Y') : '-',
             'tgl_spk' => $kontrak->tgl_spk instanceof Carbon ? $kontrak->tgl_spk->translatedFormat('d F Y') : '-',
-            'tgl_selesai' => $kontrak->tgl_selesai instanceof Carbon ? $kontrak->tgl_selesai->translatedFormat('d F Y') : '-',
+            'tgl_selesai' => $tglSelesaiEfektif instanceof Carbon ? $tglSelesaiEfektif->translatedFormat('d F Y') : '-',
             'tgl_spmk' => $kontrak->tgl_spmk instanceof Carbon ? $kontrak->tgl_spmk->translatedFormat('d F Y') : '-',
             'tanggal_spk' => $kontrak->tgl_spk instanceof Carbon ? $kontrak->tgl_spk->translatedFormat('d F Y') : '-',
             'tanggal_mulai' => $kontrak->tgl_spmk instanceof Carbon ? $kontrak->tgl_spmk->translatedFormat('d F Y') : '-',
-            'tanggal_selesai' => $kontrak->tgl_selesai instanceof Carbon ? $kontrak->tgl_selesai->translatedFormat('d F Y') : '-',
+            'tanggal_selesai' => $tglSelesaiEfektif instanceof Carbon ? $tglSelesaiEfektif->translatedFormat('d F Y') : '-',
             'nomor_sppbj' => $kontrak->sppbj ?: '-',
             'nomor_spk' => $kontrak->spk ?: '-',
             'nomor_spmk' => $kontrak->spmk ?: '-',
@@ -59,19 +93,27 @@ class KontrakDocumentDataBuilder
             'no_akta' => $penyedia ? $penyedia->no_akta : '-',
             'notaris' => $penyedia ? $penyedia->notaris : '-',
             'tanggal_akta' => $penyedia && $penyedia->tanggal_akta instanceof Carbon ? $penyedia->tanggal_akta->translatedFormat('d F Y') : '-',
+            'nama_ppk' => $pejabat['nama_ppk'],
+            'nip_ppk' => $pejabat['nip_ppk'],
+            'nama_pptk' => $pejabat['nama_pptk'],
+            'nip_pptk' => $pejabat['nip_pptk'],
+            'skpd' => $instansi['skpd'],
+            'nomor_dpa' => $instansi['nomor_dpa'],
+            'tanggal_dpa' => $instansi['tanggal_dpa'],
             'nomor_bastp' => $bastpRegister?->nomor ?: '-',
-            'tgl_bastp' => $bastpRegister && $bastpRegister->tanggal instanceof Carbon
-                ? $bastpRegister->tanggal->translatedFormat('d F Y')
-                : '-',
-            'masa_hari' => ($kontrak->tgl_spmk instanceof Carbon && $kontrak->tgl_selesai instanceof Carbon)
-                ? (int) $kontrak->tgl_spmk->diffInDays($kontrak->tgl_selesai)
-                : '-',
-            'masa' => ($kontrak->tgl_spmk instanceof Carbon && $kontrak->tgl_selesai instanceof Carbon)
-                ? ((int) $kontrak->tgl_spmk->diffInDays($kontrak->tgl_selesai)).' Hari'
-                : '-',
-            'masa_hari_terbilang' => ($kontrak->tgl_spmk instanceof Carbon && $kontrak->tgl_selesai instanceof Carbon)
-                ? $this->terbilang((int) $kontrak->tgl_spmk->diffInDays($kontrak->tgl_selesai))
-                : '-',
+            'tgl_bastp' => $this->formatRegisterDate($bastpRegister),
+            'nomor_jaminan_uang_muka' => $jaminanUangMukaRegister?->nomor ?: '-',
+            'tanggal_jaminan_uang_muka' => $this->formatRegisterDate($jaminanUangMukaRegister),
+            'nomor_jaminan_pemeliharaan' => $jaminanPemeliharaanRegister?->nomor ?: '-',
+            'tanggal_jaminan_pemeliharaan' => $this->formatRegisterDate($jaminanPemeliharaanRegister),
+            'nomor_bap' => $bapRegister?->nomor ?: '-',
+            'tgl_bap' => $this->formatRegisterDate($bapRegister),
+            'masa_hari' => $masaHari ?? '-',
+            'masa' => $masaHari !== null ? $masaHari.' Hari' : '-',
+            'masa_hari_terbilang' => $this->formatMasaHariTerbilang($masaHari),
+            'masa_hari_addendum' => $this->formatAddendumMasaHari($kontrak, $latestAddendum),
+            'jangka_pemeliharaan' => $this->formatMasaHariTerbilang($masaPemeliharaanHari),
+            'mulai_selesai_pemeliharaan' => $this->formatMasaPemeliharaan($tglSelesaiEfektif, $masaPemeliharaanHari),
         ];
 
         $data['Pekerjaan'] = $data['nama_paket'];
@@ -90,6 +132,7 @@ class KontrakDocumentDataBuilder
         $data['tgl_spl'] = $data['tgl_spk'];
 
         $data = array_merge($data, $this->sumberDanaCheckboxData($kegiatan?->sumber_dana));
+        $data = array_merge($data, $this->documentSettings->caraPembayaranCheckboxData());
         $data = array_merge($data, $this->addendumData($kontrak));
 
         if (! empty($overrideData)) {
@@ -137,6 +180,51 @@ class KontrakDocumentDataBuilder
         return $kontrak->registers->first(function (DocumentRegister $register) use ($normalized) {
             return strtoupper((string) ($register->type?->code ?? '')) === $normalized;
         });
+    }
+
+    private function formatRegisterDate(?DocumentRegister $register): string
+    {
+        if (! $register || ! $register->tanggal instanceof Carbon) {
+            return '-';
+        }
+
+        return $register->tanggal->translatedFormat('d F Y');
+    }
+
+    private function formatMasaHariTerbilang(?int $hari): string
+    {
+        if ($hari === null || $hari <= 0) {
+            return '-';
+        }
+
+        return $hari.' ('.$this->terbilang($hari).') Hari Kalender';
+    }
+
+    private function formatMasaPemeliharaan(mixed $tglSelesai, int $masaHari): string
+    {
+        if (! $tglSelesai instanceof Carbon) {
+            return '-';
+        }
+
+        $mulai = $tglSelesai->copy()->addDay();
+        $selesai = $mulai->copy()->addDays($masaHari - 1);
+
+        return 'dari Tanggal '.$mulai->translatedFormat('d F Y').' s.d Tanggal '.$selesai->translatedFormat('d F Y');
+    }
+
+    private function formatAddendumMasaHari($kontrak, ?KontrakAddendum $addendum): string
+    {
+        if (! $addendum || ! $addendum->tgl_selesai_sesudah instanceof Carbon) {
+            return '-';
+        }
+
+        if (! $kontrak->tgl_spmk instanceof Carbon) {
+            return '-';
+        }
+
+        $hari = (int) $kontrak->tgl_spmk->diffInDays($addendum->tgl_selesai_sesudah);
+
+        return $this->formatMasaHariTerbilang($hari);
     }
 
     private function addendumData($kontrak): array
