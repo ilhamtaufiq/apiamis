@@ -47,13 +47,34 @@ class KontrakDocumentDataBuilder
         $instansi = $this->documentSettings->instansiDefaults();
         $masaPemeliharaanHari = $this->documentSettings->masaPemeliharaanHari();
 
+        $desaNama = $pekerjaan->desa?->n_desa
+            ?? $pekerjaan->desa?->nama_desa
+            ?? $pekerjaan->desa?->nama
+            ?? '-';
+        $kecamatanNama = $pekerjaan->kecamatan?->n_kec
+            ?? $pekerjaan->kecamatan?->nama_kecamatan
+            ?? $pekerjaan->kecamatan?->nama
+            ?? '-';
+
+        // Override ringkasan: persen tagih + pembayaran yang lalu (diisi manual user)
+        $pembayaranLalu = [];
+        if (isset($overrideData['pembayaran_lalu']) && is_array($overrideData['pembayaran_lalu'])) {
+            $pembayaranLalu = array_values($overrideData['pembayaran_lalu']);
+        }
+        $persenTagih = (int) ($overrideData['persen_tagih'] ?? 100);
+        if (! in_array($persenTagih, [100, 95, 5, 30], true)) {
+            $persenTagih = 100;
+        }
+        $nilaiTagih = (int) round(((float) $nilaiKontrakEfektif) * $persenTagih / 100);
+        unset($overrideData['persen_tagih'], $overrideData['pembayaran_lalu'], $overrideData['nilai_tagih']);
+
         $data = [
             'nama_paket' => $pekerjaan->nama_paket,
             'pagu' => 'Rp. '.number_format($pekerjaan->pagu, 0, ',', '.'),
             'pagu_terbilang' => $this->terbilang($pekerjaan->pagu),
             'kode_rekening' => $pekerjaan->kode_rekening,
-            'kecamatan' => $pekerjaan->kecamatan ? $pekerjaan->kecamatan->nama : '-',
-            'desa' => $pekerjaan->desa ? $pekerjaan->desa->nama : '-',
+            'kecamatan' => $kecamatanNama !== '' ? $kecamatanNama : '-',
+            'desa' => $desaNama !== '' ? $desaNama : '-',
             'nama_program' => $kegiatan ? $kegiatan->nama_program : '-',
             'nama_kegiatan' => $kegiatan ? $kegiatan->nama_kegiatan : '-',
             'sub_kegiatan' => $kegiatan ? $kegiatan->nama_sub_kegiatan : '-',
@@ -66,6 +87,8 @@ class KontrakDocumentDataBuilder
                 ? 'Rp. '.number_format($latestAddendum->nilai_kontrak_sesudah, 0, ',', '.')
                 : '-',
             'nilai_kontrak_5persen' => 'Rp. '.number_format($limaPersen, 0, ',', '.'),
+            'persen_tagih' => (string) $persenTagih,
+            'nilai_tagih' => 'Rp. '.number_format($nilaiTagih, 0, ',', '.'),
             'nilai_kontrak_terbilang' => $this->terbilang($kontrak->nilai_kontrak),
             'terbilang_nilai_kontrak' => $this->terbilang($kontrak->nilai_kontrak),
             'tgl_sppbj' => $kontrak->tgl_sppbj instanceof Carbon ? $kontrak->tgl_sppbj->translatedFormat('d F Y') : '-',
@@ -123,7 +146,7 @@ class KontrakDocumentDataBuilder
         $data['Nama_Sub_Kegiatan'] = $data['nama_sub_kegiatan'];
         $data['Nilai_Kontrak'] = $data['nilai_kontrak'];
         $data['Terbilang'] = $data['nilai_kontrak_terbilang'];
-        $data['Kota'] = $pekerjaan->kecamatan ? $pekerjaan->kecamatan->nama : 'Cianjur';
+        $data['Kota'] = $kecamatanNama !== '' && $kecamatanNama !== '-' ? $kecamatanNama : 'Cianjur';
         $data['SPK'] = $data['tgl_spk'];
         $data['SPK1'] = $data['nomor_spk'];
         $data['SPPBJ'] = $data['tgl_sppbj'];
@@ -135,10 +158,11 @@ class KontrakDocumentDataBuilder
         $data = array_merge($data, $this->sumberDanaCheckboxData($kegiatan?->sumber_dana));
         $data = array_merge($data, $this->documentSettings->caraPembayaranCheckboxData());
         $data = array_merge($data, $this->addendumData($kontrak));
+        $data = array_merge($data, $this->pembayaranLaluData($pembayaranLalu));
 
         if (! empty($overrideData)) {
             foreach ($overrideData as $key => $value) {
-                $lowerKey = strtolower($key);
+                $lowerKey = strtolower((string) $key);
                 $moneyKeywords = ['nilai', 'jumlah', 'dpp', 'ppn', 'total', 'tagihan'];
                 $isMoney = false;
                 foreach ($moneyKeywords as $mk) {
@@ -148,7 +172,7 @@ class KontrakDocumentDataBuilder
                     }
                 }
 
-                $excludeKeywords = ['nomor', 'tgl', 'tanggal', 'tahun', 'kode', 'id', 'rate', 'hari'];
+                $excludeKeywords = ['nomor', 'tgl', 'tanggal', 'tahun', 'kode', 'id', 'rate', 'hari', 'persen'];
                 $isExcluded = false;
                 if (! $isMoney) {
                     foreach ($excludeKeywords as $kw) {
@@ -168,6 +192,58 @@ class KontrakDocumentDataBuilder
                 } else {
                     $data[$key] = $value;
                 }
+            }
+        }
+
+        // Pastikan nilai tagih / persen tidak tertimpa format override generik
+        $data['persen_tagih'] = (string) $persenTagih;
+        $data['nilai_tagih'] = 'Rp. '.number_format($nilaiTagih, 0, ',', '.');
+
+        return $data;
+    }
+
+    /**
+     * @param  array<int, array<string, mixed>>  $items
+     * @return array<string, string>
+     */
+    private function pembayaranLaluData(array $items): array
+    {
+        $maxSlots = 5;
+        $data = [];
+
+        for ($slot = 1; $slot <= $maxSlots; $slot++) {
+            $data["pembayaran_lalu_{$slot}_jenis"] = '-';
+            $data["pembayaran_lalu_{$slot}_tanggal"] = '-';
+            $data["pembayaran_lalu_{$slot}_nominal"] = 'Rp -';
+        }
+
+        foreach (array_values($items) as $index => $item) {
+            if ($index >= $maxSlots) {
+                break;
+            }
+            if (! is_array($item)) {
+                continue;
+            }
+
+            $slot = $index + 1;
+            $jenis = trim((string) ($item['jenis'] ?? ''));
+            $nominalRaw = $item['nominal'] ?? null;
+            $tanggalRaw = $item['tanggal'] ?? null;
+
+            $data["pembayaran_lalu_{$slot}_jenis"] = $jenis !== '' ? $jenis : '-';
+
+            if ($tanggalRaw) {
+                try {
+                    $data["pembayaran_lalu_{$slot}_tanggal"] = Carbon::parse((string) $tanggalRaw)
+                        ->locale('id')
+                        ->translatedFormat('d F Y');
+                } catch (\Throwable) {
+                    $data["pembayaran_lalu_{$slot}_tanggal"] = (string) $tanggalRaw;
+                }
+            }
+
+            if ($nominalRaw !== null && $nominalRaw !== '' && is_numeric($nominalRaw)) {
+                $data["pembayaran_lalu_{$slot}_nominal"] = 'Rp. '.number_format((float) $nominalRaw, 0, ',', '.');
             }
         }
 

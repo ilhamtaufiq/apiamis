@@ -171,7 +171,7 @@ class KontrakController extends Controller
         }
     }
 
-    public function exportRingkasan(Kontrak $kontrak)
+    public function exportRingkasan(Request $request, Kontrak $kontrak)
     {
         $kontrak->loadMissing([
             'kegiatan',
@@ -190,7 +190,8 @@ class KontrakController extends Controller
         }
 
         try {
-            $path = $this->exportService->exportRingkasan($kontrak);
+            $overrideData = $this->validatedRingkasanOverrides($request);
+            $path = $this->exportService->exportRingkasan($kontrak, 'xlsx', $overrideData);
             $namaPaket = $firstPekerjaan?->nama_paket ?? 'Kontrak';
             $downloadName = 'Ringkasan_'.Str::slug($namaPaket).'.xlsx';
 
@@ -200,7 +201,7 @@ class KontrakController extends Controller
         }
     }
 
-    public function previewRingkasan(Kontrak $kontrak)
+    public function previewRingkasan(Request $request, Kontrak $kontrak)
     {
         $kontrak->loadMissing([
             'kegiatan',
@@ -219,7 +220,8 @@ class KontrakController extends Controller
         }
 
         try {
-            $path = $this->exportService->exportRingkasan($kontrak);
+            $overrideData = $this->validatedRingkasanOverrides($request);
+            $path = $this->exportService->exportRingkasan($kontrak, 'xlsx', $overrideData);
             $namaPaket = $firstPekerjaan?->nama_paket ?? 'Kontrak';
             $downloadName = 'Ringkasan_'.Str::slug($namaPaket).'.xlsx';
 
@@ -242,6 +244,48 @@ class KontrakController extends Controller
         } catch (\Exception $e) {
             return response()->json(['message' => $e->getMessage()], 500);
         }
+    }
+
+    /**
+     * @return array{persen_tagih?: int, pembayaran_lalu?: array<int, array{jenis?: string, tanggal?: string, nominal?: float|int|string}>}
+     */
+    private function validatedRingkasanOverrides(Request $request): array
+    {
+        $validated = $request->validate([
+            'persen_tagih' => 'nullable|integer|in:100,95,5,30',
+            'pembayaran_lalu' => 'nullable|array|max:5',
+            'pembayaran_lalu.*.jenis' => 'nullable|string|max:100',
+            'pembayaran_lalu.*.tanggal' => 'nullable|date',
+            'pembayaran_lalu.*.nominal' => 'nullable|numeric|min:0',
+        ]);
+
+        $items = [];
+        foreach ($validated['pembayaran_lalu'] ?? [] as $row) {
+            if (! is_array($row)) {
+                continue;
+            }
+            $jenis = trim((string) ($row['jenis'] ?? ''));
+            $tanggal = $row['tanggal'] ?? null;
+            $nominal = $row['nominal'] ?? null;
+            if ($jenis === '' && empty($tanggal) && ($nominal === null || $nominal === '')) {
+                continue;
+            }
+            $items[] = [
+                'jenis' => $jenis,
+                'tanggal' => $tanggal,
+                'nominal' => $nominal,
+            ];
+        }
+
+        $result = [];
+        if (isset($validated['persen_tagih'])) {
+            $result['persen_tagih'] = (int) $validated['persen_tagih'];
+        }
+        if ($items !== []) {
+            $result['pembayaran_lalu'] = $items;
+        }
+
+        return $result;
     }
 
     public function exportCover(Kontrak $kontrak)

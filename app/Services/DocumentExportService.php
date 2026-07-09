@@ -103,9 +103,9 @@ class DocumentExportService
         return $tempPath;
     }
 
-    public function exportRingkasan($kontrak, $format = 'xlsx')
+    public function exportRingkasan($kontrak, $format = 'xlsx', array $overrideData = [])
     {
-        return $this->excelExportService->exportRingkasan($kontrak);
+        return $this->excelExportService->exportRingkasan($kontrak, $overrideData);
     }
 
     public function exportBAP($kontrak, $format = 'docx', $overrideData = [])
