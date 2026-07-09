@@ -114,7 +114,7 @@ class FotoController extends Controller
             'keterangan' => 'required|in:0%,25%,50%,75%,100%',
             'koordinat' => 'required|string|max:255',
             'unit_index' => 'nullable|integer',
-            'file' => 'required|file|mimes:jpg,jpeg,png|max:5120', // Max 5MB and images only
+            'file' => 'required|file|mimes:jpg,jpeg,png|max:51200', // Max 50MB and images only
         ]);
 
         $pekerjaan = Pekerjaan::query()->findOrFail($validated['pekerjaan_id']);
@@ -179,7 +179,7 @@ class FotoController extends Controller
             'keterangan' => 'nullable|in:0%,25%,50%,75%,100%',
             'koordinat' => 'nullable|string|max:255',
             'unit_index' => 'nullable|integer',
-            'file' => 'nullable|file|mimes:jpg,jpeg,png|max:5120',
+            'file' => 'nullable|file|mimes:jpg,jpeg,png|max:51200',
         ]);
 
         if (array_key_exists('koordinat', $validated) && $validated['koordinat'] !== null) {

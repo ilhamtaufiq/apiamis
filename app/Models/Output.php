@@ -5,12 +5,13 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
-use App\Traits\NotifiesAdminsOnChanges;
 use App\Traits\Auditable;
+use App\Traits\BroadcastsPekerjaanRealtime;
+use App\Traits\NotifiesAdminsOnChanges;
 
 class Output extends Model
 {
-    use NotifiesAdminsOnChanges, Auditable;
+    use BroadcastsPekerjaanRealtime, NotifiesAdminsOnChanges, Auditable;
     protected $table = 'tbl_output';
 
     protected $fillable = [

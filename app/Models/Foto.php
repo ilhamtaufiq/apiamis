@@ -9,12 +9,13 @@ use Spatie\MediaLibrary\HasMedia;
 use Spatie\MediaLibrary\MediaCollections\Models\Media;
 use Spatie\MediaLibrary\InteractsWithMedia;
 
-use App\Traits\NotifiesAdminsOnChanges;
 use App\Traits\Auditable;
+use App\Traits\BroadcastsPekerjaanRealtime;
+use App\Traits\NotifiesAdminsOnChanges;
 
 class Foto extends Model implements HasMedia
 {
-    use InteractsWithMedia, NotifiesAdminsOnChanges, Auditable;
+    use BroadcastsPekerjaanRealtime, InteractsWithMedia, NotifiesAdminsOnChanges, Auditable;
 
     protected $table = 'tbl_foto';
 
