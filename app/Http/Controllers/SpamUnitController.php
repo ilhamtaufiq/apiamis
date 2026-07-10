@@ -55,11 +55,18 @@ class SpamUnitController extends Controller
     {
         // Muat semua histori capaian/anggaran agar tahun pembangunan multi-tahun
         // bisa diturunkan di frontend; filter `tahun` hanya untuk query scope unit.
-        $query = UnitSpam::with(['desa.kecamatan', 'pengelola', 'budgets' => function ($q) {
-            $q->orderBy('tahun', 'desc');
-        }, 'achievements' => function ($q) {
-            $q->orderBy('tahun', 'desc');
-        }]);
+        // pekerjaan.kegiatan → Program (nama_sub_kegiatan) di tab Kelembagaan POKMAS.
+        $query = UnitSpam::with([
+            'desa.kecamatan',
+            'pengelola',
+            'budgets' => function ($q) {
+                $q->orderBy('tahun', 'desc');
+            },
+            'achievements' => function ($q) {
+                $q->orderBy('tahun', 'desc');
+            },
+            'pekerjaan.kegiatan:id,nama_sub_kegiatan,nama_kegiatan,nama_program,tahun_anggaran,sumber_dana',
+        ]);
 
         // Filter by kecamatan
         if ($request->filled('kecamatan_id')) {
