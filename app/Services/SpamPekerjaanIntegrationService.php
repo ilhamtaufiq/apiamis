@@ -360,19 +360,37 @@ class SpamPekerjaanIntegrationService
         $jiwaSum = (int) $pekerjaan->penerima->sum('jumlah_jiwa');
 
         if ($resolvedMetric === 'bjp') {
+            // BJP (bukan jaringan perpipaan): tidak pernah menambah SR.
+            // Volume "Sambungan Rumah"/SR dihitung sebagai KK (bjp_kk) saja.
+            // SR/sambungan rumah hanya masuk kolom SR bila capaian_metric = JP (jaringan perpipaan).
+            $volumeAsKk = 0;
+            foreach ($this->airMinumOutputsForPekerjaan($pekerjaan, true) as $output) {
+                $type = $output['output_type'] ?? null;
+                $vol = (int) round((float) ($output['volume'] ?? 0));
+                if ($vol <= 0) {
+                    continue;
+                }
+
+                // SR/sambungan rumah + sumur/BJP + output tak terklasifikasi → KK BJP
+                if ($type === 'sambungan_rumah' || $type === 'bjp' || $type === null) {
+                    $volumeAsKk += $vol;
+                }
+            }
+
+            // Prefer penerima; jika kosong, pakai volume (termasuk SR→KK).
+            // Jika keduanya ada, ambil yang lebih besar agar volume SR tidak terabaikan.
             $bjpKk = $penerimaKk;
             if ($bjpKk === 0) {
-                foreach ($this->airMinumOutputsForPekerjaan($pekerjaan, true) as $output) {
-                    if ($resolvedMetric === 'bjp') {
-                        $bjpKk += (int) round((float) $output['volume']);
-                    }
-                }
+                $bjpKk = $volumeAsKk;
+            } elseif ($volumeAsKk > $bjpKk) {
+                $bjpKk = $volumeAsKk;
             }
 
             $bjpJiwa = $jiwaSum > 0 ? $jiwaSum : ($bjpKk * 5);
 
             return [
                 'sr' => 0,
+                // KK JP dibiarkan 0 agar tidak dobel di formula coverage (kk + bjp_kk).
                 'kk' => 0,
                 'jiwa' => 0,
                 'bjp_kk' => $bjpKk,
@@ -384,9 +402,10 @@ class SpamPekerjaanIntegrationService
             ];
         }
 
+        // JP (jaringan perpipaan): hanya output sambungan rumah / SR yang mengisi kolom SR.
         $sr = 0;
         foreach ($this->airMinumOutputsForPekerjaan($pekerjaan) as $output) {
-            if ($output['output_type'] === 'sambungan_rumah') {
+            if (($output['output_type'] ?? null) === 'sambungan_rumah') {
                 $sr += (int) round((float) $output['volume']);
             }
         }

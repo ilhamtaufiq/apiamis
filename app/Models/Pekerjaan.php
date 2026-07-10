@@ -6,7 +6,12 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Schema;
 
+use App\Services\SpamPekerjaanIntegrationService;
+use App\Services\SpmSanitasiPekerjaanIntegrationService;
 use App\Traits\Auditable;
 use App\Traits\BroadcastsPekerjaanRealtime;
 use App\Traits\NotifiesAdminsOnChanges;
@@ -14,6 +19,85 @@ use App\Traits\NotifiesAdminsOnChanges;
 class Pekerjaan extends Model
 {
     use BroadcastsPekerjaanRealtime, NotifiesAdminsOnChanges, Auditable;
+
+    /**
+     * Unit SPAM / SPM Sanitasi yang tertaut, disimpan sebelum cascade delete pivot.
+     *
+     * @var array<int, array{unit_spam: list<int>, spm_sanitasi: list<int>}>
+     */
+    private static array $pendingLinkResync = [];
+
+    protected static function booted(): void
+    {
+        // Saat pekerjaan dihapus, pivot tautan cascade otomatis (FK).
+        // Capaian yang pernah di-sync dari tautan harus dihitung ulang (sama seperti detach).
+        static::deleting(function (Pekerjaan $pekerjaan) {
+            $unitSpamIds = [];
+            $spmSanitasiIds = [];
+
+            if (Schema::hasTable('tbl_unit_spam_pekerjaan')) {
+                $unitSpamIds = DB::table('tbl_unit_spam_pekerjaan')
+                    ->where('pekerjaan_id', $pekerjaan->id)
+                    ->pluck('unit_spam_id')
+                    ->map(fn ($id) => (int) $id)
+                    ->unique()
+                    ->values()
+                    ->all();
+            }
+
+            if (Schema::hasTable('tbl_spm_sanitasi_pekerjaan')) {
+                $spmSanitasiIds = DB::table('tbl_spm_sanitasi_pekerjaan')
+                    ->where('pekerjaan_id', $pekerjaan->id)
+                    ->pluck('spm_sanitasi_id')
+                    ->map(fn ($id) => (int) $id)
+                    ->unique()
+                    ->values()
+                    ->all();
+            }
+
+            self::$pendingLinkResync[$pekerjaan->id] = [
+                'unit_spam' => $unitSpamIds,
+                'spm_sanitasi' => $spmSanitasiIds,
+            ];
+        });
+
+        static::deleted(function (Pekerjaan $pekerjaan) {
+            $pending = self::$pendingLinkResync[$pekerjaan->id] ?? null;
+            unset(self::$pendingLinkResync[$pekerjaan->id]);
+
+            if (! $pending) {
+                return;
+            }
+
+            try {
+                if (! empty($pending['unit_spam'])) {
+                    $spamService = app(SpamPekerjaanIntegrationService::class);
+                    foreach ($pending['unit_spam'] as $unitId) {
+                        $unit = UnitSpam::query()->find($unitId);
+                        if ($unit) {
+                            $spamService->syncUnitAccumulationFromLinks($unit);
+                        }
+                    }
+                }
+
+                if (! empty($pending['spm_sanitasi'])) {
+                    $sanitasiService = app(SpmSanitasiPekerjaanIntegrationService::class);
+                    foreach ($pending['spm_sanitasi'] as $spmId) {
+                        $spm = SpmSanitasi::query()->find($spmId);
+                        if ($spm) {
+                            $sanitasiService->syncInfrastrukturFromLinkedPekerjaan($spm);
+                        }
+                    }
+                }
+            } catch (\Throwable $e) {
+                Log::warning('Gagal sync tautan setelah hapus pekerjaan', [
+                    'pekerjaan_id' => $pekerjaan->id,
+                    'error' => $e->getMessage(),
+                ]);
+            }
+        });
+    }
+
     /**
      * Scope untuk filter berdasarkan role user
      * - Admin: lihat semua

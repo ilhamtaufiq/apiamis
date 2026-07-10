@@ -91,6 +91,10 @@ Route::get('blog/{blog}/comments/count', [BlogCommentController::class, 'count']
 Route::get('public/puspen/progress-fisik', [PuspenProgressFisikController::class, 'publicIndex']);
 Route::get('public/spam-units/stats', [SpamUnitController::class, 'publicStats']);
 Route::get('public/spam-units/map-stats', [SpamUnitController::class, 'publicMapStats']);
+Route::get('public/spam-kelembagaan/form/{token}', [\App\Http\Controllers\SpamKelembagaanShareController::class, 'publicShow'])
+    ->middleware('throttle:60,1');
+Route::post('public/spam-kelembagaan/form/{token}', [\App\Http\Controllers\SpamKelembagaanShareController::class, 'publicSubmit'])
+    ->middleware('throttle:10,1');
 Route::get('public/spm-sanitasi/stats', [SpmSanitasiController::class, 'publicStats']);
 Route::get('public/spm-sanitasi/map-stats', [SpmSanitasiController::class, 'publicMapStats']);
 Route::post('public/contact', [ContactController::class, 'store'])->middleware('throttle:contact-inquiries');
@@ -203,6 +207,16 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::delete('spam-units/{unitSpam}/budgets/{budgetId}', [SpamUnitController::class, 'deleteBudget']);
     Route::post('spam-units/import', [SpamUnitController::class, 'import']);
     Route::apiResource('spam-units', SpamUnitController::class);
+
+    // Share form kelembagaan SPAM + verifikasi admin
+    Route::get('spam-kelembagaan/share-links', [\App\Http\Controllers\SpamKelembagaanShareController::class, 'indexLinks']);
+    Route::post('spam-kelembagaan/share-links', [\App\Http\Controllers\SpamKelembagaanShareController::class, 'storeLink']);
+    Route::put('spam-kelembagaan/share-links/{shareLink}', [\App\Http\Controllers\SpamKelembagaanShareController::class, 'updateLink']);
+    Route::delete('spam-kelembagaan/share-links/{shareLink}', [\App\Http\Controllers\SpamKelembagaanShareController::class, 'destroyLink']);
+    Route::get('spam-kelembagaan/submissions', [\App\Http\Controllers\SpamKelembagaanShareController::class, 'indexSubmissions']);
+    Route::get('spam-kelembagaan/submissions/{submission}', [\App\Http\Controllers\SpamKelembagaanShareController::class, 'showSubmission']);
+    Route::post('spam-kelembagaan/submissions/{submission}/approve', [\App\Http\Controllers\SpamKelembagaanShareController::class, 'approveSubmission']);
+    Route::post('spam-kelembagaan/submissions/{submission}/reject', [\App\Http\Controllers\SpamKelembagaanShareController::class, 'rejectSubmission']);
     Route::get('spm-sanitasi/stats', [SpmSanitasiController::class, 'stats']);
     Route::get('spm-sanitasi/capaian', [SpmSanitasiController::class, 'capaian']);
     Route::get('spm-sanitasi/integration', [SpmSanitasiController::class, 'integration']);

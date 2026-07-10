@@ -23,7 +23,15 @@ class UnitSpam extends Model
         'sistem_layanan',
         'sumber_mata_air_kap',
         'sumber_air_tanah_kap',
-        'lain_lain_kap'
+        'lain_lain_kap',
+        // Pemantauan kelembagaan POKMAS (format workbook)
+        'tahun_pembangunan',
+        'sumber_dana',
+        'program',
+        'tarif_dasar_hukum',
+        'iuran_nominal',
+        'pendapatan_bulan',
+        'biaya_operasional',
     ];
 
     protected $casts = [

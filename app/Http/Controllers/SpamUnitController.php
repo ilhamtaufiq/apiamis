@@ -53,12 +53,11 @@ class SpamUnitController extends Controller
 
     public function index(Request $request): JsonResponse
     {
-        $query = UnitSpam::with(['desa.kecamatan', 'pengelola', 'budgets' => function($q) {
+        // Muat semua histori capaian/anggaran agar tahun pembangunan multi-tahun
+        // bisa diturunkan di frontend; filter `tahun` hanya untuk query scope unit.
+        $query = UnitSpam::with(['desa.kecamatan', 'pengelola', 'budgets' => function ($q) {
             $q->orderBy('tahun', 'desc');
-        }, 'achievements' => function ($q) use ($request) {
-            if ($request->filled('tahun')) {
-                $q->where('tahun', $request->tahun);
-            }
+        }, 'achievements' => function ($q) {
             $q->orderBy('tahun', 'desc');
         }]);
 
@@ -79,18 +78,22 @@ class SpamUnitController extends Controller
             $query->where('is_simspam', filter_var($request->is_simspam, FILTER_VALIDATE_BOOLEAN));
         }
 
-        // Filter by search
+        // Filter by search (unit, desa, POKMAS, program/kelembagaan)
         if ($request->filled('search')) {
             $search = '%' . $request->search . '%';
             $query->where(function ($q) use ($search) {
                 $q->where('name', 'like', $search)
                   ->orWhere('sistem_layanan', 'like', $search)
+                  ->orWhere('program', 'like', $search)
+                  ->orWhere('sumber_dana', 'like', $search)
+                  ->orWhere('tahun_pembangunan', 'like', $search)
                   ->orWhereHas('desa', function ($dq) use ($search) {
                       $dq->where('n_desa', 'like', $search);
                   })
                   ->orWhereHas('pengelola', function ($pq) use ($search) {
                       $pq->where('pokmas', 'like', $search)
-                        ->orWhere('kepala', 'like', $search);
+                        ->orWhere('kepala', 'like', $search)
+                        ->orWhere('perdes', 'like', $search);
                   });
             });
         }
@@ -140,6 +143,14 @@ class SpamUnitController extends Controller
             'sumber_mata_air_kap' => 'nullable|string|max:255',
             'sumber_air_tanah_kap' => 'nullable|string|max:255',
             'lain_lain_kap' => 'nullable|string|max:255',
+            // Kelembagaan / teknis (format pemantauan POKMAS)
+            'tahun_pembangunan' => 'nullable|string|max:10',
+            'sumber_dana' => 'nullable|string|max:255',
+            'program' => 'nullable|string|max:255',
+            'tarif_dasar_hukum' => 'nullable|string|max:255',
+            'iuran_nominal' => 'nullable|string|max:255',
+            'pendapatan_bulan' => 'nullable|string|max:255',
+            'biaya_operasional' => 'nullable|string|max:255',
             // Pengelola
             'pokmas' => 'nullable|string|max:255',
             'perdes' => 'nullable|string|max:255',
@@ -148,7 +159,11 @@ class SpamUnitController extends Controller
             'sekretaris' => 'nullable|string|max:255',
         ]);
 
-        $unit = UnitSpam::create($validated);
+        $unitFields = collect($validated)->except([
+            'pokmas', 'perdes', 'kepala', 'bendahara', 'sekretaris',
+        ])->all();
+
+        $unit = UnitSpam::create($unitFields);
 
         // Create pengelola
         $unit->pengelola()->create([
@@ -176,6 +191,13 @@ class SpamUnitController extends Controller
             'sumber_mata_air_kap' => 'nullable|string|max:255',
             'sumber_air_tanah_kap' => 'nullable|string|max:255',
             'lain_lain_kap' => 'nullable|string|max:255',
+            'tahun_pembangunan' => 'nullable|string|max:10',
+            'sumber_dana' => 'nullable|string|max:255',
+            'program' => 'nullable|string|max:255',
+            'tarif_dasar_hukum' => 'nullable|string|max:255',
+            'iuran_nominal' => 'nullable|string|max:255',
+            'pendapatan_bulan' => 'nullable|string|max:255',
+            'biaya_operasional' => 'nullable|string|max:255',
             // Pengelola
             'pokmas' => 'nullable|string|max:255',
             'perdes' => 'nullable|string|max:255',
@@ -184,11 +206,15 @@ class SpamUnitController extends Controller
             'sekretaris' => 'nullable|string|max:255',
         ]);
 
-        $spamUnit->update($validated);
+        $unitFields = collect($validated)->except([
+            'pokmas', 'perdes', 'kepala', 'bendahara', 'sekretaris',
+        ])->all();
+
+        $spamUnit->update($unitFields);
 
         // Update or Create Pengelola
         $pengelola = $spamUnit->pengelola;
-        
+
         if ($pengelola) {
             $pengelola->pokmas = $request->pokmas;
             $pengelola->perdes = $request->perdes;
@@ -207,11 +233,10 @@ class SpamUnitController extends Controller
             $newPengelola->save();
         }
 
-
         return response()->json([
             'success' => true,
             'data' => $spamUnit->load('pengelola'),
-            'message' => 'Unit SPAM berhasil diperbarui'
+            'message' => 'Unit SPAM berhasil diperbarui',
         ]);
     }
 
