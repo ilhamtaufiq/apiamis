@@ -10,6 +10,7 @@ use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use App\Http\Resources\UserResource;
+use App\Services\MaintenanceModeService;
 use App\Services\UserPresenceService;
 use Laravel\Socialite\Facades\Socialite;
 
@@ -92,6 +93,13 @@ class AuthController extends Controller
                 }
             }
             
+            $maintenance = app(MaintenanceModeService::class);
+            if ($maintenance->isEnabled() && ! $maintenance->allowsUser($user)) {
+                return redirect()->away(
+                    $oauthCallbackBase . '#error=' . rawurlencode('Aplikasi sedang maintenance. Login ditutup sementara.')
+                );
+            }
+
             $user->load('roles', 'permissions');
             $token = $user->createToken('auth-token')->plainTextToken;
             
@@ -148,6 +156,15 @@ class AuthController extends Controller
             throw ValidationException::withMessages([
                 'email' => ['The provided credentials are incorrect.'],
             ]);
+        }
+
+        $maintenance = app(MaintenanceModeService::class);
+        if ($maintenance->isEnabled() && ! $maintenance->allowsUser($user)) {
+            return response()->json([
+                'message' => 'Aplikasi sedang maintenance. Login ditutup sementara.',
+                'code' => 'MAINTENANCE_MODE',
+                'maintenance' => true,
+            ], 503);
         }
 
         // Load roles and permissions

@@ -9,6 +9,7 @@ use App\Services\KontrakTemplateService;
 use App\Services\MailConfigService;
 use App\Services\MailContentService;
 use App\Services\MailTemplateService;
+use App\Services\MaintenanceModeService;
 use App\Services\OpenRouterService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
@@ -28,6 +29,18 @@ class AppSettingController extends Controller
     {
         $settings = AppSetting::all();
         return AppSettingResource::collection($settings);
+    }
+
+    /**
+     * Lightweight public maintenance status for SPA gate.
+     */
+    public function maintenanceStatus(Request $request, MaintenanceModeService $maintenance)
+    {
+        $user = $maintenance->resolveUser($request);
+
+        return response()->json([
+            'data' => $maintenance->statusPayload($user),
+        ]);
     }
 
     /**
@@ -68,6 +81,8 @@ class AppSettingController extends Controller
             'landing_page_active' => 'nullable|string|in:0,1',
             'spm_detail_page_active' => 'nullable|string|in:0,1',
             'puspen_progress_fisik_public' => 'nullable|string|in:0,1',
+            'maintenance_mode' => 'nullable|string|in:0,1',
+            'maintenance_bypass_emails' => 'nullable|string|max:1000',
             'mail_enabled' => 'nullable|string|in:0,1',
             'mail_host' => 'nullable|string|max:255',
             'mail_port' => 'nullable|string|max:5',
@@ -166,6 +181,20 @@ class AppSettingController extends Controller
 
         if ($request->has('puspen_progress_fisik_public')) {
             $setting = AppSetting::setValue('puspen_progress_fisik_public', $request->puspen_progress_fisik_public, 'text');
+            $updatedSettings[] = $setting;
+        }
+
+        if ($request->has('maintenance_mode')) {
+            $setting = AppSetting::setValue('maintenance_mode', $request->maintenance_mode, 'text');
+            $updatedSettings[] = $setting;
+        }
+
+        if ($request->has('maintenance_bypass_emails')) {
+            $setting = AppSetting::setValue(
+                'maintenance_bypass_emails',
+                $request->maintenance_bypass_emails,
+                'text'
+            );
             $updatedSettings[] = $setting;
         }
 

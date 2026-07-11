@@ -26,6 +26,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'role_or_permission' => \Spatie\Permission\Middleware\RoleOrPermissionMiddleware::class,
             'check.route.permission' => \App\Http\Middleware\CheckRoutePermission::class,
             'swagger.admin' => \App\Http\Middleware\EnsureSwaggerAdminAccess::class,
+            'maintenance' => \App\Http\Middleware\EnsureNotInMaintenance::class,
         ]);
 
         // Sanctum
@@ -33,8 +34,9 @@ return Application::configure(basePath: dirname(__DIR__))
             \Laravel\Sanctum\Http\Middleware\EnsureFrontendRequestsAreStateful::class,
         ]);
 
-        // Apply route permission check to all API routes (after auth)
+        // Maintenance gate + route permission on all API routes
         $middleware->api(append: [
+            'maintenance',
             'check.route.permission',
         ]);
 

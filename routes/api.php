@@ -71,6 +71,7 @@ Route::get('auth/google/callback', [AuthController::class, 'handleGoogleCallback
 
 // App Settings (public read, authenticated write)
 Route::get('app-settings', [AppSettingController::class, 'index']);
+Route::get('app-settings/maintenance', [AppSettingController::class, 'maintenanceStatus']);
 Route::get('app-settings/storage-stats', [AppSettingController::class, 'storageStats'])->middleware(['auth:sanctum', 'role:admin']);
 Route::post('app-settings', [AppSettingController::class, 'store'])->middleware(['auth:sanctum', 'role:admin']);
 Route::post('app-settings/test-ai-connection', [AppSettingController::class, 'testAiConnection'])->middleware(['auth:sanctum', 'role:admin']);
