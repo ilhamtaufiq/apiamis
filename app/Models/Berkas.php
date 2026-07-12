@@ -19,11 +19,17 @@ class Berkas extends Model implements HasMedia
     protected $fillable = [
         'pekerjaan_id',
         'jenis_dokumen',
+        'uploaded_by',
     ];
 
     public function pekerjaan(): BelongsTo
     {
         return $this->belongsTo(Pekerjaan::class, 'pekerjaan_id');
+    }
+
+    public function uploader(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'uploaded_by');
     }
 
     public function registerMediaCollections(): void

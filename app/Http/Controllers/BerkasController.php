@@ -27,7 +27,7 @@ class BerkasController extends Controller
      */
     public function index(Request $request)
     {
-        $query = Berkas::with('pekerjaan');
+        $query = Berkas::with(['pekerjaan', 'uploader']);
 
         if ($request->has('tahun') && $request->tahun) {
             $query->whereHas('pekerjaan.kegiatan', function($q) use ($request) {
@@ -39,7 +39,16 @@ class BerkasController extends Controller
             $query->where('pekerjaan_id', $request->pekerjaan_id);
         }
 
-        $berkas = $query->paginate(20);
+        // Filter file milik user login (panel pengawas: mine=1 / uploaded_by=me)
+        $uploadedBy = $request->query('uploaded_by');
+        if ($request->boolean('mine') || $uploadedBy === 'me') {
+            $query->where('uploaded_by', $request->user()?->id);
+        } elseif ($uploadedBy !== null && $uploadedBy !== '') {
+            $query->where('uploaded_by', (int) $uploadedBy);
+        }
+
+        $perPage = min(max((int) $request->query('per_page', 20), 1), 100);
+        $berkas = $query->latest('id')->paginate($perPage);
         return BerkasResource::collection($berkas);
     }
 
@@ -75,16 +84,19 @@ class BerkasController extends Controller
         $berkas = Berkas::create([
             'pekerjaan_id' => $validated['pekerjaan_id'],
             'jenis_dokumen' => $validated['jenis_dokumen'],
+            'uploaded_by' => $request->user()?->id,
         ]);
 
         // Upload file dengan Spatie MediaLibrary
         if ($request->hasFile('file')) {
+            $originalName = $request->file('file')->getClientOriginalName();
             $berkas->addMediaFromRequest('file')
+                ->usingName(pathinfo($originalName, PATHINFO_FILENAME) ?: $originalName)
                 ->usingFileName(Str::uuid() . '.' . $request->file('file')->getClientOriginalExtension())
                 ->toMediaCollection('berkas/dokumen');
         }
 
-        $berkas->load('pekerjaan');
+        $berkas->load(['pekerjaan', 'uploader']);
         return new BerkasResource($berkas);
     }
 
