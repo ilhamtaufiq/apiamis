@@ -33,8 +33,18 @@ class SpmSanitasiPekerjaanIntegrationService
     public static function classifySanitasiKomponen(string $komponen): ?string
     {
         $normalized = mb_strtolower(trim($komponen));
+        // Normalisasi spasi/tanda agar "SPALD-S", "septic_tank" ikut terdeteksi
+        $normalized = str_replace(['_', '-', '/', '\\'], ' ', $normalized);
+        $normalized = preg_replace('/\s+/', ' ', $normalized) ?? $normalized;
 
-        if (str_contains($normalized, 'tangki') && str_contains($normalized, 'septik')) {
+        $isTangkiSeptik = (str_contains($normalized, 'tangki') && str_contains($normalized, 'septik'))
+            || str_contains($normalized, 'septic tank')
+            || str_contains($normalized, 'septictank')
+            || str_contains($normalized, 'spalds')
+            || str_contains($normalized, 'spald s')
+            || (str_contains($normalized, 'spald') && str_contains($normalized, 's') && ! str_contains($normalized, 'spaldt'));
+
+        if ($isTangkiSeptik || str_contains($normalized, 'spalds')) {
             if (str_contains($normalized, 'komunal')) {
                 return 'tangki_septik_komunal';
             }
@@ -45,11 +55,24 @@ class SpmSanitasiPekerjaanIntegrationService
             return 'tangki_septik';
         }
 
-        if (str_contains($normalized, 'ipal')) {
+        // SPALDT / IPAL / IPLT (pengolahan terpusat)
+        if (
+            str_contains($normalized, 'ipal')
+            || str_contains($normalized, 'iplt')
+            || str_contains($normalized, 'spaldt')
+            || str_contains($normalized, 'spald t')
+        ) {
             return 'ipal';
         }
 
-        if (str_contains($normalized, 'mck')) {
+        if (
+            str_contains($normalized, 'mck')
+            || str_contains($normalized, 'jamban')
+            || str_contains($normalized, 'wc ')
+            || str_starts_with($normalized, 'wc')
+            || str_contains($normalized, ' toilet')
+            || str_starts_with($normalized, 'toilet')
+        ) {
             if (str_contains($normalized, 'komunal')) {
                 return 'mck_komunal';
             }
@@ -80,7 +103,7 @@ class SpmSanitasiPekerjaanIntegrationService
             'mck_komunal' => ['mck_komunal'],
             'mck' => ['mck_individu', 'mck_komunal'],
             'tangki_septik_individu', 'tangki_septik_komunal', 'tangki_septik' => ['spalds'],
-            'ipal' => ['spaldt'],
+            'ipal' => ['spaldt', 'iplt'],
             default => [],
         };
     }
@@ -91,7 +114,7 @@ class SpmSanitasiPekerjaanIntegrationService
     public static function outputTypesForSpmJenis(string $spmJenis): array
     {
         return match ($spmJenis) {
-            'spaldt' => ['ipal'],
+            'spaldt', 'iplt' => ['ipal'],
             'spalds' => ['tangki_septik_individu', 'tangki_septik_komunal', 'tangki_septik'],
             'mck_individu' => ['mck_individu', 'mck'],
             'mck_komunal' => ['mck_komunal', 'mck'],
@@ -112,11 +135,24 @@ class SpmSanitasiPekerjaanIntegrationService
     {
         $query->where(function (Builder $inner) {
             $inner->whereRaw('LOWER(komponen) LIKE ?', ['%mck%'])
+                ->orWhereRaw('LOWER(komponen) LIKE ?', ['%jamban%'])
+                ->orWhereRaw('LOWER(komponen) LIKE ?', ['%toilet%'])
+                ->orWhereRaw('LOWER(komponen) LIKE ?', ['%wc%'])
                 ->orWhere(function (Builder $ts) {
-                    $ts->whereRaw('LOWER(komponen) LIKE ?', ['%tangki%'])
-                        ->whereRaw('LOWER(komponen) LIKE ?', ['%septik%']);
+                    $ts->where(function (Builder $a) {
+                        $a->whereRaw('LOWER(komponen) LIKE ?', ['%tangki%'])
+                            ->whereRaw('LOWER(komponen) LIKE ?', ['%septik%']);
+                    })
+                        ->orWhereRaw('LOWER(komponen) LIKE ?', ['%septic%'])
+                        ->orWhereRaw('LOWER(komponen) LIKE ?', ['%spalds%'])
+                        ->orWhereRaw('LOWER(komponen) LIKE ?', ['%spald-s%'])
+                        ->orWhereRaw('LOWER(komponen) LIKE ?', ['%spald s%']);
                 })
-                ->orWhereRaw('LOWER(komponen) LIKE ?', ['%ipal%']);
+                ->orWhereRaw('LOWER(komponen) LIKE ?', ['%ipal%'])
+                ->orWhereRaw('LOWER(komponen) LIKE ?', ['%iplt%'])
+                ->orWhereRaw('LOWER(komponen) LIKE ?', ['%spaldt%'])
+                ->orWhereRaw('LOWER(komponen) LIKE ?', ['%spald-t%'])
+                ->orWhereRaw('LOWER(komponen) LIKE ?', ['%spald t%']);
         });
     }
 
@@ -125,25 +161,60 @@ class SpmSanitasiPekerjaanIntegrationService
         match ($outputType) {
             'mck_individu' => $query->where(function (Builder $inner) {
                 $inner->whereRaw('LOWER(komponen) LIKE ?', ['%mck individu%'])
-                    ->orWhereRaw('LOWER(komponen) LIKE ?', ['%mck indvidu%']);
+                    ->orWhereRaw('LOWER(komponen) LIKE ?', ['%mck indvidu%'])
+                    ->orWhereRaw('LOWER(komponen) LIKE ?', ['%jamban individu%'])
+                    ->orWhereRaw('LOWER(komponen) LIKE ?', ['%toilet individu%']);
             }),
-            'mck_komunal' => $query->whereRaw('LOWER(komponen) LIKE ?', ['%mck komunal%']),
-            'mck' => $query->whereRaw('LOWER(komponen) LIKE ?', ['%mck%'])
+            'mck_komunal' => $query->where(function (Builder $inner) {
+                $inner->whereRaw('LOWER(komponen) LIKE ?', ['%mck komunal%'])
+                    ->orWhereRaw('LOWER(komponen) LIKE ?', ['%jamban komunal%'])
+                    ->orWhereRaw('LOWER(komponen) LIKE ?', ['%toilet komunal%']);
+            }),
+            'mck' => $query->where(function (Builder $inner) {
+                $inner->whereRaw('LOWER(komponen) LIKE ?', ['%mck%'])
+                    ->orWhereRaw('LOWER(komponen) LIKE ?', ['%jamban%'])
+                    ->orWhereRaw('LOWER(komponen) LIKE ?', ['%toilet%'])
+                    ->orWhereRaw('LOWER(komponen) LIKE ?', ['%wc%']);
+            })
                 ->whereRaw('LOWER(komponen) NOT LIKE ?', ['%individu%'])
                 ->whereRaw('LOWER(komponen) NOT LIKE ?', ['%indvidu%'])
                 ->whereRaw('LOWER(komponen) NOT LIKE ?', ['%komunal%']),
-            'tangki_septik_individu' => $query->whereRaw('LOWER(komponen) LIKE ?', ['%tangki%'])
-                ->whereRaw('LOWER(komponen) LIKE ?', ['%septik%'])
-                ->where(function (Builder $inner) {
-                    $inner->whereRaw('LOWER(komponen) LIKE ?', ['%individu%'])
-                        ->orWhereRaw('LOWER(komponen) LIKE ?', ['%indvidu%']);
-                }),
-            'tangki_septik_komunal' => $query->whereRaw('LOWER(komponen) LIKE ?', ['%tangki%'])
-                ->whereRaw('LOWER(komponen) LIKE ?', ['%septik%'])
-                ->whereRaw('LOWER(komponen) LIKE ?', ['%komunal%']),
-            'tangki_septik' => $query->whereRaw('LOWER(komponen) LIKE ?', ['%tangki%'])
-                ->whereRaw('LOWER(komponen) LIKE ?', ['%septik%']),
-            'ipal' => $query->whereRaw('LOWER(komponen) LIKE ?', ['%ipal%']),
+            'tangki_septik_individu' => $query->where(function (Builder $base) {
+                $base->where(function (Builder $ts) {
+                    $ts->whereRaw('LOWER(komponen) LIKE ?', ['%tangki%'])
+                        ->whereRaw('LOWER(komponen) LIKE ?', ['%septik%']);
+                })
+                    ->orWhereRaw('LOWER(komponen) LIKE ?', ['%septic%'])
+                    ->orWhereRaw('LOWER(komponen) LIKE ?', ['%spalds%']);
+            })->where(function (Builder $inner) {
+                $inner->whereRaw('LOWER(komponen) LIKE ?', ['%individu%'])
+                    ->orWhereRaw('LOWER(komponen) LIKE ?', ['%indvidu%']);
+            }),
+            'tangki_septik_komunal' => $query->where(function (Builder $base) {
+                $base->where(function (Builder $ts) {
+                    $ts->whereRaw('LOWER(komponen) LIKE ?', ['%tangki%'])
+                        ->whereRaw('LOWER(komponen) LIKE ?', ['%septik%']);
+                })
+                    ->orWhereRaw('LOWER(komponen) LIKE ?', ['%septic%'])
+                    ->orWhereRaw('LOWER(komponen) LIKE ?', ['%spalds%']);
+            })->whereRaw('LOWER(komponen) LIKE ?', ['%komunal%']),
+            'tangki_septik' => $query->where(function (Builder $base) {
+                $base->where(function (Builder $ts) {
+                    $ts->whereRaw('LOWER(komponen) LIKE ?', ['%tangki%'])
+                        ->whereRaw('LOWER(komponen) LIKE ?', ['%septik%']);
+                })
+                    ->orWhereRaw('LOWER(komponen) LIKE ?', ['%septic%'])
+                    ->orWhereRaw('LOWER(komponen) LIKE ?', ['%spalds%'])
+                    ->orWhereRaw('LOWER(komponen) LIKE ?', ['%spald-s%'])
+                    ->orWhereRaw('LOWER(komponen) LIKE ?', ['%spald s%']);
+            }),
+            'ipal' => $query->where(function (Builder $inner) {
+                $inner->whereRaw('LOWER(komponen) LIKE ?', ['%ipal%'])
+                    ->orWhereRaw('LOWER(komponen) LIKE ?', ['%iplt%'])
+                    ->orWhereRaw('LOWER(komponen) LIKE ?', ['%spaldt%'])
+                    ->orWhereRaw('LOWER(komponen) LIKE ?', ['%spald-t%'])
+                    ->orWhereRaw('LOWER(komponen) LIKE ?', ['%spald t%']);
+            }),
             default => $query->whereRaw('1 = 0'),
         };
     }
@@ -175,24 +246,17 @@ class SpmSanitasiPekerjaanIntegrationService
         ?string $outputType = null,
         ?int $spmSanitasiId = null,
     ): Builder {
+        // Catatan: filter jenis SPM tidak dipaksa di SQL daftar tautan agar paket
+        // dengan penamaan output bervariasi tetap muncul. Validasi ketat ada di attachPekerjaan.
         $query = Pekerjaan::query()
             ->byUserRole()
-            ->whereHas('output', function (Builder $q) use ($outputType, $spmSanitasiId) {
+            ->whereHas('output', function (Builder $q) use ($outputType) {
                 self::applySanitasiOutputScope($q);
 
                 if ($outputType) {
                     $q->where(function (Builder $filtered) use ($outputType) {
                         self::applyOutputTypeSqlFilter($filtered, $outputType);
                     });
-                }
-
-                if ($spmSanitasiId) {
-                    $spm = SpmSanitasi::query()->find($spmSanitasiId);
-                    if ($spm) {
-                        $q->where(function (Builder $jenisFilter) use ($spm) {
-                            self::applySpmJenisSqlFilter($jenisFilter, (string) $spm->jenis);
-                        });
-                    }
                 }
             });
 
@@ -210,6 +274,7 @@ class SpmSanitasiPekerjaanIntegrationService
 
         if ($spmSanitasiId) {
             $spm = SpmSanitasi::query()->find($spmSanitasiId);
+            // Batasi ke desa infrastruktur; filter jenis longgar di daftar (validasi ketat di attach).
             if ($spm?->desa_id) {
                 $query->where('desa_id', $spm->desa_id);
             }
@@ -618,9 +683,13 @@ class SpmSanitasiPekerjaanIntegrationService
                 throw new \InvalidArgumentException('Output bukan komponen sanitasi yang didukung.');
             }
 
-            if (!self::outputTypeMatchesSpmJenis($outputType, (string) $spmSanitasi->jenis)) {
+            $spmJenis = (string) $spmSanitasi->jenis;
+            $jenisOk = self::outputTypeMatchesSpmJenis($outputType, $spmJenis)
+                || ($spmJenis === 'iplt' && self::outputTypeMatchesSpmJenis($outputType, 'spaldt'));
+
+            if (! $jenisOk) {
                 throw new \InvalidArgumentException(
-                    'Output tidak sesuai jenis infrastruktur. Tangki Septik → SPALDS, IPAL → SPALDT, MCK → MCK.'
+                    'Output tidak sesuai jenis infrastruktur. Tangki Septik/SPALDS → SPALDS, IPAL/IPLT/SPALDT → SPALDT/IPLT, MCK → MCK.'
                 );
             }
         }
