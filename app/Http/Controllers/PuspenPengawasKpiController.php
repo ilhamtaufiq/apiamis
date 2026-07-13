@@ -2,10 +2,13 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Pekerjaan;
 use App\Models\User;
+use App\Services\PekerjaanProgressEstimasiSummaryService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Spatie\Permission\Models\Role;
 
 class PuspenPengawasKpiController extends Controller
@@ -87,6 +90,59 @@ class PuspenPengawasKpiController extends Controller
             'tahun' => $tahun,
             'pekerjaan' => $pekerjaanRows->values(),
             'summary' => $totals,
+        ]);
+    }
+
+    /**
+     * Laporan catatan kelengkapan paket (untuk export PDF).
+     * Kolom utama: nomor, nama paket, catatan (+ pengawas untuk multi-section).
+     */
+    public function notesReport(Request $request)
+    {
+        $validated = $request->validate([
+            'tahun' => 'nullable|integer|min:2000|max:2100',
+            'search' => 'nullable|string|max:100',
+            'peran' => 'nullable|string|in:pengawas,konsultan_pengawas',
+        ]);
+
+        $tahun = (int) ($validated['tahun'] ?? now()->year);
+        $search = $validated['search'] ?? null;
+        $peran = $validated['peran'] ?? null;
+
+        $results = $this->buildResults($tahun, $search, $peran);
+        $rows = [];
+        $no = 1;
+
+        foreach ($results as $r) {
+            $user = User::find($r['id']);
+            if (! $user) {
+                continue;
+            }
+
+            $pekerjaanRows = $this->pekerjaanBreakdownForUser($user, $tahun);
+            foreach ($pekerjaanRows as $p) {
+                $rows[] = [
+                    'no' => $no++,
+                    'pengawas' => $r['nama'],
+                    'nip' => $r['nip'],
+                    'pekerjaan_id' => $p['id'],
+                    'nama_paket' => $p['nama_paket'],
+                    'kode_rekening' => $p['kode_rekening'],
+                    'catatan' => $p['catatan'] ?? '',
+                    'progress_realisasi' => $p['progress_realisasi'] ?? null,
+                    'pho_completed' => (bool) ($p['pho_completed'] ?? false),
+                    'foto_count' => $p['foto_count'] ?? 0,
+                    'penerima_count' => $p['penerima_count'] ?? 0,
+                    'output_count' => $p['output_count'] ?? 0,
+                ];
+            }
+        }
+
+        return response()->json([
+            'tahun' => $tahun,
+            'peran' => $peran,
+            'total' => count($rows),
+            'data' => $rows,
         ]);
     }
 
@@ -177,21 +233,61 @@ class PuspenPengawasKpiController extends Controller
             ->whereHas('kegiatan', function ($q) use ($tahun) {
                 $q->where('tahun_anggaran', $tahun);
             })
-            ->select('tbl_pekerjaan.id', 'tbl_pekerjaan.nama_paket', 'tbl_pekerjaan.kode_rekening')
+            ->with([
+                'output',
+                'foto',
+                'progressEstimasiHistory',
+                'kegiatan:id,tahun_anggaran',
+                'kontrak' => function ($q) {
+                    $q->select('tbl_kontrak.id', 'tbl_kontrak.id_pekerjaan');
+                },
+            ])
+            ->withCount(['penerima', 'foto', 'output'])
             ->get();
 
-        return $pekerjaanList->map(function ($pekerjaan) {
+        $estimasiService = app(PekerjaanProgressEstimasiSummaryService::class);
+        $hasPhoColumn = Schema::hasTable('puspen_progress_fisik')
+            && Schema::hasColumn('puspen_progress_fisik', 'pho_completed');
+
+        return $pekerjaanList->map(function (Pekerjaan $pekerjaan) use ($tahun, $estimasiService, $hasPhoColumn) {
             $pekerjaanId = $pekerjaan->id;
 
-            $fotoCount = DB::table('tbl_foto')->where('pekerjaan_id', $pekerjaanId)->count();
-            $penerimaCount = DB::table('tbl_penerima')->where('pekerjaan_id', $pekerjaanId)->count();
-            $outputCount = DB::table('tbl_output')->where('pekerjaan_id', $pekerjaanId)->count();
-            $fisikCount = DB::table('tbl_progress')->where('pekerjaan_id', $pekerjaanId)->count();
+            $fotoCount = (int) ($pekerjaan->foto_count ?? $pekerjaan->foto?->count() ?? 0);
+            $penerimaCount = (int) ($pekerjaan->penerima_count ?? 0);
+            $outputCount = (int) ($pekerjaan->output_count ?? $pekerjaan->output?->count() ?? 0);
+            $fisikCount = (int) DB::table('tbl_progress')->where('pekerjaan_id', $pekerjaanId)->count();
 
             $score = ($fotoCount * 1) +
                 ($penerimaCount * 1) +
                 ($outputCount * 2) +
                 ($fisikCount * 2);
+
+            $estimasi = $estimasiService->summarize(
+                $pekerjaan->progressEstimasiHistory ?? collect(),
+                $tahun
+            );
+            $progressRealisasi = $estimasi['fisik_realisasi'];
+
+            // Fallback: puspen_progress_fisik realisasi via kontrak
+            if ($progressRealisasi === null) {
+                $progressRealisasi = $this->resolvePuspenRealisasi($pekerjaanId, $tahun);
+            }
+
+            $phoCompleted = $hasPhoColumn
+                ? $this->resolvePhoCompleted($pekerjaanId, $tahun)
+                : false;
+
+            $fotoMetrics = $pekerjaan->resolveFotoMetrics();
+            $catatan = $this->buildPekerjaanCatatan(
+                progressRealisasi: $progressRealisasi,
+                phoCompleted: $phoCompleted,
+                fotoStatus: $fotoMetrics['foto_status'] ?? null,
+                fotoCount: (int) ($fotoMetrics['foto_count'] ?? $fotoCount),
+                fotoRequired: $fotoMetrics['foto_required_count'],
+                penerimaCount: $penerimaCount,
+                outputCount: $outputCount,
+                fisikCount: $fisikCount,
+            );
 
             return [
                 'id' => $pekerjaanId,
@@ -202,8 +298,143 @@ class PuspenPengawasKpiController extends Controller
                 'output_count' => $outputCount,
                 'fisik_count' => $fisikCount,
                 'score' => round($score, 1),
+                'progress_realisasi' => $progressRealisasi,
+                'pho_completed' => $phoCompleted,
+                'foto_status' => $fotoMetrics['foto_status'] ?? null,
+                'foto_required_count' => $fotoMetrics['foto_required_count'],
+                'catatan' => $catatan,
             ];
         })->sortByDesc('score')->values();
+    }
+
+    private function resolvePuspenRealisasi(int $pekerjaanId, int $tahun): ?float
+    {
+        if (! Schema::hasTable('puspen_progress_fisik')) {
+            return null;
+        }
+
+        $kontrakIds = $this->kontrakIdsForPekerjaan($pekerjaanId);
+        if ($kontrakIds === []) {
+            return null;
+        }
+
+        $row = DB::table('puspen_progress_fisik')
+            ->whereIn('kontrak_id', $kontrakIds)
+            ->where('tahun_anggaran', $tahun)
+            ->whereNotNull('realisasi')
+            ->orderByDesc('updated_at')
+            ->first();
+
+        return $row ? (float) $row->realisasi : null;
+    }
+
+    private function resolvePhoCompleted(int $pekerjaanId, int $tahun): bool
+    {
+        if (! Schema::hasTable('puspen_progress_fisik')
+            || ! Schema::hasColumn('puspen_progress_fisik', 'pho_completed')) {
+            return false;
+        }
+
+        $kontrakIds = $this->kontrakIdsForPekerjaan($pekerjaanId);
+        if ($kontrakIds === []) {
+            return false;
+        }
+
+        return DB::table('puspen_progress_fisik')
+            ->whereIn('kontrak_id', $kontrakIds)
+            ->where('tahun_anggaran', $tahun)
+            ->where('pho_completed', true)
+            ->exists();
+    }
+
+    /** @return list<int> */
+    private function kontrakIdsForPekerjaan(int $pekerjaanId): array
+    {
+        $fromPrimary = DB::table('tbl_kontrak')
+            ->where('id_pekerjaan', $pekerjaanId)
+            ->pluck('id');
+
+        $fromPivot = Schema::hasTable('kontrak_pekerjaan')
+            ? DB::table('kontrak_pekerjaan')
+                ->where('pekerjaan_id', $pekerjaanId)
+                ->pluck('kontrak_id')
+            : collect();
+
+        return $fromPrimary->merge($fromPivot)->unique()->values()->all();
+    }
+
+    /**
+     * Catatan kelengkapan untuk laporan PDF.
+     *
+     * @param  int|null  $fotoRequired
+     */
+    private function buildPekerjaanCatatan(
+        ?float $progressRealisasi,
+        bool $phoCompleted,
+        ?string $fotoStatus,
+        int $fotoCount,
+        $fotoRequired,
+        int $penerimaCount,
+        int $outputCount,
+        int $fisikCount,
+    ): string {
+        $notes = [];
+
+        if ($progressRealisasi !== null && $progressRealisasi >= 100) {
+            $notes[] = 'Progress fisik sudah 100%';
+        } elseif ($progressRealisasi !== null && $progressRealisasi > 0) {
+            $notes[] = 'Progress fisik '.rtrim(rtrim(number_format($progressRealisasi, 2, ',', '.'), '0'), ',').'%';
+        } elseif ($fisikCount > 0) {
+            $notes[] = 'Ada input progress fisik (estimasi % belum terisi)';
+        } else {
+            $notes[] = 'Progress fisik belum diinput';
+        }
+
+        $fotoLengkap = $fotoStatus === 'selesai';
+        $fotoBelum = $fotoStatus === 'belum_ada_foto' || $fotoCount === 0;
+        $fotoPartial = ! $fotoLengkap && ! $fotoBelum;
+
+        if ($phoCompleted) {
+            if ($fotoBelum || $fotoPartial) {
+                $detailFoto = $fotoBelum
+                    ? 'dokumentasi foto belum ada'
+                    : (
+                        $fotoRequired
+                            ? "dokumentasi foto belum lengkap ({$fotoCount}/{$fotoRequired})"
+                            : 'dokumentasi foto belum lengkap'
+                    );
+                $notes[] = 'Sudah PHO tetapi '.$detailFoto;
+            } else {
+                $notes[] = 'Sudah PHO dan dokumentasi foto lengkap';
+            }
+
+            if ($penerimaCount === 0) {
+                $notes[] = 'Sudah PHO tetapi penerima manfaat belum diinput';
+            }
+            if ($outputCount === 0) {
+                $notes[] = 'Sudah PHO tetapi output pekerjaan belum diinput';
+            }
+        } else {
+            if ($fotoBelum) {
+                $notes[] = 'Dokumentasi foto belum ada';
+            } elseif ($fotoPartial) {
+                $notes[] = $fotoRequired
+                    ? "Dokumentasi foto belum lengkap ({$fotoCount}/{$fotoRequired})"
+                    : 'Dokumentasi foto belum lengkap';
+            }
+
+            if ($penerimaCount === 0) {
+                $notes[] = 'Penerima manfaat belum diinput';
+            }
+            if ($outputCount === 0) {
+                $notes[] = 'Output pekerjaan belum diinput';
+            }
+        }
+
+        // Dedup while preserving order
+        $notes = array_values(array_unique($notes));
+
+        return implode('; ', $notes);
     }
 
     private function ensureKpiRoles(): void

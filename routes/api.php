@@ -362,6 +362,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('puspen/progress-fisik', [PuspenProgressFisikController::class, 'index']);
     Route::post('puspen/progress-fisik/bulk-update', [PuspenProgressFisikController::class, 'bulkUpdate']);
     Route::get('puspen/pengawas-kpi', [PuspenPengawasKpiController::class, 'index']);
+    Route::get('puspen/pengawas-kpi/notes-report', [PuspenPengawasKpiController::class, 'notesReport']);
     Route::get('puspen/pengawas-kpi/{user}', [PuspenPengawasKpiController::class, 'show']);
     Route::get('puspen/pekerjaan/{pekerjaan}/review-notes', [PuspenReviewNoteController::class, 'index']);
     Route::post('puspen/pekerjaan/{pekerjaan}/review-notes', [PuspenReviewNoteController::class, 'store']);
