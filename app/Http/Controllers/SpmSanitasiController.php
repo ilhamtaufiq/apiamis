@@ -46,6 +46,10 @@ class SpmSanitasiController extends Controller
             });
         }
 
+        if ($request->filled('tahun')) {
+            $query->where('tahun_konstruksi', (int) $request->string('tahun')->toString());
+        }
+
         $items = $query->orderByDesc('id')->paginate($request->integer('per_page', 15));
 
         return response()->json([
@@ -80,22 +84,25 @@ class SpmSanitasiController extends Controller
     {
         $kecamatanId = $request->integer('kecamatan_id') ?: null;
         $jenis = $request->filled('jenis') ? $request->string('jenis')->toString() : null;
+        $tahun = $request->filled('tahun') ? $request->string('tahun')->toString() : null;
 
         $counts = SpmSanitasi::query()
             ->when($kecamatanId, fn ($q) => $q->whereHas('desa', fn ($dq) => $dq->where('kecamatan_id', $kecamatanId)))
             ->when($jenis, fn ($q) => $q->where('jenis', $jenis))
+            ->when($tahun, fn ($q) => $q->where('tahun_konstruksi', (int) $tahun))
             ->selectRaw('jenis, COUNT(*) as total')
             ->groupBy('jenis')
             ->pluck('total', 'jenis');
 
         $baseQuery = SpmSanitasi::query()
             ->when($kecamatanId, fn ($q) => $q->whereHas('desa', fn ($dq) => $dq->where('kecamatan_id', $kecamatanId)))
-            ->when($jenis, fn ($q) => $q->where('jenis', $jenis));
+            ->when($jenis, fn ($q) => $q->where('jenis', $jenis))
+            ->when($tahun, fn ($q) => $q->where('tahun_konstruksi', (int) $tahun));
 
         $berfungsi = (clone $baseQuery)->where('status_keberfungsian', 'Berfungsi')->count();
         $totalPemanfaat = (int) (clone $baseQuery)->sum('jumlah_pemanfaat_kk');
         $totalInvestasi = (float) (clone $baseQuery)->sum('pembiayaan_total');
-        $capaian = $this->capaianService->summary($kecamatanId, $jenis);
+        $capaian = $this->capaianService->summary($kecamatanId, $jenis, $tahun);
 
         return response()->json([
             'success' => true,
@@ -123,8 +130,9 @@ class SpmSanitasiController extends Controller
 
         $kecamatanId = $request->integer('kecamatan_id') ?: null;
         $jenis = $request->filled('jenis') ? $request->string('jenis')->toString() : null;
+        $tahun = $request->filled('tahun') ? $request->string('tahun')->toString() : null;
 
-        $summary = $this->capaianService->summary($kecamatanId, $jenis);
+        $summary = $this->capaianService->summary($kecamatanId, $jenis, $tahun);
         $desaPaginator = $this->capaianService->paginateDesa(
             $kecamatanId,
             $jenis,
@@ -133,6 +141,7 @@ class SpmSanitasiController extends Controller
             $request->integer('per_page', 15),
             $request->string('sort', 'coverage_percentage')->toString(),
             $request->string('direction', 'asc')->toString(),
+            $tahun,
         );
 
         return response()->json([
@@ -344,6 +353,7 @@ class SpmSanitasiController extends Controller
                 $request->integer('kecamatan_id') ?: null,
                 $request->integer('desa_id') ?: null,
                 $request->string('search')->toString() ?: null,
+                $request->filled('tahun') ? $request->string('tahun')->toString() : null,
             ),
             'data_spm_sanitasi.xlsx'
         );

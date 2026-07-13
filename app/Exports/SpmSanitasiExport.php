@@ -14,15 +14,16 @@ class SpmSanitasiExport implements WithMultipleSheets
         protected ?int $kecamatanId = null,
         protected ?int $desaId = null,
         protected ?string $search = null,
+        protected ?string $tahun = null,
     ) {
     }
 
     public function sheets(): array
     {
         return [
-            new SpmSanitasiSheetExport('spaldt', 'SPALDT', 'FORMAT DATA SPALDT', $this->kecamatanId, $this->desaId, $this->search),
-            new SpmSanitasiSheetExport('spalds', 'SPALDS', 'FORMAT DATA SPALDS', $this->kecamatanId, $this->desaId, $this->search),
-            new SpmSanitasiSheetExport('iplt', 'IPLT', 'FORMAT DATA IPLT', $this->kecamatanId, $this->desaId, $this->search),
+            new SpmSanitasiSheetExport('spaldt', 'SPALDT', 'FORMAT DATA SPALDT', $this->kecamatanId, $this->desaId, $this->search, $this->tahun),
+            new SpmSanitasiSheetExport('spalds', 'SPALDS', 'FORMAT DATA SPALDS', $this->kecamatanId, $this->desaId, $this->search, $this->tahun),
+            new SpmSanitasiSheetExport('iplt', 'IPLT', 'FORMAT DATA IPLT', $this->kecamatanId, $this->desaId, $this->search, $this->tahun),
         ];
     }
 }
@@ -38,6 +39,7 @@ class SpmSanitasiSheetExport implements \Maatwebsite\Excel\Concerns\FromCollecti
         protected ?int $kecamatanId,
         protected ?int $desaId,
         protected ?string $search,
+        protected ?string $tahun = null,
     ) {
     }
 
@@ -96,6 +98,10 @@ class SpmSanitasiSheetExport implements \Maatwebsite\Excel\Concerns\FromCollecti
                     ->orWhere('alamat_lengkap', 'like', $search)
                     ->orWhereHas('desa', fn ($dq) => $dq->where('n_desa', 'like', $search));
             });
+        }
+
+        if ($this->tahun) {
+            $query->where('tahun_konstruksi', (int) $this->tahun);
         }
 
         return $query->orderBy('id')->get();

@@ -72,6 +72,7 @@ class SpmSanitasiCapaianService
         int $perPage = 15,
         string $sort = 'coverage_percentage',
         string $direction = 'asc',
+        ?string $tahun = null,
     ): LengthAwarePaginator {
         $query = Desa::query()
             ->realWilayah()
@@ -84,20 +85,26 @@ class SpmSanitasiCapaianService
                         ->orWhereHas('kecamatan', fn (Builder $kq) => $kq->where('n_kec', 'like', $like));
                 });
             })
-            ->withSum(['spmSanitasi as pemanfaat_kk_total' => function (Builder $q) use ($jenis) {
-                if ($jenis) {
-                    $q->where('jenis', $jenis);
-                }
+            ->withSum(['spmSanitasi as pemanfaat_kk_total' => function (Builder $q) use ($jenis, $tahun) {
+                $this->applyRelationTahunScope($q, $jenis, $tahun);
             }], 'jumlah_pemanfaat_kk')
-            ->withSum(['spmSanitasi as pemanfaat_kk_spaldt' => fn (Builder $q) => $q->where('jenis', 'spaldt')], 'jumlah_pemanfaat_kk')
-            ->withSum(['spmSanitasi as pemanfaat_kk_spalds' => fn (Builder $q) => $q->where('jenis', 'spalds')], 'jumlah_pemanfaat_kk')
-            ->withSum(['spmSanitasi as pemanfaat_kk_iplt' => fn (Builder $q) => $q->where('jenis', 'iplt')], 'jumlah_pemanfaat_kk')
-            ->withSum(['spmSanitasi as pemanfaat_kk_mck_individu' => fn (Builder $q) => $q->where('jenis', 'mck_individu')], 'jumlah_pemanfaat_kk')
-            ->withSum(['spmSanitasi as pemanfaat_kk_mck_komunal' => fn (Builder $q) => $q->where('jenis', 'mck_komunal')], 'jumlah_pemanfaat_kk')
-            ->withCount(['spmSanitasi as unit_count' => function (Builder $q) use ($jenis) {
-                if ($jenis) {
-                    $q->where('jenis', $jenis);
-                }
+            ->withSum(['spmSanitasi as pemanfaat_kk_spaldt' => function (Builder $q) use ($tahun) {
+                $this->applyRelationTahunScope($q, 'spaldt', $tahun);
+            }], 'jumlah_pemanfaat_kk')
+            ->withSum(['spmSanitasi as pemanfaat_kk_spalds' => function (Builder $q) use ($tahun) {
+                $this->applyRelationTahunScope($q, 'spalds', $tahun);
+            }], 'jumlah_pemanfaat_kk')
+            ->withSum(['spmSanitasi as pemanfaat_kk_iplt' => function (Builder $q) use ($tahun) {
+                $this->applyRelationTahunScope($q, 'iplt', $tahun);
+            }], 'jumlah_pemanfaat_kk')
+            ->withSum(['spmSanitasi as pemanfaat_kk_mck_individu' => function (Builder $q) use ($tahun) {
+                $this->applyRelationTahunScope($q, 'mck_individu', $tahun);
+            }], 'jumlah_pemanfaat_kk')
+            ->withSum(['spmSanitasi as pemanfaat_kk_mck_komunal' => function (Builder $q) use ($tahun) {
+                $this->applyRelationTahunScope($q, 'mck_komunal', $tahun);
+            }], 'jumlah_pemanfaat_kk')
+            ->withCount(['spmSanitasi as unit_count' => function (Builder $q) use ($jenis, $tahun) {
+                $this->applyRelationTahunScope($q, $jenis, $tahun);
             }]);
 
         $allowedSort = ['coverage_percentage', 'jumlah_penduduk', 'pemanfaat_kk', 'n_desa'];

@@ -33,18 +33,34 @@ class SpmSanitasiPekerjaanIntegrationService
     public static function classifySanitasiKomponen(string $komponen): ?string
     {
         $normalized = mb_strtolower(trim($komponen));
-        // Normalisasi spasi/tanda agar "SPALD-S", "septic_tank" ikut terdeteksi
+        // Normalisasi spasi/tanda agar "SPALD-S", "SPALD-T", "septic_tank" ikut terdeteksi
         $normalized = str_replace(['_', '-', '/', '\\'], ' ', $normalized);
         $normalized = preg_replace('/\s+/', ' ', $normalized) ?? $normalized;
+        // Bentuk tanpa spasi: "spald t" → "spaldt", "septic tank" → "septictank"
+        $compact = str_replace(' ', '', $normalized);
 
-        $isTangkiSeptik = (str_contains($normalized, 'tangki') && str_contains($normalized, 'septik'))
+        // 1) SPALDT / IPAL / IPLT (terpusat) — HARUS sebelum SPALDS.
+        //    Bug lama: "SPALD-T" → "spald t" lolos rule spald+s (huruf s di "spald")
+        //    dan terklasifikasi sebagai tangki septik / SPALDS.
+        $isTerpusat = str_contains($compact, 'ipal')
+            || str_contains($compact, 'iplt')
+            || str_contains($compact, 'spaldt')
+            || (bool) preg_match('/\bspald\s*t\b/u', $normalized);
+
+        if ($isTerpusat) {
+            return 'ipal';
+        }
+
+        // 2) SPALDS / Tangki Septik (setempat)
+        $isSetempat = (str_contains($normalized, 'tangki') && str_contains($normalized, 'septik'))
             || str_contains($normalized, 'septic tank')
-            || str_contains($normalized, 'septictank')
-            || str_contains($normalized, 'spalds')
-            || str_contains($normalized, 'spald s')
-            || (str_contains($normalized, 'spald') && str_contains($normalized, 's') && ! str_contains($normalized, 'spaldt'));
+            || str_contains($compact, 'septictank')
+            || str_contains($compact, 'spalds')
+            || (bool) preg_match('/\bspald\s*s\b/u', $normalized)
+            // "SPALD" tanpa suffix S/T — legacy: anggap setempat
+            || (bool) preg_match('/\bspald\b/u', $normalized);
 
-        if ($isTangkiSeptik || str_contains($normalized, 'spalds')) {
+        if ($isSetempat) {
             if (str_contains($normalized, 'komunal')) {
                 return 'tangki_septik_komunal';
             }
@@ -55,16 +71,7 @@ class SpmSanitasiPekerjaanIntegrationService
             return 'tangki_septik';
         }
 
-        // SPALDT / IPAL / IPLT (pengolahan terpusat)
-        if (
-            str_contains($normalized, 'ipal')
-            || str_contains($normalized, 'iplt')
-            || str_contains($normalized, 'spaldt')
-            || str_contains($normalized, 'spald t')
-        ) {
-            return 'ipal';
-        }
-
+        // 3) MCK / jamban / toilet
         if (
             str_contains($normalized, 'mck')
             || str_contains($normalized, 'jamban')
@@ -323,6 +330,8 @@ class SpmSanitasiPekerjaanIntegrationService
                     'volume' => (float) $output->volume,
                     'output_type' => $outputType,
                     'target_jenis' => self::spmJenisForOutputType($outputType),
+                    // Semua jenis SPM yang cocok (mis. IPAL → spaldt + iplt)
+                    'target_jenis_list' => self::spmJenisListForOutputType($outputType),
                     'mck_type' => $outputType,
                 ];
             })
@@ -456,7 +465,12 @@ class SpmSanitasiPekerjaanIntegrationService
             'mck_outputs' => $sanitasiOutputs,
             'output_types' => collect($sanitasiOutputs)->pluck('output_type')->filter()->unique()->values()->all(),
             'mck_types' => collect($sanitasiOutputs)->pluck('output_type')->filter()->unique()->values()->all(),
-            'target_jenis_list' => collect($sanitasiOutputs)->pluck('target_jenis')->filter()->unique()->values()->all(),
+            'target_jenis_list' => collect($sanitasiOutputs)
+                ->flatMap(fn (array $o) => $o['target_jenis_list'] ?? array_filter([$o['target_jenis'] ?? null]))
+                ->filter()
+                ->unique()
+                ->values()
+                ->all(),
             'derived' => $metrics,
             'is_linked' => $linkedSpmId
                 ? $pekerjaan->spmSanitasi->contains('id', $linkedSpmId)
@@ -671,34 +685,63 @@ class SpmSanitasiPekerjaanIntegrationService
             ->where('id', $pekerjaanId)
             ->firstOrFail();
 
-        if ($outputId) {
+        $spmJenis = (string) $spmSanitasi->jenis;
+        $resolvedOutputId = $outputId;
+
+        if ($resolvedOutputId) {
             $output = Output::query()
                 ->where('pekerjaan_id', $pekerjaan->id)
-                ->where('id', $outputId)
+                ->where('id', $resolvedOutputId)
                 ->firstOrFail();
 
-            $outputType = self::classifySanitasiKomponen((string) $output->komponen);
-
-            if (!self::isSanitasiKomponen((string) $output->komponen)) {
+            if (! self::isSanitasiKomponen((string) $output->komponen)) {
                 throw new \InvalidArgumentException('Output bukan komponen sanitasi yang didukung.');
             }
 
-            $spmJenis = (string) $spmSanitasi->jenis;
-            $jenisOk = self::outputTypeMatchesSpmJenis($outputType, $spmJenis)
-                || ($spmJenis === 'iplt' && self::outputTypeMatchesSpmJenis($outputType, 'spaldt'));
+            $outputType = self::classifySanitasiKomponen((string) $output->komponen);
 
-            if (! $jenisOk) {
-                throw new \InvalidArgumentException(
-                    'Output tidak sesuai jenis infrastruktur. Tangki Septik/SPALDS → SPALDS, IPAL/IPLT/SPALDT → SPALDT/IPLT, MCK → MCK.'
-                );
+            if (! self::outputMatchesSpmJenis($outputType, $spmJenis)) {
+                // Frontend kadang mengirim output_id generic; pilih output sejenis di paket yang sama.
+                $fallback = $this->firstMatchingOutputOnPekerjaan($pekerjaan, $spmJenis);
+                if ($fallback === null) {
+                    throw new \InvalidArgumentException(
+                        'Output tidak sesuai jenis infrastruktur. Tangki Septik/SPALDS → SPALDS, IPAL/IPLT/SPALDT → SPALDT/IPLT, MCK → MCK.'
+                    );
+                }
+                $resolvedOutputId = $fallback->id;
+            }
+        } else {
+            // Tanpa output_id: tautkan saja (metrik tetap bisa dihitung dari semua output sanitasi).
+            // Jika ada output yang cocok jenis, simpan sebagai default pivot.
+            $fallback = $this->firstMatchingOutputOnPekerjaan($pekerjaan, $spmJenis);
+            if ($fallback !== null) {
+                $resolvedOutputId = $fallback->id;
             }
         }
 
         $spmSanitasi->pekerjaan()->syncWithoutDetaching([
-            $pekerjaanId => ['output_id' => $outputId],
+            $pekerjaanId => ['output_id' => $resolvedOutputId],
         ]);
 
         $this->syncInfrastrukturFromLinkedPekerjaan($spmSanitasi);
+    }
+
+    public static function outputMatchesSpmJenis(?string $outputType, string $spmJenis): bool
+    {
+        return self::outputTypeMatchesSpmJenis($outputType, $spmJenis)
+            || ($spmJenis === 'iplt' && self::outputTypeMatchesSpmJenis($outputType, 'spaldt'));
+    }
+
+    public function firstMatchingOutputOnPekerjaan(Pekerjaan $pekerjaan, string $spmJenis): ?Output
+    {
+        $pekerjaan->loadMissing('output');
+
+        return $pekerjaan->output
+            ->first(function (Output $output) use ($spmJenis) {
+                $type = self::classifySanitasiKomponen((string) $output->komponen);
+
+                return self::outputMatchesSpmJenis($type, $spmJenis);
+            });
     }
 
     public function detachPekerjaan(SpmSanitasi $spmSanitasi, int $pekerjaanId): void
