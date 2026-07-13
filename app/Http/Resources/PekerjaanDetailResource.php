@@ -30,6 +30,7 @@ class PekerjaanDetailResource extends JsonResource
             'kode_rekening' => $this->kode_rekening,
             'nama_paket' => $this->nama_paket,
             'pagu' => $this->pagu,
+            'is_konsultan' => (bool) ($this->is_konsultan ?? false),
             'kecamatan_id' => $this->kecamatan_id,
             'desa_id' => $this->desa_id,
             'kegiatan_id' => $this->kegiatan_id,

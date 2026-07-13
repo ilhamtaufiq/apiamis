@@ -204,8 +204,9 @@ class PekerjaanController extends Controller
         $validated = $request->validate([
             'kode_rekening' => 'nullable|string|max:225',
             'nama_paket' => 'required|string|max:225',
-            'kecamatan_id' => 'required|integer|exists:tbl_kecamatan,id',
-            'desa_id' => 'required|integer|exists:tbl_desa,id',
+            'is_konsultan' => 'sometimes|boolean',
+            'kecamatan_id' => 'required_unless:is_konsultan,true,1|nullable|integer|exists:tbl_kecamatan,id',
+            'desa_id' => 'required_unless:is_konsultan,true,1|nullable|integer|exists:tbl_desa,id',
             'kegiatan_id' => 'nullable|integer|exists:tbl_kegiatan,id',
             'pagu' => 'required|numeric|min:0',
             'pengawas_id' => 'nullable|integer|exists:pengawas,id',
@@ -213,6 +214,12 @@ class PekerjaanController extends Controller
             'tag_ids' => 'nullable|array',
             'tag_ids.*' => 'integer|exists:tbl_tags,id',
         ]);
+
+        $validated['is_konsultan'] = (bool) ($validated['is_konsultan'] ?? false);
+        if ($validated['is_konsultan']) {
+            $validated['kecamatan_id'] = null;
+            $validated['desa_id'] = null;
+        }
 
         $pekerjaan = Pekerjaan::create($validated);
 
@@ -320,6 +327,7 @@ class PekerjaanController extends Controller
         $validated = $request->validate([
             'kode_rekening' => 'nullable|string|max:225',
             'nama_paket' => 'nullable|string|max:225',
+            'is_konsultan' => 'sometimes|boolean',
             'kecamatan_id' => 'nullable|integer|exists:tbl_kecamatan,id',
             'desa_id' => 'nullable|integer|exists:tbl_desa,id',
             'kegiatan_id' => 'nullable|integer|exists:tbl_kegiatan,id',
@@ -329,6 +337,36 @@ class PekerjaanController extends Controller
             'tag_ids' => 'nullable|array',
             'tag_ids.*' => 'integer|exists:tbl_tags,id',
         ]);
+
+        if (array_key_exists('is_konsultan', $validated)) {
+            $validated['is_konsultan'] = (bool) $validated['is_konsultan'];
+            if ($validated['is_konsultan']) {
+                $validated['kecamatan_id'] = null;
+                $validated['desa_id'] = null;
+            }
+        } elseif ($pekerjaan->is_konsultan && $request->boolean('is_konsultan', true)) {
+            // tetap konsultan: jangan paksa isi desa/kecamatan
+            unset($validated['kecamatan_id'], $validated['desa_id']);
+        }
+
+        // Jika di-set ke non-konsultan, desa/kecamatan wajib
+        $willBeKonsultan = array_key_exists('is_konsultan', $validated)
+            ? $validated['is_konsultan']
+            : (bool) $pekerjaan->is_konsultan;
+
+        if (! $willBeKonsultan) {
+            $kecamatanId = $validated['kecamatan_id'] ?? $pekerjaan->kecamatan_id;
+            $desaId = $validated['desa_id'] ?? $pekerjaan->desa_id;
+            if (! $kecamatanId || ! $desaId) {
+                return response()->json([
+                    'message' => 'Kecamatan dan desa wajib diisi untuk pekerjaan non-konsultan.',
+                    'errors' => [
+                        'kecamatan_id' => ['Kecamatan wajib diisi.'],
+                        'desa_id' => ['Desa wajib diisi.'],
+                    ],
+                ], 422);
+            }
+        }
 
         $pekerjaan->update($validated);
 

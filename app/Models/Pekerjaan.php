@@ -154,12 +154,14 @@ class Pekerjaan extends Model
         'desa_id',
         'kegiatan_id',
         'pagu',
+        'is_konsultan',
         'pengawas_id',
         'pendamping_id'
     ];
 
     protected $casts = [
         'pagu' => 'float',
+        'is_konsultan' => 'boolean',
         'kecamatan_id' => 'integer',
         'desa_id' => 'integer',
         'kegiatan_id' => 'integer',

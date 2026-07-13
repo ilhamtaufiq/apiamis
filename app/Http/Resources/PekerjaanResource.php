@@ -134,6 +134,7 @@ class PekerjaanResource extends JsonResource
             'kode_rekening' => $this->kode_rekening,
             'nama_paket' => $this->nama_paket,
             'pagu' => $this->pagu,
+            'is_konsultan' => (bool) ($this->is_konsultan ?? false),
             'progress_total' => round($progressTotal, 2),
             'deviasi' => round($deviasi, 2),
             'progress_estimasi_fisik' => $progressEstimasiFisik,

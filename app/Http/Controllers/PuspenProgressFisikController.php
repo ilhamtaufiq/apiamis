@@ -62,12 +62,13 @@ class PuspenProgressFisikController extends Controller
         $request->merge(['tahun' => $tahun]);
 
         $relations = [
-            'kegiatan:id,nama_sub_kegiatan',
-            'pekerjaan:id,nama_paket',
+            'kegiatan:id,nama_sub_kegiatan,pagu',
+            'pekerjaan:id,nama_paket,pagu',
             'pekerjaan.output:id,pekerjaan_id,komponen,satuan,volume',
             'pekerjaans.kegiatan:id,nama_sub_kegiatan',
             'pekerjaans.output:id,pekerjaan_id,komponen,satuan,volume',
-            'pekerjaans:id,nama_paket,kegiatan_id',
+            'pekerjaans:id,nama_paket,kegiatan_id,pagu',
+            'latestApprovedAddendum',
             'progress_fisik' => fn ($q) => $q->where('tahun_anggaran', $tahun),
         ];
 
@@ -81,6 +82,28 @@ class PuspenProgressFisikController extends Controller
                 $q->whereHas('kegiatan', fn ($k) => $k->where('tahun_anggaran', $tahun))
                     ->orWhereHas('pekerjaans.kegiatan', fn ($k) => $k->where('tahun_anggaran', $tahun));
             })
+            ->when(
+                Schema::hasColumn('tbl_pekerjaan', 'is_konsultan'),
+                function ($query) {
+                    // Exclude kontrak yang hanya terkait pekerjaan konsultan (tidak ada paket fisik)
+                    $query->where(function ($q) {
+                        $nonKonsultan = function ($p) {
+                            $p->where(function ($inner) {
+                                $inner->where('is_konsultan', false)
+                                    ->orWhereNull('is_konsultan');
+                            });
+                        };
+
+                        $q->whereHas('pekerjaan', $nonKonsultan)
+                            ->orWhereHas('pekerjaans', $nonKonsultan)
+                            ->orWhere(function ($orphan) {
+                                // Kontrak tanpa tautan pekerjaan (hanya kegiatan) tetap ditampilkan
+                                $orphan->whereDoesntHave('pekerjaan')
+                                    ->whereDoesntHave('pekerjaans');
+                            });
+                    });
+                }
+            )
             ->orderBy('kode_paket')
             ->orderBy('id');
 

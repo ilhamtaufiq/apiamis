@@ -25,12 +25,21 @@ class PuspenProgressFisikResource extends JsonResource
             ->values()
             ->implode(', ');
 
+        $pagu = $this->resolvePagu();
+        $nilaiKontrak = $this->resolveNilaiKontrak();
+        $sisaKontrak = max(0, $pagu - $nilaiKontrak);
+        $retensi = round($nilaiKontrak * 0.05, 2);
+
         $payload = [
             'kontrak_id' => $this->id,
             'kode_paket' => $this->kode_paket,
             'nama_paket' => $this->resolveNamaPaket(),
             'sub_kegiatan' => $subKegiatan,
             'tahun_anggaran' => (int) $request->integer('tahun', now()->year),
+            'pagu' => $pagu,
+            'nilai_kontrak' => $nilaiKontrak,
+            'sisa_kontrak' => $sisaKontrak,
+            'retensi' => $retensi,
             'rencana' => $rencana,
             'realisasi' => $realisasi,
             'deviasi' => $realisasi !== null && $rencana !== null
@@ -63,6 +72,44 @@ class PuspenProgressFisikResource extends JsonResource
         }
 
         return $names->unique()->values()->implode(', ');
+    }
+
+    private function resolvePagu(): float
+    {
+        $pekerjaans = collect();
+
+        if ($this->relationLoaded('pekerjaans')) {
+            $pekerjaans = $pekerjaans->merge($this->pekerjaans);
+        }
+
+        if ($this->relationLoaded('pekerjaan') && $this->pekerjaan) {
+            $pekerjaans->push($this->pekerjaan);
+        }
+
+        $paguSum = (float) $pekerjaans
+            ->filter(fn ($p) => $p && $p->id)
+            ->unique('id')
+            ->sum(fn ($p) => (float) ($p->pagu ?? 0));
+
+        if ($paguSum > 0) {
+            return $paguSum;
+        }
+
+        // Fallback: pagu sub kegiatan jika pagu pekerjaan kosong
+        if ($this->relationLoaded('kegiatan') && $this->kegiatan?->pagu !== null) {
+            return (float) $this->kegiatan->pagu;
+        }
+
+        return 0.0;
+    }
+
+    private function resolveNilaiKontrak(): float
+    {
+        if (method_exists($this->resource, 'nilaiKontrakBerjalan')) {
+            return (float) ($this->resource->nilaiKontrakBerjalan() ?? $this->nilai_kontrak ?? 0);
+        }
+
+        return (float) ($this->nilai_kontrak ?? 0);
     }
 
     /**
