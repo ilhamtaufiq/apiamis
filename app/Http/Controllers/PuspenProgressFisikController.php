@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Http\Resources\PuspenProgressFisikResource;
 use App\Models\AppSetting;
 use App\Models\Kontrak;
+use App\Models\Pekerjaan;
 use App\Models\PuspenProgressFisik;
 use App\Models\PuspenProgressFisikOutput;
 use App\Services\PekerjaanProgressEstimasiSyncService;
@@ -125,9 +126,78 @@ class PuspenProgressFisikController extends Controller
         }
 
         $summary = $this->calculateSummary((clone $query)->get());
+        $uncontracted = $this->listUncontractedPekerjaan($tahun, $search, $subKegiatan);
 
         return PuspenProgressFisikResource::collection($query->paginate($perPage))
-            ->additional(['summary' => $summary]);
+            ->additional([
+                'summary' => $summary,
+                'uncontracted_pekerjaan' => $uncontracted,
+            ]);
+    }
+
+    /**
+     * Paket pekerjaan tahun ini yang belum terhubung ke kontrak (pivot atau id_pekerjaan).
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function listUncontractedPekerjaan(int $tahun, ?string $search, ?string $subKegiatan): array
+    {
+        $query = Pekerjaan::query()
+            ->with([
+                'kegiatan:id,nama_sub_kegiatan,tahun_anggaran',
+                'kecamatan:id,n_kec',
+                'desa:id,n_desa',
+            ])
+            ->whereHas('kegiatan', fn ($k) => $k->where('tahun_anggaran', $tahun))
+            // Belum di pivot kontrak_pekerjaan
+            ->whereDoesntHave('kontrak')
+            // Belum sebagai id_pekerjaan utama di tbl_kontrak
+            ->whereNotIn('id', function ($q) {
+                $q->select('id_pekerjaan')
+                    ->from('tbl_kontrak')
+                    ->whereNotNull('id_pekerjaan');
+            });
+
+        if (Schema::hasColumn('tbl_pekerjaan', 'is_konsultan')) {
+            $query->where(function ($q) {
+                $q->where('is_konsultan', false)->orWhereNull('is_konsultan');
+            });
+        }
+
+        if ($search) {
+            $query->where(function ($q) use ($search) {
+                $q->where('nama_paket', 'like', "%{$search}%")
+                    ->orWhere('kode_rekening', 'like', "%{$search}%")
+                    ->orWhereHas(
+                        'kegiatan',
+                        fn ($k) => $k->where('nama_sub_kegiatan', 'like', "%{$search}%")
+                    );
+            });
+        }
+
+        if ($subKegiatan) {
+            $query->whereHas(
+                'kegiatan',
+                fn ($k) => $k->where('nama_sub_kegiatan', $subKegiatan)
+            );
+        }
+
+        return $query
+            ->orderBy('nama_paket')
+            ->get()
+            ->map(function (Pekerjaan $p) {
+                return [
+                    'pekerjaan_id' => $p->id,
+                    'nama_paket' => $p->nama_paket,
+                    'kode_rekening' => $p->kode_rekening,
+                    'sub_kegiatan' => $p->kegiatan?->nama_sub_kegiatan,
+                    'pagu' => (float) ($p->pagu ?? 0),
+                    'kecamatan' => $p->kecamatan?->n_kec,
+                    'desa' => $p->desa?->n_desa,
+                ];
+            })
+            ->values()
+            ->all();
     }
 
     private function calculateSummary($items): array
