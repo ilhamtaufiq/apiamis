@@ -379,9 +379,42 @@ class PuspenPengawasKpiController extends Controller
         int $fisikCount,
     ): string {
         $notes = [];
+        $outputBelum = $outputCount === 0;
+        $progressFull = $progressRealisasi !== null && $progressRealisasi >= 100;
+        $fotoLengkap = $fotoStatus === 'selesai';
+        $fotoBelum = $fotoStatus === 'belum_ada_foto' || $fotoCount === 0;
+        $fotoPartial = ! $fotoLengkap && ! $fotoBelum;
 
-        if ($progressRealisasi !== null && $progressRealisasi >= 100) {
-            $notes[] = 'Progress fisik sudah 100%';
+        // Peringatan kritis dulu: progress/PHO tinggi tapi data pendukung kosong
+        if ($outputBelum) {
+            if ($progressFull || $phoCompleted) {
+                $status = [];
+                if ($progressFull) {
+                    $status[] = 'progress fisik 100%';
+                }
+                if ($phoCompleted) {
+                    $status[] = 'sudah PHO';
+                }
+                $missing = ['output komponen belum ditambahkan'];
+                if ($fotoBelum) {
+                    $missing[] = 'foto tidak ada';
+                }
+                if ($penerimaCount === 0) {
+                    $missing[] = 'penerima tidak ada';
+                }
+                $notes[] = '[KRITIS] '.implode(' + ', $status)
+                    .' tetapi '.implode(', ', $missing)
+                    .' — kelengkapan foto diabaikan (slot foto mengikuti komponen output)';
+            } else {
+                $notes[] = '[PERHATIAN] Output komponen belum ditambahkan — kelengkapan foto diabaikan/tidak dapat dinilai (slot foto mengikuti komponen output)';
+            }
+        }
+
+        if ($progressFull) {
+            if (! $outputBelum) {
+                $notes[] = 'Progress fisik sudah 100%';
+            }
+            // Jika output belum: sudah masuk blok kritis di atas
         } elseif ($progressRealisasi !== null && $progressRealisasi > 0) {
             $notes[] = 'Progress fisik '.rtrim(rtrim(number_format($progressRealisasi, 2, ',', '.'), '0'), ',').'%';
         } elseif ($fisikCount > 0) {
@@ -390,44 +423,54 @@ class PuspenPengawasKpiController extends Controller
             $notes[] = 'Progress fisik belum diinput';
         }
 
-        $fotoLengkap = $fotoStatus === 'selesai';
-        $fotoBelum = $fotoStatus === 'belum_ada_foto' || $fotoCount === 0;
-        $fotoPartial = ! $fotoLengkap && ! $fotoBelum;
-
         if ($phoCompleted) {
-            if ($fotoBelum || $fotoPartial) {
-                $detailFoto = $fotoBelum
-                    ? 'dokumentasi foto belum ada'
-                    : (
-                        $fotoRequired
-                            ? "dokumentasi foto belum lengkap ({$fotoCount}/{$fotoRequired})"
-                            : 'dokumentasi foto belum lengkap'
-                    );
-                $notes[] = 'Sudah PHO tetapi '.$detailFoto;
-            } else {
-                $notes[] = 'Sudah PHO dan dokumentasi foto lengkap';
-            }
+            if (! $outputBelum) {
+                if ($fotoBelum || $fotoPartial) {
+                    $detailFoto = $fotoBelum
+                        ? 'dokumentasi foto belum ada'
+                        : (
+                            $fotoRequired
+                                ? "dokumentasi foto belum lengkap ({$fotoCount}/{$fotoRequired})"
+                                : 'dokumentasi foto belum lengkap'
+                        );
+                    $notes[] = 'Sudah PHO tetapi '.$detailFoto;
+                } else {
+                    $notes[] = 'Sudah PHO dan dokumentasi foto lengkap';
+                }
 
-            if ($penerimaCount === 0) {
-                $notes[] = 'Sudah PHO tetapi penerima manfaat belum diinput';
-            }
-            if ($outputCount === 0) {
-                $notes[] = 'Sudah PHO tetapi output pekerjaan belum diinput';
+                if ($penerimaCount === 0) {
+                    $notes[] = 'Sudah PHO tetapi penerima manfaat belum diinput';
+                }
+            } else {
+                // Output kosong: foto diabaikan — jangan klaim "foto lengkap"
+                if ($fotoCount > 0) {
+                    $notes[] = "Ada {$fotoCount} foto, tetapi tanpa komponen output tidak dihitung kelengkapan";
+                }
             }
         } else {
-            if ($fotoBelum) {
-                $notes[] = 'Dokumentasi foto belum ada';
-            } elseif ($fotoPartial) {
-                $notes[] = $fotoRequired
-                    ? "Dokumentasi foto belum lengkap ({$fotoCount}/{$fotoRequired})"
-                    : 'Dokumentasi foto belum lengkap';
+            if (! $outputBelum) {
+                if ($fotoBelum) {
+                    $notes[] = 'Dokumentasi foto belum ada';
+                } elseif ($fotoPartial) {
+                    $notes[] = $fotoRequired
+                        ? "Dokumentasi foto belum lengkap ({$fotoCount}/{$fotoRequired})"
+                        : 'Dokumentasi foto belum lengkap';
+                }
+
+                if ($penerimaCount === 0) {
+                    $notes[] = 'Penerima manfaat belum diinput';
+                }
+            } elseif ($fotoCount > 0) {
+                $notes[] = "Ada {$fotoCount} foto, tetapi tanpa komponen output tidak dihitung kelengkapan";
             }
 
-            if ($penerimaCount === 0) {
-                $notes[] = 'Penerima manfaat belum diinput';
-            }
-            if ($outputCount === 0) {
-                $notes[] = 'Output pekerjaan belum diinput';
+            if ($outputBelum && $penerimaCount === 0 && ! $progressFull && ! $phoCompleted) {
+                // Sudah disebut di blok kritis atau perhatian output; tambah penerima jika belum
+                if (! str_contains(implode(' ', $notes), 'penerima')) {
+                    $notes[] = 'Penerima manfaat belum diinput';
+                }
+            } elseif (! $outputBelum && $penerimaCount === 0) {
+                // already handled above when not pho
             }
         }
 
