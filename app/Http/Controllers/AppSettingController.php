@@ -80,6 +80,7 @@ class AppSettingController extends Controller
             'chat_api_key' => 'nullable|string|max:2000',
             'landing_page_active' => 'nullable|string|in:0,1',
             'spm_detail_page_active' => 'nullable|string|in:0,1',
+            'capaian_publik_section_active' => 'nullable|string|in:0,1',
             'puspen_progress_fisik_public' => 'nullable|string|in:0,1',
             'maintenance_mode' => 'nullable|string|in:0,1',
             'maintenance_bypass_emails' => 'nullable|string|max:1000',
@@ -176,6 +177,11 @@ class AppSettingController extends Controller
 
         if ($request->has('spm_detail_page_active')) {
             $setting = AppSetting::setValue('spm_detail_page_active', $request->spm_detail_page_active, 'text');
+            $updatedSettings[] = $setting;
+        }
+
+        if ($request->has('capaian_publik_section_active')) {
+            $setting = AppSetting::setValue('capaian_publik_section_active', $request->capaian_publik_section_active, 'text');
             $updatedSettings[] = $setting;
         }
 
