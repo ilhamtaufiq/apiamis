@@ -251,6 +251,10 @@ class KontrakController extends Controller
             'pembayaran_lalu.*.jenis' => 'nullable|string|max:100',
             'pembayaran_lalu.*.tanggal' => 'nullable|date',
             'pembayaran_lalu.*.nominal' => 'nullable|numeric|min:0',
+            'nomor_jaminan_uang_muka' => 'nullable|string|max:255',
+            'tanggal_jaminan_uang_muka' => 'nullable|date',
+            'nomor_jaminan_pelaksanaan' => 'nullable|string|max:255',
+            'tanggal_jaminan_pelaksanaan' => 'nullable|date',
         ]);
 
         $items = [];
@@ -277,6 +281,22 @@ class KontrakController extends Controller
         }
         if ($items !== []) {
             $result['pembayaran_lalu'] = $items;
+        }
+
+        foreach ([
+            'nomor_jaminan_uang_muka',
+            'tanggal_jaminan_uang_muka',
+            'nomor_jaminan_pelaksanaan',
+            'tanggal_jaminan_pelaksanaan',
+        ] as $field) {
+            if (! array_key_exists($field, $validated)) {
+                continue;
+            }
+            $value = $validated[$field];
+            if ($value === null || (is_string($value) && trim($value) === '')) {
+                continue;
+            }
+            $result[$field] = is_string($value) ? trim($value) : $value;
         }
 
         return $result;

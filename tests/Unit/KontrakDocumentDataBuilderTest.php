@@ -147,6 +147,107 @@ class KontrakDocumentDataBuilderTest extends TestCase
         $this->assertSame('☐', $data['check_pembayaran_termin']);
     }
 
+    public function test_ringkasan_modal_overrides_jaminan_fields(): void
+    {
+        $settings = Mockery::mock(KontrakDocumentSettingsService::class);
+        $settings->shouldReceive('pejabatDefaults')->andReturn([
+            'nama_ppk' => 'Budi PPK',
+            'nip_ppk' => '1',
+            'nama_pptk' => 'Ani PPTK',
+            'nip_pptk' => '2',
+        ]);
+        $settings->shouldReceive('resolvePptk')->withAnyArgs()->andReturn([
+            'nama_pptk' => 'Ani PPTK',
+            'nip_pptk' => '2',
+        ]);
+        $settings->shouldReceive('masaPemeliharaanHari')->andReturn(180);
+        $settings->shouldReceive('instansiDefaults')->andReturn([
+            'skpd' => 'Dinas',
+            'nomor_dpa' => '-',
+            'tanggal_dpa' => '-',
+        ]);
+        $settings->shouldReceive('caraPembayaranCheckboxData')->andReturn([
+            'cara_pembayaran' => 'Sekaligus',
+            'check_pembayaran_sekaligus' => '☑',
+            'check_pembayaran_termin' => '☐',
+            'check_pembayaran_bulan' => '☐',
+        ]);
+
+        $jaminanType = new DocumentType(['code' => 'JAMINAN_UM']);
+        $jaminanRegister = new DocumentRegister([
+            'nomor' => 'JUM/REGISTER/2026',
+            'tanggal' => Carbon::parse('2026-01-01'),
+        ]);
+        $jaminanRegister->setRelation('type', $jaminanType);
+
+        $kegiatan = new Kegiatan([
+            'nama_program' => 'Program',
+            'nama_kegiatan' => 'Kegiatan',
+            'nama_sub_kegiatan' => 'Sub',
+            'tahun_anggaran' => '2026',
+            'sumber_dana' => 'DAK',
+        ]);
+
+        $pekerjaan = (object) [
+            'nama_paket' => 'Paket A',
+            'pagu' => 1000000,
+            'kode_rekening' => '1',
+            'kecamatan' => (object) ['nama' => 'Cianjur'],
+            'desa' => (object) ['nama' => 'Desa'],
+            'kegiatan' => $kegiatan,
+        ];
+
+        $penyedia = (object) [
+            'nama' => 'PT A',
+            'direktur' => 'Dir',
+            'alamat' => 'Alamat',
+            'npwp' => '-',
+            'bank' => '-',
+            'norek' => '-',
+            'no_akta' => '-',
+            'notaris' => '-',
+            'tanggal_akta' => null,
+        ];
+
+        $kontrak = Mockery::mock();
+        $kontrak->penyedia = $penyedia;
+        $kontrak->nilai_kontrak = 1000000;
+        $kontrak->tgl_sppbj = null;
+        $kontrak->tgl_spk = null;
+        $kontrak->tgl_spmk = null;
+        $kontrak->tgl_selesai = null;
+        $kontrak->sppbj = '-';
+        $kontrak->spk = '-';
+        $kontrak->spmk = '-';
+        $kontrak->kode_rup = '-';
+        $kontrak->kode_paket = '-';
+        $kontrak->nomor_penawaran = '-';
+        $kontrak->tanggal_penawaran = null;
+        $kontrak->shouldReceive('loadMissing')->andReturnSelf();
+        $kontrak->shouldReceive('nilaiKontrakBerjalan')->andReturn(1000000.0);
+        $kontrak->shouldReceive('tglSelesaiBerjalan')->andReturn(null);
+        $kontrak->registers = new Collection([$jaminanRegister]);
+        $kontrak->latestApprovedAddendum = null;
+        $kontrak->approvedAddendums = new Collection([]);
+        $kontrak->shouldReceive('relationLoaded')->with('latestApprovedAddendum')->andReturn(true);
+        $kontrak->shouldReceive('relationLoaded')->with('approvedAddendums')->andReturn(true);
+
+        $builder = new KontrakDocumentDataBuilder($settings);
+        $data = $builder->build($pekerjaan, $kontrak, [
+            'nomor_jaminan_uang_muka' => 'JUM/MANUAL/99',
+            'tanggal_jaminan_uang_muka' => '2026-03-15',
+            'nomor_jaminan_pelaksanaan' => 'JP/MANUAL/01',
+            'tanggal_jaminan_pelaksanaan' => '2026-03-20',
+        ]);
+
+        $this->assertSame('JUM/MANUAL/99', $data['nomor_jaminan_uang_muka']);
+        $this->assertSame('15 Maret 2026', $data['tanggal_jaminan_uang_muka']);
+        $this->assertSame('15 Maret 2026', $data['tgl_jaminan_uang_muka']);
+        $this->assertSame('JP/MANUAL/01', $data['nomor_jaminan_pelaksanaan']);
+        $this->assertSame('20 Maret 2026', $data['tanggal_jaminan_pelaksanaan']);
+        $this->assertSame('20 Maret 2026', $data['tgl_jaminan_pelaksanaan']);
+    }
+
     public function test_pptk_comes_from_kegiatan_when_configured(): void
     {
         $settings = Mockery::mock(KontrakDocumentSettingsService::class);

@@ -11,6 +11,7 @@ class KontrakDocumentDataBuilder
     private const REGISTER_CODES = [
         'bastp' => 'BASTP',
         'jaminan_uang_muka' => 'JAMINAN_UM',
+        'jaminan_pelaksanaan' => 'JAMINAN_PEL',
         'jaminan_pemeliharaan' => 'JAMINAN_PEM',
         'bap' => 'BAP',
     ];
@@ -30,6 +31,7 @@ class KontrakDocumentDataBuilder
 
         $bastpRegister = $this->findRegisterByCode($kontrak, self::REGISTER_CODES['bastp']);
         $jaminanUangMukaRegister = $this->findRegisterByCode($kontrak, self::REGISTER_CODES['jaminan_uang_muka']);
+        $jaminanPelaksanaanRegister = $this->findRegisterByCode($kontrak, self::REGISTER_CODES['jaminan_pelaksanaan']);
         $jaminanPemeliharaanRegister = $this->findRegisterByCode($kontrak, self::REGISTER_CODES['jaminan_pemeliharaan']);
         $bapRegister = $this->findRegisterByCode($kontrak, self::REGISTER_CODES['bap']);
         $latestAddendum = $kontrak->relationLoaded('latestApprovedAddendum')
@@ -66,7 +68,25 @@ class KontrakDocumentDataBuilder
             $persenTagih = 100;
         }
         $nilaiTagih = (int) round(((float) $nilaiKontrakEfektif) * $persenTagih / 100);
-        unset($overrideData['persen_tagih'], $overrideData['pembayaran_lalu'], $overrideData['nilai_tagih']);
+
+        $jaminanOverrides = [
+            'nomor_jaminan_uang_muka' => $overrideData['nomor_jaminan_uang_muka'] ?? null,
+            'tanggal_jaminan_uang_muka' => $overrideData['tanggal_jaminan_uang_muka'] ?? null,
+            'nomor_jaminan_pelaksanaan' => $overrideData['nomor_jaminan_pelaksanaan'] ?? null,
+            'tanggal_jaminan_pelaksanaan' => $overrideData['tanggal_jaminan_pelaksanaan'] ?? null,
+        ];
+
+        unset(
+            $overrideData['persen_tagih'],
+            $overrideData['pembayaran_lalu'],
+            $overrideData['nilai_tagih'],
+            $overrideData['nomor_jaminan_uang_muka'],
+            $overrideData['tanggal_jaminan_uang_muka'],
+            $overrideData['nomor_jaminan_pelaksanaan'],
+            $overrideData['tanggal_jaminan_pelaksanaan'],
+            $overrideData['tgl_jaminan_uang_muka'],
+            $overrideData['tgl_jaminan_pelaksanaan'],
+        );
 
         $data = [
             'nama_paket' => $pekerjaan->nama_paket,
@@ -128,8 +148,13 @@ class KontrakDocumentDataBuilder
             'tgl_bastp' => $this->formatRegisterDate($bastpRegister),
             'nomor_jaminan_uang_muka' => $jaminanUangMukaRegister?->nomor ?: '-',
             'tanggal_jaminan_uang_muka' => $this->formatRegisterDate($jaminanUangMukaRegister),
+            'tgl_jaminan_uang_muka' => $this->formatRegisterDate($jaminanUangMukaRegister),
+            'nomor_jaminan_pelaksanaan' => $jaminanPelaksanaanRegister?->nomor ?: '-',
+            'tanggal_jaminan_pelaksanaan' => $this->formatRegisterDate($jaminanPelaksanaanRegister),
+            'tgl_jaminan_pelaksanaan' => $this->formatRegisterDate($jaminanPelaksanaanRegister),
             'nomor_jaminan_pemeliharaan' => $jaminanPemeliharaanRegister?->nomor ?: '-',
             'tanggal_jaminan_pemeliharaan' => $this->formatRegisterDate($jaminanPemeliharaanRegister),
+            'tgl_jaminan_pemeliharaan' => $this->formatRegisterDate($jaminanPemeliharaanRegister),
             'nomor_bap' => $bapRegister?->nomor ?: '-',
             'tgl_bap' => $this->formatRegisterDate($bapRegister),
             'masa_hari' => $masaHari ?? '-',
@@ -159,6 +184,7 @@ class KontrakDocumentDataBuilder
         $data = array_merge($data, $this->documentSettings->caraPembayaranCheckboxData());
         $data = array_merge($data, $this->addendumData($kontrak));
         $data = array_merge($data, $this->pembayaranLaluData($pembayaranLalu));
+        $data = array_merge($data, $this->applyJaminanOverrides($data, $jaminanOverrides));
 
         if (! empty($overrideData)) {
             foreach ($overrideData as $key => $value) {
@@ -200,6 +226,70 @@ class KontrakDocumentDataBuilder
         $data['nilai_tagih'] = 'Rp. '.number_format($nilaiTagih, 0, ',', '.');
 
         return $data;
+    }
+
+    /**
+     * Manual overrides from modal ringkasan (non-empty only).
+     *
+     * @param  array<string, mixed>  $data
+     * @param  array{
+     *     nomor_jaminan_uang_muka?: mixed,
+     *     tanggal_jaminan_uang_muka?: mixed,
+     *     nomor_jaminan_pelaksanaan?: mixed,
+     *     tanggal_jaminan_pelaksanaan?: mixed
+     * }  $overrides
+     * @return array<string, string>
+     */
+    private function applyJaminanOverrides(array $data, array $overrides): array
+    {
+        $nomorUm = $this->nonEmptyString($overrides['nomor_jaminan_uang_muka'] ?? null);
+        if ($nomorUm !== null) {
+            $data['nomor_jaminan_uang_muka'] = $nomorUm;
+        }
+
+        $tglUm = $this->formatOverrideDate($overrides['tanggal_jaminan_uang_muka'] ?? null);
+        if ($tglUm !== null) {
+            $data['tanggal_jaminan_uang_muka'] = $tglUm;
+            $data['tgl_jaminan_uang_muka'] = $tglUm;
+        }
+
+        $nomorPel = $this->nonEmptyString($overrides['nomor_jaminan_pelaksanaan'] ?? null);
+        if ($nomorPel !== null) {
+            $data['nomor_jaminan_pelaksanaan'] = $nomorPel;
+        }
+
+        $tglPel = $this->formatOverrideDate($overrides['tanggal_jaminan_pelaksanaan'] ?? null);
+        if ($tglPel !== null) {
+            $data['tanggal_jaminan_pelaksanaan'] = $tglPel;
+            $data['tgl_jaminan_pelaksanaan'] = $tglPel;
+        }
+
+        return $data;
+    }
+
+    private function nonEmptyString(mixed $value): ?string
+    {
+        if ($value === null) {
+            return null;
+        }
+
+        $trimmed = trim((string) $value);
+
+        return $trimmed !== '' ? $trimmed : null;
+    }
+
+    private function formatOverrideDate(mixed $value): ?string
+    {
+        $raw = $this->nonEmptyString($value);
+        if ($raw === null) {
+            return null;
+        }
+
+        try {
+            return Carbon::parse($raw)->locale('id')->translatedFormat('d F Y');
+        } catch (\Throwable) {
+            return $raw;
+        }
     }
 
     /**
