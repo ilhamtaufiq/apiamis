@@ -59,21 +59,29 @@ class PekerjaanController extends Controller
             return response()->json(['message' => 'Unauthorized'], 401);
         }
 
-        $query = Pekerjaan::with([
-            'kecamatan',
-            'desa',
-            'kegiatan',
-            'tags',
-            'pengawas',
-            'pendamping',
-            'progress',
-            'kontrak.penyedia',
-            'kontrak.addendums',
-        ])
+        $isUnbounded = $request->has('per_page') && (int) $request->per_page === -1;
+        // List ringan: jangan tarik kontrak/addendum/progress penuh bila unbounded
+        // (dashboard mobile admin sempat OOM/lag karena ini + 400+ baris).
+        $with = $isUnbounded
+            ? ['kecamatan', 'desa', 'kegiatan', 'pengawas']
+            : [
+                'kecamatan',
+                'desa',
+                'kegiatan',
+                'tags',
+                'pengawas',
+                'pendamping',
+                'progress',
+                'kontrak.penyedia',
+                'kontrak.addendums',
+            ];
+
+        $query = Pekerjaan::with($with)
             ->withCount(['penerima', 'foto'])
             ->byUserRole();  // Aman karena sudah check auth
 
-        if ($request->boolean('summary')) {
+        // summary=1 memuat output+foto+history — JANGAN digabung dengan per_page=-1
+        if ($request->boolean('summary') && ! $isUnbounded) {
             $query->with(['output', 'foto', 'progressEstimasiHistory']);
         }
 
@@ -154,9 +162,10 @@ class PekerjaanController extends Controller
             $query->latest();
         }
 
-        // Support fetching all records for dropdown (per_page=-1)
-        if ($request->has('per_page') && (int) $request->per_page === -1) {
-            return PekerjaanResource::collection($query->get());
+        // Unbounded list (dropdown/legacy): hard cap — jangan kirim ratusan paket ke HP
+        if ($isUnbounded) {
+            $cap = 80;
+            return PekerjaanResource::collection($query->limit($cap)->get());
         }
 
         $perPage = (int) $request->get('per_page', 20);
