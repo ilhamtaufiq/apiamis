@@ -29,7 +29,9 @@ class FotoController extends Controller
      */
     public function index(Request $request)
     {
-        $query = Foto::with(['pekerjaan', 'penerima', 'komponen']);
+        $query = Foto::with(['pekerjaan', 'penerima', 'komponen'])
+            // Cegah bocor foto lintas role: hanya foto dari pekerjaan yang diizinkan
+            ->whereHas('pekerjaan', fn ($q) => $q->byUserRole());
 
         if ($request->has('tahun') && $request->tahun) {
             $query->whereHas('pekerjaan.kegiatan', function ($q) use ($request) {
@@ -118,6 +120,10 @@ class FotoController extends Controller
         ]);
 
         $pekerjaan = Pekerjaan::query()->findOrFail($validated['pekerjaan_id']);
+        if (! Pekerjaan::userCanAccess((int) $pekerjaan->id)) {
+            abort(403, 'Anda tidak memiliki akses untuk pekerjaan ini');
+        }
+
         $koordinatValidation = $this->koordinatValidationService->validateForPekerjaan(
             $pekerjaan,
             $validated['koordinat'],
@@ -152,6 +158,10 @@ class FotoController extends Controller
      */
     public function show(Foto $foto)
     {
+        if (! Pekerjaan::userCanAccess((int) $foto->pekerjaan_id)) {
+            abort(403, 'Anda tidak memiliki akses untuk pekerjaan ini');
+        }
+
         $foto->load(['pekerjaan', 'penerima', 'komponen']);
 
         return new FotoResource($foto);
@@ -172,6 +182,10 @@ class FotoController extends Controller
      */
     public function update(Request $request, Foto $foto)
     {
+        if (! Pekerjaan::userCanAccess((int) $foto->pekerjaan_id)) {
+            abort(403, 'Anda tidak memiliki akses untuk pekerjaan ini');
+        }
+
         $validated = $request->validate([
             'pekerjaan_id' => 'nullable|exists:tbl_pekerjaan,id',
             'komponen_id' => 'nullable|integer',
@@ -185,6 +199,9 @@ class FotoController extends Controller
         if (array_key_exists('koordinat', $validated) && $validated['koordinat'] !== null) {
             $pekerjaanId = $validated['pekerjaan_id'] ?? $foto->pekerjaan_id;
             $pekerjaan = Pekerjaan::query()->findOrFail($pekerjaanId);
+            if (! Pekerjaan::userCanAccess((int) $pekerjaan->id)) {
+                abort(403, 'Anda tidak memiliki akses untuk pekerjaan ini');
+            }
             $koordinatValidation = $this->koordinatValidationService->validateForPekerjaan(
                 $pekerjaan,
                 $validated['koordinat'],
@@ -238,6 +255,10 @@ class FotoController extends Controller
      */
     public function destroy(Foto $foto)
     {
+        if (! Pekerjaan::userCanAccess((int) $foto->pekerjaan_id)) {
+            abort(403, 'Anda tidak memiliki akses untuk pekerjaan ini');
+        }
+
         // Delete all media files from storage
         $foto->clearMediaCollection('foto/pekerjaan');
 

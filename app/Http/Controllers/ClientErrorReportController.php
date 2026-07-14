@@ -64,17 +64,37 @@ class ClientErrorReportController extends Controller
     public function store(Request $request): JsonResponse
     {
         $validated = $request->validate([
-            'source' => ['required', 'string', Rule::in(['react', 'window.error', 'unhandledrejection', 'console.error', 'manual'])],
+            'source' => [
+                'required',
+                'string',
+                Rule::in([
+                    'react',
+                    'react-native',
+                    'window.error',
+                    'unhandledrejection',
+                    'console.error',
+                    'manual',
+                    'fatal',
+                ]),
+            ],
             'message' => ['required', 'string', 'max:5000'],
             'stack' => ['nullable', 'string'],
             'component_stack' => ['nullable', 'string'],
             'url' => ['nullable', 'string', 'max:5000'],
             'user_agent' => ['nullable', 'string', 'max:2000'],
             'metadata' => ['nullable', 'array'],
+            'app' => ['nullable', 'string', 'max:64'],
         ]);
+
+        $metadata = $validated['metadata'] ?? [];
+        if (! empty($validated['app'])) {
+            $metadata['app'] = $validated['app'];
+        }
+        unset($validated['app']);
 
         ErrorLog::create([
             ...$validated,
+            'metadata' => $metadata ?: null,
             'user_id' => $request->user()?->id,
             'ip_address' => $request->ip(),
         ]);

@@ -264,15 +264,9 @@ class PekerjaanController extends Controller
 
         $user = auth()->user();
 
-        // Check apakah user boleh akses pekerjaan ini
-        if (! $user->hasRole('admin')) {
-            $hasAccess = Pekerjaan::where('tbl_pekerjaan.id', $pekerjaan->id)
-                ->byUserRole()
-                ->exists();
-
-            if (! $hasAccess) {
-                abort(403, 'Anda tidak memiliki akses untuk pekerjaan ini');
-            }
+        // Check apakah user boleh akses pekerjaan ini (termasuk pengawas/konsultan)
+        if (! Pekerjaan::userCanAccess((int) $pekerjaan->id, $user)) {
+            abort(403, 'Anda tidak memiliki akses untuk pekerjaan ini');
         }
 
         $pekerjaan->load([
@@ -440,6 +434,7 @@ class PekerjaanController extends Controller
     public function byKecamatan(Request $request, $kecamatanId)
     {
         $query = Pekerjaan::where('kecamatan_id', $kecamatanId)
+            ->byUserRole()
             ->with('kecamatan', 'desa', 'kegiatan', 'pengawas', 'pendamping');
 
         // Filter by tahun via kegiatan
@@ -480,6 +475,7 @@ class PekerjaanController extends Controller
     public function byDesa($desaId)
     {
         $pekerjaan = Pekerjaan::where('desa_id', $desaId)
+            ->byUserRole()
             ->with('kecamatan', 'desa', 'kegiatan', 'pengawas', 'pendamping')
             ->paginate(20);
 
@@ -512,6 +508,7 @@ class PekerjaanController extends Controller
     public function byKegiatan($kegiatanId)
     {
         $pekerjaan = Pekerjaan::where('kegiatan_id', $kegiatanId)
+            ->byUserRole()
             ->with('kecamatan', 'desa', 'kegiatan', 'pengawas', 'pendamping')
             ->paginate(20);
 
@@ -554,6 +551,7 @@ class PekerjaanController extends Controller
     {
         $query = Pekerjaan::where('kecamatan_id', $kecamatanId)
             ->where('desa_id', $desaId)
+            ->byUserRole()
             ->with('kecamatan', 'desa', 'kegiatan', 'pengawas', 'pendamping');
 
         // Filter by tahun via kegiatan
@@ -600,6 +598,7 @@ class PekerjaanController extends Controller
     public function totalPaguByKecamatan($kecamatanId)
     {
         $total = Pekerjaan::where('kecamatan_id', $kecamatanId)
+            ->byUserRole()
             ->sum('pagu');
 
         return response()->json([
@@ -640,6 +639,7 @@ class PekerjaanController extends Controller
     public function totalPaguByKegiatan($kegiatanId)
     {
         $total = Pekerjaan::where('kegiatan_id', $kegiatanId)
+            ->byUserRole()
             ->sum('pagu');
 
         return response()->json([
@@ -650,6 +650,10 @@ class PekerjaanController extends Controller
 
     public function media(Pekerjaan $pekerjaan)
     {
+        if (! Pekerjaan::userCanAccess((int) $pekerjaan->id)) {
+            abort(403, 'Anda tidak memiliki akses untuk pekerjaan ini');
+        }
+
         $pekerjaan->load('foto', 'berkas');
 
         return response()->json([

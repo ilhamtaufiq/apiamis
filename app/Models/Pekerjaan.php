@@ -99,42 +99,72 @@ class Pekerjaan extends Model
     }
 
     /**
-     * Scope untuk filter berdasarkan role user
-     * - Admin: lihat semua
-     * - Pengawas/User lain: hanya lihat pekerjaan yang di-assign
+     * Scope untuk filter berdasarkan role user.
+     *
+     * - admin / manager: lihat semua
+     * - pengawas / konsultan_pengawas: HANYA user_pekerjaan (assign manual)
+     *   → tidak lewat kegiatan_role (sering bocor: 1 role = seluruh kegiatan)
+     * - role lain (tfl, operator, …): user_pekerjaan ATAU kegiatan_role
      */
     public function scopeByUserRole($query)
     {
         $user = auth()->user();
 
-        if (!$user) {
+        if (! $user) {
             return $query->whereRaw('1=0');
         }
 
-        if ($user->hasRole('admin')) {
+        if ($user->hasAnyRole(['admin', 'manager', 'super-admin'])) {
             return $query;
         }
 
-        return $query->where(function ($q) use ($user) {
-            $tableName = $this->getTable();
+        $tableName = $this->getTable();
 
-            // 1. Manually assigned via user_pekerjaan table
+        // Pengawas lapangan & konsultan: ketat per assignment user.
+        if ($user->hasAnyRole(['pengawas', 'konsultan_pengawas'])) {
+            return $query->whereIn("$tableName.id", function ($sub) use ($user) {
+                $sub->select('pekerjaan_id')
+                    ->from('user_pekerjaan')
+                    ->where('user_id', $user->id);
+            });
+        }
+
+        return $query->where(function ($q) use ($user, $tableName) {
+            // 1. Assign manual
             $q->whereIn("$tableName.id", function ($sub) use ($user) {
                 $sub->select('pekerjaan_id')
                     ->from('user_pekerjaan')
                     ->where('user_id', $user->id);
             })
-                // 2. Assigned via kegiatan role (department/sector access)
+                // 2. Akses sektoral via kegiatan_role (bukan untuk pengawas lapangan)
                 ->orWhereIn("$tableName.kegiatan_id", function ($sub) use ($user) {
                     $userRoleIds = $user->roles()->pluck('id')->toArray();
+                    if ($userRoleIds === []) {
+                        $sub->selectRaw('0')->whereRaw('1=0');
+
+                        return;
+                    }
                     $sub->select('kegiatan_id')
                         ->from('kegiatan_role')
                         ->whereIn('role_id', $userRoleIds);
                 });
-
-            // 3. Automatically assigned if user's NIP matches the Pengawas/Pendamping master data
-            // (Dihapus sesuai permintaan, sekarang menggunakan assignment manual)
         });
+    }
+
+    /**
+     * Apakah user boleh mengakses satu pekerjaan (sama logika scopeByUserRole).
+     */
+    public static function userCanAccess(int $pekerjaanId, $user = null): bool
+    {
+        $user = $user ?? auth()->user();
+        if (! $user) {
+            return false;
+        }
+
+        return static::query()
+            ->whereKey($pekerjaanId)
+            ->byUserRole()
+            ->exists();
     }
 
     /**
