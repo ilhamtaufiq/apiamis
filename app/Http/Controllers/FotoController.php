@@ -203,14 +203,23 @@ class FotoController extends Controller
 
         $foto->update($validated);
 
-        if ($request->hasFile('file')) {
-            $foto->clearMediaCollection('foto/pekerjaan');
-            $foto->addMediaFromRequest('file')
-                ->usingFileName(Str::uuid().'.'.$request->file('file')->getClientOriginalExtension())
+        // Hanya ganti media bila ada file valid. Jangan clearMedia dulu —
+        // jika add gagal setelah clear, foto hilang permanen.
+        $file = $request->file('file');
+        if ($file && $file->isValid() && $file->getSize() > 0) {
+            $newMedia = $foto->addMediaFromRequest('file')
+                ->usingFileName(Str::uuid().'.'.$file->getClientOriginalExtension())
                 ->toMediaCollection('foto/pekerjaan');
+
+            foreach ($foto->getMedia('foto/pekerjaan') as $existing) {
+                if ((int) $existing->id !== (int) $newMedia->id) {
+                    $existing->delete();
+                }
+            }
         }
 
         $foto->load(['pekerjaan', 'penerima', 'komponen']);
+        $foto->loadMedia('foto/pekerjaan');
 
         return new FotoResource($foto);
     }
