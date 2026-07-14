@@ -19,6 +19,7 @@ class Desa extends Model
         'n_desa',
         'luas',
         'jumlah_penduduk',
+        'jumlah_kk',
         'target',
         'bjp_master',
         'kecamatan_id'
@@ -27,6 +28,7 @@ class Desa extends Model
     protected $casts = [
         'luas' => 'double',
         'jumlah_penduduk' => 'integer',
+        'jumlah_kk' => 'integer',
         'target' => 'integer',
         'bjp_master' => 'integer'
     ];

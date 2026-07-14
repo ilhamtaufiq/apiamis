@@ -194,6 +194,13 @@ class FotoController extends Controller
             $validated['validasi_koordinat_message'] = $koordinatValidation['message'];
         }
 
+        // ConvertEmptyStringsToNull turns "" into null; never null-out non-nullable columns.
+        foreach (['keterangan', 'koordinat', 'pekerjaan_id', 'komponen_id'] as $field) {
+            if (array_key_exists($field, $validated) && $validated[$field] === null) {
+                unset($validated[$field]);
+            }
+        }
+
         $foto->update($validated);
 
         if ($request->hasFile('file')) {

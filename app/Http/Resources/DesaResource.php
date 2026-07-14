@@ -17,6 +17,7 @@ class DesaResource extends JsonResource
             'nama_desa' => $this->n_desa,
             'luas' => $this->luas,
             'jumlah_penduduk' => $this->jumlah_penduduk,
+            'jumlah_kk' => $this->jumlah_kk,
             'kecamatan_id' => $this->kecamatan_id,
             'kecamatan' => new KecamatanResource($this->whenLoaded('kecamatan')),
             'created_at' => $this->created_at?->toIso8601String(),

@@ -230,6 +230,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('spm-sanitasi/import', [SpmSanitasiController::class, 'import']);
     Route::apiResource('spm-sanitasi', SpmSanitasiController::class);
     Route::apiResource('kecamatan', KecamatanController::class);
+    Route::post('desa/sync-kk', [DesaController::class, 'syncKk']);
     Route::apiResource('desa', DesaController::class);
     Route::apiResource('penyedia', PenyediaController::class)->parameters(['penyedia' => 'penyedia']);
     Route::apiResource('kegiatan', KegiatanController::class);
