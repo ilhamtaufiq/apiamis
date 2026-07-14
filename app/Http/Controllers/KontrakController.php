@@ -185,9 +185,6 @@ class KontrakController extends Controller
         ]);
 
         $firstPekerjaan = $kontrak->pekerjaans->first();
-        if ($firstPekerjaan && ! $firstPekerjaan->isChecklistComplete()) {
-            return response()->json(['message' => 'Checklist pekerjaan belum 100% lengkap bos!'], 403);
-        }
 
         try {
             $overrideData = $this->validatedRingkasanOverrides($request);
@@ -215,9 +212,6 @@ class KontrakController extends Controller
         ]);
 
         $firstPekerjaan = $kontrak->pekerjaans->first();
-        if ($firstPekerjaan && ! $firstPekerjaan->isChecklistComplete()) {
-            return response()->json(['message' => 'Checklist pekerjaan belum 100% lengkap bos!'], 403);
-        }
 
         try {
             $overrideData = $this->validatedRingkasanOverrides($request);
@@ -305,22 +299,12 @@ class KontrakController extends Controller
     {
         $kontrak->loadMissing(['pekerjaans']);
 
-        $firstPekerjaan = $kontrak->pekerjaans->first();
-        if ($firstPekerjaan && ! $firstPekerjaan->isChecklistComplete()) {
-            return response()->json(['message' => 'Checklist pekerjaan belum 100% lengkap.'], 403);
-        }
-
         return response()->json($this->bapContextService->build($kontrak));
     }
 
     public function exportBAP(Request $request, Kontrak $kontrak)
     {
         $kontrak->loadMissing(['kegiatan', 'pekerjaans.kegiatan', 'pekerjaans.kecamatan', 'pekerjaans.desa', 'penyedia', 'approvedAddendums', 'registers.type']);
-
-        $firstPekerjaan = $kontrak->pekerjaans->first();
-        if ($firstPekerjaan && ! $firstPekerjaan->isChecklistComplete()) {
-            return response()->json(['message' => 'Checklist pekerjaan belum 100% lengkap bos!'], 403);
-        }
 
         $context = $this->bapContextService->build($kontrak);
         if (! $context['can_generate']) {
