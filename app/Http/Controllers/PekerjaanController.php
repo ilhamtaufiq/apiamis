@@ -118,16 +118,28 @@ class PekerjaanController extends Controller
             $query->where('pendamping_id', $request->pendamping_id);
         }
 
-        // Search functionality
-        if ($request->has('search') && ! empty($request->search)) {
-            $searchTerm = $request->search;
-            $query->where(function ($q) use ($searchTerm) {
-                $q->where('nama_paket', 'LIKE', '%'.$searchTerm.'%')
-                    ->orWhere('kode_rekening', 'LIKE', '%'.$searchTerm.'%')
-                    ->orWhereHas('kontrak.penyedia', function ($penyediaQuery) use ($searchTerm) {
-                        $penyediaQuery->where('nama', 'LIKE', '%'.$searchTerm.'%');
-                    });
-            });
+        // Search: paket, rekening, desa, kecamatan, penyedia, pengawas
+        if ($request->filled('search')) {
+            $searchTerm = trim((string) $request->input('search'));
+            if ($searchTerm !== '') {
+                $query->where(function ($q) use ($searchTerm) {
+                    $like = '%'.$searchTerm.'%';
+                    $q->where('nama_paket', 'LIKE', $like)
+                        ->orWhere('kode_rekening', 'LIKE', $like)
+                        ->orWhereHas('desa', function ($desaQuery) use ($like) {
+                            $desaQuery->where('n_desa', 'LIKE', $like);
+                        })
+                        ->orWhereHas('kecamatan', function ($kecQuery) use ($like) {
+                            $kecQuery->where('n_kec', 'LIKE', $like);
+                        })
+                        ->orWhereHas('kontrak.penyedia', function ($penyediaQuery) use ($like) {
+                            $penyediaQuery->where('nama', 'LIKE', $like);
+                        })
+                        ->orWhereHas('pengawas', function ($pengawasQuery) use ($like) {
+                            $pengawasQuery->where('nama', 'LIKE', $like);
+                        });
+                });
+            }
         }
 
         // Sorting
@@ -143,12 +155,17 @@ class PekerjaanController extends Controller
         }
 
         // Support fetching all records for dropdown (per_page=-1)
-        if ($request->has('per_page') && $request->per_page == -1) {
+        if ($request->has('per_page') && (int) $request->per_page === -1) {
             return PekerjaanResource::collection($query->get());
         }
 
-        $perPage = $request->get('per_page', 20);
-        $pekerjaan = $query->paginate($perPage);
+        $perPage = (int) $request->get('per_page', 20);
+        if ($perPage < 1) {
+            $perPage = 20;
+        }
+        // Batasi agar client mobile (5/page) dan web tidak kebablasan
+        $perPage = min($perPage, 100);
+        $pekerjaan = $query->paginate($perPage)->appends($request->query());
 
         return PekerjaanResource::collection($pekerjaan);
     }
