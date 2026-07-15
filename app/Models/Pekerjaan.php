@@ -101,10 +101,11 @@ class Pekerjaan extends Model
     /**
      * Scope untuk filter berdasarkan role user.
      *
-     * - admin / manager: lihat semua
+     * - admin / manager / super-admin: lihat semua
+     * - operator: lihat semua (termasuk bila juga punya role pengawas)
      * - pengawas / konsultan_pengawas: HANYA user_pekerjaan (assign manual)
      *   → tidak lewat kegiatan_role (sering bocor: 1 role = seluruh kegiatan)
-     * - role lain (tfl, operator, …): user_pekerjaan ATAU kegiatan_role
+     * - role lain (tfl, …): user_pekerjaan ATAU kegiatan_role
      */
     public function scopeByUserRole($query)
     {
@@ -114,7 +115,8 @@ class Pekerjaan extends Model
             return $query->whereRaw('1=0');
         }
 
-        if ($user->hasAnyRole(['admin', 'manager', 'super-admin'])) {
+        // Full access — operator checked before pengawas so dual-role is not restricted.
+        if ($user->hasAnyRole(['admin', 'manager', 'super-admin', 'operator'])) {
             return $query;
         }
 
