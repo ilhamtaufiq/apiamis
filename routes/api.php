@@ -326,6 +326,9 @@ Route::middleware('auth:sanctum')->group(function () {
     // Pekerjaan Checklist
     Route::get('pekerjaan-checklist', [PekerjaanChecklistController::class, 'index']);
     Route::post('pekerjaan-checklist/toggle', [PekerjaanChecklistController::class, 'toggle']);
+    Route::get('pekerjaan-checklist/history', [PekerjaanChecklistController::class, 'history']);
+    Route::get('pekerjaan-checklist/export/excel', [PekerjaanChecklistController::class, 'exportExcel']);
+    Route::get('pekerjaan-checklist/export/pdf', [PekerjaanChecklistController::class, 'exportPdf']);
 
     // Post Pekerjaan Checklist (pekerjaan berkontrak)
     Route::get('post-pekerjaan-checklist', [PostPekerjaanChecklistController::class, 'index']);
