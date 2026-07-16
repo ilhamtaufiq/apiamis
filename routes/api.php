@@ -43,6 +43,7 @@ use App\Http\Controllers\PuspenReviewNoteController;
 use App\Http\Controllers\RoleController;
 use App\Http\Controllers\RoutePermissionController;
 use App\Http\Controllers\SignatureLibraryController;
+use App\Http\Controllers\WhatsAppController;
 use App\Http\Controllers\SimulationNetworkController;
 use App\Http\Controllers\SpamUnitController;
 use App\Http\Controllers\SpmSanitasiController;
@@ -162,6 +163,8 @@ Route::middleware('auth:sanctum')->group(function () {
 
         // Data Quality Diagnostic
         Route::get('data-quality/stats', [DataQualityController::class, 'getStats']);
+        Route::get('data-quality/items', [DataQualityController::class, 'getItems']);
+        Route::get('data-quality/action-inbox', [DataQualityController::class, 'getActionInbox']);
 
         // Audit Logs
         Route::get('audit-logs', [AuditLogController::class, 'index']);
@@ -269,6 +272,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('staging/{id}', [SpseProcurementController::class, 'stagingDetail'])->whereNumber('id');
         Route::post('staging/apply', [SpseProcurementController::class, 'applyStaging']);
         Route::post('staging/map', [SpseProcurementController::class, 'mapStaging']);
+        Route::post('staging/promote-draft', [SpseProcurementController::class, 'promoteStaging']);
         Route::get('packages/{kode_paket}/documents', [SpseProcurementController::class, 'packageDocuments']);
         Route::post('packages/import-documents', [SpseProcurementController::class, 'importPackageDocuments']);
         Route::post('packages/download-zip', [SpseProcurementController::class, 'downloadPackageZip']);
@@ -434,6 +438,17 @@ Route::middleware('auth:sanctum')->group(function () {
             Route::get('{filename}', [BackupController::class, 'download'])->where('filename', '.*\.zip');
             Route::delete('{filename}', [BackupController::class, 'destroy'])->where('filename', '.*\.zip');
             Route::post('restore', [BackupController::class, 'restore']);
+        });
+
+    // WhatsApp bridge (admin)
+    Route::prefix('whatsapp')
+        ->middleware('role:admin')
+        ->group(function () {
+            Route::get('status', [WhatsAppController::class, 'status']);
+            Route::post('start', [WhatsAppController::class, 'start']);
+            Route::post('stop', [WhatsAppController::class, 'stop']);
+            Route::post('send', [WhatsAppController::class, 'send']);
+            Route::post('send-bulk', [WhatsAppController::class, 'sendBulk']);
         });
 
     // Tools PDFs

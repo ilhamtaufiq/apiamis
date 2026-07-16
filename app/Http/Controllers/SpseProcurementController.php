@@ -415,6 +415,65 @@ class SpseProcurementController extends Controller
         ]);
     }
 
+    /**
+     * Promote unmatched staging rows into draft pekerjaan + kontrak shell.
+     */
+    public function promoteStaging(Request $request, ProcurementMatchingService $matchingService): JsonResponse
+    {
+        $validated = $request->validate([
+            'ids' => 'required|array|min:1|max:50',
+            'ids.*' => 'integer|exists:tbl_procurement_staging_paket,id',
+            'kegiatan_id' => 'nullable|integer|exists:tbl_kegiatan,id',
+            'is_konsultan' => 'nullable|boolean',
+        ]);
+
+        $created = 0;
+        $skipped = 0;
+        $results = [];
+
+        $items = ProcurementStagingPaket::query()->whereIn('id', $validated['ids'])->get();
+        foreach ($items as $item) {
+            try {
+                $result = $matchingService->promoteToDraft($item, [
+                    'kegiatan_id' => $validated['kegiatan_id'] ?? null,
+                    'is_konsultan' => $validated['is_konsultan'] ?? true,
+                ]);
+
+                if ($result['status'] === 'created') {
+                    $created++;
+                    $results[] = [
+                        'id' => $item->id,
+                        'status' => 'created',
+                        'pekerjaan_id' => $result['pekerjaan']?->id,
+                        'kontrak_id' => $result['kontrak']?->id,
+                    ];
+                } else {
+                    $skipped++;
+                    $results[] = [
+                        'id' => $item->id,
+                        'status' => 'skipped',
+                        'reason' => $result['status'],
+                        'pekerjaan_id' => $result['pekerjaan']?->id,
+                    ];
+                }
+            } catch (\Throwable $e) {
+                $skipped++;
+                $results[] = [
+                    'id' => $item->id,
+                    'status' => 'error',
+                    'reason' => $e->getMessage(),
+                ];
+            }
+        }
+
+        return response()->json([
+            'message' => "Promote draft: {$created} dibuat, {$skipped} dilewati.",
+            'created' => $created,
+            'skipped' => $skipped,
+            'results' => $results,
+        ]);
+    }
+
     private function formatRun(ProcurementSyncRun $run): array
     {
         return [

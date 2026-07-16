@@ -2,6 +2,7 @@
 
 namespace App\Services\Procurement;
 
+use App\Models\DraftPekerjaan;
 use App\Models\Kontrak;
 use App\Models\Pekerjaan;
 use App\Models\ProcurementStagingPaket;
@@ -71,6 +72,67 @@ class ProcurementMatchingService
         }
 
         return $kontrak->fresh();
+    }
+
+    /**
+     * Create draft pekerjaan (+ kontrak shell) from unmatched staging paket.
+     *
+     * @param  array{kegiatan_id?: int|null, pagu?: float|null, is_konsultan?: bool}  $options
+     */
+    public function promoteToDraft(ProcurementStagingPaket $staging, array $options = []): array
+    {
+        if ($staging->matched_pekerjaan_id) {
+            $existing = Pekerjaan::query()->find($staging->matched_pekerjaan_id);
+
+            return [
+                'status' => 'already_matched',
+                'pekerjaan' => $existing,
+                'kontrak' => $existing?->kontrak()->first(),
+                'staging' => $staging,
+            ];
+        }
+
+        $isKonsultan = (bool) ($options['is_konsultan'] ?? true);
+        $pagu = isset($options['pagu']) ? (float) $options['pagu'] : 0.0;
+
+        $pekerjaan = Pekerjaan::query()->create([
+            'nama_paket' => mb_substr($staging->nama_paket ?: ('Paket SPSE '.$staging->kode_paket), 0, 225),
+            'kode_rekening' => null,
+            'kegiatan_id' => $options['kegiatan_id'] ?? null,
+            'pagu' => $pagu,
+            'is_konsultan' => $isKonsultan,
+            'kecamatan_id' => null,
+            'desa_id' => null,
+        ]);
+
+        $kontrak = Kontrak::query()->create([
+            'id_pekerjaan' => $pekerjaan->id,
+            'id_kegiatan' => $options['kegiatan_id'] ?? null,
+            'kode_paket' => $staging->kode_paket,
+            'kode_rup' => data_get($staging->raw_row, 'kode_rup')
+                ?? data_get($staging->raw_row, 'kodeRup')
+                ?? null,
+            'nilai_kontrak' => $pagu > 0 ? $pagu : null,
+        ]);
+
+        DraftPekerjaan::query()->updateOrCreate(
+            ['pekerjaan_id' => $pekerjaan->id],
+            [
+                'kode_paket' => $staging->kode_paket,
+                'kode_rup' => data_get($staging->raw_row, 'kode_rup')
+                    ?? data_get($staging->raw_row, 'kodeRup')
+                    ?? null,
+            ],
+        );
+
+        $this->applyMatch($staging, 'promoted_draft', $pekerjaan->id, $kontrak->id);
+
+        return [
+            'status' => 'created',
+            'pekerjaan' => $pekerjaan->fresh(),
+            'kontrak' => $kontrak->fresh(),
+            'staging' => $staging->fresh(['pekerjaan', 'kontrak']),
+        ];
     }
 
     private function applyMatch(
