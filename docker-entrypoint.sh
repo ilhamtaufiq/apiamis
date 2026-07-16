@@ -42,6 +42,43 @@ if [ -f "scripts/index_knowledge.py" ]; then
 fi
 
 REVERB_PID=""
+WHATSAPP_PID=""
+
+start_whatsapp_bridge() {
+    if [ "${DISABLE_WHATSAPP_BRIDGE:-false}" = "true" ]; then
+        log "WhatsApp bridge disabled via DISABLE_WHATSAPP_BRIDGE=true"
+        return
+    fi
+
+    if [ ! -f "docker/whatsapp-bridge/bridge.mjs" ]; then
+        log "Skipping WhatsApp bridge: docker/whatsapp-bridge/bridge.mjs not found"
+        return
+    fi
+
+    WHATSAPP_AUTH_DIR="${WHATSAPP_AUTH_DIR:-/var/www/html/storage/app/whatsapp-auth}"
+    mkdir -p "$WHATSAPP_AUTH_DIR"
+    chown -R www-data:www-data "$WHATSAPP_AUTH_DIR"
+
+    WHATSAPP_HOST_BIND="${WHATSAPP_BRIDGE_HOST:-127.0.0.1}"
+    WHATSAPP_PORT_BIND="${WHATSAPP_BRIDGE_PORT:-4000}"
+    log "Starting WhatsApp bridge on ${WHATSAPP_HOST_BIND}:${WHATSAPP_PORT_BIND}..."
+
+    WHATSAPP_BRIDGE_HOST="${WHATSAPP_HOST_BIND}" \
+    WHATSAPP_BRIDGE_PORT="${WHATSAPP_PORT_BIND}" \
+    WHATSAPP_BRIDGE_KEY="${WHATSAPP_BRIDGE_KEY:-}" \
+    WHATSAPP_AUTH_DIR="${WHATSAPP_AUTH_DIR}" \
+    WHATSAPP_LOG_LEVEL="${WHATSAPP_LOG_LEVEL:-silent}" \
+    node docker/whatsapp-bridge/bridge.mjs >> /proc/1/fd/2 2>&1 &
+    WHATSAPP_PID=$!
+
+    sleep 1
+    if kill -0 "$WHATSAPP_PID" 2>/dev/null; then
+        log "WhatsApp bridge started (pid ${WHATSAPP_PID})"
+    else
+        log "ERROR: WhatsApp bridge exited immediately — check storage/logs"
+        WHATSAPP_PID=""
+    fi
+}
 
 start_reverb() {
     if [ "${DISABLE_REVERB:-false}" = "true" ]; then
@@ -81,6 +118,7 @@ start_reverb() {
 }
 
 start_reverb
+start_whatsapp_bridge
 
 apache2-foreground &
 APACHE_PID=$!
@@ -89,6 +127,9 @@ shutdown() {
     kill "$APACHE_PID" 2>/dev/null || true
     if [ -n "$REVERB_PID" ]; then
         kill "$REVERB_PID" 2>/dev/null || true
+    fi
+    if [ -n "$WHATSAPP_PID" ]; then
+        kill "$WHATSAPP_PID" 2>/dev/null || true
     fi
     wait "$APACHE_PID" 2>/dev/null || true
     exit 0

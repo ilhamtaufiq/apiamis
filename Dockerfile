@@ -8,7 +8,15 @@ ENV COMPOSER_CACHE_DIR=/tmp/composer-cache
 RUN --mount=type=cache,target=/tmp/composer-cache \
     composer install --no-dev --no-interaction --no-scripts --prefer-dist --no-progress --ignore-platform-reqs
 
-# Stage 2: Build Node.js assets
+# Stage 2: WhatsApp Baileys bridge (sidecar in same container as Laravel)
+FROM node:20-bookworm-slim AS whatsapp-bridge
+WORKDIR /bridge
+COPY docker/whatsapp-bridge/package.json docker/whatsapp-bridge/package-lock.json ./
+RUN --mount=type=cache,target=/root/.npm \
+    npm ci --omit=dev --no-audit --no-fund
+COPY docker/whatsapp-bridge/bridge.mjs ./
+
+# Stage 3: Build Node.js assets
 FROM node:20-alpine AS asset-builder
 WORKDIR /app
 # Install Python and build dependencies for @ilhamtaufiq/rab-analyzer post-install scripts
@@ -20,7 +28,7 @@ COPY vite.config.js ./
 COPY resources ./resources
 RUN npm run build
 
-# Stage 3: Final Production Image
+# Stage 4: Final Production Image
 FROM php:8.3-apache
 WORKDIR /var/www/html
 
@@ -55,6 +63,8 @@ COPY --chown=www-data:www-data . .
 # Copy vendor and built assets from previous stages
 COPY --from=vendor --chown=www-data:www-data /app/vendor /var/www/html/vendor
 COPY --from=asset-builder --chown=www-data:www-data /app/public/build /var/www/html/public/build
+COPY --from=whatsapp-bridge --chown=www-data:www-data /bridge /var/www/html/docker/whatsapp-bridge
+COPY --from=whatsapp-bridge /usr/local/bin/node /usr/local/bin/node
 
 # Finalize setup
 RUN mkdir -p storage/framework/{cache/data,sessions,views} \
