@@ -50,11 +50,21 @@ class OnlyOfficeMediaAuthorizer
         }
 
         if ($owner instanceof KontrakAddendum) {
-            $owner->loadMissing('kontrak.pekerjaan');
+            $owner->loadMissing('kontrak.pekerjaans');
+
+            $kontrak = $owner->kontrak;
+            if (! $kontrak) {
+                return false;
+            }
+
+            $pekerjaanIds = $kontrak->pekerjaans->pluck('id');
+            if ($kontrak->id_pekerjaan) {
+                $pekerjaanIds->push($kontrak->id_pekerjaan);
+            }
 
             return Pekerjaan::query()
                 ->byUserRole()
-                ->whereKey($owner->kontrak?->pekerjaan_id)
+                ->whereIn('id', $pekerjaanIds->unique()->filter()->values())
                 ->exists();
         }
 
@@ -64,6 +74,41 @@ class OnlyOfficeMediaAuthorizer
 
         if ($owner instanceof UserDriveItem) {
             return $owner->canManage($user);
+        }
+
+        return false;
+    }
+
+    /**
+     * Who may open the document in edit mode.
+     * View access is broader; edit is limited to admins, operators, and resource owners.
+     */
+    public function canEdit(?User $user, Media $media): bool
+    {
+        if (! $user || ! $this->canAccess($user, $media)) {
+            return false;
+        }
+
+        if ($user->hasRole('admin') || $user->hasRole('operator')) {
+            return true;
+        }
+
+        $owner = $media->model;
+        if (! $owner) {
+            return false;
+        }
+
+        if ($owner instanceof UserDriveItem) {
+            return $owner->canManage($user);
+        }
+
+        if ($owner instanceof PuspenMediaShare) {
+            return $owner->user_id === $user->id;
+        }
+
+        // Berkas / kontrak: pengawas may edit documents of assigned pekerjaan.
+        if ($user->hasRole('pengawas') || $user->hasRole('konsultan_pengawas')) {
+            return $this->canAccess($user, $media);
         }
 
         return false;

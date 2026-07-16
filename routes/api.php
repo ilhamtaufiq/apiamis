@@ -107,6 +107,7 @@ Route::get('public/puspen/media-shares/{shareToken}/download', [PuspenMediaShare
 
 // ONLYOFFICE Document Server (public — signed download & save callback)
 Route::post('onlyoffice/callback', [OnlyOfficeController::class, 'callback'])->name('onlyoffice.callback');
+Route::get('onlyoffice/health', [OnlyOfficeController::class, 'health'])->name('onlyoffice.health');
 Route::get('onlyoffice/media/{media}/download', [OnlyOfficeController::class, 'download'])->name('onlyoffice.media.download');
 
 Route::middleware('auth:sanctum')->group(function () {

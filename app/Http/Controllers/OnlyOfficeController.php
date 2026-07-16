@@ -20,6 +20,36 @@ class OnlyOfficeController extends Controller
         private readonly OnlyOfficeMediaAuthorizer $authorizer,
     ) {}
 
+    public function health(): JsonResponse
+    {
+        $enabled = $this->onlyOffice->isEnabled();
+        $documentServerUrl = rtrim((string) config('onlyoffice.document_server_url'), '/');
+        $reachable = false;
+        $message = $enabled ? 'Document Server dikonfigurasi.' : 'ONLYOFFICE belum dikonfigurasi.';
+
+        if ($enabled && $documentServerUrl !== '') {
+            try {
+                $response = Http::timeout(5)->get($documentServerUrl.'/healthcheck');
+                $reachable = $response->successful()
+                    || str_contains(strtolower($response->body()), 'true');
+                $message = $reachable
+                    ? 'Document Server siap.'
+                    : 'Document Server tidak merespons healthcheck.';
+            } catch (\Throwable $exception) {
+                $message = 'Document Server tidak terjangkau: '.$exception->getMessage();
+            }
+        }
+
+        return response()->json([
+            'data' => [
+                'enabled' => $enabled,
+                'reachable' => $reachable,
+                'document_server_url' => $documentServerUrl !== '' ? $documentServerUrl.'/' : null,
+                'message' => $message,
+            ],
+        ], $enabled && $reachable ? 200 : 503);
+    }
+
     public function config(Request $request, Media $media): JsonResponse
     {
         if (! $this->onlyOffice->isEnabled()) {
@@ -34,8 +64,19 @@ class OnlyOfficeController extends Controller
             ], 422);
         }
 
+        $mode = $request->query('mode');
+        if (is_string($mode)) {
+            $mode = strtolower($mode);
+        } else {
+            $mode = null;
+        }
+
+        if ($mode !== null && ! in_array($mode, ['view', 'edit'], true)) {
+            return response()->json(['message' => 'Mode tidak valid. Gunakan view atau edit.'], 422);
+        }
+
         return response()->json([
-            'data' => $this->onlyOffice->buildEditorPayload($request->user(), $media),
+            'data' => $this->onlyOffice->buildEditorPayload($request->user(), $media, $mode),
         ]);
     }
 
@@ -46,9 +87,10 @@ class OnlyOfficeController extends Controller
 
         $hasOnlyOfficeToken = OnlyOfficeDownloadToken::valid($media->id, $expiresAt, $token);
         $hasLegacySignature = $request->hasValidSignature();
+        $hasUserAccess = $request->user() && $this->authorizer->canAccess($request->user(), $media);
 
         abort_unless(
-            $hasOnlyOfficeToken || $hasLegacySignature,
+            $hasOnlyOfficeToken || $hasLegacySignature || $hasUserAccess,
             403,
             'Tautan unduhan tidak valid atau kedaluwarsa.',
         );
@@ -78,6 +120,7 @@ class OnlyOfficeController extends Controller
         }
 
         $status = (int) ($payload['status'] ?? 0);
+        // 2 = ready for saving, 6 = force save
         if (! in_array($status, [2, 6], true)) {
             return response()->json(['error' => 0]);
         }
@@ -105,22 +148,8 @@ class OnlyOfficeController extends Controller
             $response = Http::timeout(120)->get($downloadUrl);
             abort_unless($response->successful(), 500, 'Gagal mengunduh dokumen dari ONLYOFFICE.');
 
-            $tempPath = tempnam(sys_get_temp_dir(), 'onlyoffice-save-');
-            file_put_contents($tempPath, $response->body());
-
-            $owner = $media->model;
-            $collection = $media->collection_name;
-            $fileName = $media->file_name;
-            $customProperties = $media->custom_properties;
-
-            $media->delete();
-
-            $owner->addMedia($tempPath)
-                ->usingFileName($fileName)
-                ->withCustomProperties($customProperties)
-                ->toMediaCollection($collection);
-
-            @unlink($tempPath);
+            // Keep the same media_id so links and keys remain stable.
+            $this->onlyOffice->overwriteMediaFile($media, $response->body());
         } catch (\Throwable $exception) {
             Log::error('ONLYOFFICE callback save failed', [
                 'media_id' => $mediaId,

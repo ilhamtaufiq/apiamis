@@ -33,16 +33,26 @@ class OnlyOfficeService
         return in_array(strtolower($extension), self::SUPPORTED_EXTENSIONS, true);
     }
 
-    public function buildEditorPayload(User $user, Media $media): array
+    /**
+     * @param  'view'|'edit'|null  $requestedMode
+     */
+    public function buildEditorPayload(User $user, Media $media, ?string $requestedMode = null): array
     {
         abort_unless($this->isEnabled(), 503, 'ONLYOFFICE Document Server belum dikonfigurasi.');
         abort_unless($this->supportsMedia($media), 422, 'Format file tidak didukung ONLYOFFICE.');
         abort_unless($this->authorizer->canAccess($user, $media), 403, 'Anda tidak memiliki akses ke dokumen ini.');
 
-        $canEdit = $user->hasRole('admin');
+        $canEdit = $this->authorizer->canEdit($user, $media);
         $extension = strtolower($media->extension ?: pathinfo($media->file_name, PATHINFO_EXTENSION));
-        $documentKey = $this->buildDocumentKey($media);
 
+        // PDF is view-only in practice for most deployments.
+        if ($extension === 'pdf') {
+            $canEdit = false;
+        }
+
+        $mode = $this->resolveMode($requestedMode, $canEdit);
+        $isEdit = $mode === 'edit';
+        $documentKey = $this->buildDocumentKey($media);
         $downloadUrl = OnlyOfficeDownloadToken::buildDownloadUrl($media->id);
 
         $config = [
@@ -52,17 +62,18 @@ class OnlyOfficeService
                 'title' => $media->file_name,
                 'url' => $downloadUrl,
                 'permissions' => [
-                    'edit' => $canEdit,
+                    'edit' => $isEdit,
                     'download' => true,
                     'print' => true,
-                    'review' => false,
-                    'comment' => $canEdit,
-                    'fillForms' => $canEdit,
+                    'review' => $isEdit,
+                    'comment' => $isEdit,
+                    'fillForms' => $isEdit,
+                    'editCommentAuthorOnly' => false,
                 ],
             ],
             'documentType' => $this->resolveDocumentType($extension),
             'editorConfig' => [
-                'mode' => $canEdit ? 'edit' : 'view',
+                'mode' => $mode,
                 'lang' => 'id',
                 'callbackUrl' => url('/api/onlyoffice/callback'),
                 'user' => [
@@ -70,12 +81,13 @@ class OnlyOfficeService
                     'name' => $user->name,
                 ],
                 'customization' => [
-                    'forcesave' => $canEdit,
-                    'compactToolbar' => ! $canEdit,
-                    'toolbarNoTabs' => ! $canEdit,
+                    'forcesave' => $isEdit,
+                    'compactToolbar' => ! $isEdit,
+                    'toolbarNoTabs' => ! $isEdit,
                     'feedback' => false,
                     'help' => false,
                     'compactHeader' => true,
+                    'autosave' => $isEdit,
                 ],
             ],
         ];
@@ -88,11 +100,14 @@ class OnlyOfficeService
         return [
             'documentServerUrl' => rtrim((string) config('onlyoffice.document_server_url'), '/').'/',
             'config' => $config,
-            'mode' => $canEdit ? 'edit' : 'view',
+            'mode' => $mode,
+            'can_edit' => $canEdit,
+            'download_url' => $downloadUrl,
             'media' => [
                 'id' => $media->id,
                 'file_name' => $media->file_name,
                 'mime_type' => $media->mime_type,
+                'extension' => $extension,
             ],
         ];
     }
@@ -120,5 +135,57 @@ class OnlyOfficeService
             'ppt', 'pptx', 'odp' => 'slide',
             default => 'word',
         };
+    }
+
+    /**
+     * Overwrite media file in place so media_id stays stable.
+     */
+    public function overwriteMediaFile(Media $media, string $binaryContents): void
+    {
+        $path = $media->getPath();
+        $directory = dirname($path);
+
+        if (! is_dir($directory)) {
+            mkdir($directory, 0755, true);
+        }
+
+        file_put_contents($path, $binaryContents);
+
+        clearstatcache(true, $path);
+
+        $media->size = (int) (filesize($path) ?: strlen($binaryContents));
+        if (method_exists($media, 'touch')) {
+            $media->touch();
+        } else {
+            $media->updated_at = now();
+            $media->save();
+        }
+
+        // Clear generated conversions so previews refresh.
+        if (method_exists($media, 'deleteGeneratedConversions')) {
+            try {
+                $media->deleteGeneratedConversions();
+            } catch (\Throwable) {
+                // Non-fatal for documents without conversions.
+            }
+        }
+    }
+
+    private function resolveMode(?string $requestedMode, bool $canEdit): string
+    {
+        $requested = strtolower((string) $requestedMode);
+
+        if ($requested === 'edit') {
+            abort_unless($canEdit, 403, 'Anda tidak memiliki izin mengedit dokumen ini.');
+
+            return 'edit';
+        }
+
+        if ($requested === 'view') {
+            return 'view';
+        }
+
+        // Default: edit when allowed, otherwise view.
+        return $canEdit ? 'edit' : 'view';
     }
 }
