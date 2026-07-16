@@ -462,6 +462,9 @@ Route::middleware('auth:sanctum')->group(function () {
         ->middleware('role:admin')
         ->group(function () {
             Route::get('status', [WhatsAppController::class, 'status']);
+            Route::get('chats', [WhatsAppController::class, 'chats']);
+            Route::get('chats/{jid}/messages', [WhatsAppController::class, 'chatMessages'])
+                ->where('jid', '.*');
             Route::post('start', [WhatsAppController::class, 'start']);
             Route::post('stop', [WhatsAppController::class, 'stop']);
             Route::post('send', [WhatsAppController::class, 'send']);

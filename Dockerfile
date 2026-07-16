@@ -14,7 +14,7 @@ WORKDIR /bridge
 COPY docker/whatsapp-bridge/package.json docker/whatsapp-bridge/package-lock.json ./
 RUN --mount=type=cache,target=/root/.npm \
     npm ci --omit=dev --no-audit --no-fund
-COPY docker/whatsapp-bridge/bridge.mjs ./
+COPY docker/whatsapp-bridge/bridge.mjs docker/whatsapp-bridge/chat-store.mjs ./
 
 # Stage 3: Build Node.js assets
 FROM node:20-alpine AS asset-builder

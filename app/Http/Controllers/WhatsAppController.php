@@ -63,6 +63,21 @@ class WhatsAppController extends Controller
         return $this->forward('post', '/send-bulk', $validated);
     }
 
+    public function chats(Request $request)
+    {
+        $limit = min(max((int) $request->query('limit', 50), 1), 100);
+
+        return $this->forward('get', '/chats?limit='.$limit);
+    }
+
+    public function chatMessages(Request $request, string $jid)
+    {
+        $limit = min(max((int) $request->query('limit', 50), 1), 100);
+        $encodedJid = rawurlencode($jid);
+
+        return $this->forward('get', '/chats/'.$encodedJid.'/messages?limit='.$limit);
+    }
+
     private function forward(string $method, string $path, array $payload = [])
     {
         try {
