@@ -38,10 +38,13 @@ class Kegiatan extends Model
         'kode_rekening',
         'nama_pptk',
         'nip_pptk',
+        'sipd_id_sub_bl',
+        'kode_sub_giat',
     ];
 
     protected $casts = [
         'pagu' => 'decimal:2',
         'kode_rekening' => 'array',
+        'sipd_id_sub_bl' => 'integer',
     ];
 }

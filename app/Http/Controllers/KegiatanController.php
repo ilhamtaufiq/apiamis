@@ -79,6 +79,8 @@ class KegiatanController extends Controller
             'kode_rekening' => 'nullable|array',
             'nama_pptk' => 'nullable|string|max:255',
             'nip_pptk' => 'nullable|string|max:50',
+            'sipd_id_sub_bl' => 'nullable|integer|min:1',
+            'kode_sub_giat' => 'nullable|string|max:64',
         ]);
 
         $kegiatan = Kegiatan::create($validated);
@@ -148,6 +150,8 @@ class KegiatanController extends Controller
             'kode_rekening' => 'nullable|array',
             'nama_pptk' => 'nullable|string|max:255',
             'nip_pptk' => 'nullable|string|max:50',
+            'sipd_id_sub_bl' => 'nullable|integer|min:1',
+            'kode_sub_giat' => 'nullable|string|max:64',
         ]);
 
         $kegiatan->update($validated);
