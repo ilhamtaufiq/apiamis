@@ -39,6 +39,11 @@ return [
         'client_id' => env('GOOGLE_CLIENT_ID'),
         'client_secret' => env('GOOGLE_CLIENT_SECRET'),
         'redirect' => env('GOOGLE_REDIRECT_URI'),
+        // Backup upload OAuth (must be listed in Google Cloud Console redirect URIs)
+        'drive_redirect' => env(
+            'GOOGLE_DRIVE_REDIRECT_URI',
+            rtrim((string) env('APP_URL', 'http://localhost'), '/').'/api/app-settings/backups/google-drive/callback'
+        ),
     ],
 
     'whatsapp_bridge' => [

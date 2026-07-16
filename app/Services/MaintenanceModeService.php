@@ -77,6 +77,7 @@ class MaintenanceModeService
             'auth/me',
             'auth/google',
             'auth/google/callback',
+            'app-settings/backups/google-drive/callback',
             'auth/handoff',
             'auth/handoff/exchange',
             'up',

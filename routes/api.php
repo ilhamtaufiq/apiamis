@@ -6,6 +6,7 @@ use App\Http\Controllers\AppSettingController;
 use App\Http\Controllers\AuditLogController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\BackupController;
+use App\Http\Controllers\GoogleDriveBackupController;
 use App\Http\Controllers\BeritaAcaraController;
 use App\Http\Controllers\BerkasController;
 use App\Http\Controllers\ChecklistItemController;
@@ -69,6 +70,12 @@ Route::post('auth/handoff/exchange', [AuthController::class, 'exchangeHandoff'])
 // Google OAuth Routes
 Route::get('auth/google', [AuthController::class, 'redirectToGoogle']);
 Route::get('auth/google/callback', [AuthController::class, 'handleGoogleCallback']);
+
+// Google Drive backup OAuth callback (browser redirect from Google — no Sanctum)
+Route::get(
+    'app-settings/backups/google-drive/callback',
+    [GoogleDriveBackupController::class, 'callback']
+)->middleware('throttle:20,1');
 
 // App Settings (public read, authenticated write)
 Route::get('app-settings', [AppSettingController::class, 'index']);
@@ -436,9 +443,18 @@ Route::middleware('auth:sanctum')->group(function () {
             Route::get('/', [BackupController::class, 'index']);
             Route::post('/', [BackupController::class, 'store']);
             Route::get('jobs/{jobId}', [BackupController::class, 'showJob']);
+            Route::post('restore', [BackupController::class, 'restore']);
+
+            // Google Drive backup (must be before {filename} routes)
+            Route::get('google-drive/status', [GoogleDriveBackupController::class, 'status']);
+            Route::get('google-drive/connect', [GoogleDriveBackupController::class, 'connect']);
+            Route::delete('google-drive', [GoogleDriveBackupController::class, 'disconnect']);
+            Route::get('google-drive/jobs/{jobId}', [GoogleDriveBackupController::class, 'showUploadJob']);
+            Route::post('{filename}/google-drive', [GoogleDriveBackupController::class, 'upload'])
+                ->where('filename', '.*\.zip');
+
             Route::get('{filename}', [BackupController::class, 'download'])->where('filename', '.*\.zip');
             Route::delete('{filename}', [BackupController::class, 'destroy'])->where('filename', '.*\.zip');
-            Route::post('restore', [BackupController::class, 'restore']);
         });
 
     // WhatsApp bridge (admin)
