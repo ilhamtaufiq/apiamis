@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Exceptions\BackupJobCancelledException;
 use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Http;
@@ -188,6 +189,14 @@ class GoogleDriveBackupService
         $absolute = $this->backups->backupAbsolutePath($filename);
         $initial = $this->readJobStatus($jobId) ?? [];
 
+        $this->recordWorkerPid($jobId, getmypid());
+
+        if ($this->isCancelRequested($jobId)) {
+            $this->finalizeCancelledJob($jobId, $filename, $initial);
+
+            return;
+        }
+
         $this->writeJobStatus($jobId, [
             'job_id' => $jobId,
             'status' => 'running',
@@ -219,7 +228,17 @@ class GoogleDriveBackupService
                 'progress' => 100,
                 'result' => $result,
             ]);
+        } catch (BackupJobCancelledException $exception) {
+            $running = $this->readJobStatus($jobId) ?? [];
+            $this->finalizeCancelledJob($jobId, $filename, $running);
         } catch (\Throwable $exception) {
+            if ($this->isCancelRequested($jobId)) {
+                $running = $this->readJobStatus($jobId) ?? [];
+                $this->finalizeCancelledJob($jobId, $filename, $running);
+
+                return;
+            }
+
             Log::error('Google Drive upload job failed', [
                 'job_id' => $jobId,
                 'filename' => $filename,
@@ -252,6 +271,66 @@ class GoogleDriveBackupService
         $status = json_decode(Storage::disk('local')->get($path), true);
 
         return is_array($status) ? $status : null;
+    }
+
+    public function cancelUploadJob(string $jobId): array
+    {
+        $status = $this->readJobStatus($jobId);
+        abort_unless($status !== null, 404, 'Status upload tidak ditemukan');
+
+        $state = (string) ($status['status'] ?? '');
+        if (in_array($state, ['completed', 'failed', 'cancelled'], true)) {
+            return $status;
+        }
+
+        $this->writeJobStatus($jobId, array_merge($status, [
+            'cancel_requested' => true,
+            'cancel_requested_at' => now()->toIso8601String(),
+            'message' => 'Membatalkan upload…',
+        ]));
+
+        SystemBackupService::terminateProcessPid(isset($status['pid']) ? (int) $status['pid'] : null);
+
+        return $this->readJobStatus($jobId) ?? $status;
+    }
+
+    public function recordWorkerPid(string $jobId, int $pid): void
+    {
+        $current = $this->readJobStatus($jobId) ?? [];
+        $this->writeJobStatus($jobId, array_merge($current, [
+            'job_id' => $jobId,
+            'pid' => $pid,
+        ]));
+    }
+
+    private function isCancelRequested(string $jobId): bool
+    {
+        $status = $this->readJobStatus($jobId);
+
+        return (bool) ($status['cancel_requested'] ?? false);
+    }
+
+    private function assertNotCancelled(string $jobId): void
+    {
+        if ($this->isCancelRequested($jobId)) {
+            throw new BackupJobCancelledException('Upload ke Google Drive dibatalkan');
+        }
+    }
+
+    private function finalizeCancelledJob(string $jobId, string $filename, array $previousStatus): void
+    {
+        $this->writeJobStatus($jobId, [
+            'job_id' => $jobId,
+            'status' => 'cancelled',
+            'filename' => $filename,
+            'size' => $previousStatus['size'] ?? null,
+            'created_at' => $previousStatus['created_at'] ?? now()->toIso8601String(),
+            'started_at' => $previousStatus['started_at'] ?? null,
+            'finished_at' => now()->toIso8601String(),
+            'message' => 'Upload ke Google Drive dibatalkan',
+            'progress' => 0,
+            'cancel_requested' => true,
+        ]);
     }
 
     /**
@@ -299,6 +378,8 @@ class GoogleDriveBackupService
             $authRetries = 0;
 
             while ($offset < $fileSize) {
+                $this->assertNotCancelled($jobId);
+
                 $chunk = fread($handle, self::CHUNK_BYTES);
                 if ($chunk === false || $chunk === '') {
                     throw new \RuntimeException('Gagal membaca chunk file backup');
@@ -495,6 +576,8 @@ class GoogleDriveBackupService
 
     private function patchJobProgress(string $jobId, int $progress, string $message): void
     {
+        $this->assertNotCancelled($jobId);
+
         $current = $this->readJobStatus($jobId) ?? [];
         $current['progress'] = $progress;
         $current['message'] = $message;

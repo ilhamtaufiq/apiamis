@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Exceptions\BackupJobCancelledException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Log;
@@ -81,7 +82,16 @@ class SystemBackupService
         // Large media zips need headroom beyond default 128M/256M.
         @ini_set('memory_limit', '1024M');
 
+        $this->recordWorkerPid($jobId, getmypid());
+
         $initialStatus = $this->readJobStatus($jobId) ?? [];
+        $zipPath = Storage::disk('local')->path($this->backupFilePath($fileName));
+
+        if ($this->isCancelRequested($jobId)) {
+            $this->finalizeCancelledJob($jobId, $fileName, $zipPath, $includeMedia, $initialStatus);
+
+            return;
+        }
 
         $this->writeJobStatus($jobId, [
             'job_id' => $jobId,
@@ -93,8 +103,6 @@ class SystemBackupService
             'message' => 'Menyiapkan dump database',
             'progress' => 5,
         ]);
-
-        $zipPath = Storage::disk('local')->path($this->backupFilePath($fileName));
 
         try {
             $result = $this->createBackupArchive($jobId, $fileName, $includeMedia);
@@ -112,7 +120,17 @@ class SystemBackupService
                 'progress' => 100,
                 'result' => $result,
             ]);
+        } catch (BackupJobCancelledException $exception) {
+            $runningStatus = $this->readJobStatus($jobId) ?? [];
+            $this->finalizeCancelledJob($jobId, $fileName, $zipPath, $includeMedia, $runningStatus);
         } catch (\Throwable $exception) {
+            if ($this->isCancelRequested($jobId)) {
+                $runningStatus = $this->readJobStatus($jobId) ?? [];
+                $this->finalizeCancelledJob($jobId, $fileName, $zipPath, $includeMedia, $runningStatus);
+
+                return;
+            }
+
             Log::error('Backup job failed', [
                 'job_id' => $jobId,
                 'filename' => $fileName,
@@ -151,6 +169,56 @@ class SystemBackupService
         $status = json_decode(Storage::disk('local')->get($path), true);
 
         return is_array($status) ? $status : null;
+    }
+
+    public function cancelJob(string $jobId): array
+    {
+        $status = $this->readJobStatus($jobId);
+        abort_unless($status !== null, 404, 'Status backup tidak ditemukan');
+
+        $state = (string) ($status['status'] ?? '');
+        if (in_array($state, ['completed', 'failed', 'cancelled'], true)) {
+            return $status;
+        }
+
+        $this->writeJobStatus($jobId, array_merge($status, [
+            'cancel_requested' => true,
+            'cancel_requested_at' => now()->toIso8601String(),
+            'message' => 'Membatalkan backup…',
+        ]));
+
+        self::terminateProcessPid(isset($status['pid']) ? (int) $status['pid'] : null);
+
+        return $this->readJobStatus($jobId) ?? $status;
+    }
+
+    public function recordWorkerPid(string $jobId, int $pid): void
+    {
+        $current = $this->readJobStatus($jobId) ?? [];
+        $this->writeJobStatus($jobId, array_merge($current, [
+            'job_id' => $jobId,
+            'pid' => $pid,
+        ]));
+    }
+
+    public static function terminateProcessPid(?int $pid): void
+    {
+        if ($pid === null || $pid <= 0) {
+            return;
+        }
+
+        if (DIRECTORY_SEPARATOR === '\\') {
+            @exec('taskkill /PID '.(int) $pid.' /F');
+
+            return;
+        }
+
+        @exec('kill -TERM '.(int) $pid.' 2>/dev/null');
+        usleep(300_000);
+        $stillRunning = shell_exec('kill -0 '.(int) $pid.' 2>/dev/null; echo $?');
+        if (trim((string) $stillRunning) === '0') {
+            @exec('kill -KILL '.(int) $pid.' 2>/dev/null');
+        }
     }
 
     public function backupAbsolutePath(string $filename): string
@@ -300,7 +368,7 @@ class SystemBackupService
                 'message' => 'Membuat dump database…',
                 'progress' => 10,
             ]);
-            $this->dumpDatabase($sqlTempPath);
+            $this->dumpDatabase($sqlTempPath, $jobId);
 
             $this->patchJob($jobId, [
                 'message' => 'Membuka arsip ZIP…',
@@ -371,6 +439,8 @@ class SystemBackupService
 
     private function patchJob(string $jobId, array $patch): void
     {
+        $this->assertNotCancelled($jobId);
+
         $current = $this->readJobStatus($jobId) ?? [];
         $this->writeJobStatus($jobId, array_merge($current, $patch, [
             'job_id' => $jobId,
@@ -378,7 +448,46 @@ class SystemBackupService
         ]));
     }
 
-    private function dumpDatabase(string $targetPath): void
+    private function isCancelRequested(string $jobId): bool
+    {
+        $status = $this->readJobStatus($jobId);
+
+        return (bool) ($status['cancel_requested'] ?? false);
+    }
+
+    private function assertNotCancelled(string $jobId): void
+    {
+        if ($this->isCancelRequested($jobId)) {
+            throw new BackupJobCancelledException();
+        }
+    }
+
+    private function finalizeCancelledJob(
+        string $jobId,
+        string $fileName,
+        string $zipPath,
+        bool $includeMedia,
+        array $previousStatus,
+    ): void {
+        if (File::exists($zipPath)) {
+            @unlink($zipPath);
+        }
+
+        $this->writeJobStatus($jobId, [
+            'job_id' => $jobId,
+            'status' => 'cancelled',
+            'filename' => $fileName,
+            'include_media' => $includeMedia,
+            'created_at' => $previousStatus['created_at'] ?? now()->toIso8601String(),
+            'started_at' => $previousStatus['started_at'] ?? null,
+            'finished_at' => now()->toIso8601String(),
+            'message' => 'Backup dibatalkan',
+            'progress' => 0,
+            'cancel_requested' => true,
+        ]);
+    }
+
+    private function dumpDatabase(string $targetPath, ?string $jobId = null): void
     {
         $pdo = DB::connection()->getPdo();
         $schema = DB::connection()->getSchemaBuilder();
@@ -402,6 +511,10 @@ class SystemBackupService
             fwrite($handle, self::SQL_MARKER);
 
             foreach ($tableNames as $tableName) {
+                if ($jobId !== null) {
+                    $this->assertNotCancelled($jobId);
+                }
+
                 $escapedTable = str_replace('`', '``', $tableName);
                 $create = DB::selectOne("SHOW CREATE TABLE `{$escapedTable}`");
                 $createSql = (string) ($create->{'Create Table'} ?? array_values((array) $create)[1] ?? '');

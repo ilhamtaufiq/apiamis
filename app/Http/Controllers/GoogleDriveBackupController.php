@@ -82,4 +82,16 @@ class GoogleDriveBackupController extends Controller
             'data' => $status,
         ]);
     }
+
+    public function cancelUploadJob(string $jobId)
+    {
+        $status = $this->drive->cancelUploadJob($jobId);
+
+        return response()->json([
+            'data' => $status,
+            'message' => $status['status'] === 'cancelled'
+                ? 'Upload ke Google Drive dibatalkan'
+                : 'Permintaan pembatalan upload dikirim',
+        ]);
+    }
 }

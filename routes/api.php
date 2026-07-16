@@ -443,6 +443,7 @@ Route::middleware('auth:sanctum')->group(function () {
             Route::get('/', [BackupController::class, 'index']);
             Route::post('/', [BackupController::class, 'store']);
             Route::get('jobs/{jobId}', [BackupController::class, 'showJob']);
+            Route::delete('jobs/{jobId}', [BackupController::class, 'cancelJob']);
             Route::post('restore', [BackupController::class, 'restore']);
 
             // Google Drive backup (must be before {filename} routes)
@@ -450,6 +451,7 @@ Route::middleware('auth:sanctum')->group(function () {
             Route::get('google-drive/connect', [GoogleDriveBackupController::class, 'connect']);
             Route::delete('google-drive', [GoogleDriveBackupController::class, 'disconnect']);
             Route::get('google-drive/jobs/{jobId}', [GoogleDriveBackupController::class, 'showUploadJob']);
+            Route::delete('google-drive/jobs/{jobId}', [GoogleDriveBackupController::class, 'cancelUploadJob']);
             Route::post('{filename}/google-drive', [GoogleDriveBackupController::class, 'upload'])
                 ->where('filename', '.*\.zip');
 

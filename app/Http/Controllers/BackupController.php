@@ -49,6 +49,18 @@ class BackupController extends Controller
         ]);
     }
 
+    public function cancelJob(string $jobId)
+    {
+        $status = $this->backups->cancelJob($jobId);
+
+        return response()->json([
+            'data' => $status,
+            'message' => $status['status'] === 'cancelled'
+                ? 'Backup dibatalkan'
+                : 'Permintaan pembatalan backup dikirim',
+        ]);
+    }
+
     public function download(string $filename)
     {
         $path = $this->backups->backupAbsolutePath($filename);
