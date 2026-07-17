@@ -300,6 +300,58 @@ class SpseHttpClient
         ];
     }
 
+    /**
+     * Lightweight check before listing a URL as importable.
+     * Rejects 404/HTML login pages so legacy /nontender/{id}/{section} paths
+     * are not offered to users (they fail with the same HTTP 404 on every import).
+     */
+    public function isDownloadableBinary(SpseSession $session, string $urlOrPath, ?string $refererPath = null): bool
+    {
+        $url = $this->absoluteUrl($session, $urlOrPath);
+        $headers = [];
+        if ($refererPath) {
+            $headers['Referer'] = $this->absoluteUrl($session, $refererPath);
+        }
+
+        $response = $this->pageRequest($session)
+            ->withHeaders($headers)
+            ->withOptions(['allow_redirects' => ['max' => 5]])
+            ->get($url);
+
+        if (! $response->successful()) {
+            return false;
+        }
+
+        $contentType = strtolower((string) $response->header('Content-Type'));
+        $disposition = strtolower((string) $response->header('Content-Disposition'));
+        $body = $response->body();
+
+        if (str_starts_with($body, '%PDF')) {
+            return true;
+        }
+
+        if (str_contains($disposition, 'attachment') || str_contains($disposition, 'filename=')) {
+            return true;
+        }
+
+        if (
+            str_contains($contentType, 'pdf')
+            || str_contains($contentType, 'zip')
+            || str_contains($contentType, 'octet-stream')
+            || str_contains($contentType, 'msword')
+            || str_contains($contentType, 'officedocument')
+        ) {
+            return true;
+        }
+
+        // HTML error/login pages must not be treated as downloadable documents.
+        if (str_contains($contentType, 'text/html') || str_contains($contentType, 'text/plain')) {
+            return false;
+        }
+
+        return $body !== '';
+    }
+
     private function request(SpseSession $session)
     {
         return $this->baseRequest($session)

@@ -87,4 +87,21 @@ class SpseDocumentScannerTest extends TestCase
 
         $this->assertSame('/tender/12345', $pages[0]['path']);
     }
+
+    public function test_legacy_nontender_section_urls_are_not_generic_downloads(): void
+    {
+        // Generic discovery should not invent /nontender/{id}/administrasiteknis links.
+        $html = <<<'HTML'
+            <a href="/cianjurkab/nontender/10802505000">Paket</a>
+            <a href="/cianjurkab/admin/utility/viewpdfpl?id=10802505000">Summary</a>
+            <a href="/cianjurkab/dl/abc123">File Asli.pdf</a>
+        HTML;
+
+        $docs = $this->scanner->discoverFromNontenderHtml($html);
+        $urls = array_column($docs, 'url');
+
+        $this->assertTrue(collect($urls)->contains(fn ($u) => str_contains($u, 'viewpdfpl')));
+        $this->assertTrue(collect($urls)->contains(fn ($u) => str_contains($u, '/dl/')));
+        $this->assertFalse(collect($urls)->contains(fn ($u) => str_contains($u, 'administrasiteknis')));
+    }
 }

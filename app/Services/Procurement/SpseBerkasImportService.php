@@ -41,6 +41,19 @@ class SpseBerkasImportService
                 continue;
             }
 
+            // Legacy section pages — not file URLs (always 404 on SPSE inaproc).
+            if (preg_match('#/nontender/\d+/(pengumumanlelang|beritaacara|dokumenkualifikasi|suratpenawaran|administrasiteknis|dokumenharga|evaluasiteknis|persyaratankualifikasi)/?$#i', $url)) {
+                $failed++;
+                $results[] = [
+                    'index' => $index,
+                    'status' => 'failed',
+                    'url' => $url,
+                    'reason' => 'URL section SPSE (bukan file). Pakai link /dl, /dlsec, viewpdfpl, atau cetak*.',
+                ];
+
+                continue;
+            }
+
             $berkas = Berkas::create([
                 'pekerjaan_id' => $pekerjaanId,
                 'jenis_dokumen' => $jenisDokumen,
@@ -65,11 +78,15 @@ class SpseBerkasImportService
             } catch (\Throwable $e) {
                 $berkas->delete();
                 $failed++;
+                $message = $e->getMessage();
+                if (str_contains($message, 'HTTP 404')) {
+                    $message = 'SPSE unduh gagal: HTTP 404 (URL tidak ada atau butuh sesi berbeda).';
+                }
                 $results[] = [
                     'index' => $index,
                     'status' => 'failed',
                     'url' => $url,
-                    'reason' => $e->getMessage(),
+                    'reason' => $message,
                 ];
             }
         }

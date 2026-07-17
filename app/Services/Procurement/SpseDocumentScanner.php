@@ -8,8 +8,12 @@ class SpseDocumentScanner
 {
     private const ANCHOR_PATTERN = '/<a[^>]+href=["\']([^"\']+)["\'][^>]*>(.*?)<\/a>/is';
 
-    /** Direct PDF endpoints under /nontender/{id}/ (mirror python downloader.py). */
-    private const KNOWN_ENDPOINTS = [
+    /**
+     * Legacy SPSE 4 paths under /nontender/{id}/{section}.
+     * On SPSE inaproc these almost always return HTTP 404; real files come from
+     * /dl, /dlsec, viewpdfpl, cetak*, and rincian_* pages. Kept only for probe fallback.
+     */
+    private const LEGACY_NONTENDER_ENDPOINTS = [
         ['path' => 'pengumumanlelang', 'label' => 'Summary Non Tender', 'doc_type' => 'summary'],
         ['path' => 'beritaacara', 'label' => 'Berita Acara Hasil Pengadaan', 'doc_type' => 'berita_acara'],
         ['path' => 'dokumenkualifikasi', 'label' => 'Dokumen Kualifikasi', 'doc_type' => 'kualifikasi'],
@@ -132,9 +136,18 @@ class SpseDocumentScanner
             }
         }
 
-        // 5. Endpoint PDF langsung (fallback seperti downloader.py)
-        foreach (self::KNOWN_ENDPOINTS as $endpoint) {
+        // 5. Legacy /nontender/{id}/{section} — only if still served as a real file.
+        // Blindly listing them caused 8× "SPSE unduh gagal: HTTP 404" on every import
+        // while the same docs were already discovered via /dl|/dlsec|viewpdfpl|cetak.
+        foreach (self::LEGACY_NONTENDER_ENDPOINTS as $endpoint) {
             $path = "/nontender/{$kodePaket}/{$endpoint['path']}";
+            if (! $this->legacyEndpointIsDownloadable($session, $path, $referer)) {
+                continue;
+            }
+            // Skip if we already have a real download/generated doc for this type.
+            if ($this->hasDocType($documents, $endpoint['doc_type'])) {
+                continue;
+            }
             $this->pushDocument($session, $documents, $seen, [
                 'url' => $path,
                 'label' => $endpoint['label'],
@@ -418,6 +431,32 @@ class SpseDocumentScanner
         } catch (\Throwable) {
             return null;
         }
+    }
+
+    /**
+     * Probe legacy section URL: must be HTTP 2xx and look like a binary/PDF, not HTML.
+     */
+    private function legacyEndpointIsDownloadable(SpseSession $session, string $path, ?string $referer = null): bool
+    {
+        try {
+            return $this->httpClient->isDownloadableBinary($session, $path, $referer);
+        } catch (\Throwable) {
+            return false;
+        }
+    }
+
+    /**
+     * @param  array<int, array{doc_type?: string}>  $documents
+     */
+    private function hasDocType(array $documents, string $docType): bool
+    {
+        foreach ($documents as $doc) {
+            if (($doc['doc_type'] ?? '') === $docType) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**
