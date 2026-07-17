@@ -29,6 +29,7 @@ use App\Http\Controllers\KontrakController;
 use App\Http\Controllers\MenuPermissionController;
 use App\Http\Controllers\OnlyOfficeController;
 use App\Http\Controllers\OutputController;
+use App\Http\Controllers\PanduanPageController;
 use App\Http\Controllers\PekerjaanChecklistController;
 use App\Http\Controllers\PekerjaanController;
 use App\Http\Controllers\PekerjaanProgressEstimasiController;
@@ -89,6 +90,11 @@ Route::post('app-settings/mail-templates', [AppSettingController::class, 'storeM
 Route::post('app-settings/mail-templates/{key}/test', [AppSettingController::class, 'testMailTemplate'])->middleware(['auth:sanctum', 'role:admin']);
 Route::get('app-settings/kontrak-templates', [AppSettingController::class, 'kontrakTemplates'])->middleware(['auth:sanctum', 'role:admin']);
 Route::get('app-settings/kontrak-templates/{key}/download', [AppSettingController::class, 'downloadKontrakTemplate'])->middleware(['auth:sanctum', 'role:admin']);
+
+// Public panduan CMS (for /docs dynamic pages)
+Route::get('panduan', [PanduanPageController::class, 'publicIndex']);
+Route::get('panduan/{slug}', [PanduanPageController::class, 'publicShow'])
+    ->where('slug', '[a-z0-9]+(?:-[a-z0-9]+)*');
 
 // Public Blog Routes
 Route::get('blog', [\App\Http\Controllers\BlogController::class, 'index']);
@@ -177,6 +183,16 @@ Route::middleware('auth:sanctum')->group(function () {
         // Audit Logs
         Route::get('audit-logs', [AuditLogController::class, 'index']);
         Route::get('audit-logs/{auditLog}', [AuditLogController::class, 'show']);
+
+        // Manajemen panduan (CMS docs) — admin only
+        Route::get('admin/panduan', [PanduanPageController::class, 'index']);
+        Route::post('admin/panduan', [PanduanPageController::class, 'store']);
+        Route::post('admin/panduan/seed', [PanduanPageController::class, 'seedDefaults']);
+        Route::get('admin/panduan/{panduan}', [PanduanPageController::class, 'show'])->whereNumber('panduan');
+        Route::put('admin/panduan/{panduan}', [PanduanPageController::class, 'update'])->whereNumber('panduan');
+        Route::patch('admin/panduan/{panduan}', [PanduanPageController::class, 'update'])->whereNumber('panduan');
+        Route::delete('admin/panduan/{panduan}', [PanduanPageController::class, 'destroy'])->whereNumber('panduan');
+
         // Frontend Error Logs
         Route::get('error-logs', [ClientErrorReportController::class, 'index']);
         Route::post('error-logs/bulk/resolve', [ClientErrorReportController::class, 'bulkResolve']);
