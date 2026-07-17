@@ -35,8 +35,10 @@ class PenerimaController extends Controller
             $query->where('pekerjaan_id', $request->pekerjaan_id);
         }
 
-        // Filter by komunal
-        if ($request->boolean('komunal') !== null) {
+        // Filter by komunal only when query param is explicitly provided.
+        // Note: $request->boolean() always returns bool (never null), so it must not
+        // be used as the presence check — that would hide all komunal rows by default.
+        if ($request->has('komunal')) {
             $query->komunal($request->boolean('komunal'));
         }
 
