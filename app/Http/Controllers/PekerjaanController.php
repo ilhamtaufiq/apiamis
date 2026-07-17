@@ -932,49 +932,112 @@ class PekerjaanController extends Controller
         ];
     }
 
+    /**
+     * Stream a zip of all pekerjaan berkas.
+     *
+     * Uses ZipStream (no temp full-archive on disk) + STORE compression so large
+     * media packages do not OOM PHP or double-write multi-GB zip files. Pair with
+     * BFF streaming and browser-native download (not fetch+blob).
+     */
     public function downloadAllBerkas(Pekerjaan $pekerjaan, Request $request)
     {
-        $pekerjaan->load('berkas');
-        $format = $request->get('format', 'original'); // 'original' or 'pdf'
+        @set_time_limit(0);
+        @ini_set('max_execution_time', '0');
+        @ini_set('memory_limit', '512M');
+
+        $pekerjaan->load('berkas.media');
+        $format = strtolower((string) $request->get('format', 'original')); // 'original' | 'pdf'
 
         if ($pekerjaan->berkas->count() === 0) {
             return response()->json(['message' => 'Tidak ada berkas untuk diunduh'], 404);
         }
 
-        $zip = new \ZipArchive;
-        $suffix = $format === 'pdf' ? '_PDF' : '';
-        $fileName = str_replace([' ', '/', '\\'], '_', $pekerjaan->nama_paket).$suffix.'.zip';
-        $tempFile = tempnam(sys_get_temp_dir(), 'zip');
-
-        if ($zip->open($tempFile, \ZipArchive::CREATE | \ZipArchive::OVERWRITE) === true) {
-            foreach ($pekerjaan->berkas as $berkas) {
-                $media = $berkas->getFirstMedia('berkas/dokumen');
-                if ($media && file_exists($media->getPath())) {
-                    if ($format === 'pdf') {
-                        $pdfPath = $this->getPdfPath($media);
-                        if ($pdfPath && file_exists($pdfPath)) {
-                            $innerFileName = str_replace([' ', '/', '\\'], '_', $berkas->jenis_dokumen).'_'.$media->id.'.pdf';
-                            $zip->addFile($pdfPath, $innerFileName);
-                        } else {
-                            // If PDF conversion fails, fall back to original for this file?
-                            // Or skip? User asked for "Download Semua sebagai PDF".
-                            // I'll skip or add original with warning? Better skip or keep original.
-                            // Let's keep original if PDF fails, but with its original extension.
-                            $extension = pathinfo($media->file_name, PATHINFO_EXTENSION);
-                            $innerFileName = str_replace([' ', '/', '\\'], '_', $berkas->jenis_dokumen).'_'.$media->id.'.'.$extension;
-                            $zip->addFile($media->getPath(), $innerFileName);
-                        }
-                    } else {
-                        $extension = pathinfo($media->file_name, PATHINFO_EXTENSION);
-                        $innerFileName = str_replace([' ', '/', '\\'], '_', $berkas->jenis_dokumen).'_'.$media->id.'.'.$extension;
-                        $zip->addFile($media->getPath(), $innerFileName);
-                    }
-                }
+        // Preflight: at least one readable media path (PDF conversion is deferred to stream).
+        $hasReadable = false;
+        foreach ($pekerjaan->berkas as $berkas) {
+            $media = $berkas->getFirstMedia('berkas/dokumen');
+            if ($media && is_readable($media->getPath())) {
+                $hasReadable = true;
+                break;
             }
-            $zip->close();
         }
 
-        return response()->download($tempFile, $fileName)->deleteFileAfterSend(true);
+        if (! $hasReadable) {
+            return response()->json(['message' => 'Tidak ada file berkas yang dapat diunduh'], 404);
+        }
+
+        $suffix = $format === 'pdf' ? '_PDF' : '';
+        $baseName = preg_replace('/[^\w\-.]+/u', '_', (string) $pekerjaan->nama_paket) ?: 'berkas_'.$pekerjaan->id;
+        $fileName = $baseName.$suffix.'.zip';
+
+        return response()->streamDownload(function () use ($pekerjaan, $format, $fileName) {
+            // Drop PHP output buffers so chunks reach the reverse proxy immediately.
+            while (ob_get_level() > 0) {
+                ob_end_clean();
+            }
+
+            $zip = new \ZipStream\ZipStream(
+                outputName: $fileName,
+                sendHttpHeaders: false,
+                // STORE: no re-compress of already-compressed docs (docx/pdf/xlsx) — far
+                // less CPU/memory than DEFLATE on multi-hundred-MB packages.
+                defaultCompressionMethod: \ZipStream\CompressionMethod::STORE,
+                defaultEnableZeroHeader: true,
+                enableZip64: true,
+                flushOutput: true,
+            );
+
+            $usedNames = [];
+
+            foreach ($pekerjaan->berkas as $berkas) {
+                $media = $berkas->getFirstMedia('berkas/dokumen');
+                if (! $media) {
+                    continue;
+                }
+
+                $sourcePath = $media->getPath();
+                $extension = strtolower((string) pathinfo($media->file_name, PATHINFO_EXTENSION));
+                $label = preg_replace('/[^\w\-.]+/u', '_', (string) $berkas->jenis_dokumen) ?: 'berkas';
+
+                if ($format === 'pdf') {
+                    $pdfPath = $this->getPdfPath($media);
+                    if ($pdfPath && is_readable($pdfPath)) {
+                        $sourcePath = $pdfPath;
+                        $extension = 'pdf';
+                    }
+                }
+
+                if (! is_readable($sourcePath)) {
+                    continue;
+                }
+
+                $innerBase = $label.'_'.$media->id.($extension !== '' ? '.'.$extension : '');
+                $innerName = $innerBase;
+                $n = 2;
+                while (isset($usedNames[$innerName])) {
+                    $innerName = $label.'_'.$media->id.'_'.$n.($extension !== '' ? '.'.$extension : '');
+                    $n++;
+                }
+                $usedNames[$innerName] = true;
+
+                try {
+                    $zip->addFileFromPath(
+                        fileName: $innerName,
+                        path: $sourcePath,
+                        compressionMethod: \ZipStream\CompressionMethod::STORE,
+                    );
+                } catch (\Throwable $e) {
+                    // Skip unreadable/corrupt single files; keep streaming the rest.
+                    report($e);
+                }
+            }
+
+            $zip->finish();
+        }, $fileName, [
+            'Content-Type' => 'application/zip',
+            'X-Accel-Buffering' => 'no',
+            'Cache-Control' => 'no-store, private',
+        ]);
     }
 
     private function getPdfPath($media)

@@ -82,8 +82,11 @@ class OnlyOfficeService
                 ],
                 'customization' => [
                     'forcesave' => $isEdit,
+                    // compactToolbar only — do NOT set toolbarNoTabs.
+                    // OnlyOffice api.js (9.4+) switches to /index_loader.html when
+                    // toolbarNoTabs is true, and our Document Server package is
+                    // missing main/*/index_loader.html (404) while index.html exists.
                     'compactToolbar' => ! $isEdit,
-                    'toolbarNoTabs' => ! $isEdit,
                     'feedback' => false,
                     'help' => false,
                     'compactHeader' => true,
