@@ -162,7 +162,8 @@ class PekerjaanController extends Controller
             $query->latest();
         }
 
-        // Unbounded list (dropdown/legacy): hard cap — jangan kirim ratusan paket ke HP
+        // Unbounded list (dropdown / legacy mobile): hard cap — jangan kirim ratusan paket ke HP.
+        // Export Excel/PDF web harus paginate (per_page ≤ 100), bukan mengandalkan per_page=-1.
         if ($isUnbounded) {
             $cap = 80;
             return PekerjaanResource::collection($query->limit($cap)->get());
