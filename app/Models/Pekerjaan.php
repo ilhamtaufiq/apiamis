@@ -186,12 +186,15 @@ class Pekerjaan extends Model
     /**
      * Paket yang masih relevan ditindaklanjuti (bukan dibatalkan).
      * NULL status dianggap active (legacy).
+     * Kolom di-qualify dengan nama tabel agar aman di join (mis. user_pekerjaan).
      */
     public function scopeNotCanceled($query)
     {
-        return $query->where(function ($q) {
-            $q->whereNull('status')
-                ->orWhere('status', '!=', self::STATUS_CANCELED);
+        $table = $query->getModel()->getTable();
+
+        return $query->where(function ($q) use ($table) {
+            $q->whereNull("{$table}.status")
+                ->orWhere("{$table}.status", '!=', self::STATUS_CANCELED);
         });
     }
 

@@ -187,16 +187,19 @@ class PuspenPengawasKpiController extends Controller
             $penerimaCount = (int) $pekerjaanRows->sum('penerima_count');
             $outputCount = (int) $pekerjaanRows->sum('output_count');
             $fisikCount = (int) $pekerjaanRows->sum('fisik_count');
+            // score per paket = 0–100 kelengkapan; total = jumlah skor paket (bukan volume spam)
             $score = round((float) $pekerjaanRows->sum('score'), 1);
             $scorePerPekerjaan = $pekerjaanCount > 0
                 ? round($score / $pekerjaanCount, 1)
                 : 0.0;
+            $qualityPackages = $pekerjaanRows->filter(fn ($row) => ($row['score'] ?? 0) >= 70)->count();
 
             $results[] = [
                 'id' => $u->id,
                 'nama' => $u->name,
                 'nip' => $u->nip,
                 'jabatan' => $u->jabatan,
+                'avatar' => $u->avatar,
                 'roles' => $this->getUserKpiRoles($u),
                 'pekerjaan_count' => $pekerjaanCount,
                 'foto_count' => $fotoCount,
@@ -205,19 +208,27 @@ class PuspenPengawasKpiController extends Controller
                 'fisik_count' => $fisikCount,
                 'score' => $score,
                 'score_per_pekerjaan' => $scorePerPekerjaan,
+                'quality_packages' => $qualityPackages,
             ];
         }
 
+        // Ranking fair: rata-rata kelengkapan dulu, lalu jumlah paket berkualitas (≥70), baru total.
         usort($results, function ($a, $b) {
-            if ($b['score_per_pekerjaan'] === $a['score_per_pekerjaan']) {
-                if ($b['score'] === $a['score']) {
-                    return $b['pekerjaan_count'] <=> $a['pekerjaan_count'];
-                }
+            if ($b['score_per_pekerjaan'] !== $a['score_per_pekerjaan']) {
+                return $b['score_per_pekerjaan'] <=> $a['score_per_pekerjaan'];
+            }
 
+            $qualityA = (int) ($a['quality_packages'] ?? 0);
+            $qualityB = (int) ($b['quality_packages'] ?? 0);
+            if ($qualityB !== $qualityA) {
+                return $qualityB <=> $qualityA;
+            }
+
+            if ($b['score'] !== $a['score']) {
                 return $b['score'] <=> $a['score'];
             }
 
-            return $b['score_per_pekerjaan'] <=> $a['score_per_pekerjaan'];
+            return $b['pekerjaan_count'] <=> $a['pekerjaan_count'];
         });
 
         foreach ($results as $index => &$row) {
@@ -227,9 +238,22 @@ class PuspenPengawasKpiController extends Controller
         return $results;
     }
 
+    /**
+     * Bobot dimensi kelengkapan (0–100). Hanya dimensi yang applicable di-normalisasi.
+     * Bukan volume mentah — mencegah gaming lewat spam foto/output.
+     */
+    private const SCORE_WEIGHT_FOTO = 35;
+
+    private const SCORE_WEIGHT_PENERIMA = 25;
+
+    private const SCORE_WEIGHT_PROGRESS = 25;
+
+    private const SCORE_WEIGHT_KOORDINAT = 15;
+
     private function pekerjaanBreakdownForUser(User $user, int $tahun): Collection
     {
         $pekerjaanList = $user->assignedPekerjaan()
+            ->notCanceled()
             ->whereHas('kegiatan', function ($q) use ($tahun) {
                 $q->where('tahun_anggaran', $tahun);
             })
@@ -257,11 +281,6 @@ class PuspenPengawasKpiController extends Controller
             $outputCount = (int) ($pekerjaan->output_count ?? $pekerjaan->output?->count() ?? 0);
             $fisikCount = (int) DB::table('tbl_progress')->where('pekerjaan_id', $pekerjaanId)->count();
 
-            $score = ($fotoCount * 1) +
-                ($penerimaCount * 1) +
-                ($outputCount * 2) +
-                ($fisikCount * 2);
-
             $estimasi = $estimasiService->summarize(
                 $pekerjaan->progressEstimasiHistory ?? collect(),
                 $tahun
@@ -278,12 +297,29 @@ class PuspenPengawasKpiController extends Controller
                 : false;
 
             $fotoMetrics = $pekerjaan->resolveFotoMetrics();
+            $fotoCount = (int) ($fotoMetrics['foto_count'] ?? $fotoCount);
+            $fotoRequired = $fotoMetrics['foto_required_count'];
+
+            $scoreBreakdown = $this->computeFairPackageScore(
+                isKonsultan: (bool) ($pekerjaan->is_konsultan ?? false),
+                fotoCount: $fotoCount,
+                fotoRequired: is_numeric($fotoRequired) ? (int) $fotoRequired : null,
+                fotoStatus: $fotoMetrics['foto_status'] ?? null,
+                penerimaCount: $penerimaCount,
+                outputCount: $outputCount,
+                outputs: $pekerjaan->output ?? collect(),
+                progressRealisasi: $progressRealisasi,
+                fisikCount: $fisikCount,
+                phoCompleted: $phoCompleted,
+                fotos: $pekerjaan->foto ?? collect(),
+            );
+
             $catatan = $this->buildPekerjaanCatatan(
                 progressRealisasi: $progressRealisasi,
                 phoCompleted: $phoCompleted,
                 fotoStatus: $fotoMetrics['foto_status'] ?? null,
-                fotoCount: (int) ($fotoMetrics['foto_count'] ?? $fotoCount),
-                fotoRequired: $fotoMetrics['foto_required_count'],
+                fotoCount: $fotoCount,
+                fotoRequired: $fotoRequired,
                 penerimaCount: $penerimaCount,
                 outputCount: $outputCount,
                 fisikCount: $fisikCount,
@@ -293,11 +329,14 @@ class PuspenPengawasKpiController extends Controller
                 'id' => $pekerjaanId,
                 'nama_paket' => $pekerjaan->nama_paket,
                 'kode_rekening' => $pekerjaan->kode_rekening,
+                'is_konsultan' => (bool) ($pekerjaan->is_konsultan ?? false),
                 'foto_count' => $fotoCount,
                 'penerima_count' => $penerimaCount,
                 'output_count' => $outputCount,
                 'fisik_count' => $fisikCount,
-                'score' => round($score, 1),
+                /** Skor kelengkapan 0–100 (bukan volume). */
+                'score' => $scoreBreakdown['score'],
+                'score_breakdown' => $scoreBreakdown['breakdown'],
                 'progress_realisasi' => $progressRealisasi,
                 'pho_completed' => $phoCompleted,
                 'foto_status' => $fotoMetrics['foto_status'] ?? null,
@@ -305,6 +344,144 @@ class PuspenPengawasKpiController extends Controller
                 'catatan' => $catatan,
             ];
         })->sortByDesc('score')->values();
+    }
+
+    /**
+     * Skor fair 0–100: rasio kelengkapan berbobot, di-cap target (bukan jumlah mentah).
+     *
+     * @param  \Illuminate\Support\Collection|iterable  $outputs
+     * @param  \Illuminate\Support\Collection|iterable  $fotos
+     * @return array{score: float, breakdown: array<string, float|null>}
+     */
+    private function computeFairPackageScore(
+        bool $isKonsultan,
+        int $fotoCount,
+        ?int $fotoRequired,
+        ?string $fotoStatus,
+        int $penerimaCount,
+        int $outputCount,
+        $outputs,
+        ?float $progressRealisasi,
+        int $fisikCount,
+        bool $phoCompleted,
+        $fotos,
+    ): array {
+        $outputs = collect($outputs);
+        $fotos = collect($fotos);
+
+        // --- Progress (selalu applicable) ---
+        $progressRatio = 0.0;
+        if ($progressRealisasi !== null && $progressRealisasi > 0) {
+            $progressRatio = min(1.0, $progressRealisasi / 100.0);
+        } elseif ($fisikCount > 0) {
+            // Ada input progress mentah tanpa % estimasi → kredit terbatas
+            $progressRatio = 0.25;
+        }
+        if ($phoCompleted) {
+            $progressRatio = max($progressRatio, 0.9);
+        }
+
+        // Paket konsultan: penilaian fokusus progress (tanpa foto/penerima unit)
+        if ($isKonsultan) {
+            $score = round($progressRatio * 100, 1);
+
+            return [
+                'score' => $score,
+                'breakdown' => [
+                    'foto' => null,
+                    'penerima' => null,
+                    'progress' => round($progressRatio * 100, 1),
+                    'koordinat' => null,
+                ],
+            ];
+        }
+
+        // --- Foto (cap ke target slot; butuh output) ---
+        $fotoApplicable = $outputCount > 0 && $fotoRequired !== null && $fotoRequired > 0;
+        $fotoRatio = 0.0;
+        if ($fotoApplicable) {
+            if ($fotoStatus === 'selesai') {
+                $fotoRatio = 1.0;
+            } else {
+                $fotoRatio = min(1.0, $fotoCount / max(1, $fotoRequired));
+            }
+        }
+
+        // --- Penerima (hanya output yang wajib unit/penerima) ---
+        $penerimaTarget = 0;
+        foreach ($outputs as $output) {
+            $optional = (bool) ($output->penerima_is_optional ?? false);
+            if ($optional) {
+                continue;
+            }
+            $penerimaTarget += max(1, (int) ceil((float) ($output->volume ?? 0)));
+        }
+        $penerimaApplicable = $penerimaTarget > 0;
+        $penerimaRatio = $penerimaApplicable
+            ? min(1.0, $penerimaCount / $penerimaTarget)
+            : 0.0;
+
+        // --- Koordinat (dari foto yang sudah ada) ---
+        $fotoWithCoords = $fotos->filter(function ($foto) {
+            $k = $foto->koordinat ?? null;
+
+            return is_string($k) ? trim($k) !== '' : ! empty($k);
+        })->count();
+        $koordinatApplicable = $fotoCount > 0;
+        $koordinatRatio = $koordinatApplicable
+            ? min(1.0, $fotoWithCoords / max(1, $fotoCount))
+            : 0.0;
+
+        // --- Output belum diisi: progress tetap dihitung, dimensi lain non-applicable ---
+        if ($outputCount === 0) {
+            // Tanpa output, foto/penerima tidak bisa dinilai — skor = progress saja (maks 100)
+            // tapi diberi penalti 0.5 agar tidak setara paket lengkap
+            $score = round($progressRatio * 100 * 0.5, 1);
+
+            return [
+                'score' => $score,
+                'breakdown' => [
+                    'foto' => null,
+                    'penerima' => null,
+                    'progress' => round($progressRatio * 100, 1),
+                    'koordinat' => null,
+                ],
+            ];
+        }
+
+        $dimensions = [
+            ['ratio' => $fotoRatio, 'weight' => self::SCORE_WEIGHT_FOTO, 'applicable' => $fotoApplicable, 'key' => 'foto'],
+            ['ratio' => $penerimaRatio, 'weight' => self::SCORE_WEIGHT_PENERIMA, 'applicable' => $penerimaApplicable, 'key' => 'penerima'],
+            ['ratio' => $progressRatio, 'weight' => self::SCORE_WEIGHT_PROGRESS, 'applicable' => true, 'key' => 'progress'],
+            ['ratio' => $koordinatRatio, 'weight' => self::SCORE_WEIGHT_KOORDINAT, 'applicable' => $koordinatApplicable, 'key' => 'koordinat'],
+        ];
+
+        $applicableWeight = 0.0;
+        $weightedSum = 0.0;
+        $breakdown = [
+            'foto' => null,
+            'penerima' => null,
+            'progress' => round($progressRatio * 100, 1),
+            'koordinat' => null,
+        ];
+
+        foreach ($dimensions as $dim) {
+            if (! $dim['applicable']) {
+                continue;
+            }
+            $applicableWeight += $dim['weight'];
+            $weightedSum += $dim['ratio'] * $dim['weight'];
+            $breakdown[$dim['key']] = round($dim['ratio'] * 100, 1);
+        }
+
+        $score = $applicableWeight > 0
+            ? round(($weightedSum / $applicableWeight) * 100, 1)
+            : 0.0;
+
+        return [
+            'score' => $score,
+            'breakdown' => $breakdown,
+        ];
     }
 
     private function resolvePuspenRealisasi(int $pekerjaanId, int $tahun): ?float
