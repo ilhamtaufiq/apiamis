@@ -78,15 +78,32 @@ class DashboardController extends Controller
                 ->orderBy('tahun_anggaran', 'desc')
                 ->pluck('tahun_anggaran');
 
-            // Pekerjaan statistics
-            $pekerjaanQuery = \App\Models\Pekerjaan::query();
+            // Pekerjaan statistics (rekap status dulu, lalu hitung metrik utama tanpa canceled)
+            $pekerjaanAllQuery = \App\Models\Pekerjaan::query();
             if ($tahun) {
-                $pekerjaanQuery->whereHas('kegiatan', function ($q) use ($tahun) {
+                $pekerjaanAllQuery->whereHas('kegiatan', function ($q) use ($tahun) {
                     $q->where('tahun_anggaran', $tahun);
                 });
             }
-            
-            $totalPekerjaan = (clone $pekerjaanQuery)->count();
+
+            $pekerjaanBatal = (clone $pekerjaanAllQuery)
+                ->where('status', \App\Models\Pekerjaan::STATUS_CANCELED)
+                ->count();
+            $pekerjaanAktif = (clone $pekerjaanAllQuery)->notCanceled()->count();
+            $pekerjaanBerkontrak = (clone $pekerjaanAllQuery)
+                ->notCanceled()
+                ->whereExists(function ($query) {
+                    $query->select(DB::raw(1))
+                        ->from('tbl_kontrak')
+                        ->whereRaw('tbl_kontrak.id_pekerjaan = tbl_pekerjaan.id');
+                })
+                ->count();
+            $pekerjaanBelumBerkontrak = max(0, $pekerjaanAktif - $pekerjaanBerkontrak);
+
+            // Metrik operasional hanya paket aktif (exclude dibatalkan)
+            $pekerjaanQuery = (clone $pekerjaanAllQuery)->notCanceled();
+
+            $totalPekerjaan = $pekerjaanAktif;
             $totalPaguPekerjaan = (clone $pekerjaanQuery)->sum('pagu') ?? 0;
             
             // Pekerjaan per kecamatan
@@ -130,14 +147,17 @@ class DashboardController extends Controller
                     ];
                 });
 
-            // Kontrak statistics
+            // Kontrak statistics (hanya kontrak pada paket aktif)
             $kontrakQuery = \App\Models\Kontrak::query()
-                ->whereHas('pekerjaan.kegiatan', function ($q) use ($tahun) {
+                ->whereHas('pekerjaan', function ($q) use ($tahun) {
+                    $q->notCanceled();
                     if ($tahun) {
-                        $q->where('tahun_anggaran', $tahun);
+                        $q->whereHas('kegiatan', function ($kegiatanQuery) use ($tahun) {
+                            $kegiatanQuery->where('tahun_anggaran', $tahun);
+                        });
                     }
                 });
-            
+
             $totalKontrak = (clone $kontrakQuery)->count();
             $totalNilaiKontrak = (clone $kontrakQuery)->sum('nilai_kontrak') ?? 0;
             
@@ -171,16 +191,19 @@ class DashboardController extends Controller
                     ];
                 });
 
-            // Output statistics
+            // Output statistics (hanya paket aktif)
             $outputQuery = \App\Models\Output::query()
-                ->whereHas('pekerjaan.kegiatan', function ($q) use ($tahun) {
+                ->whereHas('pekerjaan', function ($q) use ($tahun) {
+                    $q->notCanceled();
                     if ($tahun) {
-                        $q->where('tahun_anggaran', $tahun);
+                        $q->whereHas('kegiatan', function ($kegiatanQuery) use ($tahun) {
+                            $kegiatanQuery->where('tahun_anggaran', $tahun);
+                        });
                     }
                 });
 
             $totalOutput = (clone $outputQuery)->count();
-            
+
             // Output per satuan
             $outputPerSatuan = (clone $outputQuery)
                 ->select('satuan as name', DB::raw('count(*) as value'))
@@ -207,11 +230,14 @@ class DashboardController extends Controller
                     ];
                 });
 
-            // Penerima statistics
+            // Penerima statistics (hanya paket aktif)
             $penerimaQuery = \App\Models\Penerima::query()
-                ->whereHas('pekerjaan.kegiatan', function ($q) use ($tahun) {
+                ->whereHas('pekerjaan', function ($q) use ($tahun) {
+                    $q->notCanceled();
                     if ($tahun) {
-                        $q->where('tahun_anggaran', $tahun);
+                        $q->whereHas('kegiatan', function ($kegiatanQuery) use ($tahun) {
+                            $kegiatanQuery->where('tahun_anggaran', $tahun);
+                        });
                     }
                 });
 
@@ -240,6 +266,11 @@ class DashboardController extends Controller
                     'availableYears' => $availableYears,
                     'totalPekerjaan' => $totalPekerjaan,
                     'totalPaguPekerjaan' => $totalPaguPekerjaan,
+                    // Rekap status paket (aktif/batal/kontrak) untuk executive brief
+                    'pekerjaanAktif' => $pekerjaanAktif,
+                    'pekerjaanBatal' => $pekerjaanBatal,
+                    'pekerjaanBerkontrak' => $pekerjaanBerkontrak,
+                    'pekerjaanBelumBerkontrak' => $pekerjaanBelumBerkontrak,
                     'pekerjaanPerKecamatan' => $pekerjaanPerKecamatan,
                     'pekerjaanPerDesa' => $pekerjaanPerDesa,
                     'paguPekerjaanPerKecamatan' => $paguPekerjaanPerKecamatan,
