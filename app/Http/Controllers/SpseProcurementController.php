@@ -165,10 +165,11 @@ class SpseProcurementController extends Controller
     {
         $staging = ProcurementStagingPaket::query()
             ->with([
+                // DB columns: tbl_kecamatan.n_kec, tbl_desa.n_desa (not "nama")
                 'pekerjaan:id,nama_paket,kegiatan_id,kecamatan_id,desa_id,pagu,kode_rekening',
                 'pekerjaan.kegiatan:id,nama_kegiatan,tahun_anggaran',
-                'pekerjaan.kecamatan:id,nama',
-                'pekerjaan.desa:id,nama',
+                'pekerjaan.kecamatan:id,n_kec',
+                'pekerjaan.desa:id,n_desa',
                 'kontrak:id,kode_paket,spk,nilai_kontrak,tgl_spk',
                 'syncRun:id,status,started_at,finished_at,item_count,matched_count',
             ])
@@ -182,6 +183,32 @@ class SpseProcurementController extends Controller
         $path = $staging->jenis_paket === 'tender_seleksi'
             ? "/tender/{$staging->kode_paket}"
             : "/nontender/{$staging->kode_paket}";
+
+        $pekerjaan = $staging->pekerjaan;
+        $pekerjaanPayload = null;
+        if ($pekerjaan) {
+            $pekerjaanPayload = [
+                'id' => $pekerjaan->id,
+                'nama_paket' => $pekerjaan->nama_paket,
+                'kode_rekening' => $pekerjaan->kode_rekening,
+                'pagu' => $pekerjaan->pagu,
+                'kegiatan' => $pekerjaan->kegiatan ? [
+                    'id' => $pekerjaan->kegiatan->id,
+                    'nama_kegiatan' => $pekerjaan->kegiatan->nama_kegiatan,
+                    'tahun_anggaran' => $pekerjaan->kegiatan->tahun_anggaran,
+                ] : null,
+                'kecamatan' => $pekerjaan->kecamatan ? [
+                    'id' => $pekerjaan->kecamatan->id,
+                    'nama_kecamatan' => $pekerjaan->kecamatan->n_kec,
+                    'n_kec' => $pekerjaan->kecamatan->n_kec,
+                ] : null,
+                'desa' => $pekerjaan->desa ? [
+                    'id' => $pekerjaan->desa->id,
+                    'nama_desa' => $pekerjaan->desa->n_desa,
+                    'n_desa' => $pekerjaan->desa->n_desa,
+                ] : null,
+            ];
+        }
 
         return response()->json([
             'data' => [
@@ -199,7 +226,7 @@ class SpseProcurementController extends Controller
                 'raw_row' => $staging->raw_row,
                 'fetched_at' => $staging->fetched_at?->toIso8601String(),
                 'spse_url' => "{$baseUrl}/{$lpseSlug}{$path}",
-                'pekerjaan' => $staging->pekerjaan,
+                'pekerjaan' => $pekerjaanPayload,
                 'kontrak' => $staging->kontrak,
                 'sync_run' => $staging->syncRun ? $this->formatRun($staging->syncRun) : null,
             ],
