@@ -153,12 +153,16 @@ class DataQualityController extends Controller
 
     /**
      * Unified "needs action" inbox for operators.
+     *
+     * Semua hitungan terkait pekerjaan mengabaikan paket status canceled/dibatalkan
+     * (via basePekerjaanQuery / notCanceled, tiket, dan kontrak).
      */
     public function getActionInbox(Request $request)
     {
         $tahun = $request->query('tahun');
         $actions = [];
 
+        // Stats sudah lewat basePekerjaanQuery()->notCanceled().
         $statsResponse = $this->getStats($request);
         $stats = $statsResponse->getData(true)['data'] ?? [];
 
@@ -174,7 +178,7 @@ class DataQualityController extends Controller
                     'id' => "dq-{$key}",
                     'source' => 'data_quality',
                     'title' => "{$count} pekerjaan {$meta['label']}",
-                    'detail' => 'Perbaiki kelengkapan data pekerjaan.',
+                    'detail' => 'Perbaiki kelengkapan data pekerjaan (paket dibatalkan dikecualikan).',
                     'severity' => $meta['severity'],
                     'count' => $count,
                     'href' => $meta['href'].($tahun ? "&tahun={$tahun}" : ''),
@@ -186,6 +190,11 @@ class DataQualityController extends Controller
             $openHigh = Tiket::query()
                 ->whereIn('status', ['open', 'pending'])
                 ->where('prioritas', 'high')
+                ->where(function ($q) {
+                    // Tiket tanpa pekerjaan tetap dihitung; yang terikat paket canceled di-skip.
+                    $q->whereNull('pekerjaan_id')
+                        ->orWhereHas('pekerjaan', fn ($pq) => $pq->notCanceled());
+                })
                 ->count();
             if ($openHigh > 0) {
                 $actions[] = [
@@ -199,13 +208,19 @@ class DataQualityController extends Controller
                 ];
             }
 
-            $openAll = Tiket::query()->whereIn('status', ['open', 'pending'])->count();
+            $openAll = Tiket::query()
+                ->whereIn('status', ['open', 'pending'])
+                ->where(function ($q) {
+                    $q->whereNull('pekerjaan_id')
+                        ->orWhereHas('pekerjaan', fn ($pq) => $pq->notCanceled());
+                })
+                ->count();
             if ($openAll > 0) {
                 $actions[] = [
                     'id' => 'tiket-open',
                     'source' => 'tiket',
                     'title' => "{$openAll} tiket masih terbuka",
-                    'detail' => 'Termasuk pending dan open.',
+                    'detail' => 'Termasuk pending dan open (paket dibatalkan dikecualikan).',
                     'severity' => $openAll > 20 ? 'medium' : 'low',
                     'count' => $openAll,
                     'href' => '/tiket',
@@ -217,6 +232,11 @@ class DataQualityController extends Controller
             ->whereNotNull('tgl_selesai')
             ->whereDate('tgl_selesai', '>=', now()->toDateString())
             ->whereDate('tgl_selesai', '<=', now()->addDays(30)->toDateString())
+            // Abaikan kontrak milik paket dibatalkan.
+            ->where(function ($q) {
+                $q->whereDoesntHave('pekerjaan')
+                    ->orWhereHas('pekerjaan', fn ($pq) => $pq->notCanceled());
+            })
             ->when($tahun, function ($q) use ($tahun) {
                 $q->where(function ($inner) use ($tahun) {
                     $inner->whereHas('pekerjaan.kegiatan', fn ($kq) => $kq->where('tahun_anggaran', $tahun))
@@ -230,7 +250,7 @@ class DataQualityController extends Controller
                 'id' => 'kontrak-h30',
                 'source' => 'kontrak',
                 'title' => "{$endingSoon} kontrak berakhir ≤ 30 hari",
-                'detail' => 'Siapkan BA / addendum / perpanjangan bila perlu.',
+                'detail' => 'Siapkan BA / addendum / perpanjangan bila perlu (paket dibatalkan dikecualikan).',
                 'severity' => 'high',
                 'count' => $endingSoon,
                 'href' => '/kontrak',
@@ -250,6 +270,7 @@ class DataQualityController extends Controller
                 'stats' => $stats,
                 'actions' => $actions,
                 'total_actions' => count($actions),
+                'excludes_canceled_pekerjaan' => true,
             ],
         ]);
     }
@@ -257,7 +278,9 @@ class DataQualityController extends Controller
     private function basePekerjaanQuery(Request $request)
     {
         $tahun = $request->query('tahun');
-        $baseQuery = Pekerjaan::query();
+        $baseQuery = Pekerjaan::query()
+            // Paket dibatalkan tidak perlu ditindaklanjuti (koordinat/foto/kontrak).
+            ->notCanceled();
 
         if ($tahun) {
             $baseQuery->whereHas('kegiatan', function ($query) use ($tahun) {

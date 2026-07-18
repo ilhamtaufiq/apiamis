@@ -183,6 +183,18 @@ class Pekerjaan extends Model
 
     public const STATUS_CANCELED = 'canceled';
 
+    /**
+     * Paket yang masih relevan ditindaklanjuti (bukan dibatalkan).
+     * NULL status dianggap active (legacy).
+     */
+    public function scopeNotCanceled($query)
+    {
+        return $query->where(function ($q) {
+            $q->whereNull('status')
+                ->orWhere('status', '!=', self::STATUS_CANCELED);
+        });
+    }
+
     protected $fillable = [
         'kode_rekening',
         'nama_paket',
