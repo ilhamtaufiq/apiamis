@@ -102,10 +102,14 @@ class Pekerjaan extends Model
      * Scope untuk filter berdasarkan role user.
      *
      * - admin / manager / super-admin: lihat semua
-     * - operator: lihat semua (termasuk bila juga punya role pengawas)
-     * - pengawas / konsultan_pengawas: HANYA user_pekerjaan (assign manual)
-     *   → tidak lewat kegiatan_role (sering bocor: 1 role = seluruh kegiatan)
+     * - operator di portal Arumanis: lihat semua
+     * - operator + pengawas di app lapangan (X-Arumanis-App: pengawas|pengawasan|mobile):
+     *   HANYA user_pekerjaan (assign) — dual-role tidak bocor ke “lihat semua”
+     * - pengawas / konsultan_pengawas: HANYA user_pekerjaan
      * - role lain (tfl, …): user_pekerjaan ATAU kegiatan_role
+     *
+     * Header konteks app (dari BFF panel / mobile):
+     *   X-Arumanis-App: pengawas | pengawasan | mobile
      */
     public function scopeByUserRole($query)
     {
@@ -115,20 +119,23 @@ class Pekerjaan extends Model
             return $query->whereRaw('1=0');
         }
 
-        // Full access — operator checked before pengawas so dual-role is not restricted.
+        $tableName = $this->getTable();
+        $isFieldApp = static::requestIsFieldAppContext();
+        $isPengawasRole = $user->hasAnyRole(['pengawas', 'konsultan_pengawas']);
+
+        // Panel/mobile lapangan: dual operator+pengawas tetap dibatasi assign.
+        if ($isFieldApp && $isPengawasRole) {
+            return static::constrainQueryToAssignedPekerjaan($query, $user, $tableName);
+        }
+
+        // Portal Arumanis: operator/admin full access (termasuk dual-role).
         if ($user->hasAnyRole(['admin', 'manager', 'super-admin', 'operator'])) {
             return $query;
         }
 
-        $tableName = $this->getTable();
-
-        // Pengawas lapangan & konsultan: ketat per assignment user.
-        if ($user->hasAnyRole(['pengawas', 'konsultan_pengawas'])) {
-            return $query->whereIn("$tableName.id", function ($sub) use ($user) {
-                $sub->select('pekerjaan_id')
-                    ->from('user_pekerjaan')
-                    ->where('user_id', $user->id);
-            });
+        // Pure pengawas / konsultan (portal atau field).
+        if ($isPengawasRole) {
+            return static::constrainQueryToAssignedPekerjaan($query, $user, $tableName);
         }
 
         return $query->where(function ($q) use ($user, $tableName) {
@@ -150,6 +157,38 @@ class Pekerjaan extends Model
                         ->from('kegiatan_role')
                         ->whereIn('role_id', $userRoleIds);
                 });
+        });
+    }
+
+    /**
+     * Apakah request berasal dari app lapangan (panel /pengawasan atau mobile).
+     */
+    public static function requestIsFieldAppContext(): bool
+    {
+        $raw = request()->header('X-Arumanis-App')
+            ?? request()->header('X-App-Context')
+            ?? request()->query('app_context');
+
+        $ctx = strtolower(trim((string) $raw));
+
+        return in_array($ctx, ['pengawas', 'pengawasan', 'mobile', 'field'], true);
+    }
+
+    /**
+     * Batasi query ke paket yang di-assign lewat user_pekerjaan.
+     *
+     * @param  \Illuminate\Database\Eloquent\Builder  $query
+     * @param  \App\Models\User|\Illuminate\Contracts\Auth\Authenticatable  $user
+     * @return \Illuminate\Database\Eloquent\Builder
+     */
+    protected static function constrainQueryToAssignedPekerjaan($query, $user, ?string $tableName = null)
+    {
+        $tableName = $tableName ?? (new static)->getTable();
+
+        return $query->whereIn("{$tableName}.id", function ($sub) use ($user) {
+            $sub->select('pekerjaan_id')
+                ->from('user_pekerjaan')
+                ->where('user_id', $user->id);
         });
     }
 
