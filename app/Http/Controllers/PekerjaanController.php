@@ -80,9 +80,13 @@ class PekerjaanController extends Controller
             ->withCount(['penerima', 'foto', 'kontrak'])
             ->byUserRole();  // Aman karena sudah check auth
 
-        // summary=1 memuat output+foto+history — JANGAN digabung dengan per_page=-1
-        if ($request->boolean('summary') && ! $isUnbounded) {
-            $query->with(['output', 'foto', 'progressEstimasiHistory']);
+        // summary=1: progressEstimasiHistory selalu (kolom Fisik/Keuangan/Deviasi dashboard).
+        // output+foto penuh tetap dibatasi — digabung per_page=-1 sempat OOM di mobile admin.
+        if ($request->boolean('summary')) {
+            $query->with(['progressEstimasiHistory']);
+            if (! $isUnbounded) {
+                $query->with(['output', 'foto']);
+            }
         }
 
         // Filter by tahun via kegiatan
