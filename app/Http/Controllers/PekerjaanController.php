@@ -126,6 +126,20 @@ class PekerjaanController extends Controller
             $query->where('pendamping_id', $request->pendamping_id);
         }
 
+        // status=active → exclude canceled (null legacy dihitung active)
+        // status=canceled → hanya dibatalkan
+        // status=all / omitted → semua
+        if ($request->filled('status') && $request->status !== 'all') {
+            $status = (string) $request->status;
+            if ($status === Pekerjaan::STATUS_ACTIVE) {
+                $query->notCanceled();
+            } elseif ($status === Pekerjaan::STATUS_CANCELED) {
+                $query->where('status', Pekerjaan::STATUS_CANCELED);
+            } else {
+                $query->where('status', $status);
+            }
+        }
+
         // Search: paket, rekening, desa, kecamatan, penyedia, pengawas
         if ($request->filled('search')) {
             $searchTerm = trim((string) $request->input('search'));
