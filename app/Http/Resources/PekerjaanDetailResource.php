@@ -31,6 +31,14 @@ class PekerjaanDetailResource extends JsonResource
             'nama_paket' => $this->nama_paket,
             'pagu' => $this->pagu,
             'is_konsultan' => (bool) ($this->is_konsultan ?? false),
+            'status' => $this->status ?: 'active',
+            'catatan' => $this->catatan,
+            'has_kontrak' => $this->relationLoaded('kontrak')
+                ? $this->kontrak->isNotEmpty()
+                : (int) ($this->kontrak_count ?? 0) > 0,
+            'kontrak_count' => $this->relationLoaded('kontrak')
+                ? $this->kontrak->count()
+                : (int) ($this->kontrak_count ?? 0),
             'kecamatan_id' => $this->kecamatan_id,
             'desa_id' => $this->desa_id,
             'kegiatan_id' => $this->kegiatan_id,

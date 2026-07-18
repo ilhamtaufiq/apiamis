@@ -77,7 +77,7 @@ class PekerjaanController extends Controller
             ];
 
         $query = Pekerjaan::with($with)
-            ->withCount(['penerima', 'foto'])
+            ->withCount(['penerima', 'foto', 'kontrak'])
             ->byUserRole();  // Aman karena sudah check auth
 
         // summary=1 memuat output+foto+history — JANGAN digabung dengan per_page=-1
@@ -232,6 +232,8 @@ class PekerjaanController extends Controller
             'kode_rekening' => 'nullable|string|max:225',
             'nama_paket' => 'required|string|max:225',
             'is_konsultan' => 'sometimes|boolean',
+            'status' => 'sometimes|string|in:active,canceled',
+            'catatan' => 'nullable|string|max:5000',
             'kecamatan_id' => 'required_unless:is_konsultan,true,1|nullable|integer|exists:tbl_kecamatan,id',
             'desa_id' => 'required_unless:is_konsultan,true,1|nullable|integer|exists:tbl_desa,id',
             'kegiatan_id' => 'nullable|integer|exists:tbl_kegiatan,id',
@@ -243,6 +245,7 @@ class PekerjaanController extends Controller
         ]);
 
         $validated['is_konsultan'] = (bool) ($validated['is_konsultan'] ?? false);
+        $validated['status'] = $validated['status'] ?? Pekerjaan::STATUS_ACTIVE;
         if ($validated['is_konsultan']) {
             $validated['kecamatan_id'] = null;
             $validated['desa_id'] = null;
@@ -349,6 +352,8 @@ class PekerjaanController extends Controller
             'kode_rekening' => 'nullable|string|max:225',
             'nama_paket' => 'nullable|string|max:225',
             'is_konsultan' => 'sometimes|boolean',
+            'status' => 'sometimes|string|in:active,canceled',
+            'catatan' => 'nullable|string|max:5000',
             'kecamatan_id' => 'nullable|integer|exists:tbl_kecamatan,id',
             'desa_id' => 'nullable|integer|exists:tbl_desa,id',
             'kegiatan_id' => 'nullable|integer|exists:tbl_kegiatan,id',

@@ -179,6 +179,10 @@ class Pekerjaan extends Model
     }
     protected $table = 'tbl_pekerjaan';
 
+    public const STATUS_ACTIVE = 'active';
+
+    public const STATUS_CANCELED = 'canceled';
+
     protected $fillable = [
         'kode_rekening',
         'nama_paket',
@@ -187,8 +191,10 @@ class Pekerjaan extends Model
         'kegiatan_id',
         'pagu',
         'is_konsultan',
+        'status',
+        'catatan',
         'pengawas_id',
-        'pendamping_id'
+        'pendamping_id',
     ];
 
     protected $casts = [
@@ -198,7 +204,7 @@ class Pekerjaan extends Model
         'desa_id' => 'integer',
         'kegiatan_id' => 'integer',
         'pengawas_id' => 'integer',
-        'pendamping_id' => 'integer'
+        'pendamping_id' => 'integer',
     ];
 
     /**

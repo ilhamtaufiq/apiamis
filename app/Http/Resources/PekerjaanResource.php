@@ -135,6 +135,12 @@ class PekerjaanResource extends JsonResource
             'nama_paket' => $this->nama_paket,
             'pagu' => $this->pagu,
             'is_konsultan' => (bool) ($this->is_konsultan ?? false),
+            'status' => $this->status ?: 'active',
+            'catatan' => $this->catatan,
+            'has_kontrak' => (int) ($this->kontrak_count
+                ?? ($this->relationLoaded('kontrak') ? $this->kontrak->count() : 0)) > 0,
+            'kontrak_count' => (int) ($this->kontrak_count
+                ?? ($this->relationLoaded('kontrak') ? $this->kontrak->count() : 0)),
             'progress_total' => round($progressTotal, 2),
             'deviasi' => round($deviasi, 2),
             'progress_estimasi_fisik' => $progressEstimasiFisik,
