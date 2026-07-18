@@ -11,7 +11,7 @@ Backend REST untuk ekosistem **Arumanis** (satu data air minum & sanitasi Kabupa
 [![laravel](https://img.shields.io/badge/Laravel-13-ff2d20?style=for-the-badge&labelColor=111111&logo=laravel&logoColor=ff2d20)](https://laravel.com/)
 [![php](https://img.shields.io/badge/PHP-8.2+-777BB4?style=for-the-badge&labelColor=111111&logo=php&logoColor=white)](https://www.php.net/)
 [![swagger](https://img.shields.io/badge/OpenAPI-Swagger-85EA2D?style=for-the-badge&labelColor=111111&logo=swagger&logoColor=black)](#api--dokumentasi)
-[![platform](https://img.shields.io/badge/platform-0.6.0-674bb5?style=for-the-badge&labelColor=111111)](https://github.com/ilhamtaufiq/arumanis)
+[![platform](https://img.shields.io/badge/platform-0.8.0-674bb5?style=for-the-badge&labelColor=111111)](https://github.com/ilhamtaufiq/arumanis)
 
 <p>
   <a href="https://apiamis.cianjur.space/api/documentation"><strong>Swagger UI</strong></a>

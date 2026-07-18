@@ -2,6 +2,17 @@
 
 All notable changes to the APIAMIS project will be documented in this file.
 
+## [0.8.0] - 2026-07-18
+
+### Added
+- **Puspen KPI**: skor kelengkapan fair 0–100 (foto/penerima/progress/GPS), exclude paket canceled, field avatar untuk podium.
+- **Pekerjaan**: filter query `status=active|canceled`; scope `notCanceled`.
+- **Data quality / action-inbox**: exclude paket dibatalkan dari stats, antrian, tiket, dan kontrak H-30.
+
+### Changed
+- Ranking KPI pengawas berdasarkan rata-rata kelengkapan per paket (bukan volume input).
+All notable changes to the APIAMIS project will be documented in this file.
+
 ## [2026-05-09]
 
 ### Added
