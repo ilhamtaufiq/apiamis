@@ -79,7 +79,7 @@ class User extends Authenticatable
 
     public function grantPengawasRoleIfEligible(): bool
     {
-        if ($this->hasRole('pengawas') || $this->hasRole('konsultan_pengawas')) {
+        if ($this->hasAnyRole(['pengawas', 'konsultan_pengawas', 'tfl'])) {
             return false;
         }
 

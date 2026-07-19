@@ -105,8 +105,8 @@ class Pekerjaan extends Model
      * - operator di portal Arumanis: lihat semua
      * - operator + pengawas di app lapangan (X-Arumanis-App: pengawas|pengawasan|mobile):
      *   HANYA user_pekerjaan (assign) — dual-role tidak bocor ke “lihat semua”
-     * - pengawas / konsultan_pengawas: HANYA user_pekerjaan
-     * - role lain (tfl, …): user_pekerjaan ATAU kegiatan_role
+     * - pengawas / konsultan_pengawas / tfl: HANYA user_pekerjaan (setara lapangan)
+     * - role lain (user, …): user_pekerjaan ATAU kegiatan_role
      *
      * Header konteks app (dari BFF panel / mobile):
      *   X-Arumanis-App: pengawas | pengawasan | mobile
@@ -121,7 +121,7 @@ class Pekerjaan extends Model
 
         $tableName = $this->getTable();
         $isFieldApp = static::requestIsFieldAppContext();
-        $isPengawasRole = $user->hasAnyRole(['pengawas', 'konsultan_pengawas']);
+        $isPengawasRole = $user->hasAnyRole(['pengawas', 'konsultan_pengawas', 'tfl']);
 
         // Panel/mobile lapangan: dual operator+pengawas tetap dibatasi assign.
         if ($isFieldApp && $isPengawasRole) {
@@ -133,7 +133,7 @@ class Pekerjaan extends Model
             return $query;
         }
 
-        // Pure pengawas / konsultan (portal atau field).
+        // Pure pengawas / konsultan / tfl (portal atau field) — setara.
         if ($isPengawasRole) {
             return static::constrainQueryToAssignedPekerjaan($query, $user, $tableName);
         }

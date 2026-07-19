@@ -20,12 +20,13 @@ class ProgressController extends Controller
      */
     public function report(int $pekerjaanId): JsonResponse
     {
-        $pekerjaan = Pekerjaan::with(['kegiatan', 'kontrak.penyedia', 'kecamatan', 'desa'])->findOrFail($pekerjaanId);
+        $pekerjaan = Pekerjaan::with(['kegiatan', 'kontrak.penyedia', 'kecamatan', 'desa', 'pengawas'])->findOrFail($pekerjaanId);
         
         // Get first kontrak (assuming one kontrak per pekerjaan)
         $kontrak = $pekerjaan->kontrak->first();
         $penyedia = $kontrak?->penyedia;
         $kegiatan = $pekerjaan->kegiatan;
+        $pengawas = $pekerjaan->pengawas;
         
         $progress = Progress::firstOrCreate(
             ['pekerjaan_id' => $pekerjaanId],
@@ -84,6 +85,9 @@ class ProgressController extends Controller
                     'nama_sub_kegiatan' => $kegiatan->nama_sub_kegiatan,
                     'sumber_dana' => $kegiatan->sumber_dana,
                     'tahun_anggaran' => $kegiatan->tahun_anggaran,
+                    // PPTK di level sub kegiatan (autofill pejabat Mengetahui)
+                    'nama_pptk' => $kegiatan->nama_pptk,
+                    'nip_pptk' => $kegiatan->nip_pptk,
                 ] : null,
                 'kontrak' => $kontrak ? [
                     'tgl_spmk' => $kontrak->tgl_spmk?->format('Y-m-d'),
@@ -96,6 +100,11 @@ class ProgressController extends Controller
                 'penyedia' => $penyedia ? [
                     'nama' => $penyedia->nama,
                     'direktur' => $penyedia->direktur,
+                ] : null,
+                'pengawas' => $pengawas ? [
+                    'nama' => $pengawas->nama,
+                    'nip' => $pengawas->nip,
+                    'jabatan' => $pengawas->jabatan,
                 ] : null,
                 'items' => $items,
                 'totals' => [

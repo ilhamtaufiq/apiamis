@@ -106,8 +106,8 @@ class OnlyOfficeMediaAuthorizer
             return $owner->user_id === $user->id;
         }
 
-        // Berkas / kontrak: pengawas may edit documents of assigned pekerjaan.
-        if ($user->hasRole('pengawas') || $user->hasRole('konsultan_pengawas')) {
+        // Berkas / kontrak: field roles (pengawas / konsultan_pengawas / tfl) may edit assigned docs.
+        if ($user->hasAnyRole(['pengawas', 'konsultan_pengawas', 'tfl'])) {
             return $this->canAccess($user, $media);
         }
 
