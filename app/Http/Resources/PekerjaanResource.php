@@ -3,6 +3,7 @@
 namespace App\Http\Resources;
 
 use App\Services\PekerjaanProgressEstimasiSummaryService;
+use App\Services\ProgressTabMetricsService;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -52,65 +53,18 @@ class PekerjaanResource extends JsonResource
         }
 
         $progressTotal = 0;
-        $progressRencana = 0;
         $deviasi = 0;
         $fotoMetrics = $this->resource->resolveFotoMetrics();
         $fotoStatus = $fotoMetrics['foto_status'];
         $fotoRequiredCount = $fotoMetrics['foto_required_count'];
         $fotoActualCount = $fotoMetrics['foto_count'];
 
+        // Progress fisik = tab Progress / Buat Laporan (bobot RAB + realisasi mingguan)
         if ($this->relationLoaded('progress') && $this->progress) {
-            $content = $this->progress->content ?? [];
-            $items = $content['items'] ?? [];
-
-            // 1. Temukan minggu terakhir yang ada laporan realisasinya
-            $maxReportedWeek = 0;
-            foreach ($items as $item) {
-                $weeklyData = $item['weekly_data'] ?? [];
-                foreach ($weeklyData as $minggu => $data) {
-                    if (isset($data['realisasi']) && $data['realisasi'] !== null) {
-                        $maxReportedWeek = max($maxReportedWeek, (int) $minggu);
-                    }
-                }
-            }
-
-            // 2. Hitung progres fisik dan rencana (rencana hanya dihitung sampai maxReportedWeek)
-            foreach ($items as $item) {
-                $bobot = (float) ($item['bobot'] ?? 0);
-                $weeklyData = $item['weekly_data'] ?? [];
-                $itemTotalReal = 0;
-                $itemTotalRencana = 0;
-
-                foreach ($weeklyData as $minggu => $data) {
-                    $realisasi = $data['realisasi'] ?? null;
-                    if ($realisasi !== null) {
-                        $itemTotalReal += $realisasi;
-                    }
-
-                    if ((int) $minggu <= $maxReportedWeek) {
-                        $rencana = $data['rencana'] ?? 0;
-                        if ($rencana !== null) {
-                            $itemTotalRencana += $rencana;
-                        }
-                    }
-                }
-
-                $targetVolume = (float) ($item['target_volume'] ?? 0);
-
-                $progressPercent = $targetVolume > 0
-                    ? ($itemTotalReal / $targetVolume) * 100
-                    : 0;
-                $weightedProgress = ($progressPercent * $bobot) / 100;
-                $progressTotal += $weightedProgress;
-
-                $rencanaPercent = $targetVolume > 0
-                    ? ($itemTotalRencana / $targetVolume) * 100
-                    : 0;
-                $weightedRencana = ($rencanaPercent * $bobot) / 100;
-                $progressRencana += $weightedRencana;
-            }
-
-            $deviasi = $progressTotal - $progressRencana;
+            $metrics = app(ProgressTabMetricsService::class)
+                ->summarize($this->progress->content ?? []);
+            $progressTotal = $metrics['progress_total'];
+            $deviasi = $metrics['deviasi'];
         }
 
         $progressEstimasiFisik = null;
