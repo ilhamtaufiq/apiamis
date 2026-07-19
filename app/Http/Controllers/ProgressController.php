@@ -20,10 +20,26 @@ class ProgressController extends Controller
      */
     public function report(int $pekerjaanId): JsonResponse
     {
-        $pekerjaan = Pekerjaan::with(['kegiatan', 'kontrak.penyedia', 'kecamatan', 'desa', 'pengawas'])->findOrFail($pekerjaanId);
-        
-        // Get first kontrak (assuming one kontrak per pekerjaan)
+        $pekerjaan = Pekerjaan::with([
+            'kegiatan',
+            'kontrak.penyedia',
+            'kontrak.latestApprovedAddendum',
+            'kecamatan',
+            'desa',
+            'pengawas',
+        ])->findOrFail($pekerjaanId);
+
+        // Pivot kontrak_pekerjaan dulu; fallback id_pekerjaan di tbl_kontrak
+        // (banyak paket hanya terhubung via id_pekerjaan tanpa baris pivot).
         $kontrak = $pekerjaan->kontrak->first();
+        if (! $kontrak) {
+            $kontrak = \App\Models\Kontrak::query()
+                ->with(['penyedia', 'latestApprovedAddendum'])
+                ->where('id_pekerjaan', $pekerjaanId)
+                ->orderByDesc('id')
+                ->first();
+        }
+
         $penyedia = $kontrak?->penyedia;
         $kegiatan = $pekerjaan->kegiatan;
         $pengawas = $pekerjaan->pengawas;
@@ -89,14 +105,29 @@ class ProgressController extends Controller
                     'nama_pptk' => $kegiatan->nama_pptk,
                     'nip_pptk' => $kegiatan->nip_pptk,
                 ] : null,
-                'kontrak' => $kontrak ? [
-                    'tgl_spmk' => $kontrak->tgl_spmk?->format('Y-m-d'),
-                    'tgl_spk' => $kontrak->tgl_spk?->format('Y-m-d'),
-                    'tgl_selesai' => $kontrak->tgl_selesai?->format('Y-m-d'),
-                    'spk' => $kontrak->spk,
-                    'spmk' => $kontrak->spmk,
-                    'nilai_kontrak' => $kontrak->nilai_kontrak,
-                ] : null,
+                'kontrak' => (function () use ($kontrak) {
+                    if (! $kontrak) {
+                        return null;
+                    }
+                    $tglMulai = $kontrak->tgl_spmk ?? $kontrak->tgl_spk;
+                    $tglSelesai = $kontrak->tglSelesaiBerjalan();
+                    if (! $tglSelesai instanceof \Carbon\Carbon && $kontrak->tgl_selesai) {
+                        $tglSelesai = $kontrak->tgl_selesai;
+                    }
+
+                    return [
+                        // Mulai: SPMK → fallback SPK
+                        'tgl_spmk' => $tglMulai?->format('Y-m-d'),
+                        'tgl_spk' => $kontrak->tgl_spk?->format('Y-m-d'),
+                        // Selesai: addendum disetujui bila ada
+                        'tgl_selesai' => $tglSelesai instanceof \Carbon\Carbon
+                            ? $tglSelesai->format('Y-m-d')
+                            : null,
+                        'spk' => $kontrak->spk,
+                        'spmk' => $kontrak->spmk,
+                        'nilai_kontrak' => $kontrak->nilaiKontrakBerjalan() ?? $kontrak->nilai_kontrak,
+                    ];
+                })(),
                 'penyedia' => $penyedia ? [
                     'nama' => $penyedia->nama,
                     'direktur' => $penyedia->direktur,

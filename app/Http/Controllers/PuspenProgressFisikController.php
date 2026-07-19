@@ -149,6 +149,11 @@ class PuspenProgressFisikController extends Controller
                 'desa:id,n_desa',
             ])
             ->whereHas('kegiatan', fn ($k) => $k->where('tahun_anggaran', $tahun))
+            // Paket dibatalkan tidak dihitung "belum berkontrak" di progress fisik
+            ->when(
+                Schema::hasColumn('tbl_pekerjaan', 'status'),
+                fn ($q) => $q->notCanceled()
+            )
             // Belum di pivot kontrak_pekerjaan
             ->whereDoesntHave('kontrak')
             // Belum sebagai id_pekerjaan utama di tbl_kontrak
