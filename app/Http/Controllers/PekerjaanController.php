@@ -319,7 +319,10 @@ class PekerjaanController extends Controller
 
         $pekerjaan->load([
             'kecamatan', 'desa', 'kegiatan',
-            'foto', 'berkas', 'output', 'penerima', 'kontrak.penyedia', 'tags', 'pengawas', 'pendamping',
+            'foto',
+            // media + uploader untuk panel review (pratinjau/unduh + label uploader)
+            'berkas.media', 'berkas.uploader',
+            'output', 'penerima', 'kontrak.penyedia', 'tags', 'pengawas', 'pendamping',
             'progress',
         ]);
 
