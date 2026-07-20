@@ -82,6 +82,9 @@ class AppSettingController extends Controller
             'spm_detail_page_active' => 'nullable|string|in:0,1',
             'capaian_publik_section_active' => 'nullable|string|in:0,1',
             'puspen_progress_fisik_public' => 'nullable|string|in:0,1',
+            'pengawas_berkas_show_rab' => 'nullable|string|in:0,1',
+            'pengawas_berkas_show_gambar' => 'nullable|string|in:0,1',
+            'pengawas_berkas_show_nego' => 'nullable|string|in:0,1',
             'maintenance_mode' => 'nullable|string|in:0,1',
             'maintenance_bypass_emails' => 'nullable|string|max:1000',
             'mail_enabled' => 'nullable|string|in:0,1',
@@ -188,6 +191,13 @@ class AppSettingController extends Controller
         if ($request->has('puspen_progress_fisik_public')) {
             $setting = AppSetting::setValue('puspen_progress_fisik_public', $request->puspen_progress_fisik_public, 'text');
             $updatedSettings[] = $setting;
+        }
+
+        foreach (AppSetting::PENGAWAS_BERKAS_JUDUL_KEYS as $settingKey) {
+            if ($request->has($settingKey)) {
+                $setting = AppSetting::setValue($settingKey, $request->input($settingKey), 'text');
+                $updatedSettings[] = $setting;
+            }
         }
 
         if ($request->has('maintenance_mode')) {

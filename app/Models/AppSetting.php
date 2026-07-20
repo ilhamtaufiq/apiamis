@@ -20,12 +20,42 @@ class AppSetting extends Model implements HasMedia
     ];
 
     /**
+     * Judul berkas yang bisa dibuka ke role pengawas / konsultan_pengawas
+     * lewat toggle pengaturan (1 = tampilkan).
+     *
+     * @var array<string, string>
+     */
+    public const PENGAWAS_BERKAS_JUDUL_KEYS = [
+        'RAB' => 'pengawas_berkas_show_rab',
+        'GAMBAR' => 'pengawas_berkas_show_gambar',
+        'NEGO' => 'pengawas_berkas_show_nego',
+    ];
+
+    /**
      * Get a setting value by key
      */
     public static function getValue(string $key, $default = null): ?string
     {
         $setting = static::where('key', $key)->first();
         return $setting ? $setting->value : $default;
+    }
+
+    /**
+     * Judul berkas (RAB / GAMBAR / NEGO) yang diaktifkan untuk role lapangan.
+     *
+     * @return list<string>
+     */
+    public static function pengawasVisibleBerkasJuduls(): array
+    {
+        $titles = [];
+
+        foreach (self::PENGAWAS_BERKAS_JUDUL_KEYS as $judul => $key) {
+            if (self::getValue($key, '0') === '1') {
+                $titles[] = $judul;
+            }
+        }
+
+        return $titles;
     }
 
     /**

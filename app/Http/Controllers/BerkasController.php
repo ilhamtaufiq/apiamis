@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\AppSetting;
 use App\Models\Berkas;
 use App\Models\Pekerjaan;
 use App\Models\PuspenMediaShare;
@@ -40,9 +41,34 @@ class BerkasController extends Controller
         }
 
         // Filter file milik user login (panel pengawas: mine=1 / uploaded_by=me)
+        // Role pengawas/konsultan_pengawas juga dapat berkas berjudul RAB/GAMBAR/NEGO
+        // bila opsi pengaturan aktif.
+        $user = $request->user();
         $uploadedBy = $request->query('uploaded_by');
-        if ($request->boolean('mine') || $uploadedBy === 'me') {
-            $query->where('uploaded_by', $request->user()?->id);
+        $isPrivileged = $user && $user->hasAnyRole(['admin', 'manager', 'super-admin', 'operator']);
+        $isFieldPengawas = $user && $user->hasAnyRole(['pengawas', 'konsultan_pengawas']);
+        $wantsOwnOnly = $request->boolean('mine') || $uploadedBy === 'me';
+        // Role lapangan murni (bukan dual admin/operator): selalu batasi ke milik sendiri + shared.
+        $forceFieldScope = $isFieldPengawas && ! $isPrivileged;
+
+        if ($wantsOwnOnly || $forceFieldScope) {
+            $userId = $user?->id;
+            $sharedTitles = ($isFieldPengawas || $forceFieldScope)
+                ? AppSetting::pengawasVisibleBerkasJuduls()
+                : [];
+
+            $query->where(function ($q) use ($userId, $sharedTitles) {
+                $q->where('uploaded_by', $userId);
+
+                if ($sharedTitles !== []) {
+                    $q->orWhere(function ($shared) use ($sharedTitles) {
+                        foreach ($sharedTitles as $index => $title) {
+                            $method = $index === 0 ? 'whereRaw' : 'orWhereRaw';
+                            $shared->{$method}('LOWER(TRIM(jenis_dokumen)) = ?', [mb_strtolower($title)]);
+                        }
+                    });
+                }
+            });
         } elseif ($uploadedBy !== null && $uploadedBy !== '') {
             $query->where('uploaded_by', (int) $uploadedBy);
         }
