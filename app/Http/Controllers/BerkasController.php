@@ -62,10 +62,7 @@ class BerkasController extends Controller
 
                 if ($sharedTitles !== []) {
                     $q->orWhere(function ($shared) use ($sharedTitles) {
-                        foreach ($sharedTitles as $index => $title) {
-                            $method = $index === 0 ? 'whereRaw' : 'orWhereRaw';
-                            $shared->{$method}('LOWER(TRIM(jenis_dokumen)) = ?', [mb_strtolower($title)]);
-                        }
+                        AppSetting::applyPengawasSharedBerkasJudulFilter($shared, $sharedTitles);
                     });
                 }
             });
