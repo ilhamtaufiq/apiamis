@@ -77,7 +77,7 @@ class PekerjaanController extends Controller
             ];
 
         $query = Pekerjaan::with($with)
-            ->withCount(['penerima', 'foto', 'kontrak'])
+            ->withCount(['penerima', 'foto', 'kontrak', 'kontrakLegacy'])
             ->byUserRole();  // Aman karena sudah check auth
 
         // summary=1: progressEstimasiHistory selalu (kolom Fisik/Keuangan/Deviasi dashboard).

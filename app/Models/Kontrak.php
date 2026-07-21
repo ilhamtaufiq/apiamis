@@ -69,6 +69,27 @@ class Kontrak extends Model implements HasMedia
                     ->withTimestamps();
     }
 
+    /**
+     * Kontrak yang tertaut ke minimal satu paket lewat legacy id_pekerjaan ATAU pivot konsolidasi.
+     * Callback opsional diterapkan ke query Pekerjaan (notCanceled, tahun, dll.).
+     *
+     * @param  callable(\Illuminate\Database\Eloquent\Builder): void|null  $pekerjaanConstraint
+     */
+    public function scopeLinkedToPekerjaan($query, ?callable $pekerjaanConstraint = null)
+    {
+        return $query->where(function ($outer) use ($pekerjaanConstraint) {
+            $outer->whereHas('pekerjaan', function ($q) use ($pekerjaanConstraint) {
+                if ($pekerjaanConstraint) {
+                    $pekerjaanConstraint($q);
+                }
+            })->orWhereHas('pekerjaans', function ($q) use ($pekerjaanConstraint) {
+                if ($pekerjaanConstraint) {
+                    $pekerjaanConstraint($q);
+                }
+            });
+        });
+    }
+
     public function penyedia(): BelongsTo
     {
         return $this->belongsTo(Penyedia::class, 'id_penyedia');

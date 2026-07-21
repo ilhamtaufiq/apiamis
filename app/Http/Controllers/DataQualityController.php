@@ -31,21 +31,17 @@ class DataQualityController extends Controller
                 ->whereRaw('tbl_foto.pekerjaan_id = tbl_pekerjaan.id');
         })->count();
 
-        $startedNoPhotosCount = (clone $baseQuery)->whereExists(function ($query) {
-            $query->select(DB::raw(1))
-                ->from('tbl_kontrak')
-                ->whereRaw('tbl_kontrak.id_pekerjaan = tbl_pekerjaan.id');
-        })->whereNotExists(function ($query) {
-            $query->select(DB::raw(1))
-                ->from('tbl_foto')
-                ->whereRaw('tbl_foto.pekerjaan_id = tbl_pekerjaan.id');
-        })->count();
+        // withKontrak: legacy id_pekerjaan + pivot kontrak_pekerjaan (kontrak konsolidasi)
+        $startedNoPhotosCount = (clone $baseQuery)
+            ->withKontrak()
+            ->whereNotExists(function ($query) {
+                $query->select(DB::raw(1))
+                    ->from('tbl_foto')
+                    ->whereRaw('tbl_foto.pekerjaan_id = tbl_pekerjaan.id');
+            })
+            ->count();
 
-        $noContractCount = (clone $baseQuery)->whereNotExists(function ($query) {
-            $query->select(DB::raw(1))
-                ->from('tbl_kontrak')
-                ->whereRaw('tbl_kontrak.id_pekerjaan = tbl_pekerjaan.id');
-        })->count();
+        $noContractCount = (clone $baseQuery)->withoutKontrak()->count();
 
         return response()->json([
             'success' => true,
@@ -93,21 +89,15 @@ class DataQualityController extends Controller
                     ->whereRaw('tbl_foto.pekerjaan_id = tbl_pekerjaan.id');
             });
         } elseif ($issue === 'started_no_photos') {
-            $query->whereExists(function ($q) {
-                $q->select(DB::raw(1))
-                    ->from('tbl_kontrak')
-                    ->whereRaw('tbl_kontrak.id_pekerjaan = tbl_pekerjaan.id');
-            })->whereNotExists(function ($q) {
-                $q->select(DB::raw(1))
-                    ->from('tbl_foto')
-                    ->whereRaw('tbl_foto.pekerjaan_id = tbl_pekerjaan.id');
-            });
+            $query->withKontrak()
+                ->whereNotExists(function ($q) {
+                    $q->select(DB::raw(1))
+                        ->from('tbl_foto')
+                        ->whereRaw('tbl_foto.pekerjaan_id = tbl_pekerjaan.id');
+                });
         } else {
-            $query->whereNotExists(function ($q) {
-                $q->select(DB::raw(1))
-                    ->from('tbl_kontrak')
-                    ->whereRaw('tbl_kontrak.id_pekerjaan = tbl_pekerjaan.id');
-            });
+            // no_contracts — exclude paket yang sudah di pivot konsolidasi
+            $query->withoutKontrak();
         }
 
         if (! empty($validated['search'])) {
@@ -228,18 +218,20 @@ class DataQualityController extends Controller
             }
         }
 
+        // Kontrak berakhir: cek tautan legacy ATAU pivot konsolidasi (pekerjaans)
         $endingSoon = Kontrak::query()
             ->whereNotNull('tgl_selesai')
             ->whereDate('tgl_selesai', '>=', now()->toDateString())
             ->whereDate('tgl_selesai', '<=', now()->addDays(30)->toDateString())
-            // Abaikan kontrak milik paket dibatalkan.
             ->where(function ($q) {
-                $q->whereDoesntHave('pekerjaan')
-                    ->orWhereHas('pekerjaan', fn ($pq) => $pq->notCanceled());
+                // Minimal satu paket aktif (legacy atau pivot); kontrak tanpa paket di-skip
+                $q->whereHas('pekerjaan', fn ($pq) => $pq->notCanceled())
+                    ->orWhereHas('pekerjaans', fn ($pq) => $pq->notCanceled());
             })
             ->when($tahun, function ($q) use ($tahun) {
                 $q->where(function ($inner) use ($tahun) {
                     $inner->whereHas('pekerjaan.kegiatan', fn ($kq) => $kq->where('tahun_anggaran', $tahun))
+                        ->orWhereHas('pekerjaans.kegiatan', fn ($kq) => $kq->where('tahun_anggaran', $tahun))
                         ->orWhereHas('kegiatan', fn ($kq) => $kq->where('tahun_anggaran', $tahun));
                 });
             })

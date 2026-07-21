@@ -237,6 +237,47 @@ class Pekerjaan extends Model
         });
     }
 
+    /**
+     * Paket yang punya minimal 1 kontrak.
+     * Mendukung:
+     * - legacy: tbl_kontrak.id_pekerjaan
+     * - konsolidasi multi-paket: pivot kontrak_pekerjaan
+     */
+    public function scopeWithKontrak($query)
+    {
+        $table = $query->getModel()->getTable();
+
+        return $query->where(function ($outer) use ($table) {
+            $outer->whereExists(function ($exists) use ($table) {
+                $exists->select(DB::raw(1))
+                    ->from('tbl_kontrak')
+                    ->whereColumn('tbl_kontrak.id_pekerjaan', "{$table}.id");
+            })->orWhereExists(function ($exists) use ($table) {
+                $exists->select(DB::raw(1))
+                    ->from('kontrak_pekerjaan')
+                    ->whereColumn('kontrak_pekerjaan.pekerjaan_id', "{$table}.id");
+            });
+        });
+    }
+
+    /**
+     * Paket yang belum punya kontrak (legacy id_pekerjaan maupun pivot konsolidasi).
+     */
+    public function scopeWithoutKontrak($query)
+    {
+        $table = $query->getModel()->getTable();
+
+        return $query->whereNotExists(function ($exists) use ($table) {
+            $exists->select(DB::raw(1))
+                ->from('tbl_kontrak')
+                ->whereColumn('tbl_kontrak.id_pekerjaan', "{$table}.id");
+        })->whereNotExists(function ($exists) use ($table) {
+            $exists->select(DB::raw(1))
+                ->from('kontrak_pekerjaan')
+                ->whereColumn('kontrak_pekerjaan.pekerjaan_id', "{$table}.id");
+        });
+    }
+
     protected $fillable = [
         'kode_rekening',
         'nama_paket',
@@ -314,12 +355,21 @@ class Pekerjaan extends Model
     }
 
     /**
-     * Relasi Many-to-Many dengan Kontrak
+     * Relasi Many-to-Many dengan Kontrak (pivot multi-paket / konsolidasi).
      */
     public function kontrak(): \Illuminate\Database\Eloquent\Relations\BelongsToMany
     {
         return $this->belongsToMany(Kontrak::class, 'kontrak_pekerjaan', 'pekerjaan_id', 'kontrak_id')
             ->withTimestamps();
+    }
+
+    /**
+     * Relasi legacy: tbl_kontrak.id_pekerjaan (satu kontrak menunjuk satu paket).
+     * Dipakai bersama pivot untuk deteksi has_kontrak yang lengkap.
+     */
+    public function kontrakLegacy(): HasMany
+    {
+        return $this->hasMany(Kontrak::class, 'id_pekerjaan');
     }
 
     public function beritaAcara(): \Illuminate\Database\Eloquent\Relations\HasOne

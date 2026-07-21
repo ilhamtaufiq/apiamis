@@ -33,12 +33,26 @@ class PekerjaanDetailResource extends JsonResource
             'is_konsultan' => (bool) ($this->is_konsultan ?? false),
             'status' => $this->status ?: 'active',
             'catatan' => $this->catatan,
-            'has_kontrak' => $this->relationLoaded('kontrak')
-                ? $this->kontrak->isNotEmpty()
-                : (int) ($this->kontrak_count ?? 0) > 0,
-            'kontrak_count' => $this->relationLoaded('kontrak')
-                ? $this->kontrak->count()
-                : (int) ($this->kontrak_count ?? 0),
+            'has_kontrak' => (function () {
+                $pivot = $this->relationLoaded('kontrak')
+                    ? $this->kontrak->count()
+                    : (int) ($this->kontrak_count ?? 0);
+                $legacy = $this->relationLoaded('kontrakLegacy')
+                    ? $this->kontrakLegacy->count()
+                    : (int) ($this->kontrak_legacy_count ?? 0);
+
+                return $pivot > 0 || $legacy > 0;
+            })(),
+            'kontrak_count' => (function () {
+                $pivot = $this->relationLoaded('kontrak')
+                    ? $this->kontrak->count()
+                    : (int) ($this->kontrak_count ?? 0);
+                $legacy = $this->relationLoaded('kontrakLegacy')
+                    ? $this->kontrakLegacy->count()
+                    : (int) ($this->kontrak_legacy_count ?? 0);
+
+                return $pivot > 0 ? $pivot : $legacy;
+            })(),
             'kecamatan_id' => $this->kecamatan_id,
             'desa_id' => $this->desa_id,
             'kegiatan_id' => $this->kegiatan_id,

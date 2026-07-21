@@ -91,10 +91,24 @@ class PekerjaanResource extends JsonResource
             'is_konsultan' => (bool) ($this->is_konsultan ?? false),
             'status' => $this->status ?: 'active',
             'catatan' => $this->catatan,
-            'has_kontrak' => (int) ($this->kontrak_count
-                ?? ($this->relationLoaded('kontrak') ? $this->kontrak->count() : 0)) > 0,
-            'kontrak_count' => (int) ($this->kontrak_count
-                ?? ($this->relationLoaded('kontrak') ? $this->kontrak->count() : 0)),
+            // Pivot konsolidasi + legacy id_pekerjaan (hindari double-count jika keduanya terisi)
+            'has_kontrak' => (function () {
+                $pivot = (int) ($this->kontrak_count
+                    ?? ($this->relationLoaded('kontrak') ? $this->kontrak->count() : 0));
+                $legacy = (int) ($this->kontrak_legacy_count
+                    ?? ($this->relationLoaded('kontrakLegacy') ? $this->kontrakLegacy->count() : 0));
+
+                return $pivot > 0 || $legacy > 0;
+            })(),
+            'kontrak_count' => (function () {
+                $pivot = (int) ($this->kontrak_count
+                    ?? ($this->relationLoaded('kontrak') ? $this->kontrak->count() : 0));
+                $legacy = (int) ($this->kontrak_legacy_count
+                    ?? ($this->relationLoaded('kontrakLegacy') ? $this->kontrakLegacy->count() : 0));
+
+                // Prefer pivot (multi-paket); fallback legacy bila belum di-sync
+                return $pivot > 0 ? $pivot : $legacy;
+            })(),
             'progress_total' => round($progressTotal, 2),
             'deviasi' => round($deviasi, 2),
             'progress_estimasi_fisik' => $progressEstimasiFisik,

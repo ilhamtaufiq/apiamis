@@ -22,8 +22,9 @@ class DashboardController extends Controller
         $tahun = $request->query('tahun');
         $user = auth()->user();
         
+        // Bump key segment when stats payload / kontrak konsolidasi logic changes
         $version = \Illuminate\Support\Facades\Cache::get('dashboard_stats_version', 1);
-        $cacheKey = "dashboard_stats_v{$version}_" . ($tahun ?? 'all') . "_" . ($user ? $user->id : 'guest');
+        $cacheKey = "dashboard_stats_v{$version}_fk2_" . ($tahun ?? 'all') . "_" . ($user ? $user->id : 'guest');
 
         return \Illuminate\Support\Facades\Cache::remember($cacheKey, now()->addMinutes(30), function () use ($request, $tahun) {
             // Base query
@@ -90,21 +91,45 @@ class DashboardController extends Controller
                 ->where('status', \App\Models\Pekerjaan::STATUS_CANCELED)
                 ->count();
             $pekerjaanAktif = (clone $pekerjaanAllQuery)->notCanceled()->count();
+
+            // withKontrak: legacy id_pekerjaan ATAU pivot konsolidasi kontrak_pekerjaan
             $pekerjaanBerkontrak = (clone $pekerjaanAllQuery)
                 ->notCanceled()
-                ->whereExists(function ($query) {
-                    $query->select(DB::raw(1))
-                        ->from('tbl_kontrak')
-                        ->whereRaw('tbl_kontrak.id_pekerjaan = tbl_pekerjaan.id');
-                })
+                ->withKontrak()
                 ->count();
             $pekerjaanBelumBerkontrak = max(0, $pekerjaanAktif - $pekerjaanBerkontrak);
 
+            // Paket aktif: fisik vs konsultan (is_konsultan)
+            $pekerjaanFisik = (clone $pekerjaanAllQuery)
+                ->notCanceled()
+                ->where(function ($q) {
+                    $q->where('is_konsultan', false)->orWhereNull('is_konsultan');
+                })
+                ->count();
+            $pekerjaanKonsultan = (clone $pekerjaanAllQuery)
+                ->notCanceled()
+                ->where('is_konsultan', true)
+                ->count();
+            $pekerjaanFisikBerkontrak = (clone $pekerjaanAllQuery)
+                ->notCanceled()
+                ->where(function ($q) {
+                    $q->where('is_konsultan', false)->orWhereNull('is_konsultan');
+                })
+                ->withKontrak()
+                ->count();
+            $pekerjaanFisikBelumBerkontrak = max(0, $pekerjaanFisik - $pekerjaanFisikBerkontrak);
+
             // Metrik operasional hanya paket aktif (exclude dibatalkan)
             $pekerjaanQuery = (clone $pekerjaanAllQuery)->notCanceled();
+            $pekerjaanFisikQuery = (clone $pekerjaanQuery)->where(function ($q) {
+                $q->where('is_konsultan', false)->orWhereNull('is_konsultan');
+            });
+            $pekerjaanKonsultanQuery = (clone $pekerjaanQuery)->where('is_konsultan', true);
 
             $totalPekerjaan = $pekerjaanAktif;
             $totalPaguPekerjaan = (clone $pekerjaanQuery)->sum('pagu') ?? 0;
+            $totalPaguPekerjaanFisik = (clone $pekerjaanFisikQuery)->sum('pagu') ?? 0;
+            $totalPaguPekerjaanKonsultan = (clone $pekerjaanKonsultanQuery)->sum('pagu') ?? 0;
             
             // Pekerjaan per kecamatan
             $pekerjaanPerKecamatan = (clone $pekerjaanQuery)
@@ -147,18 +172,20 @@ class DashboardController extends Controller
                     ];
                 });
 
-            // Kontrak statistics (hanya kontrak pada paket aktif)
+            // Kontrak: tautan legacy (id_pekerjaan) ATAU pivot multi-paket (konsolidasi)
+            $pekerjaanAktifConstraint = function ($q) use ($tahun) {
+                $q->notCanceled();
+                if ($tahun) {
+                    $q->whereHas('kegiatan', function ($kegiatanQuery) use ($tahun) {
+                        $kegiatanQuery->where('tahun_anggaran', $tahun);
+                    });
+                }
+            };
             $kontrakQuery = \App\Models\Kontrak::query()
-                ->whereHas('pekerjaan', function ($q) use ($tahun) {
-                    $q->notCanceled();
-                    if ($tahun) {
-                        $q->whereHas('kegiatan', function ($kegiatanQuery) use ($tahun) {
-                            $kegiatanQuery->where('tahun_anggaran', $tahun);
-                        });
-                    }
-                });
+                ->linkedToPekerjaan($pekerjaanAktifConstraint);
 
             $totalKontrak = (clone $kontrakQuery)->count();
+            // nilai_kontrak dihitung per baris kontrak (1 kontrak konsolidasi = 1 nilai, tidak digandakan per paket)
             $totalNilaiKontrak = (clone $kontrakQuery)->sum('nilai_kontrak') ?? 0;
             
             // Kontrak per penyedia (top 10)
@@ -266,11 +293,17 @@ class DashboardController extends Controller
                     'availableYears' => $availableYears,
                     'totalPekerjaan' => $totalPekerjaan,
                     'totalPaguPekerjaan' => $totalPaguPekerjaan,
-                    // Rekap status paket (aktif/batal/kontrak) untuk executive brief
+                    // Rekap status paket (aktif/batal/kontrak/fisik/konsultan) untuk executive brief
                     'pekerjaanAktif' => $pekerjaanAktif,
                     'pekerjaanBatal' => $pekerjaanBatal,
                     'pekerjaanBerkontrak' => $pekerjaanBerkontrak,
                     'pekerjaanBelumBerkontrak' => $pekerjaanBelumBerkontrak,
+                    'pekerjaanFisik' => $pekerjaanFisik,
+                    'pekerjaanKonsultan' => $pekerjaanKonsultan,
+                    'pekerjaanFisikBerkontrak' => $pekerjaanFisikBerkontrak,
+                    'pekerjaanFisikBelumBerkontrak' => $pekerjaanFisikBelumBerkontrak,
+                    'totalPaguPekerjaanFisik' => $totalPaguPekerjaanFisik,
+                    'totalPaguPekerjaanKonsultan' => $totalPaguPekerjaanKonsultan,
                     'pekerjaanPerKecamatan' => $pekerjaanPerKecamatan,
                     'pekerjaanPerDesa' => $pekerjaanPerDesa,
                     'paguPekerjaanPerKecamatan' => $paguPekerjaanPerKecamatan,
