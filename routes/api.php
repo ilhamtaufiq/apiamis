@@ -312,9 +312,11 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('kontrak/{kontrak}/export-bap', [KontrakController::class, 'exportBAP']);
     Route::get('penerima/summary', [PenerimaController::class, 'summary']);
     Route::apiResource('penerima', PenerimaController::class);
-    Route::apiResource('berkas', BerkasController::class)->parameters(['berkas' => 'berkas']);
+    // Harus sebelum apiResource agar tidak tertangkap {berkas}
+    Route::get('berkas/jenis-dokumen', [BerkasController::class, 'jenisDokumen']);
     Route::post('berkas/upload-from-url', [BerkasController::class, 'uploadFromUrl']);
     Route::get('berkas/{berkas}/export-pdf', [BerkasController::class, 'convertToPdf']);
+    Route::apiResource('berkas', BerkasController::class)->parameters(['berkas' => 'berkas']);
     Route::post('koordinat/validate', [KoordinatValidationController::class, 'validateKoordinat']);
     Route::apiResource('foto', FotoController::class);
     Route::get('user-drive', [UserDriveController::class, 'index']);

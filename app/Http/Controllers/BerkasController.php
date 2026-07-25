@@ -76,6 +76,32 @@ class BerkasController extends Controller
     }
 
     /**
+     * Distinct jenis_dokumen untuk dropdown seragam (creatable di FE).
+     *
+     * @OA\Get(
+     *     path="/api/berkas/jenis-dokumen",
+     *     summary="List distinct jenis dokumen berkas",
+     *     tags={"Media Management (Berkas)"},
+     *     @OA\Response(response=200, description="Successful operation")
+     * )
+     */
+    public function jenisDokumen()
+    {
+        $values = Berkas::query()
+            ->whereNotNull('jenis_dokumen')
+            ->where('jenis_dokumen', '!=', '')
+            ->distinct()
+            ->orderBy('jenis_dokumen')
+            ->pluck('jenis_dokumen')
+            ->map(fn ($v) => trim((string) $v))
+            ->filter()
+            ->values()
+            ->all();
+
+        return response()->json(['data' => $values]);
+    }
+
+    /**
      * @OA\Post(
      *     path="/api/berkas",
      *     summary="Upload new berkas",
