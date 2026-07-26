@@ -51,6 +51,8 @@ class PekerjaanProgressEstimasiController extends Controller
             'keuangan.realisasi' => 'nullable|array',
             'keuangan.realisasi.*.tanggal' => 'required|date',
             'keuangan.realisasi.*.persen' => ['required', fn ($attr, $value, $fail) => $this->validatePercent($attr, $value, $fail)],
+            'keuangan.realisasi.*.nomor_sp2d' => 'nullable|string|max:255',
+            'keuangan.realisasi.*.tanggal_pembuatan' => 'nullable|date',
         ]);
 
         $pekerjaan = Pekerjaan::byUserRole()->findOrFail($pekerjaanId);
@@ -74,6 +76,12 @@ class PekerjaanProgressEstimasiController extends Controller
                             'tipe' => $tipe,
                             'tanggal' => $entry['tanggal'],
                             'persen' => $this->normalizePercent($entry['persen']),
+                            'nomor_sp2d' => $jenis === 'keuangan' && $tipe === 'realisasi'
+                                ? ($entry['nomor_sp2d'] ?? null)
+                                : null,
+                            'tanggal_pembuatan' => $jenis === 'keuangan' && $tipe === 'realisasi'
+                                ? ($entry['tanggal_pembuatan'] ?? null)
+                                : null,
                         ]);
                     }
                 }
@@ -108,6 +116,8 @@ class PekerjaanProgressEstimasiController extends Controller
                 'id' => $history->id,
                 'tanggal' => $history->tanggal->format('Y-m-d'),
                 'persen' => $history->persen,
+                'nomor_sp2d' => $history->nomor_sp2d,
+                'tanggal_pembuatan' => $history->tanggal_pembuatan?->format('Y-m-d'),
             ];
         }
 
