@@ -40,6 +40,11 @@ class BerkasController extends Controller
             $query->where('pekerjaan_id', $request->pekerjaan_id);
         }
 
+        if ($request->filled('search')) {
+            $search = $request->input('search');
+            $query->where('jenis_dokumen', 'like', "%{$search}%");
+        }
+
         // Filter file milik user login (panel pengawas: mine=1 / uploaded_by=me)
         // Role pengawas/konsultan_pengawas juga dapat berkas berjudul RAB/GAMBAR/NEGO
         // bila opsi pengaturan aktif.
