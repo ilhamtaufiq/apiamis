@@ -55,6 +55,7 @@ use App\Http\Controllers\ToolPdfController;
 use App\Http\Controllers\BlogCommentController;
 use App\Http\Controllers\TiketCommentController;
 use App\Http\Controllers\TiketController;
+use App\Http\Controllers\UsulanKegiatanController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\UserDriveController;
 use App\Http\Controllers\UserPekerjaanController;
@@ -382,6 +383,7 @@ Route::middleware('auth:sanctum')->group(function () {
     // Tiket
     Route::post('tiket/bulk-update', [TiketController::class, 'bulkUpdate']);
     Route::apiResource('tiket', TiketController::class);
+    Route::apiResource('usulan-kegiatan', UsulanKegiatanController::class);
     Route::post('tiket/{tiket}/comments', [TiketCommentController::class, 'store']);
 
     // Custom penerima
