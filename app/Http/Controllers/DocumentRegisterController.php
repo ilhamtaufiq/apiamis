@@ -89,14 +89,6 @@ class DocumentRegisterController extends Controller
             'sequence_number' => 'nullable|integer|min:1',
         ]);
 
-        if (DocumentRegister::where('kontrak_id', $validated['kontrak_id'])
-            ->where('type_id', $validated['type_id'])
-            ->exists()) {
-            return response()->json([
-                'message' => 'Kontrak ini sudah memiliki registrasi untuk tipe dokumen tersebut.',
-            ], 422);
-        }
-
         $type = DocumentType::findOrFail($validated['type_id']);
         $date = new \DateTime($validated['tanggal']);
         $year = (int) $date->format('Y');
