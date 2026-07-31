@@ -163,7 +163,18 @@ class DocumentRegisterController extends Controller
     public function destroy($id)
     {
         $register = DocumentRegister::findOrFail($id);
+        $year = $register->year;
+
         $register->delete();
+
+        // Recalculate sequence to max remaining for that year
+        $maxSeq = DocumentRegister::where('year', $year)->max('sequence_number') ?? 0;
+        DB::table('tbl_document_sequences')
+            ->updateOrInsert(
+                ['year' => $year, 'type' => 'berita-acara'],
+                ['last_number' => $maxSeq]
+            );
+
         return response()->json(['message' => 'Register deleted']);
     }
 
