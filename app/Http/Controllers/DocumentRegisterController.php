@@ -87,6 +87,7 @@ class DocumentRegisterController extends Controller
             'description' => 'nullable|string',
             'nilai' => 'nullable|numeric|min:0',
             'sequence_number' => 'nullable|integer|min:1',
+            'nomor' => 'nullable|string|max:255',
         ]);
 
         $type = DocumentType::findOrFail($validated['type_id']);
@@ -97,6 +98,11 @@ class DocumentRegisterController extends Controller
             $register = DB::transaction(function () use ($validated, $type, $date, $year, $request) {
             if ($request->filled('sequence_number')) {
                 $sequence = (int) $request->sequence_number;
+
+                // Pastikan sequence tidak duplikat di tahun yang sama
+                if (DocumentRegister::where('year', $year)->where('sequence_number', $sequence)->exists()) {
+                    throw new \RuntimeException("Sequence nomor $sequence untuk tahun $year sudah digunakan.");
+                }
             } else {
                 $seq = DB::table('tbl_document_sequences')
                     ->where('year', $year)
@@ -113,10 +119,15 @@ class DocumentRegisterController extends Controller
                     ['last_number' => $sequence]
                 );
 
-            $nomor = $this->generateNumber($type, $sequence, $date, $validated['kontrak_id']);
+            // Nomor manual override template, atau generate dari template
+            if ($request->filled('nomor')) {
+                $nomor = trim($validated['nomor']);
+            } else {
+                $nomor = $this->generateNumber($type, $sequence, $date, $validated['kontrak_id']);
+            }
 
             if (DocumentRegister::where('nomor', $nomor)->exists()) {
-                throw new \RuntimeException("Nomor dokumen $nomor sudah terdaftar. Gunakan urutan manual jika ingin menggunakan nomor lain.");
+                throw new \RuntimeException("Nomor dokumen $nomor sudah terdaftar.");
             }
 
             return DocumentRegister::create([
