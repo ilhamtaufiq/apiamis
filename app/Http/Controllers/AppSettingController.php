@@ -193,6 +193,11 @@ class AppSettingController extends Controller
             $updatedSettings[] = $setting;
         }
 
+        if ($request->has('penerima_pin')) {
+            $setting = AppSetting::setValue('penerima_pin', $request->penerima_pin, 'secret');
+            $updatedSettings[] = $setting;
+        }
+
         foreach (AppSetting::PENGAWAS_BERKAS_JUDUL_KEYS as $settingKey) {
             if ($request->has($settingKey)) {
                 $setting = AppSetting::setValue($settingKey, $request->input($settingKey), 'text');

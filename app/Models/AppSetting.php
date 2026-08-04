@@ -20,6 +20,12 @@ class AppSetting extends Model implements HasMedia
     ];
 
     /**
+     * PIN untuk membuka data sensitif penerima (NIK, Alamat) di PenerimaResource.
+     * Default: '123456'.
+     */
+    public const PENERIMA_PIN_KEY = 'penerima_pin';
+
+    /**
      * Judul berkas yang bisa dibuka ke role pengawas / konsultan_pengawas
      * lewat toggle pengaturan (1 = tampilkan).
      *

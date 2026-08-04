@@ -9,7 +9,8 @@ class PenerimaResource extends JsonResource
     public function toArray($request)
     {
         $pin = $request->header('X-PIN') ?? $request->query('pin');
-        $unmasked = $pin === '123456';
+        $expectedPin = \App\Models\AppSetting::getValue(\App\Models\AppSetting::PENERIMA_PIN_KEY, '123456');
+        $unmasked = $pin === $expectedPin;
 
         return [
             'id' => $this->id,
