@@ -26,14 +26,18 @@ class BackupController extends Controller
         $validated = $request->validate([
             'label' => 'nullable|string|max:80',
             'include_media' => 'nullable|boolean',
+            's3_direct' => 'nullable|boolean',
         ]);
 
         $includeMedia = $request->boolean('include_media', true);
-        $status = $this->backups->queueBackup($validated['label'] ?? null, $includeMedia);
+        $s3Direct = $request->boolean('s3_direct', false);
+        $status = $this->backups->queueBackup($validated['label'] ?? null, $includeMedia, $s3Direct);
 
         return response()->json([
             'data' => $status,
-            'message' => 'Backup sedang diproses di server',
+            'message' => $s3Direct
+                ? 'Backup sedang diproses langsung ke S3'
+                : 'Backup sedang diproses di server',
         ], 202);
     }
 
@@ -63,6 +67,23 @@ class BackupController extends Controller
 
     public function download(string $filename)
     {
+        $this->backups->guardFilename($filename);
+        $disk = $this->backups->getBackupDisk($filename);
+
+        if ($disk === 's3') {
+            $s3Disk = $this->backups->getS3Disk();
+            $s3Path = "system-backups/{$filename}";
+            abort_unless($s3Disk->exists($s3Path), 404, 'Backup tidak ditemukan di S3');
+
+            return response()->streamDownload(function () use ($s3Disk, $s3Path) {
+                $s3Disk->download($s3Path);
+            }, $filename, [
+                'Content-Type' => 'application/zip',
+                'X-Accel-Buffering' => 'no',
+                'Cache-Control' => 'no-store, private',
+            ]);
+        }
+
         $path = $this->backups->backupAbsolutePath($filename);
         abort_unless(File::exists($path), 404, 'Backup tidak ditemukan');
 
@@ -137,6 +158,58 @@ class BackupController extends Controller
             if ($tempZipPath) {
                 Storage::disk('local')->delete($tempZipPath);
             }
+        }
+    }
+
+    public function testS3Connection(Request $request)
+    {
+        $request->validate([
+            's3_endpoint' => 'nullable|string|max:255',
+            's3_region' => 'nullable|string|max:64',
+            's3_bucket' => 'nullable|string|max:64',
+            's3_access_key_id' => 'nullable|string|max:128',
+            's3_secret_access_key' => 'nullable|string|max:255',
+        ]);
+
+        $endpoint = $request->input('s3_endpoint') ?: \App\Models\AppSetting::getValue('s3_endpoint');
+        $region = $request->input('s3_region') ?: \App\Models\AppSetting::getValue('s3_region');
+        $bucket = $request->input('s3_bucket') ?: \App\Models\AppSetting::getValue('s3_bucket');
+        $accessKeyId = $request->input('s3_access_key_id') ?: \App\Models\AppSetting::getValue('s3_access_key_id');
+        $secretAccessKey = $request->input('s3_secret_access_key') ?: \App\Models\AppSetting::getValue('s3_secret_access_key');
+
+        $usedStoredKey = !$request->filled('s3_secret_access_key');
+
+        if (!$region || !$bucket || !$accessKeyId || !$secretAccessKey) {
+            return response()->json([
+                'ok' => false,
+                'error' => 'Region, Bucket, Access Key, dan Secret Key wajib diisi untuk uji koneksi.',
+                'used_stored_key' => $usedStoredKey,
+            ], 400);
+        }
+
+        try {
+            $disk = Storage::build([
+                'driver' => 's3',
+                'key' => $accessKeyId,
+                'secret' => $secretAccessKey,
+                'region' => $region,
+                'bucket' => $bucket,
+                'endpoint' => $endpoint ?: null,
+                'use_path_style_endpoint' => (bool) $endpoint,
+            ]);
+
+            $disk->files('', false);
+
+            return response()->json([
+                'ok' => true,
+                'used_stored_key' => $usedStoredKey,
+            ]);
+        } catch (\Throwable $e) {
+            return response()->json([
+                'ok' => false,
+                'error' => 'Koneksi S3 gagal: ' . $e->getMessage(),
+                'used_stored_key' => $usedStoredKey,
+            ], 422);
         }
     }
 }

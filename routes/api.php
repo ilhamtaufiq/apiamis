@@ -475,6 +475,9 @@ Route::middleware('auth:sanctum')->group(function () {
             Route::post('{filename}/google-drive', [GoogleDriveBackupController::class, 'upload'])
                 ->where('filename', '.*\.zip');
 
+            // S3 storage testing
+            Route::post('s3/test', [BackupController::class, 'testS3Connection']);
+
             Route::get('{filename}', [BackupController::class, 'download'])->where('filename', '.*\.zip');
             Route::delete('{filename}', [BackupController::class, 'destroy'])->where('filename', '.*\.zip');
         });

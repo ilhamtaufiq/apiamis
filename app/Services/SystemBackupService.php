@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Exceptions\BackupJobCancelledException;
+use App\Models\AppSetting;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Log;
@@ -10,6 +11,8 @@ use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Spatie\MediaLibrary\MediaCollections\Models\Media;
 use ZipArchive;
+use ZipStream\ZipStream;
+use ZipStream\OperationMode;
 
 class SystemBackupService
 {
@@ -17,11 +20,42 @@ class SystemBackupService
 
     private const SQL_MARKER = "/*__ARUMANIS_STMT__*/\n";
 
+    /**
+     * Build an S3 disk from AppSetting values (dynamic config).
+     */
+    public function getS3Disk(): \Illuminate\Contracts\Filesystem\Filesystem
+    {
+        $endpoint = AppSetting::getValue('s3_endpoint');
+        $region = AppSetting::getValue('s3_region');
+        $bucket = AppSetting::getValue('s3_bucket');
+        $accessKeyId = AppSetting::getValue('s3_access_key_id');
+        $secretAccessKey = AppSetting::getValue('s3_secret_access_key');
+
+        if (!$region || !$bucket || !$accessKeyId || !$secretAccessKey) {
+            throw new \RuntimeException('Pengaturan AWS S3 belum lengkap atau belum dikonfigurasi.');
+        }
+
+        return Storage::build([
+            'driver' => 's3',
+            'key' => $accessKeyId,
+            'secret' => $secretAccessKey,
+            'region' => $region,
+            'bucket' => $bucket,
+            'endpoint' => $endpoint ?: null,
+            'use_path_style_endpoint' => (bool) $endpoint,
+        ]);
+    }
+
+    public function isS3BackupEnabled(): bool
+    {
+        return AppSetting::getValue('s3_backup_enabled') === '1';
+    }
+
     public function listBackups(): array
     {
         $backupDir = $this->ensureBackupDirectory();
 
-        return collect(Storage::disk('local')->files($backupDir))
+        $local = collect(Storage::disk('local')->files($backupDir))
             ->filter(fn ($file) => Str::endsWith($file, '.zip'))
             ->map(function (string $file) {
                 $absolutePath = Storage::disk('local')->path($file);
@@ -30,8 +64,30 @@ class SystemBackupService
                     'filename' => basename($file),
                     'size' => File::exists($absolutePath) ? File::size($absolutePath) : 0,
                     'last_modified' => File::exists($absolutePath) ? File::lastModified($absolutePath) : null,
+                    'storage' => 'local',
                 ];
-            })
+            });
+
+        $s3 = collect();
+        if ($this->isS3BackupEnabled()) {
+            try {
+                $s3Disk = $this->getS3Disk();
+                $s3 = collect($s3Disk->files($backupDir))
+                    ->filter(fn ($file) => Str::endsWith($file, '.zip'))
+                    ->map(function (string $file) use ($s3Disk) {
+                        return [
+                            'filename' => basename($file),
+                            'size' => $s3Disk->size($file),
+                            'last_modified' => $s3Disk->lastModified($file),
+                            'storage' => 's3',
+                        ];
+                    });
+            } catch (\Throwable $e) {
+                Log::warning('Gagal mengambil daftar backup dari S3', ['error' => $e->getMessage()]);
+            }
+        }
+
+        return $local->merge($s3)
             ->sortByDesc('last_modified')
             ->values()
             ->map(function (array $item) {
@@ -42,7 +98,7 @@ class SystemBackupService
             ->all();
     }
 
-    public function queueBackup(?string $label, bool $includeMedia): array
+    public function queueBackup(?string $label, bool $includeMedia, bool $s3Direct = false): array
     {
         $jobId = (string) Str::uuid();
         $fileName = $this->buildBackupFilename($label);
@@ -52,17 +108,18 @@ class SystemBackupService
             'status' => 'queued',
             'filename' => $fileName,
             'include_media' => $includeMedia,
+            's3_direct' => $s3Direct,
             'created_at' => now()->toIso8601String(),
             'message' => 'Backup masuk antrean',
             'progress' => 0,
         ]);
 
-        $detached = $this->dispatchDetached($jobId, $fileName, $includeMedia);
+        $detached = $this->dispatchDetached($jobId, $fileName, $includeMedia, $s3Direct);
 
         if (! $detached) {
             // Fallback when exec/proc_open is disabled — runs after HTTP response.
-            app()->terminating(function () use ($jobId, $fileName, $includeMedia) {
-                $this->runBackupJob($jobId, $fileName, $includeMedia);
+            app()->terminating(function () use ($jobId, $fileName, $includeMedia, $s3Direct) {
+                $this->runBackupJob($jobId, $fileName, $includeMedia, $s3Direct);
             });
         }
 
@@ -71,11 +128,12 @@ class SystemBackupService
             'status' => 'queued',
             'filename' => $fileName,
             'include_media' => $includeMedia,
+            's3_direct' => $s3Direct,
             'message' => 'Backup masuk antrean',
         ];
     }
 
-    public function runBackupJob(string $jobId, string $fileName, bool $includeMedia): void
+    public function runBackupJob(string $jobId, string $fileName, bool $includeMedia, bool $s3Direct = false): void
     {
         ignore_user_abort(true);
         @set_time_limit(0);
@@ -86,6 +144,9 @@ class SystemBackupService
 
         $initialStatus = $this->readJobStatus($jobId) ?? [];
         $zipPath = Storage::disk('local')->path($this->backupFilePath($fileName));
+
+        // If s3Direct requested but S3 not configured, fall back to local.
+        $s3Direct = $s3Direct && $this->isS3BackupEnabled();
 
         if ($this->isCancelRequested($jobId)) {
             $this->finalizeCancelledJob($jobId, $fileName, $zipPath, $includeMedia, $initialStatus);
@@ -98,6 +159,7 @@ class SystemBackupService
             'status' => 'running',
             'filename' => $fileName,
             'include_media' => $includeMedia,
+            's3_direct' => $s3Direct,
             'created_at' => $initialStatus['created_at'] ?? now()->toIso8601String(),
             'started_at' => now()->toIso8601String(),
             'message' => 'Menyiapkan dump database',
@@ -105,7 +167,7 @@ class SystemBackupService
         ]);
 
         try {
-            $result = $this->createBackupArchive($jobId, $fileName, $includeMedia);
+            $result = $this->createBackupArchive($jobId, $fileName, $includeMedia, $s3Direct);
             $runningStatus = $this->readJobStatus($jobId) ?? [];
 
             $this->writeJobStatus($jobId, [
@@ -232,8 +294,53 @@ class SystemBackupService
     {
         $this->guardFilename($filename);
         $path = $this->backupFilePath($filename);
-        abort_unless(Storage::disk('local')->exists($path), 404, 'Backup tidak ditemukan');
-        Storage::disk('local')->delete($path);
+
+        // Delete from local storage if present
+        if (Storage::disk('local')->exists($path)) {
+            Storage::disk('local')->delete($path);
+        }
+
+        // Also delete from S3 if enabled
+        if ($this->isS3BackupEnabled()) {
+            try {
+                $s3Disk = $this->getS3Disk();
+                $s3Path = "{$this->BACKUP_DIR}/{$filename}";
+                $s3Disk->delete($s3Path);
+            } catch (\Throwable $e) {
+                Log::warning('Gagal menghapus backup dari S3', [
+                    'filename' => $filename,
+                    'error' => $e->getMessage(),
+                ]);
+            }
+        }
+
+        abort_unless(Storage::disk('local')->exists($path) || $this->isS3BackupEnabled(), 404, 'Backup tidak ditemukan');
+    }
+
+    /**
+     * Get the filesystem (local or S3) where this backup lives.
+     */
+    public function getBackupDisk(string $filename): string
+    {
+        $path = $this->backupFilePath($filename);
+        if (Storage::disk('local')->exists($path)) {
+            return 'local';
+        }
+        if ($this->isS3BackupEnabled()) {
+            try {
+                $s3Disk = $this->getS3Disk();
+                $s3Path = "{$this->BACKUP_DIR}/{$filename}";
+                if ($s3Disk->exists($s3Path)) {
+                    return 's3';
+                }
+            } catch (\Throwable $e) {
+                Log::warning('Gagal memeriksa penyimpanan S3', [
+                    'filename' => $filename,
+                    'error' => $e->getMessage(),
+                ]);
+            }
+        }
+        return 'local';
     }
 
     public function restoreArchive(string $zipPath): array
@@ -294,12 +401,13 @@ class SystemBackupService
         abort_unless(preg_match('/^[A-Za-z0-9-]+$/', $jobId) === 1, 422, 'ID backup tidak valid');
     }
 
-    private function dispatchDetached(string $jobId, string $fileName, bool $includeMedia): bool
+    private function dispatchDetached(string $jobId, string $fileName, bool $includeMedia, bool $s3Direct = false): bool
     {
         try {
             $php = PHP_BINARY ?: 'php';
             $artisan = base_path('artisan');
             $mediaFlag = $includeMedia ? '1' : '0';
+            $s3Flag = $s3Direct ? '1' : '0';
             $logFile = storage_path('logs/backup-'.$jobId.'.log');
 
             if (! function_exists('exec') && ! function_exists('proc_open')) {
@@ -309,12 +417,13 @@ class SystemBackupService
             if (DIRECTORY_SEPARATOR === '\\') {
                 // Windows (Laragon): start detached without waiting.
                 $cmd = sprintf(
-                    'start /B "" %s %s backup:run %s %s %s > %s 2>&1',
+                    'start /B "" %s %s backup:run %s %s %s %s > %s 2>&1',
                     escapeshellarg($php),
                     escapeshellarg($artisan),
                     escapeshellarg($jobId),
                     escapeshellarg($fileName),
                     escapeshellarg($mediaFlag),
+                    escapeshellarg($s3Flag),
                     escapeshellarg($logFile)
                 );
                 if (function_exists('popen')) {
@@ -327,12 +436,13 @@ class SystemBackupService
             }
 
             $cmd = sprintf(
-                'nohup %s %s backup:run %s %s %s > %s 2>&1 &',
+                'nohup %s %s backup:run %s %s %s %s > %s 2>&1 &',
                 escapeshellarg($php),
                 escapeshellarg($artisan),
                 escapeshellarg($jobId),
                 escapeshellarg($fileName),
                 escapeshellarg($mediaFlag),
+                escapeshellarg($s3Flag),
                 escapeshellarg($logFile)
             );
             exec($cmd);
@@ -347,7 +457,103 @@ class SystemBackupService
         }
     }
 
-    private function createBackupArchive(string $jobId, string $fileName, bool $includeMedia): array
+    private function createBackupArchive(string $jobId, string $fileName, bool $includeMedia, bool $s3Direct = false): array
+    {
+        $sqlTempPath = tempnam(sys_get_temp_dir(), 'arumanis_sql_');
+        if ($sqlTempPath === false) {
+            throw new \RuntimeException('Gagal menyiapkan file backup');
+        }
+
+        if ($s3Direct && $this->isS3BackupEnabled()) {
+            return $this->createBackupArchiveS3($jobId, $fileName, $includeMedia, $sqlTempPath);
+        }
+
+        return $this->createBackupArchiveLocal($jobId, $fileName, $includeMedia, $sqlTempPath);
+    }
+
+    /**
+     * Stream backup ZIP directly to S3 — no intermediate local archive.
+     */
+    private function createBackupArchiveS3(string $jobId, string $fileName, bool $includeMedia, string $sqlTempPath): array
+    {
+        try {
+            $this->patchJob($jobId, [
+                'message' => 'Membuat dump database…',
+                'progress' => 10,
+            ]);
+            $this->dumpDatabase($sqlTempPath, $jobId);
+
+            $this->patchJob($jobId, [
+                'message' => 'Streaming arsip ZIP langsung ke S3…',
+                'progress' => 30,
+            ]);
+
+            $s3Disk = $this->getS3Disk();
+            $s3Client = $s3Disk->getClient();
+            $s3Client->registerStreamWrapper();
+
+            $bucket = AppSetting::getValue('s3_bucket');
+            $s3Path = "s3://{$bucket}/system-backups/{$fileName}";
+
+            $writeStream = fopen($s3Path, 'wb');
+            if ($writeStream === false) {
+                throw new \RuntimeException('Gagal membuka stream ke S3 bucket');
+            }
+
+            $zip = new ZipStream(
+                operationMode: OperationMode::NORMAL,
+                outputStream: $writeStream,
+                sendHttpHeaders: false,
+            );
+
+            $dbStream = fopen($sqlTempPath, 'rb');
+            $zip->addFileFromStream('database.sql', $dbStream);
+            fclose($dbStream);
+
+            $mediaCount = 0;
+            if ($includeMedia) {
+                $this->patchJob($jobId, [
+                    'message' => 'Streaming file media ke S3…',
+                    'progress' => 40,
+                ]);
+                $mediaCount = $this->addMediaFilesToZipStream($zip, function (int $done, int $total) use ($jobId) {
+                    $pct = $total > 0 ? 40 + (int) floor(($done / $total) * 50) : 70;
+                    $this->patchJob($jobId, [
+                        'message' => "Streaming media {$done}/{$total}",
+                        'progress' => min(90, $pct),
+                    ]);
+                });
+            }
+
+            $this->patchJob($jobId, [
+                'message' => 'Menutup arsip ZIP di S3…',
+                'progress' => 95,
+            ]);
+
+            $zip->finish();
+            fclose($writeStream);
+
+            $size = $s3Disk->size('system-backups/'.$fileName);
+
+            return [
+                'filename' => $fileName,
+                'download_url' => url('/api/app-settings/backups/'.$fileName),
+                'size' => $size,
+                'include_media' => $includeMedia,
+                'media_files' => $mediaCount,
+                'storage' => 's3',
+            ];
+        } catch (\Throwable $e) {
+            throw new \RuntimeException('Backup ke S3 gagal: '.$e->getMessage());
+        } finally {
+            @unlink($sqlTempPath);
+        }
+    }
+
+    /**
+     * Local backup (existing behavior when S3 is not enabled).
+     */
+    private function createBackupArchiveLocal(string $jobId, string $fileName, bool $includeMedia, string $sqlTempPath): array
     {
         $backupDir = $this->ensureBackupDirectory();
         $zipPath = Storage::disk('local')->path($backupDir.DIRECTORY_SEPARATOR.$fileName);
@@ -356,11 +562,6 @@ class SystemBackupService
         $freeBytes = @disk_free_space(dirname($zipPath));
         if (is_int($freeBytes) && $freeBytes < 1_073_741_824) {
             throw new \RuntimeException('Ruang disk server kurang dari 1 GB. Bebaskan ruang sebelum backup besar.');
-        }
-
-        $sqlTempPath = tempnam(sys_get_temp_dir(), 'arumanis_sql_');
-        if ($sqlTempPath === false) {
-            throw new \RuntimeException('Gagal menyiapkan file backup');
         }
 
         try {
@@ -620,6 +821,58 @@ class SystemBackupService
             }
             // STORE = no recompress (photos/PDFs already compressed) — faster for multi-GB.
             $zip->setCompressionName($archiveName, ZipArchive::CM_STORE);
+            $count++;
+
+            if ($onProgress && ($count - $lastReport >= 25 || $count === $total)) {
+                $onProgress($count, $total);
+                $lastReport = $count;
+            }
+        }
+
+        return $count;
+    }
+
+    /**
+     * Add media files directly to a ZipStream output (for S3 streaming backup).
+     */
+    private function addMediaFilesToZipStream(ZipStream $zip, ?callable $onProgress = null): int
+    {
+        $mediaItems = Media::query()->get(['id', 'disk', 'file_name', 'collection_name', 'model_type', 'model_id']);
+        $directories = [];
+
+        foreach ($mediaItems as $media) {
+            $disk = $media->disk ?: config('filesystems.default', 'public');
+            $relativePath = $media->getPathRelativeToRoot();
+            $directory = trim(str_replace(['\\', '/'], DIRECTORY_SEPARATOR, dirname($relativePath)), DIRECTORY_SEPARATOR);
+            $directories[$disk][$directory === '.' ? '' : $directory] = true;
+        }
+
+        $allFiles = [];
+        foreach ($directories as $disk => $paths) {
+            foreach (array_keys($paths) as $path) {
+                foreach (Storage::disk($disk)->allFiles($path) as $file) {
+                    $absolutePath = Storage::disk($disk)->path($file);
+                    if (! File::exists($absolutePath)) {
+                        continue;
+                    }
+                    $allFiles[] = [$disk, $file, $absolutePath];
+                }
+            }
+        }
+
+        $total = count($allFiles);
+        $count = 0;
+        $lastReport = 0;
+
+        foreach ($allFiles as [$disk, $file, $absolutePath]) {
+            $archiveName = 'media/'.$disk.'/'.ltrim(str_replace(['\\', '/'], '/', $file), '/');
+            $stream = fopen($absolutePath, 'rb');
+            if ($stream === false) {
+                Log::warning('Backup S3: gagal membuka file media', ['file' => $file]);
+                continue;
+            }
+            $zip->addFileFromStream($archiveName, $stream);
+            fclose($stream);
             $count++;
 
             if ($onProgress && ($count - $lastReport >= 25 || $count === $total)) {
