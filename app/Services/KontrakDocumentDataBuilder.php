@@ -163,6 +163,7 @@ class KontrakDocumentDataBuilder
             'masa_hari_addendum' => $this->formatAddendumMasaHari($kontrak, $latestAddendum),
             'jangka_pemeliharaan' => $this->formatMasaHariTerbilang($masaPemeliharaanHari),
             'mulai_selesai_pemeliharaan' => $this->formatMasaPemeliharaan($tglSelesaiEfektif, $masaPemeliharaanHari),
+            'masa_pemeliharaan' => $this->formatMasaPemeliharaanDariBastp($bastpRegister, $masaPemeliharaanHari),
         ];
 
         $data['Pekerjaan'] = $data['nama_paket'];
@@ -379,6 +380,18 @@ class KontrakDocumentDataBuilder
         return 'dari Tanggal '.$mulai->translatedFormat('d F Y').' s.d Tanggal '.$selesai->translatedFormat('d F Y');
     }
 
+    private function formatMasaPemeliharaanDariBastp(?DocumentRegister $bastpRegister, int $masaHari): string
+    {
+        if (! $bastpRegister || ! $bastpRegister->tanggal instanceof Carbon) {
+            return '-';
+        }
+
+        $mulai = $bastpRegister->tanggal->copy();
+        $selesai = $mulai->copy()->addDays($masaHari);
+
+        return $mulai->translatedFormat('d F Y').' sampai dengan '.$selesai->translatedFormat('d F Y');
+    }
+
     private function formatAddendumMasaHari($kontrak, ?KontrakAddendum $addendum): string
     {
         if (! $addendum || ! $addendum->tgl_selesai_sesudah instanceof Carbon) {
@@ -435,8 +448,8 @@ class KontrakDocumentDataBuilder
         $normalized = strtoupper((string) $sumberDana);
         $normalized = preg_replace('/[^A-Z0-9]+/', ' ', $normalized);
 
-        $checked = '☑';
-        $unchecked = '☐';
+        $checked = '☑ Centang';
+        $unchecked = '☐ Kosong';
 
         $hasApbd = str_contains($normalized, 'APBD');
         $hasApbn = str_contains($normalized, 'APBN');

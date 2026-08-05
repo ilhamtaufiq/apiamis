@@ -4,6 +4,7 @@ namespace App\Services;
 
 use Illuminate\Support\Str;
 use PhpOffice\PhpSpreadsheet\Cell\Coordinate;
+use PhpOffice\PhpSpreadsheet\Cell\DataType;
 use PhpOffice\PhpSpreadsheet\IOFactory;
 
 class ExcelDocumentExportService
@@ -46,7 +47,7 @@ class ExcelDocumentExportService
 
                     $replaced = $this->replacePlaceholders($value, $data);
                     if ($replaced !== $value) {
-                        $cell->setValue($replaced);
+                        $cell->setValueExplicit($replaced, DataType::TYPE_STRING);
                     }
                 }
             }
