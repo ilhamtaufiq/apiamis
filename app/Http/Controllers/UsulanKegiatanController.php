@@ -9,6 +9,8 @@ use App\Notifications\AppNotification;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Validator;
+use Maatwebsite\Excel\Facades\Excel;
+use App\Exports\UsulanKegiatanExport;
 
 class UsulanKegiatanController extends Controller
 {
@@ -194,5 +196,15 @@ class UsulanKegiatanController extends Controller
         $usulan->delete();
 
         return response()->json(['message' => 'Usulan kegiatan berhasil dihapus.']);
+    }
+
+    public function exportExcel(Request $request)
+    {
+        $user = auth()->user();
+        if (!$user) {
+            return response()->json(['message' => 'Unauthorized'], 401);
+        }
+
+        return Excel::download(new UsulanKegiatanExport(), 'rekap_usulan_kegiatan.xlsx');
     }
 }

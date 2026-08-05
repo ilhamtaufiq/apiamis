@@ -23,6 +23,9 @@ class UsulanKegiatan extends Model implements HasMedia
         'desa_id',
         'perihal',
         'ringkasan',
+        'tanggal_surat_masuk',
+        'nomor_surat_masuk',
+        'tanggal_surat',
     ];
 
     /**
