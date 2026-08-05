@@ -47,6 +47,7 @@ use App\Http\Controllers\RoutePermissionController;
 use App\Http\Controllers\SignatureLibraryController;
 use App\Http\Controllers\WhatsAppController;
 use App\Http\Controllers\SimulationNetworkController;
+use App\Http\Controllers\ArumanisInsightController;
 use App\Http\Controllers\SpamUnitController;
 use App\Http\Controllers\SpmSanitasiController;
 use App\Http\Controllers\SpseProcurementController;
@@ -519,6 +520,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::patch('live-chat/threads/{thread}/close', [LiveChatController::class, 'closeThread']);
 
     // Asisten AI (with sessions, cache, and learning)
+    Route::get('arumanis-insight', [\App\Http\Controllers\ArumanisInsightController::class, 'index']);
     Route::post('chat', [\App\Http\Controllers\ChatController::class, 'chat']);
     Route::post('chat/stream', [\App\Http\Controllers\ChatController::class, 'chatStream']);
     Route::get('chat/sessions', [\App\Http\Controllers\ChatController::class, 'sessions']);

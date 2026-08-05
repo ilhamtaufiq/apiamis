@@ -23,7 +23,7 @@ class SpmSanitasiCapaianService
         $desaQuery = $this->desaBaseQuery($kecamatanId);
         $totalPenduduk = (int) $desaQuery->sum('jumlah_penduduk');
         $totalDesa = (int) $desaQuery->count();
-        $targetKk = $totalPenduduk > 0 ? (int) round($totalPenduduk / self::JIWA_PER_KK) : 0;
+        $targetKk = (int) $desaQuery->sum('target');
 
         $pemanfaatQuery = $this->pemanfaatBaseQuery($kecamatanId, $jenis, $tahun);
         $totalPemanfaatKk = (int) $pemanfaatQuery->sum('jumlah_pemanfaat_kk');
@@ -146,7 +146,7 @@ class SpmSanitasiCapaianService
     public function mapDesaCapaian(Desa $desa): array
     {
         $penduduk = (int) ($desa->jumlah_penduduk ?? 0);
-        $targetKk = $penduduk > 0 ? (int) round($penduduk / self::JIWA_PER_KK) : 0;
+        $targetKk = (int) ($desa->target ?? 0);
 
         $pemanfaatKk = (int) ($desa->pemanfaat_kk_total ?? 0);
         $pemanfaatJiwa = $pemanfaatKk * self::JIWA_PER_KK;
@@ -259,10 +259,10 @@ class SpmSanitasiCapaianService
                 $this->applyRelationTahunScope($q, $jenis, $tahun);
             }])
             ->orderBy('n_desa')
-            ->get(['id', 'n_desa', 'kecamatan_id', 'jumlah_penduduk'])
+            ->get(['id', 'n_desa', 'kecamatan_id', 'jumlah_penduduk', 'target'])
             ->map(function (Desa $desa) {
                 $penduduk = (int) ($desa->jumlah_penduduk ?? 0);
-                $targetKk = $penduduk > 0 ? (int) round($penduduk / self::JIWA_PER_KK) : 0;
+                $targetKk = (int) ($desa->target ?? 0);
                 $pemanfaatKk = (int) ($desa->pemanfaat_kk_total ?? 0);
 
                 return [
