@@ -215,6 +215,7 @@ Route::middleware('auth:sanctum')->group(function () {
     // Dashboard
     Route::get('dashboard/stats', [DashboardController::class, 'stats']);
     Route::get('dashboard/analytics', [AnalyticsController::class, 'stats']);
+    Route::get('dashboard/executive-progress', [DashboardController::class, 'executiveProgress']);
     Route::post('presence/heartbeat', [UserPresenceController::class, 'heartbeat']);
     Route::get('presence/online', [UserPresenceController::class, 'index']);
 

@@ -448,8 +448,8 @@ class KontrakDocumentDataBuilder
         $normalized = strtoupper((string) $sumberDana);
         $normalized = preg_replace('/[^A-Z0-9]+/', ' ', $normalized);
 
-        $checked = '☑ Centang';
-        $unchecked = '☐ Kosong';
+        $checked = '✓';
+        $unchecked = '';
 
         $hasApbd = str_contains($normalized, 'APBD');
         $hasApbn = str_contains($normalized, 'APBN');

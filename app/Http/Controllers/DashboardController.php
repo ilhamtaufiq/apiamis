@@ -3,6 +3,8 @@
 namespace App\Http\Controllers;
 
 use App\Models\Kegiatan;
+use App\Models\Pekerjaan;
+use App\Models\PekerjaanProgressEstimasiHistory;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Http\Request;
 
@@ -320,5 +322,129 @@ class DashboardController extends Controller
                 ]
             ]);
         });
+    }
+
+    /**
+     * Monthly trend: fisik average % + keuangan nominal from SP2D progress
+     */
+    public function executiveProgress(Request $request)
+    {
+        $tahun = (int) ($request->query('tahun') ?? date('Y'));
+        $pekerjaanIds = $request->query('pekerjaan_ids');
+
+        // Active pekerjaan for tahun (exclude canceled)
+        $basePekerjaanQuery = Pekerjaan::notCanceled()
+            ->whereHas('kegiatan', fn($q) => $q->where('tahun_anggaran', $tahun));
+
+        if ($pekerjaanIds) {
+            $activeIds = $basePekerjaanQuery->pluck('id')->map('intval')->toArray();
+            $ids = array_values(array_intersect(array_map('intval', explode(',', $pekerjaanIds)), $activeIds));
+            if (empty($ids)) {
+                return response()->json([
+                    'success' => true,
+                    'data' => ['monthly_trend' => [], 'totals' => ['keuangan_total' => 0]]
+                ]);
+            }
+        } else {
+            $ids = $basePekerjaanQuery->pluck('id')->map('intval')->toArray();
+        }
+
+        if (empty($ids)) {
+            return response()->json([
+                'success' => true,
+                'data' => ['monthly_trend' => [], 'totals' => ['keuangan_total' => 0]]
+            ]);
+        }
+
+        $monthNames = [
+            1 => 'Jan', 2 => 'Feb', 3 => 'Mar', 4 => 'Apr',
+            5 => 'Mei', 6 => 'Jun', 7 => 'Jul', 8 => 'Agu',
+            9 => 'Sep', 10 => 'Okt', 11 => 'Nov', 12 => 'Des',
+        ];
+
+        // All realisasi entries newest-first
+        $historyRecords = PekerjaanProgressEstimasiHistory::query()
+            ->whereIn('pekerjaan_id', $ids)
+            ->where('tipe', 'realisasi')
+            ->whereRaw('YEAR(tanggal) = ?', [$tahun])
+            ->orderBy('tanggal', 'desc')
+            ->orderBy('id', 'desc')
+            ->get();
+
+        $paguByPekerjaan = Pekerjaan::whereIn('id', $ids)->pluck('pagu', 'id');
+
+        // Latest persen per (pekerjaan_id, jenis, month)
+        // Rows are newest-first, first hit wins
+        $latest = [];
+        foreach ($historyRecords as $r) {
+            $pid = (int) $r->pekerjaan_id;
+            $m = (int) $r->tanggal->month;
+            $jenis = $r->jenis;
+            $latest[$pid][$jenis][$m] ??= (float) $r->persen;
+        }
+
+        // Aggregate by month (carry forward cross-month)
+        $months = range(1, 12);
+        $fisikSum = array_fill(1, 12, 0.0);
+        $fisikCount = array_fill(1, 12, 0);
+        $keuanganNominal = array_fill(1, 12, 0.0);
+
+        foreach ($latest as $pid => $byJenis) {
+            $pagu = (float) ($paguByPekerjaan[$pid] ?? 0);
+            if ($pagu <= 0) continue;
+
+            $prevFisik = null;
+            $prevKeuangan = null;
+
+            foreach ($months as $m) {
+                // Cumulative before this month's update (for delta)
+                $keuanganBefore = $prevKeuangan;
+
+                // Current month value or carry forward
+                if (isset($byJenis['fisik'][$m])) {
+                    $prevFisik = $byJenis['fisik'][$m];
+                }
+                if (isset($byJenis['keuangan'][$m])) {
+                    $prevKeuangan = $byJenis['keuangan'][$m];
+                }
+
+                if ($prevFisik !== null) {
+                    $fisikSum[$m] += $prevFisik;
+                    $fisikCount[$m]++;
+                }
+
+                // Incremental disbursement = cumulative % now minus before
+                if ($prevKeuangan !== null && $pagu > 0) {
+                    $delta = max(0, $prevKeuangan - ($keuanganBefore ?? 0));
+                    $keuanganNominal[$m] += ($delta / 100) * $pagu;
+                }
+            }
+        }
+
+        // Denominator: total pekerjaan yang pernah input fisik realisasi di tahun ini.
+        // Pembagi tetap supaya rata-rata tidak turun saat lebih banyak paket masuk datanya.
+        $totalFisikJobs = 0;
+        foreach ($latest as $byJenis) {
+            if (!empty($byJenis['fisik'])) $totalFisikJobs++;
+        }
+
+        $monthlyTrend = [];
+        foreach ($months as $m) {
+            $monthlyTrend[] = [
+                'month' => $monthNames[$m] ?? "B{$m}",
+                'fisik_avg' => $totalFisikJobs > 0 ? round($fisikSum[$m] / $totalFisikJobs, 1) : 0,
+                'keuangan_sum' => round($keuanganNominal[$m]),
+            ];
+        }
+
+        return response()->json([
+            'success' => true,
+            'data' => [
+                'monthly_trend' => $monthlyTrend,
+                'totals' => [
+                    'keuangan_total' => round(array_sum($keuanganNominal)),
+                ],
+            ],
+        ]);
     }
 }
