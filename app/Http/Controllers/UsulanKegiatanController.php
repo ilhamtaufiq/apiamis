@@ -75,7 +75,6 @@ class UsulanKegiatanController extends Controller
             'kecamatan_id' => 'required|exists:tbl_kecamatan,id',
             'desa_id' => 'required|exists:tbl_desa,id',
             'perihal' => 'required|string|max:255',
-            'ringkasan' => 'required|string',
             'dokumen' => 'nullable|file|mimes:pdf,doc,docx,xls,xlsx,png,jpg,jpeg|max:10240', // max 10MB
         ]);
 
@@ -90,7 +89,6 @@ class UsulanKegiatanController extends Controller
             'kecamatan_id' => $request->kecamatan_id,
             'desa_id' => $request->desa_id,
             'perihal' => $request->perihal,
-            'ringkasan' => $request->ringkasan,
         ]);
 
         if ($request->hasFile('dokumen')) {
@@ -150,7 +148,6 @@ class UsulanKegiatanController extends Controller
             'kecamatan_id' => 'sometimes|required|exists:tbl_kecamatan,id',
             'desa_id' => 'sometimes|required|exists:tbl_desa,id',
             'perihal' => 'sometimes|required|string|max:255',
-            'ringkasan' => 'sometimes|required|string',
             'dokumen' => 'nullable|file|mimes:pdf,doc,docx,xls,xlsx,png,jpg,jpeg|max:10240',
         ]);
 
@@ -164,7 +161,6 @@ class UsulanKegiatanController extends Controller
             'kecamatan_id',
             'desa_id',
             'perihal',
-            'ringkasan',
         ]));
 
         if ($request->hasFile('dokumen')) {
