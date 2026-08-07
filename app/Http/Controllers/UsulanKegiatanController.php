@@ -89,6 +89,7 @@ class UsulanKegiatanController extends Controller
             'kecamatan_id' => $request->kecamatan_id,
             'desa_id' => $request->desa_id,
             'perihal' => $request->perihal,
+            'ringkasan' => $request->ringkasan ?? '',
         ]);
 
         if ($request->hasFile('dokumen')) {
