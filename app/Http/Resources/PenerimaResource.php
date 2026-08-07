@@ -9,6 +9,15 @@ class PenerimaResource extends JsonResource
     public function toArray($request)
     {
         $pin = $request->header('X-PIN') ?? $request->query('pin');
+        // Fallback: nested collections (via PekerjaanDetailResource) may not
+        // receive the original $request with X-PIN header. Read from the
+        // app container as a safety net.
+        if (!$pin && function_exists('app')) {
+            $pin = app(\Illuminate\Http\Request::class)->header('X-PIN');
+        }
+        if (!$pin) {
+            $pin = app(\Illuminate\Http\Request::class)->query('pin');
+        }
         $expectedPin = \App\Models\AppSetting::getValue(\App\Models\AppSetting::PENERIMA_PIN_KEY, '123456');
         $unmasked = $pin === $expectedPin;
 
