@@ -28,6 +28,7 @@ class KontrakAddendum extends Model implements HasMedia
         'tgl_selesai_sebelum',
         'tgl_selesai_sesudah',
         'status',
+        'kelengkapan_override',
         'created_by',
         'approved_by',
         'approved_at',
@@ -40,6 +41,7 @@ class KontrakAddendum extends Model implements HasMedia
         'nilai_kontrak_sebelum' => 'float',
         'nilai_kontrak_sesudah' => 'float',
         'approved_at' => 'datetime',
+        'kelengkapan_override' => 'boolean',
     ];
 
     public function kontrak(): BelongsTo

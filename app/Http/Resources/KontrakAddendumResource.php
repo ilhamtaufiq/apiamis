@@ -22,6 +22,7 @@ class KontrakAddendumResource extends JsonResource
             'tgl_selesai_sebelum' => $this->tgl_selesai_sebelum?->format('Y-m-d'),
             'tgl_selesai_sesudah' => $this->tgl_selesai_sesudah?->format('Y-m-d'),
             'status' => $this->status,
+            'kelengkapan_override' => (bool) $this->kelengkapan_override,
             'created_by' => $this->created_by,
             'approved_by' => $this->approved_by,
             'approved_at' => $this->approved_at?->toIso8601String(),
@@ -46,6 +47,11 @@ class KontrakAddendumResource extends JsonResource
                     'nama_paket' => $this->kontrak->pekerjaan->nama_paket,
                     'kode_rekening' => $this->kontrak->pekerjaan->kode_rekening,
                 ] : null,
+                'pekerjaans' => $this->kontrak->relationLoaded('pekerjaans') ? $this->kontrak->pekerjaans->map(fn ($p) => [
+                    'id' => $p->id,
+                    'nama_paket' => $p->nama_paket,
+                    'kode_rekening' => $p->kode_rekening,
+                ]) : [],
                 'penyedia' => $this->kontrak->relationLoaded('penyedia') && $this->kontrak->penyedia ? [
                     'id' => $this->kontrak->penyedia->id,
                     'nama' => $this->kontrak->penyedia->nama,

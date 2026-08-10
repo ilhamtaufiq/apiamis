@@ -283,6 +283,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::delete('kontrak-addendums/{kontrakAddendum}', [KontrakAddendumController::class, 'destroy']);
     Route::post('kontrak-addendums/{kontrakAddendum}/submit', [KontrakAddendumController::class, 'submit']);
     Route::post('kontrak-addendums/{kontrakAddendum}/approve', [KontrakAddendumController::class, 'approve']);
+    Route::post('kontrak-addendums/{kontrakAddendum}/override-kelengkapan', [KontrakAddendumController::class, 'overrideKelengkapan']);
     Route::post('kontrak-addendums/{kontrakAddendum}/reject', [KontrakAddendumController::class, 'reject']);
     Route::post('kontrak-addendums/{kontrakAddendum}/upload', [KontrakAddendumController::class, 'upload']);
 

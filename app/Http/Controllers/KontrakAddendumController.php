@@ -54,6 +54,7 @@ class KontrakAddendumController extends Controller
 
         $query = KontrakAddendum::with([
             'kontrak.pekerjaan',
+            'kontrak.pekerjaans',
             'kontrak.penyedia',
             'items',
             'media',
@@ -73,6 +74,9 @@ class KontrakAddendumController extends Controller
                 $q->where('nomor_addendum', 'like', "%{$search}%")
                     ->orWhere('alasan', 'like', "%{$search}%")
                     ->orWhereHas('kontrak.pekerjaan', function ($pekerjaan) use ($search) {
+                        $pekerjaan->where('nama_paket', 'like', "%{$search}%");
+                    })
+                    ->orWhereHas('kontrak.pekerjaans', function ($pekerjaan) use ($search) {
                         $pekerjaan->where('nama_paket', 'like', "%{$search}%");
                     })
                     ->orWhereHas('kontrak.penyedia', function ($penyedia) use ($search) {
@@ -130,6 +134,7 @@ class KontrakAddendumController extends Controller
         return new KontrakAddendumResource(
             $kontrakAddendum->load([
                 'kontrak.pekerjaan',
+                'kontrak.pekerjaans',
                 'kontrak.penyedia',
                 'items',
                 'creator',
@@ -196,9 +201,9 @@ class KontrakAddendumController extends Controller
     {
         $this->authorizeAdmin();
 
-        if ($kontrakAddendum->status !== 'diajukan') {
+        if (! in_array($kontrakAddendum->status, ['diajukan', 'draft'], true)) {
             return response()->json([
-                'message' => 'Hanya addendum yang sudah diajukan yang bisa disetujui',
+                'message' => 'Hanya addendum yang sudah diajukan atau draft yang bisa disetujui',
             ], 422);
         }
 
@@ -211,6 +216,27 @@ class KontrakAddendumController extends Controller
             'status' => 'disetujui',
             'approved_by' => auth()->id(),
             'approved_at' => now(),
+        ]);
+
+        return new KontrakAddendumResource($kontrakAddendum->fresh()->load(['items', 'media']));
+    }
+
+    public function overrideKelengkapan(KontrakAddendum $kontrakAddendum)
+    {
+        $this->authorizeAdmin();
+
+        if ($kontrakAddendum->status === 'disetujui') {
+            return response()->json([
+                'message' => 'Addendum yang sudah disetujui tidak bisa diubah kelengkapannya',
+            ], 422);
+        }
+
+        $validated = request()->validate([
+            'kelengkapan_override' => 'required|boolean',
+        ]);
+
+        $kontrakAddendum->update([
+            'kelengkapan_override' => (bool) $validated['kelengkapan_override'],
         ]);
 
         return new KontrakAddendumResource($kontrakAddendum->fresh()->load(['items', 'media']));
