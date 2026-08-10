@@ -28,6 +28,11 @@ class UsulanKegiatan extends Model implements HasMedia
         'tanggal_surat',
     ];
 
+    protected $casts = [
+        'tanggal_surat_masuk' => 'date',
+        'tanggal_surat' => 'date',
+    ];
+
     /**
      * Get the user who created this usulan.
      */

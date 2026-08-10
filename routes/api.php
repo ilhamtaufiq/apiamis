@@ -385,8 +385,8 @@ Route::middleware('auth:sanctum')->group(function () {
     // Tiket
     Route::post('tiket/bulk-update', [TiketController::class, 'bulkUpdate']);
     Route::apiResource('tiket', TiketController::class);
-    Route::apiResource('usulan-kegiatan', UsulanKegiatanController::class);
     Route::get('usulan-kegiatan/export-excel', [UsulanKegiatanController::class, 'exportExcel']);
+    Route::apiResource('usulan-kegiatan', UsulanKegiatanController::class);
     Route::post('tiket/{tiket}/comments', [TiketCommentController::class, 'store']);
 
     // Custom penerima

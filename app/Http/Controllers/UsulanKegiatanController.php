@@ -75,7 +75,11 @@ class UsulanKegiatanController extends Controller
             'kecamatan_id' => 'required|exists:tbl_kecamatan,id',
             'desa_id' => 'required|exists:tbl_desa,id',
             'perihal' => 'required|string|max:255',
-            'dokumen' => 'nullable|file|mimes:pdf,doc,docx,xls,xlsx,png,jpg,jpeg|max:10240', // max 10MB
+            'dokumen' => 'nullable|file|mimes:pdf,doc,docx,xls,xlsx,png,jpg,jpeg|max:10240',
+            'ringkasan' => 'nullable|string',
+            'tanggal_surat_masuk' => 'required|date',
+            'nomor_surat_masuk' => 'required|string|max:255',
+            'tanggal_surat' => 'required|date',
         ]);
 
         if ($validator->fails()) {
@@ -90,6 +94,9 @@ class UsulanKegiatanController extends Controller
             'desa_id' => $request->desa_id,
             'perihal' => $request->perihal,
             'ringkasan' => $request->ringkasan ?? '',
+            'tanggal_surat_masuk' => $request->tanggal_surat_masuk,
+            'nomor_surat_masuk' => $request->nomor_surat_masuk,
+            'tanggal_surat' => $request->tanggal_surat,
         ]);
 
         if ($request->hasFile('dokumen')) {
@@ -150,6 +157,10 @@ class UsulanKegiatanController extends Controller
             'desa_id' => 'sometimes|required|exists:tbl_desa,id',
             'perihal' => 'sometimes|required|string|max:255',
             'dokumen' => 'nullable|file|mimes:pdf,doc,docx,xls,xlsx,png,jpg,jpeg|max:10240',
+            'ringkasan' => 'nullable|string',
+            'tanggal_surat_masuk' => 'sometimes|required|date',
+            'nomor_surat_masuk' => 'sometimes|required|string|max:255',
+            'tanggal_surat' => 'sometimes|required|date',
         ]);
 
         if ($validator->fails()) {
@@ -162,6 +173,9 @@ class UsulanKegiatanController extends Controller
             'kecamatan_id',
             'desa_id',
             'perihal',
+            'tanggal_surat_masuk',
+            'nomor_surat_masuk',
+            'tanggal_surat',
         ]));
 
         if ($request->hasFile('dokumen')) {

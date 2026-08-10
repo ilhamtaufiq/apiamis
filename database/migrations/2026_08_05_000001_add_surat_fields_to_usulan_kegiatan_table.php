@@ -9,9 +9,9 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('tbl_usulan_kegiatan', function (Blueprint $table) {
-            $table->date('tanggal_surat_masuk')->nullable()->after('ringkasan');
-            $table->string('nomor_surat_masuk', 100)->nullable()->after('tanggal_surat_masuk');
-            $table->date('tanggal_surat')->nullable()->after('nomor_surat_masuk');
+            $table->date('tanggal_surat_masuk')->after('ringkasan');
+            $table->string('nomor_surat_masuk', 100)->after('tanggal_surat_masuk');
+            $table->date('tanggal_surat')->after('nomor_surat_masuk');
         });
     }
 
