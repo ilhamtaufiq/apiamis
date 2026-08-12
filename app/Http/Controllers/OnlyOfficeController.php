@@ -96,28 +96,41 @@ class OnlyOfficeController extends Controller
         );
         abort_unless(file_exists($media->getPath()), 404, 'File tidak ditemukan.');
 
+        // Sanitize filename against header injection (quotes / CRLF).
+        $safeName = str_replace(['"', "\r", "\n"], '', $media->file_name);
+
         return response()->file($media->getPath(), [
             'Content-Type' => $media->mime_type ?: 'application/octet-stream',
-            'Content-Disposition' => 'inline; filename="'.$media->file_name.'"',
-            'Cache-Control' => 'private, max-age=60',
+            'Content-Disposition' => 'inline; filename="'.$safeName.'"',
+            'Cache-Control' => 'no-store',
         ]);
     }
 
     public function callback(Request $request): JsonResponse
     {
         $payload = $request->all();
-        $jwtSecret = (string) config('onlyoffice.jwt_secret');
+        // JWT is the ONLY trust anchor for this public endpoint (DS signs the
+        // callback with the same secret we used to sign the editor config).
+        // Reject when no secret or invalid signature — otherwise anyone can
+        // overwrite any media file by POSTing status=2 + key + url.
+        $jwtSecret = OnlyOfficeDownloadToken::secret();
+        if ($jwtSecret === '') {
+            Log::error('ONLYOFFICE callback rejected: no JWT secret configured');
 
-        if ($jwtSecret !== '') {
-            $token = $request->input('token')
-                ?? $request->bearerToken()
-                ?? $this->extractJwtFromBody($payload);
-
-            $decoded = is_string($token) ? OnlyOfficeJwt::decode($token, $jwtSecret) : null;
-            if (is_array($decoded)) {
-                $payload = array_merge($payload, $decoded);
-            }
+            return response()->json(['error' => 1]);
         }
+
+        $token = $request->input('token')
+            ?? $request->bearerToken()
+            ?? $this->extractJwtFromBody($payload);
+
+        $decoded = is_string($token) ? OnlyOfficeJwt::decode($token, $jwtSecret) : null;
+        if (! is_array($decoded)) {
+            Log::warning('ONLYOFFICE callback rejected: invalid or missing JWT');
+
+            return response()->json(['error' => 1]);
+        }
+        $payload = array_merge($payload, $decoded);
 
         $status = (int) ($payload['status'] ?? 0);
         // 2 = ready for saving, 6 = force save
@@ -130,6 +143,13 @@ class OnlyOfficeController extends Controller
 
         if (! $downloadUrl || $documentKey === '') {
             Log::warning('ONLYOFFICE callback missing url/key', ['payload' => $payload]);
+
+            return response()->json(['error' => 1]);
+        }
+
+        // SSRF guard: the document URL must point back at the Document Server.
+        if (! $this->urlFromDocumentServer($downloadUrl)) {
+            Log::warning('ONLYOFFICE callback rejected: url host mismatch', ['url' => $downloadUrl]);
 
             return response()->json(['error' => 1]);
         }
@@ -171,5 +191,20 @@ class OnlyOfficeController extends Controller
         }
 
         return null;
+    }
+
+    /**
+     * SSRF allowlist: callback `url` must resolve to the configured Document Server.
+     */
+    private function urlFromDocumentServer(string $downloadUrl): bool
+    {
+        $dsHost = parse_url((string) config('onlyoffice.document_server_url'), PHP_URL_HOST);
+        $urlHost = parse_url($downloadUrl, PHP_URL_HOST);
+
+        if (! $dsHost || ! $urlHost) {
+            return false;
+        }
+
+        return strcasecmp($dsHost, $urlHost) === 0;
     }
 }

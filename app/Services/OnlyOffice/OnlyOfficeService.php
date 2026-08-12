@@ -55,6 +55,8 @@ class OnlyOfficeService
         $documentKey = $this->buildDocumentKey($media);
         $downloadUrl = OnlyOfficeDownloadToken::buildDownloadUrl($media->id);
 
+        $callbackUrl = $this->resolveCallbackUrl();
+
         $config = [
             'document' => [
                 'fileType' => $extension,
@@ -75,7 +77,7 @@ class OnlyOfficeService
             'editorConfig' => [
                 'mode' => $mode,
                 'lang' => 'id',
-                'callbackUrl' => url('/api/onlyoffice/callback'),
+                'callbackUrl' => $callbackUrl,
                 'user' => [
                     'id' => (string) $user->id,
                     'name' => $user->name,
@@ -190,5 +192,19 @@ class OnlyOfficeService
 
         // Default: edit when allowed, otherwise view.
         return $canEdit ? 'edit' : 'view';
+    }
+
+    /**
+     * Callback URL MUST be reachable from the Document Server container.
+     * The internal hostname differs from the public APP_URL, so allow override.
+     */
+    private function resolveCallbackUrl(): string
+    {
+        $override = trim((string) config('onlyoffice.callback_url'));
+        if ($override !== '') {
+            return rtrim($override, '/').'/api/onlyoffice/callback';
+        }
+
+        return url('/api/onlyoffice/callback');
     }
 }

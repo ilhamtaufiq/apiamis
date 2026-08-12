@@ -29,7 +29,16 @@ class OnlyOfficeJwt
 
         $decoded = json_decode(self::base64UrlDecode($body), true);
 
-        return is_array($decoded) ? $decoded : null;
+        if (! is_array($decoded)) {
+            return null;
+        }
+
+        // Reject expired tokens when an exp claim is present.
+        if (isset($decoded['exp']) && is_numeric($decoded['exp']) && (int) $decoded['exp'] < time()) {
+            return null;
+        }
+
+        return $decoded;
     }
 
     private static function base64UrlEncode(string $value): string

@@ -39,7 +39,8 @@ class OnlyOfficeDownloadToken
         return "onlyoffice:{$mediaId}:{$expiresAt}";
     }
 
-    private static function secret(): string
+    /** Shared between DownloadToken (public) and Callback JWT (private). */
+    public static function secret(): string
     {
         $jwtSecret = (string) config('onlyoffice.jwt_secret');
 

@@ -86,9 +86,10 @@ class OnlyOfficeConverter
             ? ['token' => OnlyOfficeJwt::encode($payload, $jwtSecret)]
             : $payload;
 
+        // Per-attempt timeout reduced to 10 s to bound total wall time to ~8 min.
         for ($attempt = 0; $attempt < 40; $attempt++) {
             try {
-                $response = Http::timeout(120)->post($converterUrl, $body);
+                $response = Http::timeout(10)->post($converterUrl, $body);
             } catch (\Throwable $exception) {
                 Log::error('ONLYOFFICE converter request failed', [
                     'message' => $exception->getMessage(),
@@ -130,8 +131,19 @@ class OnlyOfficeConverter
 
     private function downloadConvertedPdf(string $fileUrl): ?string
     {
+        // SSRF guard: converted PDF URL must resolve to the Document Server host.
+        $dsHost = parse_url((string) config('onlyoffice.document_server_url'), PHP_URL_HOST);
+        if ($dsHost && ! empty($fileUrl)) {
+            $urlHost = parse_url($fileUrl, PHP_URL_HOST);
+            if (! $urlHost || strcasecmp($dsHost, $urlHost) !== 0) {
+                Log::warning('ONLYOFFICE converter rejected: host mismatch', ['url' => $fileUrl]);
+
+                return null;
+            }
+        }
+
         try {
-            $response = Http::timeout(120)->get($fileUrl);
+            $response = Http::timeout(10)->get($fileUrl);
 
             if (! $response->successful()) {
                 return null;
@@ -141,6 +153,13 @@ class OnlyOfficeConverter
 
             if (! file_exists($outputDir)) {
                 mkdir($outputDir, 0775, true);
+            }
+
+            // Cleanup stale temp files older than 24 h to prevent disk bloat.
+            foreach (glob("$outputDir/*.pdf") as $old) {
+                if (time() - filemtime($old) > DAY_SECONDS) {
+                    @unlink($old);
+                }
             }
 
             $outputPath = $outputDir.'/'.Str::uuid().'.pdf';
