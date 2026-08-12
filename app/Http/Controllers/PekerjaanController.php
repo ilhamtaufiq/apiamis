@@ -76,6 +76,13 @@ class PekerjaanController extends Controller
                 'kontrak.addendums',
             ];
 
+        // Untuk export (summary + unbounded): masih butuh tags & kontrak minimal.
+        // Ambil kontrak tanpa nested payload agar ringan (anti-OOM).
+        if ($isUnbounded && $request->boolean('summary')) {
+            $with[] = 'tags';
+            $with[] = 'kontrak'; // nominal saja, tanpa penyedia/addendums
+        }
+
         $query = Pekerjaan::with($with)
             ->withCount(['penerima', 'foto', 'kontrak', 'kontrakLegacy'])
             ->byUserRole();  // Aman karena sudah check auth
