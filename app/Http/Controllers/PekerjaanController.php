@@ -94,6 +94,11 @@ class PekerjaanController extends Controller
             if (! $isUnbounded) {
                 $query->with(['output', 'foto']);
             }
+            // Rekap Progress butuh kontrak untuk grouping konsolidasi (client-side).
+            if (! in_array('kontrak', $with) && ! in_array('kontrak.penyedia', $with)) {
+                $with[] = 'kontrak';
+                $query->with('kontrak');
+            }
         }
 
         // Filter by tahun via kegiatan
@@ -135,6 +140,11 @@ class PekerjaanController extends Controller
 
         if ($request->has('pendamping_id') && ! empty($request->pendamping_id)) {
             $query->where('pendamping_id', $request->pendamping_id);
+        }
+
+        // Filter fisik/konsultan: is_konsultan=1 hanya konsultan, =0 hanya pekerjaan fisik.
+        if ($request->has('is_konsultan')) {
+            $query->where('is_konsultan', $request->boolean('is_konsultan'));
         }
 
         // status=active → exclude canceled (null legacy dihitung active)
@@ -188,9 +198,10 @@ class PekerjaanController extends Controller
         }
 
         // Unbounded list (dropdown / legacy mobile): hard cap — jangan kirim ratusan paket ke HP.
-        // Export Excel/PDF web harus paginate (per_page ≤ 100), bukan mengandalkan per_page=-1.
+        // summary=1 (Rekap Progress web + export) butuh semua data untuk grouping konsolidasi
+        // client-side; payload-nya ringan (kontrak tanpa penyedia/addendums) jadi cap lebih longgar.
         if ($isUnbounded) {
-            $cap = 80;
+            $cap = $request->boolean('summary') ? 500 : 80;
             return PekerjaanResource::collection($query->limit($cap)->get());
         }
 
