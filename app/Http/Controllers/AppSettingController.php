@@ -101,6 +101,7 @@ class AppSettingController extends Controller
             'mail_body' => 'nullable|string|max:50000',
             'logo' => 'nullable|file|mimes:jpg,jpeg,png,svg|max:2048',
             'favicon' => 'nullable|file|mimes:jpg,jpeg,png,svg,ico|max:1024',
+            'login_cover' => 'nullable|file|mimes:jpg,jpeg,png,webp|max:5120',
             'kontrak_template_spk' => 'nullable|file|mimes:docx|max:10240',
             'kontrak_template_ringkasan' => 'nullable|file|mimes:docx,xlsx|max:10240',
             'kontrak_template_bap' => 'nullable|file|mimes:docx|max:10240',
@@ -366,6 +367,18 @@ class AppSettingController extends Controller
             $setting->clearMediaCollection('app-settings');
             $setting->addMediaFromRequest('favicon')
                 ->usingFileName('favicon_' . Str::uuid() . '.' . $request->file('favicon')->getClientOriginalExtension())
+                ->toMediaCollection('app-settings');
+            $updatedSettings[] = $setting->fresh();
+        }
+
+        if ($request->hasFile('login_cover')) {
+            $setting = AppSetting::updateOrCreate(
+                ['key' => 'login_cover'],
+                ['type' => 'file', 'value' => null]
+            );
+            $setting->clearMediaCollection('app-settings');
+            $setting->addMediaFromRequest('login_cover')
+                ->usingFileName('login_cover_' . Str::uuid() . '.' . $request->file('login_cover')->getClientOriginalExtension())
                 ->toMediaCollection('app-settings');
             $updatedSettings[] = $setting->fresh();
         }
