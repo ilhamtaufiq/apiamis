@@ -51,6 +51,7 @@ use App\Http\Controllers\ArumanisInsightController;
 use App\Http\Controllers\SpamUnitController;
 use App\Http\Controllers\SpmSanitasiController;
 use App\Http\Controllers\SpseProcurementController;
+use App\Http\Controllers\SipdPekerjaanLinkController;
 use App\Http\Controllers\TagController;
 use App\Http\Controllers\ToolPdfController;
 use App\Http\Controllers\BlogCommentController;
@@ -160,6 +161,11 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // Menu permissions - user menus
     Route::get('menu-permissions/user/menus', [MenuPermissionController::class, 'getUserMenus']);
+
+    // Manual link SIPD rincian → pekerjaan (Status Arumanis)
+    Route::get('sipd-pekerjaan-links', [SipdPekerjaanLinkController::class, 'index']);
+    Route::put('sipd-pekerjaan-links', [SipdPekerjaanLinkController::class, 'upsert']);
+    Route::delete('sipd-pekerjaan-links', [SipdPekerjaanLinkController::class, 'destroy']);
 
     // Manajemen kegiatan-role dan user-pekerjaan (hanya admin)
     Route::middleware(['role:admin'])->group(function () {
