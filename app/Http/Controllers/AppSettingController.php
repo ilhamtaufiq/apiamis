@@ -115,6 +115,12 @@ class AppSettingController extends Controller
             'kontrak_nomor_dpa' => 'nullable|string|max:255',
             'kontrak_tanggal_dpa' => 'nullable|string|max:255',
             'kontrak_cara_pembayaran' => 'nullable|string|in:sekaligus,termin,bulan',
+            's3_backup_enabled' => 'nullable|string|in:0,1',
+            's3_endpoint' => 'nullable|string|max:255',
+            's3_region' => 'nullable|string|max:64',
+            's3_bucket' => 'nullable|string|max:64',
+            's3_access_key_id' => 'nullable|string|max:128',
+            's3_secret_access_key' => 'nullable|string|max:255',
         ]);
 
         $apiKeyProviders = array_merge(array_keys(OpenRouterService::providerOptions()), ['local']);
@@ -305,6 +311,36 @@ class AppSettingController extends Controller
                 $request->input('kontrak_masa_pemeliharaan_hari'),
                 'text'
             );
+            $updatedSettings[] = $setting;
+        }
+
+        if ($request->has('s3_backup_enabled')) {
+            $setting = AppSetting::setValue('s3_backup_enabled', $request->input('s3_backup_enabled'), 'text');
+            $updatedSettings[] = $setting;
+        }
+
+        if ($request->has('s3_endpoint')) {
+            $setting = AppSetting::setValue('s3_endpoint', $request->input('s3_endpoint'), 'text');
+            $updatedSettings[] = $setting;
+        }
+
+        if ($request->has('s3_region')) {
+            $setting = AppSetting::setValue('s3_region', $request->input('s3_region'), 'text');
+            $updatedSettings[] = $setting;
+        }
+
+        if ($request->has('s3_bucket')) {
+            $setting = AppSetting::setValue('s3_bucket', $request->input('s3_bucket'), 'text');
+            $updatedSettings[] = $setting;
+        }
+
+        if ($request->has('s3_access_key_id')) {
+            $setting = AppSetting::setValue('s3_access_key_id', $request->input('s3_access_key_id'), 'text');
+            $updatedSettings[] = $setting;
+        }
+
+        if ($request->has('s3_secret_access_key') && filled($request->input('s3_secret_access_key'))) {
+            $setting = AppSetting::setValue('s3_secret_access_key', $request->input('s3_secret_access_key'), 'secret');
             $updatedSettings[] = $setting;
         }
 

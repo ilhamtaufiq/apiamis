@@ -16,6 +16,7 @@ class AppSettingResource extends JsonResource
             str_starts_with((string) $this->key, 'chat_api_key_')
             || $this->key === 'mail_password'
             || str_starts_with((string) $this->key, 'google_drive_')
+            || $this->key === 's3_secret_access_key'
         ) {
             $isConfigured = filled($this->value);
             $value = null;
