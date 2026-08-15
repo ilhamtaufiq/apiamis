@@ -154,6 +154,7 @@ class PekerjaanResource extends JsonResource
                     : [],
             ])->values()),
             'penerima_count' => $this->penerima_count,
+            'sipd_links_count' => (int) ($this->sipd_links_count ?? 0),
             'created_at' => $this->created_at?->toIso8601String(),
             'updated_at' => $this->updated_at?->toIso8601String(),
         ];

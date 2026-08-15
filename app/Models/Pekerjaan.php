@@ -428,6 +428,12 @@ class Pekerjaan extends Model
             ->withTimestamps();
     }
 
+    /** Tautan ke baris rincian SIPD (Status Arumanis). */
+    public function sipdLinks(): HasMany
+    {
+        return $this->hasMany(SipdPekerjaanLink::class, 'pekerjaan_id');
+    }
+
     /**
      * Relasi Many-to-Many dengan ChecklistItems
      */
