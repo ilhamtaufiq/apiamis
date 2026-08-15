@@ -109,17 +109,10 @@ class PekerjaanController extends Controller
         }
 
         // Filter by sub kegiatan SIPD (dropdown Status Arumanis): cocokkan kegiatan
-        // via sipd_id_sub_bl (id_sub_bl) atau kode_sub_giat.
-        if ($request->filled('sipd_sub_bl_id') || $request->filled('kode_sub_giat')) {
+        // via nama_sub_kegiatan (fallback kode_sub_giat / sipd_id_sub_bl).
+        if ($request->filled('nama_sub_kegiatan')) {
             $query->whereHas('kegiatan', function ($q) use ($request) {
-                $q->where(function ($inner) use ($request) {
-                    if ($request->filled('sipd_sub_bl_id')) {
-                        $inner->orWhere('sipd_id_sub_bl', (int) $request->sipd_sub_bl_id);
-                    }
-                    if ($request->filled('kode_sub_giat')) {
-                        $inner->orWhere('kode_sub_giat', $request->kode_sub_giat);
-                    }
-                });
+                $q->where('nama_sub_kegiatan', $request->nama_sub_kegiatan);
             });
         }
 
