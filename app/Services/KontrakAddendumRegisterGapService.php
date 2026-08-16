@@ -26,6 +26,7 @@ class KontrakAddendumRegisterGapService
             ->with([
                 'type',
                 'kontrak.pekerjaan.pengawas',
+                'kontrak.pekerjaans',
                 'kontrak.penyedia',
                 'kontrak.addendums',
             ])
@@ -71,6 +72,13 @@ class KontrakAddendumRegisterGapService
                     'nama_paket' => $pekerjaan->nama_paket,
                     'kode_rekening' => $pekerjaan->kode_rekening,
                 ] : null,
+                'pekerjaans' => $kontrak->relationLoaded('pekerjaans')
+                    ? $kontrak->pekerjaans->map(fn ($p) => [
+                        'id' => $p->id,
+                        'nama_paket' => $p->nama_paket,
+                        'kode_rekening' => $p->kode_rekening,
+                    ])->values()->all()
+                    : [],
                 'penyedia' => $kontrak->penyedia ? [
                     'id' => $kontrak->penyedia->id,
                     'nama' => $kontrak->penyedia->nama,
