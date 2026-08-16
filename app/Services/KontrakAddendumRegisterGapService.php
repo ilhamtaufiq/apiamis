@@ -62,6 +62,9 @@ class KontrakAddendumRegisterGapService
                 'tanggal_register' => $register->tanggal?->format('Y-m-d'),
                 'type_code' => $register->type?->code,
                 'type_name' => $register->type?->name,
+                // Keterangan/nilai dari register — petunjuk untuk melengkapi addendum.
+                'description' => $register->description,
+                'nilai' => $register->nilai,
                 'kontrak_id' => $kontrak->id,
                 'addendum_count' => $kontrak->addendums->count(),
                 'pekerjaan' => $pekerjaan ? [

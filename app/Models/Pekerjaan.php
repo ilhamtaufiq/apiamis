@@ -123,14 +123,16 @@ class Pekerjaan extends Model
         $isFieldApp = static::requestIsFieldAppContext();
         $isPengawasRole = $user->hasAnyRole(['pengawas', 'konsultan_pengawas', 'tfl']);
 
+        // Portal Arumanis: operator/admin full access (termasuk dual-role),
+        // baik di portal maupun konteks lapangan. Cek duluan agar admin yang
+        // juga punya role pengawas tetap lihat semua pekerjaan.
+        if ($user->hasAnyRole(['admin', 'manager', 'super-admin', 'operator'])) {
+            return $query;
+        }
+
         // Panel/mobile lapangan: dual operator+pengawas tetap dibatasi assign.
         if ($isFieldApp && $isPengawasRole) {
             return static::constrainQueryToAssignedPekerjaan($query, $user, $tableName);
-        }
-
-        // Portal Arumanis: operator/admin full access (termasuk dual-role).
-        if ($user->hasAnyRole(['admin', 'manager', 'super-admin', 'operator'])) {
-            return $query;
         }
 
         // Pure pengawas / konsultan / tfl (portal atau field) — setara.

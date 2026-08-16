@@ -83,6 +83,10 @@ class SpseDocumentDownloader
             return 'application/pdf';
         }
 
+        if (preg_match('/^\s*(<!doctype html|<html)/i', $body)) {
+            return 'text/html';
+        }
+
         return 'application/octet-stream';
     }
 
@@ -93,6 +97,7 @@ class SpseDocumentDownloader
             'application/zip', 'application/x-zip-compressed' => '.zip',
             'image/jpeg' => '.jpg',
             'image/png' => '.png',
+            'text/html' => '.html',
             default => '.bin',
         };
     }
