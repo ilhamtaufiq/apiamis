@@ -381,6 +381,9 @@ class AppSettingController extends Controller
                 ->usingFileName('login_cover_' . Str::uuid() . '.' . $request->file('login_cover')->getClientOriginalExtension())
                 ->toMediaCollection('app-settings');
             $updatedSettings[] = $setting->fresh();
+        } elseif ($request->boolean('login_cover_remove')) {
+            AppSetting::where('key', 'login_cover')
+                ->first()?->clearMediaCollection('app-settings');
         }
 
         foreach (KontrakTemplateService::TEMPLATES as $settingKey => $definition) {
