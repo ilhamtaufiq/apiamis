@@ -51,6 +51,9 @@ class SearchController extends Controller
             return response()->json(['success' => true, 'data' => []]);
         }
 
+        // Batasi panjang query agar full-text scan tak liar.
+        $query = mb_substr(trim((string) $query), 0, 60);
+
         $results = array_merge(
             $this->searchPekerjaan($query, $tahun),
             $this->searchKontrak($query, $tahun),
@@ -69,12 +72,17 @@ class SearchController extends Controller
         ]);
     }
 
+    /** Escape karakter operator boolean-mode agar query tak error/berperilaku liar. */
+    private function escapeBool(string $query): string
+    {
+        return str_replace(['\\', '+', '-', '>', '<', '(', ')', '~', '*', '"', '@'], ' ', $query);
+    }
+
     private function searchPekerjaan(string $query, ?string $tahun): array
     {
         return Pekerjaan::byUserRole()
             ->where(function ($q) use ($query) {
-                $q->whereRaw('MATCH(nama_paket, kode_rekening) AGAINST(? IN BOOLEAN MODE)', [$query])
-                    ->orWhere('nama_paket', 'LIKE', "%{$query}%")
+                $q->whereRaw('MATCH(nama_paket, kode_rekening) AGAINST(? IN BOOLEAN MODE)', [$this->escapeBool($query)])
                     ->orWhereHas('kontrak.penyedia', function ($penyediaQuery) use ($query) {
                         $penyediaQuery->where('nama', 'LIKE', "%{$query}%");
                     });
@@ -108,8 +116,7 @@ class SearchController extends Controller
     private function searchKontrak(string $query, ?string $tahun): array
     {
         return Kontrak::where(function ($q) use ($query) {
-            $q->whereRaw('MATCH(spk, spmk, kode_paket) AGAINST(? IN BOOLEAN MODE)', [$query])
-                ->orWhere('spk', 'LIKE', "%{$query}%")
+            $q->whereRaw('MATCH(spk, spmk, kode_paket) AGAINST(? IN BOOLEAN MODE)', [$this->escapeBool($query)])
                 ->orWhereHas('pekerjaan', function ($pq) use ($query) {
                     $pq->byUserRole()->where('nama_paket', 'LIKE', "%{$query}%");
                 });
@@ -136,7 +143,7 @@ class SearchController extends Controller
 
     private function searchPenyedia(string $query): array
     {
-        return Penyedia::whereRaw('MATCH(nama, direktur) AGAINST(? IN BOOLEAN MODE)', [$query])
+        return Penyedia::whereRaw('MATCH(nama, direktur) AGAINST(? IN BOOLEAN MODE)', [$this->escapeBool($query)])
             ->limit(5)
             ->get()
             ->map(fn ($item) => [
@@ -151,7 +158,7 @@ class SearchController extends Controller
 
     private function searchKegiatan(string $query): array
     {
-        return Kegiatan::whereRaw('MATCH(nama_kegiatan, nama_sub_kegiatan, nama_program) AGAINST(? IN BOOLEAN MODE)', [$query])
+        return Kegiatan::whereRaw('MATCH(nama_kegiatan, nama_sub_kegiatan, nama_program) AGAINST(? IN BOOLEAN MODE)', [$this->escapeBool($query)])
             ->limit(5)
             ->get()
             ->map(fn ($item) => [
@@ -165,7 +172,7 @@ class SearchController extends Controller
 
     private function searchDesa(string $query): array
     {
-        return Desa::whereRaw('MATCH(n_desa) AGAINST(? IN BOOLEAN MODE)', [$query])
+        return Desa::whereRaw('MATCH(n_desa) AGAINST(? IN BOOLEAN MODE)', [$this->escapeBool($query)])
             ->with('kecamatan')
             ->limit(5)
             ->get()
@@ -208,7 +215,7 @@ class SearchController extends Controller
     private function searchPenerima(string $query, ?string $tahun): array
     {
         return Penerima::where(function ($q) use ($query) {
-            $q->whereRaw('MATCH(nama, nik, alamat) AGAINST(? IN BOOLEAN MODE)', [$query])
+            $q->whereRaw('MATCH(nama, nik, alamat) AGAINST(? IN BOOLEAN MODE)', [$this->escapeBool($query)])
                 ->orWhereHas('pekerjaan', function ($pq) use ($query) {
                     $pq->byUserRole()->where('nama_paket', 'LIKE', "%{$query}%");
                 });
@@ -234,7 +241,7 @@ class SearchController extends Controller
     private function searchOutput(string $query, ?string $tahun): array
     {
         return Output::where(function ($q) use ($query) {
-            $q->whereRaw('MATCH(komponen, satuan) AGAINST(? IN BOOLEAN MODE)', [$query])
+            $q->whereRaw('MATCH(komponen, satuan) AGAINST(? IN BOOLEAN MODE)', [$this->escapeBool($query)])
                 ->orWhereHas('pekerjaan', function ($pq) use ($query) {
                     $pq->byUserRole()->where('nama_paket', 'LIKE', "%{$query}%");
                 });
@@ -265,6 +272,8 @@ class SearchController extends Controller
                     $pq->byUserRole()->where('nama_paket', 'LIKE', "%{$query}%");
                 });
         })
+            // content adalah JSON besar; batasi scan via pekerjaan dulu bila mungkin.
+            ->whereHas('pekerjaan')
             ->whereHas('pekerjaan.kegiatan', function ($q) use ($tahun) {
                 if ($tahun) {
                     $q->where('tahun_anggaran', $tahun);
