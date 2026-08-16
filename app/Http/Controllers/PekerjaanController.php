@@ -875,9 +875,12 @@ class PekerjaanController extends Controller
 
             $data = $query->paginate($perPage);
 
+            // Konsolidasi: pastikan paket yang share kontrak sama selalu satu halaman.
+            $items = $this->expandKonsolidasiGroup($data->items());
+
             return response()->json([
                 'success' => true,
-                'data' => $data->items(),
+                'data' => $items,
                 'meta' => [
                     'current_page' => $data->currentPage(),
                     'last_page' => $data->lastPage(),
@@ -897,6 +900,28 @@ class PekerjaanController extends Controller
                 'line' => $e->getLine(),
             ], 500);
         }
+    }
+
+    /**
+     * Konsolidasi: jika paket di halaman ini share kontrak dengan paket lain,
+     * ikutkan paket lain tsb (di luar halaman) agar grup utuh di satu halaman.
+     */
+    private function expandKonsolidasiGroup($items)
+    {
+        $kontrakIds = collect($items)->flatMap(fn ($p) => $p->kontrak->pluck('id'))->unique();
+        if ($kontrakIds->isEmpty()) {
+            return $items;
+        }
+
+        $pekerjaanIds = collect($items)->pluck('id');
+        $extra = Pekerjaan::has('kontrak')
+            ->whereHas('kontrak', fn ($q) => $q->whereIn('tbl_kontrak.id', $kontrakIds))
+            ->whereNotIn('id', $pekerjaanIds)
+            ->with($this->documentRegisterEagerLoads())
+            ->withCount(['foto', 'penerima'])
+            ->get();
+
+        return collect($items)->concat($extra)->all();
     }
 
     private function documentRegisterEagerLoads(): array

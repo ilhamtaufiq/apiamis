@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Http\Resources\KontrakAddendumResource;
+use App\Models\DocumentRegister;
 use App\Models\Kontrak;
 use App\Models\KontrakAddendum;
 use App\Models\Pekerjaan;
@@ -118,6 +119,8 @@ class KontrakAddendumController extends Controller
                 'created_by' => auth()->id(),
             ]);
 
+            $this->linkRegister($addendum);
+
             $this->syncItems($addendum, $items);
             $this->storeTypedAttachments($addendum);
 
@@ -148,7 +151,7 @@ class KontrakAddendumController extends Controller
 
     public function update(Request $request, KontrakAddendum $kontrakAddendum)
     {
-        $this->authorizeAdmin();
+        $this->authorizeCreate($kontrakAddendum->kontrak);
         $this->ensureEditable($kontrakAddendum);
 
         $validated = $this->validateAddendum($request, $kontrakAddendum->kontrak, $kontrakAddendum);
@@ -158,6 +161,7 @@ class KontrakAddendumController extends Controller
             unset($validated['items']);
 
             $kontrakAddendum->update($validated);
+            $this->linkRegister($kontrakAddendum);
 
             if (is_array($items)) {
                 $kontrakAddendum->items()->delete();
@@ -188,8 +192,6 @@ class KontrakAddendumController extends Controller
             ], 422);
         }
 
-        $this->ensureRequiredAttachmentsExist($kontrakAddendum);
-
         $kontrakAddendum->update([
             'status' => 'diajukan',
             'approved_by' => null,
@@ -199,11 +201,70 @@ class KontrakAddendumController extends Controller
         return new KontrakAddendumResource($kontrakAddendum->fresh()->load(['items', 'media']));
     }
 
+    /**
+     * Admin mulai memproses: tetapkan nomor addendum + buat nomor dokumen wajib.
+     */
+    public function process(Request $request, KontrakAddendum $kontrakAddendum)
+    {
+        $this->authorizeAdmin();
+
+        if ($kontrakAddendum->status !== 'diajukan') {
+            return response()->json([
+                'message' => 'Hanya addendum yang sudah diajukan yang bisa diproses',
+            ], 422);
+        }
+
+        $validated = $request->validate([
+            'nomor_addendum' => 'required|string|max:100',
+            'dokumen' => 'required|array',
+            'dokumen.*.type' => 'required|string',
+            'dokumen.*.nomor' => 'required|string|max:255',
+            'dokumen.*.tanggal' => 'required|date',
+        ]);
+
+        $addendumTypeId = \App\Models\DocumentType::query()
+            ->get()
+            ->filter(fn ($t) => in_array(strtolower((string) $t->code), ['add', 'addendum'], true))
+            ->value('id');
+
+        DB::transaction(function () use ($validated, $kontrakAddendum, $addendumTypeId) {
+            $kontrakAddendum->update([
+                'nomor_addendum' => $validated['nomor_addendum'],
+                'status' => 'disetujui',
+                'approved_by' => auth()->id(),
+                'approved_at' => now(),
+            ]);
+            $this->linkRegister($kontrakAddendum);
+
+            foreach ($validated['dokumen'] as $dokumen) {
+                // Hapus register lama untuk slot yang sama, lalu buat ulang.
+                DocumentRegister::query()
+                    ->where('addendum_id', $kontrakAddendum->id)
+                    ->where('attachment_type', $dokumen['type'])
+                    ->delete();
+
+                DocumentRegister::create([
+                    'kontrak_id' => $kontrakAddendum->kontrak_id,
+                    'addendum_id' => $kontrakAddendum->id,
+                    'type_id' => $addendumTypeId,
+                    'attachment_type' => $dokumen['type'],
+                    'nomor' => $dokumen['nomor'],
+                    'tanggal' => $dokumen['tanggal'],
+                    'sequence_number' => 0,
+                    'year' => (int) substr($dokumen['tanggal'], 0, 4),
+                    'description' => self::REQUIRED_ATTACHMENT_TYPES[$dokumen['type']] ?? null,
+                ]);
+            }
+        });
+
+        return new KontrakAddendumResource($kontrakAddendum->fresh()->load(['items', 'media']));
+    }
+
     public function approve(KontrakAddendum $kontrakAddendum)
     {
         $this->authorizeAdmin();
 
-        if (! in_array($kontrakAddendum->status, ['diajukan', 'draft'], true)) {
+        if (! in_array($kontrakAddendum->status, ['diajukan', 'draft', 'diproses'], true)) {
             return response()->json([
                 'message' => 'Hanya addendum yang sudah diajukan atau draft yang bisa disetujui',
             ], 422);
@@ -213,12 +274,15 @@ class KontrakAddendumController extends Controller
             'nomor_addendum' => 'required|string|max:100',
         ]);
 
+        $this->ensureRequiredAttachmentsExist($kontrakAddendum);
+
         $kontrakAddendum->update([
             'nomor_addendum' => $validated['nomor_addendum'],
             'status' => 'disetujui',
             'approved_by' => auth()->id(),
             'approved_at' => now(),
         ]);
+        $this->linkRegister($kontrakAddendum);
 
         return new KontrakAddendumResource($kontrakAddendum->fresh()->load(['items', 'media']));
     }
@@ -248,7 +312,7 @@ class KontrakAddendumController extends Controller
     {
         $this->authorizeAdmin();
 
-        if ($kontrakAddendum->status !== 'diajukan') {
+        if (! in_array($kontrakAddendum->status, ['diajukan', 'diproses'], true)) {
             return response()->json([
                 'message' => 'Hanya addendum yang sudah diajukan yang bisa ditolak',
             ], 422);
@@ -265,15 +329,31 @@ class KontrakAddendumController extends Controller
 
     public function upload(Request $request, KontrakAddendum $kontrakAddendum)
     {
-        $this->authorizeAdmin();
+        $this->authorizeSubmit($kontrakAddendum);
         $this->ensureEditable($kontrakAddendum);
 
         $request->validate([
+            'type' => 'required|string',
             'file' => 'required|file|mimes:pdf,doc,docx,xls,xlsx,jpg,jpeg,png|max:10240',
         ]);
 
+        $type = $request->input('type');
+
+        if (! array_key_exists($type, self::REQUIRED_ATTACHMENT_TYPES)) {
+            return response()->json(['message' => 'Jenis lampiran tidak valid'], 422);
+        }
+
+        // Ganti lampiran lama untuk slot yang sama.
+        $kontrakAddendum->getMedia('kontrak/addendum')
+            ->filter(fn ($media) => $media->getCustomProperty('type') === $type)
+            ->each->delete();
+
         $kontrakAddendum
             ->addMediaFromRequest('file')
+            ->withCustomProperties([
+                'type' => $type,
+                'label' => self::REQUIRED_ATTACHMENT_TYPES[$type],
+            ])
             ->toMediaCollection('kontrak/addendum');
 
         return new KontrakAddendumResource($kontrakAddendum->fresh()->load(['items', 'media']));
@@ -342,7 +422,7 @@ class KontrakAddendumController extends Controller
 
     private function ensureRequiredAttachmentsExist(KontrakAddendum $addendum): void
     {
-        if (auth()->user()?->hasRole('admin')) {
+        if ($addendum->kelengkapan_override) {
             return;
         }
 
@@ -421,5 +501,22 @@ class KontrakAddendumController extends Controller
             403,
             'Pengawas hanya boleh mengajukan addendum untuk pekerjaan yang diassign'
         );
+    }
+
+    /**
+     * Tautkan addendum ke register dokumen yang nomornya cocok (dari gap).
+     */
+    private function linkRegister(KontrakAddendum $addendum): void
+    {
+        $nomor = $addendum->nomor_addendum;
+        if (! $nomor) {
+            return;
+        }
+
+        DocumentRegister::query()
+            ->where('kontrak_id', $addendum->kontrak_id)
+            ->where('nomor', $nomor)
+            ->whereNull('addendum_id')
+            ->update(['addendum_id' => $addendum->id]);
     }
 }

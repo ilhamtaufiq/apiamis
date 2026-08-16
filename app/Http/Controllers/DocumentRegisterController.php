@@ -12,7 +12,7 @@ class DocumentRegisterController extends Controller
 {
     public function index(Request $request)
     {
-        $query = DocumentRegister::with(['kontrak.pekerjaan', 'kontrak.penyedia', 'type']);
+        $query = DocumentRegister::with(['kontrak.pekerjaan', 'kontrak.penyedia', 'type', 'addendum']);
 
         if ($request->has('tahun')) {
             $query->where('year', $request->tahun);
@@ -20,6 +20,10 @@ class DocumentRegisterController extends Controller
 
         if ($request->has('type_id')) {
             $query->where('type_id', $request->type_id);
+        }
+
+        if ($request->has('addendum_id')) {
+            $query->where('addendum_id', $request->addendum_id);
         }
 
         if ($request->has('search')) {
@@ -83,6 +87,7 @@ class DocumentRegisterController extends Controller
         $validated = $request->validate([
             'kontrak_id' => 'required|exists:tbl_kontrak,id',
             'type_id' => 'required|exists:tbl_document_types,id',
+            'addendum_id' => 'nullable|exists:tbl_kontrak_addendums,id',
             'tanggal' => 'required|date',
             'description' => 'nullable|string',
             'nilai' => 'nullable|numeric|min:0',
@@ -133,6 +138,7 @@ class DocumentRegisterController extends Controller
             return DocumentRegister::create([
                 'kontrak_id' => $validated['kontrak_id'],
                 'type_id' => $validated['type_id'],
+                'addendum_id' => $validated['addendum_id'] ?? null,
                 'nomor' => $nomor,
                 'tanggal' => $validated['tanggal'],
                 'sequence_number' => $sequence,
@@ -156,6 +162,7 @@ class DocumentRegisterController extends Controller
             'nomor' => 'required|string|max:255',
             'description' => 'nullable|string',
             'nilai' => 'nullable|numeric|min:0',
+            'addendum_id' => 'nullable|exists:tbl_kontrak_addendums,id',
         ]);
 
         if (DocumentRegister::where('nomor', $validated['nomor'])

@@ -30,6 +30,7 @@ class KontrakAddendumRegisterGapService
                 'kontrak.addendums',
             ])
             ->whereIn('type_id', $typeIds)
+            ->whereNull('addendum_id')
             ->orderByDesc('tanggal')
             ->get();
 
@@ -46,11 +47,8 @@ class KontrakAddendumRegisterGapService
                 continue;
             }
 
-            $hasMatchingAddendum = $kontrak->addendums->contains(function ($addendum) use ($registerNomor) {
-                return $this->normalizeNomor($addendum->nomor_addendum) === $registerNomor;
-            });
-
-            if ($hasMatchingAddendum) {
+            // Addendum sudah dibuat (meski nomor belum ditetapkan) — jangan tampilkan sebagai gap.
+            if ($kontrak->addendums->isNotEmpty()) {
                 continue;
             }
 
@@ -66,6 +64,7 @@ class KontrakAddendumRegisterGapService
                 'description' => $register->description,
                 'nilai' => $register->nilai,
                 'kontrak_id' => $kontrak->id,
+                'addendum_id' => $register->addendum_id,
                 'addendum_count' => $kontrak->addendums->count(),
                 'pekerjaan' => $pekerjaan ? [
                     'id' => $pekerjaan->id,

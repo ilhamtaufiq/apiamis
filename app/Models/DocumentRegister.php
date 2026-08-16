@@ -9,7 +9,7 @@ class DocumentRegister extends Model
 {
     use Auditable;
     protected $table = 'tbl_document_registers';
-    protected $fillable = ['kontrak_id', 'type_id', 'nomor', 'tanggal', 'sequence_number', 'year', 'description', 'nilai'];
+    protected $fillable = ['kontrak_id', 'type_id', 'addendum_id', 'attachment_type', 'nomor', 'tanggal', 'sequence_number', 'year', 'description', 'nilai'];
 
     protected $casts = [
         'tanggal' => 'date',
@@ -24,5 +24,10 @@ class DocumentRegister extends Model
     public function type()
     {
         return $this->belongsTo(DocumentType::class, 'type_id');
+    }
+
+    public function addendum()
+    {
+        return $this->belongsTo(KontrakAddendum::class, 'addendum_id');
     }
 }
