@@ -76,6 +76,8 @@ class KontrakAddendumResource extends JsonResource
                 'type' => $media->mime_type,
                 'document_type' => $media->getCustomProperty('type'),
                 'label' => $media->getCustomProperty('label'),
+                'nomor' => $media->getCustomProperty('nomor'),
+                'tanggal' => $media->getCustomProperty('tanggal'),
                 'size' => $media->size,
             ]),
             'created_at' => $this->created_at?->toIso8601String(),

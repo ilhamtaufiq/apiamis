@@ -216,18 +216,21 @@ class KontrakAddendumController extends Controller
 
         $validated = $request->validate([
             'nomor_addendum' => 'required|string|max:100',
-            'dokumen' => 'required|array',
+            'dokumen' => 'nullable|array',
             'dokumen.*.type' => 'required|string',
             'dokumen.*.nomor' => 'required|string|max:255',
             'dokumen.*.tanggal' => 'required|date',
         ]);
+
+        // Bila admin tak kirim dokumen, ambil nomor/tanggal dari lampiran yang diupload pengawas.
+        $dokumen = $validated['dokumen'] ?? $this->dokumenFromAttachments($kontrakAddendum);
 
         $addendumTypeId = \App\Models\DocumentType::query()
             ->get()
             ->filter(fn ($t) => in_array(strtolower((string) $t->code), ['add', 'addendum'], true))
             ->value('id');
 
-        DB::transaction(function () use ($validated, $kontrakAddendum, $addendumTypeId) {
+        DB::transaction(function () use ($validated, $dokumen, $kontrakAddendum, $addendumTypeId) {
             $kontrakAddendum->update([
                 'nomor_addendum' => $validated['nomor_addendum'],
                 'status' => 'disetujui',
@@ -236,23 +239,23 @@ class KontrakAddendumController extends Controller
             ]);
             $this->linkRegister($kontrakAddendum);
 
-            foreach ($validated['dokumen'] as $dokumen) {
+            foreach ($dokumen as $dok) {
                 // Hapus register lama untuk slot yang sama, lalu buat ulang.
                 DocumentRegister::query()
                     ->where('addendum_id', $kontrakAddendum->id)
-                    ->where('attachment_type', $dokumen['type'])
+                    ->where('attachment_type', $dok['type'])
                     ->delete();
 
                 DocumentRegister::create([
                     'kontrak_id' => $kontrakAddendum->kontrak_id,
                     'addendum_id' => $kontrakAddendum->id,
                     'type_id' => $addendumTypeId,
-                    'attachment_type' => $dokumen['type'],
-                    'nomor' => $dokumen['nomor'],
-                    'tanggal' => $dokumen['tanggal'],
+                    'attachment_type' => $dok['type'],
+                    'nomor' => $dok['nomor'],
+                    'tanggal' => $dok['tanggal'],
                     'sequence_number' => 0,
-                    'year' => (int) substr($dokumen['tanggal'], 0, 4),
-                    'description' => self::REQUIRED_ATTACHMENT_TYPES[$dokumen['type']] ?? null,
+                    'year' => (int) substr($dok['tanggal'], 0, 4),
+                    'description' => self::REQUIRED_ATTACHMENT_TYPES[$dok['type']] ?? null,
                 ]);
             }
         });
@@ -404,6 +407,8 @@ class KontrakAddendumController extends Controller
     private function storeTypedAttachments(KontrakAddendum $addendum): void
     {
         $attachments = request()->file('attachments', []);
+        $nomors = request()->input('attachment_nomor', []);
+        $tanggal = request()->input('attachment_tanggal', []);
 
         foreach ($attachments as $type => $file) {
             if (! $file || ! array_key_exists($type, self::REQUIRED_ATTACHMENT_TYPES)) {
@@ -415,6 +420,8 @@ class KontrakAddendumController extends Controller
                 ->withCustomProperties([
                     'type' => $type,
                     'label' => self::REQUIRED_ATTACHMENT_TYPES[$type],
+                    'nomor' => $nomors[$type] ?? null,
+                    'tanggal' => $tanggal[$type] ?? null,
                 ])
                 ->toMediaCollection('kontrak/addendum');
         }
@@ -506,6 +513,29 @@ class KontrakAddendumController extends Controller
     /**
      * Tautkan addendum ke register dokumen yang nomornya cocok (dari gap).
      */
+    /**
+     * Bangun daftar dokumen (type/nomor/tanggal) dari lampiran yang diupload pengawas.
+     */
+    private function dokumenFromAttachments(KontrakAddendum $addendum): array
+    {
+        $dokumen = [];
+
+        foreach ($addendum->getMedia('kontrak/addendum') as $media) {
+            $type = $media->getCustomProperty('type');
+            if (! $type) {
+                continue;
+            }
+
+            $dokumen[] = [
+                'type' => $type,
+                'nomor' => $media->getCustomProperty('nomor'),
+                'tanggal' => $media->getCustomProperty('tanggal'),
+            ];
+        }
+
+        return $dokumen;
+    }
+
     private function linkRegister(KontrakAddendum $addendum): void
     {
         $nomor = $addendum->nomor_addendum;
