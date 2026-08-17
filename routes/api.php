@@ -43,6 +43,7 @@ use App\Http\Controllers\PuspenMediaShareController;
 use App\Http\Controllers\PuspenPengawasKpiController;
 use App\Http\Controllers\PuspenReviewNoteController;
 use App\Http\Controllers\RoleController;
+use App\Http\Controllers\SkController;
 use App\Http\Controllers\RoutePermissionController;
 use App\Http\Controllers\SignatureLibraryController;
 use App\Http\Controllers\WhatsAppController;
@@ -212,6 +213,9 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('error-logs/{errorLog}', [ClientErrorReportController::class, 'show'])->whereNumber('errorLog');
         Route::post('error-logs/{errorLog}/resolve', [ClientErrorReportController::class, 'resolve'])->whereNumber('errorLog');
         Route::post('error-logs/{errorLog}/reopen', [ClientErrorReportController::class, 'reopen'])->whereNumber('errorLog');
+
+        // Pengaturan SK — arsip dokumen SK (admin only)
+        Route::apiResource('sk', SkController::class);
     });
 
     Route::get('/user', function (Request $request) {
