@@ -136,19 +136,71 @@ class UserDriveController extends Controller
     {
         abort_unless($userDriveItem->canManage($request->user()), 403);
 
-        if ($userDriveItem->kind === UserDriveItem::KIND_FOLDER) {
-            $hasChildren = UserDriveItem::ownedBy($request->user()->id)
-                ->where('parent_id', $userDriveItem->id)
-                ->exists();
-
-            abort_if($hasChildren, 422, 'Folder tidak kosong. Hapus isi folder terlebih dahulu.');
-        }
-
-        $userDriveItem->delete();
+        $deleted = DB::transaction(function () use ($userDriveItem) {
+            return $this->deleteItemRecursive($userDriveItem);
+        });
 
         return response()->json([
             'success' => true,
             'message' => 'Item drive berhasil dihapus',
+            'deleted' => $deleted,
         ]);
+    }
+
+    public function bulkDestroy(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'ids' => 'required|array|min:1',
+            'ids.*' => 'integer',
+        ]);
+
+        $items = UserDriveItem::ownedBy($request->user()->id)
+            ->whereIn('id', $validated['ids'])
+            ->get();
+
+        if ($items->isEmpty()) {
+            return response()->json(['message' => 'Item drive tidak ditemukan'], 404);
+        }
+
+        $deleted = DB::transaction(function () use ($items) {
+            $count = 0;
+            foreach ($items as $item) {
+                $count += $this->deleteItemRecursive($item);
+            }
+
+            return $count;
+        });
+
+        return response()->json([
+            'success' => true,
+            'message' => "{$deleted} item drive dihapus",
+            'deleted' => $deleted,
+        ]);
+    }
+
+    /**
+     * Hapus item beserta seluruh turunannya (rekursif).
+     * File: hapus media + record. Folder: hapus semua anak dulu, lalu folder.
+     */
+    private function deleteItemRecursive(UserDriveItem $item): int
+    {
+        $count = 0;
+
+        if ($item->kind === UserDriveItem::KIND_FOLDER) {
+            $children = UserDriveItem::ownedBy($item->user_id)
+                ->where('parent_id', $item->id)
+                ->get();
+
+            foreach ($children as $child) {
+                $count += $this->deleteItemRecursive($child);
+            }
+        } else {
+            $item->clearMediaCollection('drive-file');
+        }
+
+        $item->delete();
+        $count++;
+
+        return $count;
     }
 }

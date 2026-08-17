@@ -7,6 +7,7 @@ use App\Models\Foto;
 use App\Models\Pekerjaan;
 use App\Services\KoordinatValidationService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
 class FotoController extends Controller
@@ -266,5 +267,39 @@ class FotoController extends Controller
         $foto->delete();
 
         return response()->json(['message' => 'Foto deleted successfully']);
+    }
+
+    public function bulkDestroy(Request $request)
+    {
+        $validated = $request->validate([
+            'ids' => 'required|array|min:1',
+            'ids.*' => 'integer',
+        ]);
+
+        $ids = $validated['ids'];
+        $fotos = Foto::whereIn('id', $ids)->get();
+
+        if ($fotos->isEmpty()) {
+            return response()->json(['message' => 'Foto tidak ditemukan'], 404);
+        }
+
+        foreach ($fotos as $foto) {
+            if (! Pekerjaan::userCanAccess((int) $foto->pekerjaan_id)) {
+                abort(403, 'Anda tidak memiliki akses untuk pekerjaan ini');
+            }
+        }
+
+        $deleted = DB::transaction(function () use ($fotos) {
+            $count = 0;
+            foreach ($fotos as $foto) {
+                $foto->clearMediaCollection('foto/pekerjaan');
+                $foto->delete();
+                $count++;
+            }
+
+            return $count;
+        });
+
+        return response()->json(['message' => "{$deleted} foto dihapus", 'deleted' => $deleted]);
     }
 }

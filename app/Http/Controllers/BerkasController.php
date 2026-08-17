@@ -218,8 +218,35 @@ class BerkasController extends Controller
         
         // Delete the database record
         $berkas->delete();
-        
+
         return response()->json(['message' => 'Berkas deleted successfully']);
+    }
+
+    public function bulkDestroy(Request $request)
+    {
+        $validated = $request->validate([
+            'ids' => 'required|array|min:1',
+            'ids.*' => 'integer',
+        ]);
+
+        $berkasList = Berkas::whereIn('id', $validated['ids'])->get();
+
+        if ($berkasList->isEmpty()) {
+            return response()->json(['message' => 'Berkas tidak ditemukan'], 404);
+        }
+
+        $deleted = DB::transaction(function () use ($berkasList) {
+            $count = 0;
+            foreach ($berkasList as $berkas) {
+                $berkas->clearMediaCollection('berkas/dokumen');
+                $berkas->delete();
+                $count++;
+            }
+
+            return $count;
+        });
+
+        return response()->json(['message' => "{$deleted} berkas dihapus", 'deleted' => $deleted]);
     }
     public function convertToPdf(Berkas $berkas, DocumentPdfConverter $converter)
     {

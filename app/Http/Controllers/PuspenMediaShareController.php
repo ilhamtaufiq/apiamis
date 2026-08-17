@@ -351,4 +351,36 @@ class PuspenMediaShareController extends Controller
 
         return $token;
     }
+
+    public function destroyMedia(Request $request): JsonResponse
+    {
+        abort_unless($request->user()->hasRole('admin'), 403, 'Hanya admin yang dapat menghapus media');
+
+        $validated = $request->validate([
+            'ids' => 'required|array|min:1',
+            'ids.*' => 'integer',
+        ]);
+
+        $media = Media::whereIn('id', $validated['ids'])->get();
+
+        if ($media->isEmpty()) {
+            return response()->json(['message' => 'Media tidak ditemukan'], 404);
+        }
+
+        $deleted = DB::transaction(function () use ($media) {
+            $count = 0;
+            foreach ($media as $item) {
+                $item->delete();
+                $count++;
+            }
+
+            return $count;
+        });
+
+        return response()->json([
+            'success' => true,
+            'message' => "{$deleted} media dihapus",
+            'deleted' => $deleted,
+        ]);
+    }
 }

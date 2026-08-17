@@ -331,12 +331,15 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('berkas/jenis-dokumen', [BerkasController::class, 'jenisDokumen']);
     Route::post('berkas/upload-from-url', [BerkasController::class, 'uploadFromUrl']);
     Route::get('berkas/{berkas}/export-pdf', [BerkasController::class, 'convertToPdf']);
+    Route::delete('berkas/bulk', [BerkasController::class, 'bulkDestroy']);
     Route::apiResource('berkas', BerkasController::class)->parameters(['berkas' => 'berkas']);
     Route::post('koordinat/validate', [KoordinatValidationController::class, 'validateKoordinat']);
+    Route::delete('foto/bulk', [FotoController::class, 'bulkDestroy']);
     Route::apiResource('foto', FotoController::class);
     Route::get('user-drive', [UserDriveController::class, 'index']);
     Route::post('user-drive/folders', [UserDriveController::class, 'storeFolder']);
     Route::post('user-drive/files', [UserDriveController::class, 'storeFile']);
+    Route::delete('user-drive/bulk', [UserDriveController::class, 'bulkDestroy']);
     Route::get('user-drive/{userDriveItem}', [UserDriveController::class, 'show']);
     Route::delete('user-drive/{userDriveItem}', [UserDriveController::class, 'destroy']);
     Route::apiResource('users', UserController::class);
@@ -419,6 +422,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('puspen/pekerjaan/{pekerjaan}/review-notes', [PuspenReviewNoteController::class, 'store']);
     Route::delete('puspen/review-notes/{puspenReviewNote}', [PuspenReviewNoteController::class, 'destroy']);
     Route::get('puspen/media-library', [PuspenMediaShareController::class, 'mediaLibrary']);
+    Route::delete('puspen/media', [PuspenMediaShareController::class, 'destroyMedia']);
     Route::apiResource('puspen/media-shares', PuspenMediaShareController::class)
         ->parameters(['media-shares' => 'puspenMediaShare'])
         ->only(['index', 'store', 'update', 'destroy']);
