@@ -651,8 +651,13 @@ class KontrakAddendumController extends Controller
         foreach ($numbers as $num) {
             if (!$num || !is_string($num)) continue;
 
+            // Ekstrak nomor addendum utama: ...DISPERKIM-AMS.{id_pekerjaan}.{sequence}/{year}
+            // Mencari pola .[sequence]/[year] di akhir string nomor
+            if (preg_match('/\.(\d+)\/\d+$/', $num, $matches)) {
+                $maxSeq = max($maxSeq, (int)$matches[1]);
+            }
             // Ekstrak dari format {id_pekerjaan}.{sequence}/AMS/...
-            if (preg_match('/^\d+\.(\d+)/', $num, $matches)) {
+            elseif (preg_match('/^\d+\.(\d+)/', $num, $matches)) {
                 $maxSeq = max($maxSeq, (int)$matches[1]);
             }
             // Ekstrak dari format {sequence}/ADD-AMIS/... atau {sequence}/...
