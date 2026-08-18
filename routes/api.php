@@ -287,6 +287,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('kontrak/{kontrak}/addendums', [KontrakAddendumController::class, 'index']);
     Route::get('kontrak/{kontrak}/addendum-register-gaps', [KontrakAddendumController::class, 'registerGapsForKontrak']);
     Route::post('kontrak/{kontrak}/addendums', [KontrakAddendumController::class, 'store']);
+    Route::post('kontrak/{kontrak}/addendum-numbers', [KontrakAddendumController::class, 'generateNumbers']);
 
     Route::get('kontrak-addendums/{kontrakAddendum}', [KontrakAddendumController::class, 'show']);
     Route::put('kontrak-addendums/{kontrakAddendum}', [KontrakAddendumController::class, 'update']);

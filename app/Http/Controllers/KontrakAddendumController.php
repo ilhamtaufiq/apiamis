@@ -101,6 +101,77 @@ class KontrakAddendumController extends Controller
         return KontrakAddendumResource::collection($addendums);
     }
 
+    /**
+     * Generate nomor addendum + nomor berkas dari sequence berita-acara (sama
+     * dengan Register Dokumen). Nomor pertama menggunakan template tipe dokumen ADD/Addendum.
+     * Nomor berkas berikutnya menggunakan nomor addendum tersebut sebagai prefix.
+     */
+    public function generateNumbers(Request $request, Kontrak $kontrak)
+    {
+        $this->authorizeCreate($kontrak);
+
+        $validated = $request->validate([
+            'tanggal' => 'required|date',
+            'count' => 'required|integer|min:1|max:20',
+        ]);
+
+        $count = (int) $validated['count'];
+        $date = new \DateTime($validated['tanggal']);
+        $year = (int) $date->format('Y');
+
+        $addendumType = \App\Models\DocumentType::query()
+            ->whereIn(DB::raw('lower(code)'), ['add', 'addendum'])
+            ->first();
+
+        if (!$addendumType) {
+            return response()->json(['message' => 'Tipe dokumen Addendum (ADD) belum dikonfigurasi di Master Tipe Dokumen.'], 422);
+        }
+
+        $seq = DB::table('tbl_document_sequences')
+            ->where('year', $year)
+            ->where('type', 'berita-acara')
+            ->first();
+
+        $start = $seq ? ((int) $seq->last_number + 1) : 1;
+
+        // ponytail: preview only — sequence di-commit saat addendum disimpan (store).
+        $roman = [1 => 'I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X', 'XI', 'XII'];
+        $monthRoman = $roman[(int)$date->format('n')] ?? $date->format('n');
+
+        // Ekstrak sequence SPK (contoh: '098' dari DISPERKIM-AMS.098.390/2026)
+        $spkPrefix = (string) $kontrak->id_pekerjaan;
+        if ($kontrak->spk && preg_match('/DISPERKIM-AMS\.(\d+)/i', $kontrak->spk, $matches)) {
+            $spkPrefix = $matches[1];
+        } elseif ($kontrak->spk && preg_match('/\.(\d+)\.\d+\/\d+$/', $kontrak->spk, $matches)) {
+            $spkPrefix = $matches[1];
+        }
+
+        $template = $addendumType->format_template ?: '{sequence}/{code}-AMIS/{month}/{year}';
+        $replacements = [
+            '{sequence}' => str_pad((string)$start, 3, '0', STR_PAD_LEFT),
+            '{nomor_urut_surat}' => $start,
+            '{code}' => $addendumType->code,
+            '{year}' => $date->format('Y'),
+            '{tahun}' => $date->format('Y'),
+            '{month}' => $monthRoman,
+            '{day}' => $date->format('d'),
+            '{kontrak_id}' => $kontrak->id,
+            // Addendum utama memakai id_pekerjaan asli sebagai prefix
+            '{id_pekerjaan}' => $kontrak->id_pekerjaan,
+        ];
+
+        $addendumNumber = str_replace(array_keys($replacements), array_values($replacements), $template);
+
+        $numbers = [$addendumNumber];
+        for ($i = 1; $i < $count; $i++) {
+            $seqStr = str_pad((string)($start + $i), 3, '0', STR_PAD_LEFT);
+            // Lampiran: {id_pekerjaan}.{sequence}/{spkPrefix}/AMS/{year} (contoh: 626.107/098/AMS/2026)
+            $numbers[] = $kontrak->id_pekerjaan . '.' . $seqStr . '/' . $spkPrefix . '/AMS/' . $date->format('Y');
+        }
+
+        return response()->json(['numbers' => $numbers]);
+    }
+
     public function store(Request $request, Kontrak $kontrak)
     {
         $this->authorizeCreate($kontrak);
@@ -109,7 +180,7 @@ class KontrakAddendumController extends Controller
         // Lampiran wajib tak divalidasi saat create — simpan draft dulu,
         // lengkapi bertahap, wajib penuh baru saat submit (ensureRequiredAttachmentsExist).
 
-        $addendum = DB::transaction(function () use ($validated, $kontrak) {
+        $addendum = DB::transaction(function () use ($validated, $kontrak, $request) {
             $items = $validated['items'] ?? [];
             unset($validated['items'], $validated['attachments']);
 
@@ -123,6 +194,18 @@ class KontrakAddendumController extends Controller
 
             $this->syncItems($addendum, $items);
             $this->storeTypedAttachments($addendum);
+
+            // Update document sequence jika ada nomor tergenerate yang di-simpan
+            $allNumbers = [];
+            if ($addendum->nomor_addendum) {
+                $allNumbers[] = $addendum->nomor_addendum;
+            }
+            $nomors = $request->input('attachment_nomor', []);
+            if (is_array($nomors)) {
+                $allNumbers = array_merge($allNumbers, array_values($nomors));
+            }
+            $year = $addendum->tanggal_addendum ? (int) substr($addendum->tanggal_addendum, 0, 4) : (int) date('Y');
+            $this->updateSequenceFromNumbers($allNumbers, $year);
 
             return $addendum;
         });
@@ -156,7 +239,7 @@ class KontrakAddendumController extends Controller
 
         $validated = $this->validateAddendum($request, $kontrakAddendum->kontrak, $kontrakAddendum);
 
-        DB::transaction(function () use ($validated, $kontrakAddendum) {
+        DB::transaction(function () use ($validated, $kontrakAddendum, $request) {
             $items = $validated['items'] ?? null;
             unset($validated['items']);
 
@@ -167,6 +250,18 @@ class KontrakAddendumController extends Controller
                 $kontrakAddendum->items()->delete();
                 $this->syncItems($kontrakAddendum, $items);
             }
+
+            // Update document sequence jika ada nomor tergenerate yang di-simpan saat update
+            $allNumbers = [];
+            if ($kontrakAddendum->nomor_addendum) {
+                $allNumbers[] = $kontrakAddendum->nomor_addendum;
+            }
+            $nomors = $request->input('attachment_nomor', []);
+            if (is_array($nomors)) {
+                $allNumbers = array_merge($allNumbers, array_values($nomors));
+            }
+            $year = $kontrakAddendum->tanggal_addendum ? (int) substr($kontrakAddendum->tanggal_addendum, 0, 4) : (int) date('Y');
+            $this->updateSequenceFromNumbers($allNumbers, $year);
         });
 
         return new KontrakAddendumResource($kontrakAddendum->fresh()->load(['items', 'media']));
@@ -174,8 +269,8 @@ class KontrakAddendumController extends Controller
 
     public function destroy(KontrakAddendum $kontrakAddendum)
     {
-        $this->authorizeAdmin();
-        $this->ensureEditable($kontrakAddendum);
+        $this->authorizeSubmit($kontrakAddendum); // Memastikan admin atau pengawas pengampu
+        $this->ensureEditable($kontrakAddendum); // Memastikan status != 'disetujui'
 
         $kontrakAddendum->delete();
 
@@ -548,5 +643,39 @@ class KontrakAddendumController extends Controller
             ->where('nomor', $nomor)
             ->whereNull('addendum_id')
             ->update(['addendum_id' => $addendum->id]);
+    }
+
+    private function updateSequenceFromNumbers(array $numbers, int $year): void
+    {
+        $maxSeq = 0;
+        foreach ($numbers as $num) {
+            if (!$num || !is_string($num)) continue;
+
+            // Ekstrak dari format {id_pekerjaan}.{sequence}/AMS/...
+            if (preg_match('/^\d+\.(\d+)/', $num, $matches)) {
+                $maxSeq = max($maxSeq, (int)$matches[1]);
+            }
+            // Ekstrak dari format {sequence}/ADD-AMIS/... atau {sequence}/...
+            elseif (preg_match('/^(\d+)\//', $num, $matches)) {
+                $maxSeq = max($maxSeq, (int)$matches[1]);
+            }
+        }
+
+        if ($maxSeq > 0) {
+            $seq = DB::table('tbl_document_sequences')
+                ->where('year', $year)
+                ->where('type', 'berita-acara')
+                ->lockForUpdate()
+                ->first();
+
+            $currentLast = $seq ? (int)$seq->last_number : 0;
+            if ($maxSeq > $currentLast) {
+                DB::table('tbl_document_sequences')
+                    ->updateOrInsert(
+                        ['year' => $year, 'type' => 'berita-acara'],
+                        ['last_number' => $maxSeq]
+                    );
+            }
+        }
     }
 }
