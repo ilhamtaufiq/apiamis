@@ -468,7 +468,13 @@ class KontrakAddendumController extends Controller
                     ->where('kontrak_id', $kontrak->id)
                     ->ignore($current?->id),
             ],
-            'nomor_addendum' => 'nullable|string|max:100',
+            'nomor_addendum' => [
+                'nullable',
+                'string',
+                'max:100',
+                Rule::unique('tbl_kontrak_addendums', 'nomor_addendum')->ignore($current?->id),
+                Rule::unique('tbl_document_registers', 'nomor')->ignore($current?->nomor_addendum, 'nomor')
+            ],
             'tanggal_addendum' => 'required|date',
             'jenis_addendum' => 'required|in:teknis,biaya,waktu,teknis_biaya,lainnya',
             'alasan' => 'nullable|string',
