@@ -349,12 +349,20 @@ class KontrakController extends Controller
                 $nama = $kontrak->pekerjaans->first()?->nama_paket
                     ?? $kontrak->kode_paket
                     ?? "kontrak_{$kontrak->id}";
+                if (!file_exists($path)) {
+                    $errors[] = "$nama: file tidak ditemukan setelah export";
+                    continue;
+                }
                 $safeName = preg_replace('/[^\w\-.]+/', '_', $nama);
-                $zip->addFile($path, "cover_{$safeName}.docx");
+                if ($zip->addFile($path, "cover_{$safeName}.docx") !== true) {
+                    $errors[] = "$nama: gagal menambah ke ZIP";
+                    @unlink($path);
+                    continue;
+                }
                 $count++;
                 @unlink($path);
             } catch (\Exception $e) {
-                $errors[] = $nama ?? "kontrak_{$kontrak->id}".': '.$e->getMessage();
+                $errors[] = "$nama: {$e->getMessage()}";
             }
         }
 
