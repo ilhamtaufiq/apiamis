@@ -80,7 +80,7 @@ class PekerjaanController extends Controller
         // Ambil kontrak tanpa nested payload agar ringan (anti-OOM).
         if ($isUnbounded && $request->boolean('summary')) {
             $with[] = 'tags';
-            $with[] = 'kontrak'; // nominal saja, tanpa penyedia/addendums
+            $with[] = 'kontrak.registers.type'; // registers untuk SP2D di export rekap
         }
 
         $query = Pekerjaan::with($with)
@@ -95,9 +95,9 @@ class PekerjaanController extends Controller
                 $query->with(['output', 'foto']);
             }
             // Rekap Progress butuh kontrak untuk grouping konsolidasi (client-side).
-            if (! in_array('kontrak', $with) && ! in_array('kontrak.penyedia', $with)) {
-                $with[] = 'kontrak';
-                $query->with('kontrak');
+            if (! in_array('kontrak', $with) && ! in_array('kontrak.registers.type', $with)) {
+                $with[] = 'kontrak.registers.type';
+                $query->with('kontrak.registers.type');
             }
         }
 

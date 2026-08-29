@@ -3,7 +3,12 @@
 namespace App\Http\Controllers;
 
 use App\Models\Desa;
+use App\Models\Pekerjaan;
+use App\Models\SpmSanitasi;
+use App\Models\UnitSpam;
+use App\Models\UsulanKegiatan;
 use App\Http\Resources\DesaResource;
+use App\Http\Resources\PekerjaanResource;
 use App\Services\DesaKkSyncService;
 use Illuminate\Http\Request;
 use RuntimeException;
@@ -199,6 +204,68 @@ class DesaController extends Controller
      *     @OA\Response(response=200, description="Sync completed")
      * )
      */
+    /**
+     * @OA\Get(
+     *     path="/api/desa/{id}/profile",
+     *     summary="Get desa profile with aggregated data",
+     *     tags={"Desa"},
+     *     @OA\Parameter(
+     *         name="id",
+     *         in="path",
+     *         required=true,
+     *         @OA\Schema(type="integer")
+     *     ),
+     *     @OA\Response(response=200, description="Successful operation")
+     * )
+     */
+    public function profile(Desa $desa)
+    {
+        $desa->load('kecamatan');
+
+        $pekerjaan = Pekerjaan::where('desa_id', $desa->id)->get();
+        $spmSanitasi = SpmSanitasi::where('desa_id', $desa->id)->get();
+        $unitSpam = UnitSpam::where('desa_id', $desa->id)->get();
+        $usulanKegiatan = UsulanKegiatan::where('desa_id', $desa->id)->count();
+
+        $totalPagu = $pekerjaan->sum('pagu');
+        $pekerjaanAktif = $pekerjaan->where('status', 'active')->count();
+        $pekerjaanSelesai = $pekerjaan->where('status', 'completed')->count();
+
+        $totalPemanfaatKk = $spmSanitasi->sum('jumlah_pemanfaat_kk');
+        $totalPemanfaatJiwa = $spmSanitasi->sum('jumlah_pemanfaat_jiwa');
+        $infrastrukturBerfungsi = $spmSanitasi->where('status_keberfungsian', 'Berfungsi')->count();
+
+        $totalUnitSpam = $unitSpam->count();
+        $unitSpamSimspam = $unitSpam->where('is_simspam', true)->count();
+
+        $kepadatan = $desa->luas > 0
+            ? round($desa->jumlah_penduduk / $desa->luas, 2)
+            : null;
+
+        return response()->json([
+            'data' => [
+                'desa' => new DesaResource($desa),
+                'ringkasan' => [
+                    'kepadatan_penduduk' => $kepadatan,
+                    'total_pekerjaan' => $pekerjaan->count(),
+                    'pekerjaan_aktif' => $pekerjaanAktif,
+                    'pekerjaan_selesai' => $pekerjaanSelesai,
+                    'total_pagu' => round($totalPagu, 2),
+                    'total_unit_spam' => $totalUnitSpam,
+                    'unit_spam_simspam' => $unitSpamSimspam,
+                    'total_infrastruktur_sanitasi' => $spmSanitasi->count(),
+                    'infrastruktur_berfungsi' => $infrastrukturBerfungsi,
+                    'total_pemanfaat_kk' => $totalPemanfaatKk,
+                    'total_pemanfaat_jiwa' => $totalPemanfaatJiwa,
+                    'total_usulan_kegiatan' => $usulanKegiatan,
+                ],
+                'pekerjaan' => PekerjaanResource::collection($pekerjaan->load(['kecamatan', 'kegiatan'])),
+                'spm_sanitasi' => $spmSanitasi->values(),
+                'unit_spam' => $unitSpam->values(),
+            ],
+        ]);
+    }
+
     public function syncKk(Request $request, DesaKkSyncService $service)
     {
         $validated = $request->validate([

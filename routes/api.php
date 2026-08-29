@@ -271,6 +271,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::apiResource('spm-sanitasi', SpmSanitasiController::class);
     Route::apiResource('kecamatan', KecamatanController::class);
     Route::post('desa/sync-kk', [DesaController::class, 'syncKk']);
+    Route::get('desa/{desa}/profile', [DesaController::class, 'profile']);
     Route::apiResource('desa', DesaController::class);
     Route::apiResource('penyedia', PenyediaController::class)->parameters(['penyedia' => 'penyedia']);
     Route::apiResource('kegiatan', KegiatanController::class);

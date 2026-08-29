@@ -135,10 +135,25 @@ class PekerjaanResource extends JsonResource
             'kontrak' => $this->whenLoaded('kontrak', fn () => $this->kontrak->map(fn ($kontrak) => [
                 'id' => $kontrak->id,
                 'spk' => $kontrak->spk,
+                'tgl_spk' => $kontrak->tgl_spk?->format('Y-m-d'),
                 'kode_paket' => $kontrak->kode_paket,
                 'tgl_spmk' => $kontrak->tgl_spmk?->format('Y-m-d'),
                 'tgl_selesai' => $kontrak->tgl_selesai?->format('Y-m-d'),
                 'nilai_kontrak' => $kontrak->nilai_kontrak,
+                'registers' => $kontrak->relationLoaded('registers')
+                    ? $kontrak->registers->map(fn ($register) => [
+                        'id' => $register->id,
+                        'type_id' => $register->type_id,
+                        'nomor' => $register->nomor,
+                        'tanggal' => $register->tanggal,
+                        'nilai' => $register->nilai,
+                        'type' => $register->relationLoaded('type') && $register->type ? [
+                            'id' => $register->type->id,
+                            'code' => $register->type->code,
+                            'name' => $register->type->name,
+                        ] : null,
+                    ])->values()
+                    : [],
                 'penyedia' => $kontrak->relationLoaded('penyedia') && $kontrak->penyedia ? [
                     'id' => $kontrak->penyedia->id,
                     'nama' => $kontrak->penyedia->nama,
