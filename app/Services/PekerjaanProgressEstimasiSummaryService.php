@@ -31,11 +31,17 @@ class PekerjaanProgressEstimasiSummaryService
                 'id' => $history->id,
                 'tanggal' => $history->tanggal->format('Y-m-d'),
                 'persen' => (float) $history->persen,
+                'nilai' => $history->nilai !== null ? (float) $history->nilai : null,
             ];
         }
 
         $fisik = $this->buildSectionSummary($grouped['fisik']);
         $keuangan = $this->buildSectionSummary($grouped['keuangan']);
+
+        $keuanganRealisasiNilai = null;
+        if ($keuangan['latest_entry'] !== null && isset($keuangan['latest_entry']['nilai'])) {
+            $keuanganRealisasiNilai = $keuangan['latest_entry']['nilai'];
+        }
 
         return [
             'fisik_realisasi' => $fisik['latest_realisasi'],
@@ -44,6 +50,7 @@ class PekerjaanProgressEstimasiSummaryService
             'keuangan_realisasi' => $keuangan['latest_realisasi'],
             'keuangan_rencana' => $keuangan['latest_rencana'],
             'keuangan_deviasi' => $keuangan['deviasi'],
+            'keuangan_realisasi_nilai' => $keuanganRealisasiNilai,
         ];
     }
 
@@ -58,6 +65,7 @@ class PekerjaanProgressEstimasiSummaryService
             'deviasi' => $latestRencana !== null && $latestRealisasi !== null
                 ? round(($latestRealisasi['persen'] ?? 0) - ($latestRencana['persen'] ?? 0), 2)
                 : null,
+            'latest_entry' => $latestRealisasi,
         ];
     }
 

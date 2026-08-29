@@ -69,6 +69,7 @@ class PekerjaanResource extends JsonResource
 
         $progressEstimasiFisik = null;
         $progressEstimasiKeuangan = null;
+        $progressEstimasiKeuanganNilai = null;
         $deviasiEstimasiFisik = null;
         $deviasiEstimasiKeuangan = null;
 
@@ -79,6 +80,7 @@ class PekerjaanResource extends JsonResource
 
             $progressEstimasiFisik = $estimasiSummary['fisik_realisasi'];
             $progressEstimasiKeuangan = $estimasiSummary['keuangan_realisasi'];
+            $progressEstimasiKeuanganNilai = $estimasiSummary['keuangan_realisasi_nilai'];
             $deviasiEstimasiFisik = $estimasiSummary['fisik_deviasi'];
             $deviasiEstimasiKeuangan = $estimasiSummary['keuangan_deviasi'];
         }
@@ -113,6 +115,7 @@ class PekerjaanResource extends JsonResource
             'deviasi' => round($deviasi, 2),
             'progress_estimasi_fisik' => $progressEstimasiFisik,
             'progress_estimasi_keuangan' => $progressEstimasiKeuangan,
+            'progress_estimasi_keuangan_nilai' => $progressEstimasiKeuanganNilai,
             'deviasi_estimasi_fisik' => $deviasiEstimasiFisik,
             'deviasi_estimasi_keuangan' => $deviasiEstimasiKeuangan,
             'foto_count' => $this->foto_count ?? $fotoActualCount,
