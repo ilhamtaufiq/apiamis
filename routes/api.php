@@ -277,6 +277,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::apiResource('kegiatan', KegiatanController::class);
     // Custom routes - Kontrak
     Route::get('kontrak/export/excel', [KontrakController::class, 'exportExcel']);
+    Route::get('kontrak/export-all-covers', [KontrakController::class, 'exportAllCovers']);
 
     Route::get('kontrak/pekerjaan/{pekerjaanId}', [KontrakController::class, 'byPekerjaan']);
     Route::get('kontrak/kegiatan/{kegiatanId}', [KontrakController::class, 'byKegiatan']);

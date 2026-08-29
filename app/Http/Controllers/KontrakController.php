@@ -315,6 +315,60 @@ class KontrakController extends Controller
         }
     }
 
+    public function exportAllCovers(Request $request)
+    {
+        $validated = $request->validate([
+            'tahun' => 'nullable|integer|min:2000|max:2100',
+        ]);
+        $tahun = $validated['tahun'] ?? null;
+
+        $query = Kontrak::query()
+            ->with(['kegiatan', 'pekerjaans.kegiatan', 'pekerjaans.kecamatan', 'pekerjaans.desa', 'penyedia', 'approvedAddendums']);
+
+        if ($tahun) {
+            $query->whereHas('kegiatan', fn ($q) => $q->where('tahun_anggaran', $tahun));
+        }
+
+        $kontraks = $query->get();
+
+        if ($kontraks->isEmpty()) {
+            return response()->json(['message' => 'Tidak ada kontrak untuk diekspor'], 404);
+        }
+
+        $zip = new \ZipArchive();
+        $tmpZip = tempnam(sys_get_temp_dir(), 'cover_').'.zip';
+        if ($zip->open($tmpZip, \ZipArchive::CREATE | \ZipArchive::OVERWRITE) !== true) {
+            return response()->json(['message' => 'Gagal membuat arsip ZIP'], 500);
+        }
+
+        $errors = [];
+        $count = 0;
+        foreach ($kontraks as $kontrak) {
+            try {
+                $path = $this->exportService->exportCover($kontrak);
+                $nama = $kontrak->pekerjaans->first()?->nama_paket
+                    ?? $kontrak->kode_paket
+                    ?? "kontrak_{$kontrak->id}";
+                $safeName = preg_replace('/[^\w\-.]+/', '_', $nama);
+                $zip->addFile($path, "cover_{$safeName}.docx");
+                $count++;
+                @unlink($path);
+            } catch (\Exception $e) {
+                $errors[] = $nama ?? "kontrak_{$kontrak->id}".': '.$e->getMessage();
+            }
+        }
+
+        $zip->close();
+
+        if ($count === 0) {
+            @unlink($tmpZip);
+            return response()->json(['message' => 'Tidak ada cover yang bisa dibuat: '.implode('; ', $errors)], 500);
+        }
+
+        return response()->download($tmpZip, 'cover_kontrak'.($tahun ? "_$tahun" : '').'.zip')
+            ->deleteFileAfterSend(true);
+    }
+
     public function bapContext(Kontrak $kontrak)
     {
         $kontrak->loadMissing(['pekerjaans']);
