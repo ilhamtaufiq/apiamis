@@ -19,8 +19,10 @@ class PekerjaanProgressEstimasiHistory extends Model
         'tipe',
         'tanggal',
         'persen',
+        'nilai',
         'nomor_sp2d',
         'tanggal_pembuatan',
+        'tanggal_pencairan',
     ];
 
     protected $casts = [
@@ -28,7 +30,9 @@ class PekerjaanProgressEstimasiHistory extends Model
         'tahun_anggaran' => 'integer',
         'tanggal' => 'date',
         'tanggal_pembuatan' => 'date',
+        'tanggal_pencairan' => 'date',
         'persen' => 'float',
+        'nilai' => 'float',
     ];
 
     public function pekerjaan(): BelongsTo

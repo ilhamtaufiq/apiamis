@@ -53,6 +53,8 @@ class PekerjaanProgressEstimasiController extends Controller
             'keuangan.realisasi.*.persen' => ['required', fn ($attr, $value, $fail) => $this->validatePercent($attr, $value, $fail)],
             'keuangan.realisasi.*.nomor_sp2d' => 'nullable|string|max:255',
             'keuangan.realisasi.*.tanggal_pembuatan' => 'nullable|date',
+            'keuangan.realisasi.*.tanggal_pencairan' => 'nullable|date',
+            'keuangan.realisasi.*.nilai' => 'nullable|numeric',
         ]);
 
         $pekerjaan = Pekerjaan::byUserRole()->findOrFail($pekerjaanId);
@@ -76,11 +78,17 @@ class PekerjaanProgressEstimasiController extends Controller
                             'tipe' => $tipe,
                             'tanggal' => $entry['tanggal'],
                             'persen' => $this->normalizePercent($entry['persen']),
+                            'nilai' => $jenis === 'keuangan' && $tipe === 'realisasi'
+                                ? ($entry['nilai'] ?? null)
+                                : null,
                             'nomor_sp2d' => $jenis === 'keuangan' && $tipe === 'realisasi'
                                 ? ($entry['nomor_sp2d'] ?? null)
                                 : null,
                             'tanggal_pembuatan' => $jenis === 'keuangan' && $tipe === 'realisasi'
                                 ? ($entry['tanggal_pembuatan'] ?? null)
+                                : null,
+                            'tanggal_pencairan' => $jenis === 'keuangan' && $tipe === 'realisasi'
+                                ? ($entry['tanggal_pencairan'] ?? null)
                                 : null,
                         ]);
                     }
@@ -116,8 +124,10 @@ class PekerjaanProgressEstimasiController extends Controller
                 'id' => $history->id,
                 'tanggal' => $history->tanggal->format('Y-m-d'),
                 'persen' => $history->persen,
+                'nilai' => $history->nilai,
                 'nomor_sp2d' => $history->nomor_sp2d,
                 'tanggal_pembuatan' => $history->tanggal_pembuatan?->format('Y-m-d'),
+                'tanggal_pencairan' => $history->tanggal_pencairan?->format('Y-m-d'),
             ];
         }
 
