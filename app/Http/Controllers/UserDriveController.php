@@ -3,7 +3,9 @@
 namespace App\Http\Controllers;
 
 use App\Http\Resources\UserDriveItemResource;
+use App\Models\User;
 use App\Models\UserDriveItem;
+use App\Models\UserDriveShare;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -21,9 +23,16 @@ class UserDriveController extends Controller
         ]);
 
         $parentId = $request->input('parent_id');
+        $userId = $request->user()->id;
 
-        $query = UserDriveItem::ownedBy($request->user()->id)
-            ->with('media')
+        $query = UserDriveItem::where(function ($q) use ($userId) {
+            $q->where('user_id', $userId)
+                ->orWhereHas('shares', function ($share) use ($userId) {
+                    $share->whereNull('shared_to_user_id')
+                        ->orWhere('shared_to_user_id', $userId);
+                });
+        })
+            ->with(['media', 'shares'])
             ->when(
                 $parentId === null || $parentId === '' || $parentId === 'null',
                 fn ($builder) => $builder->whereNull('parent_id'),
@@ -129,7 +138,40 @@ class UserDriveController extends Controller
     {
         abort_unless($userDriveItem->canManage($request->user()), 403);
 
-        return new UserDriveItemResource($userDriveItem->load('media'));
+        return new UserDriveItemResource($userDriveItem->load(['media', 'shares']));
+    }
+
+    public function rename(Request $request, UserDriveItem $userDriveItem)
+    {
+        $validated = $request->validate([
+            'name' => 'required|string|max:255',
+        ]);
+
+        abort_unless($userDriveItem->canManage($request->user()), 403);
+
+        $userDriveItem->update([
+            'name' => trim($validated['name']),
+        ]);
+
+        return new UserDriveItemResource($userDriveItem->load(['media', 'shares']));
+    }
+
+    public function share(Request $request, UserDriveItem $userDriveItem)
+    {
+        $validated = $request->validate([
+            'user_id' => 'nullable|integer|exists:users,id',
+        ]);
+
+        abort_unless($userDriveItem->canManage($request->user()), 403);
+
+        $userId = $validated['user_id'] ?? null;
+
+        UserDriveShare::updateOrCreate(
+            ['item_id' => $userDriveItem->id, 'shared_to_user_id' => $userId],
+            ['item_id' => $userDriveItem->id, 'shared_to_user_id' => $userId],
+        );
+
+        return new UserDriveItemResource($userDriveItem->load(['media', 'shares']));
     }
 
     public function destroy(Request $request, UserDriveItem $userDriveItem): JsonResponse

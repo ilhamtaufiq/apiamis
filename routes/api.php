@@ -343,7 +343,9 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('user-drive/folders', [UserDriveController::class, 'storeFolder']);
     Route::post('user-drive/files', [UserDriveController::class, 'storeFile']);
     Route::delete('user-drive/bulk', [UserDriveController::class, 'bulkDestroy']);
+    Route::post('user-drive/{userDriveItem}/share', [UserDriveController::class, 'share']);
     Route::get('user-drive/{userDriveItem}', [UserDriveController::class, 'show']);
+    Route::put('user-drive/{userDriveItem}', [UserDriveController::class, 'rename']);
     Route::delete('user-drive/{userDriveItem}', [UserDriveController::class, 'destroy']);
     Route::apiResource('users', UserController::class);
     Route::apiResource('roles', RoleController::class);

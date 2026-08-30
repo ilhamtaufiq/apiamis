@@ -41,6 +41,21 @@ class UserDriveItem extends Model implements HasMedia
         return $this->hasMany(self::class, 'parent_id');
     }
 
+    public function shares(): HasMany
+    {
+        return $this->hasMany(UserDriveShare::class, 'item_id');
+    }
+
+    public function isSharedTo(int $userId): bool
+    {
+        return $this->shares()
+            ->where(function ($q) use ($userId) {
+                $q->whereNull('shared_to_user_id')
+                    ->orWhere('shared_to_user_id', $userId);
+            })
+            ->exists();
+    }
+
     public function scopeOwnedBy($query, int $userId)
     {
         return $query->where('user_id', $userId);
