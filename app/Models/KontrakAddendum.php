@@ -19,6 +19,7 @@ class KontrakAddendum extends Model implements HasMedia
         'kontrak_id',
         'addendum_ke',
         'nomor_addendum',
+        'attachment_nomors',
         'tanggal_addendum',
         'jenis_addendum',
         'alasan',
@@ -42,6 +43,7 @@ class KontrakAddendum extends Model implements HasMedia
         'nilai_kontrak_sesudah' => 'float',
         'approved_at' => 'datetime',
         'kelengkapan_override' => 'boolean',
+        'attachment_nomors' => 'array',
     ];
 
     public function kontrak(): BelongsTo

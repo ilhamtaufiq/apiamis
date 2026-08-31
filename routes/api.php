@@ -300,6 +300,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('kontrak-addendums/{kontrakAddendum}/override-kelengkapan', [KontrakAddendumController::class, 'overrideKelengkapan']);
     Route::post('kontrak-addendums/{kontrakAddendum}/reject', [KontrakAddendumController::class, 'reject']);
     Route::post('kontrak-addendums/{kontrakAddendum}/upload', [KontrakAddendumController::class, 'upload']);
+    Route::put('kontrak-addendums/{kontrakAddendum}/attachment-numbers', [KontrakAddendumController::class, 'updateAttachmentNumbers']);
 
     Route::post('kontrak/import', [KontrakController::class, 'import']);
     Route::get('kontrak/import/template', [KontrakController::class, 'downloadTemplate']);

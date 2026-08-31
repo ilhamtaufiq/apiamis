@@ -25,6 +25,37 @@ class KontrakAddendumController extends Controller
         'surat_perintah_pelaksanaan' => 'Surat Perintah Pelaksanaan (PPK)',
     ];
 
+    /**
+     * Nomor/tanggal lampiran dari generate nomor bisa ada tanpa file-nya
+     * (file menyusul). Persist agar tidak hilang sebelum upload.
+     */
+    private function buildAttachmentNomors(Request $request): ?array
+    {
+        $nomors = $request->input('attachment_nomor', []);
+        $tanggals = $request->input('attachment_tanggal', []);
+
+        if (! is_array($nomors) || $nomors === []) {
+            return null;
+        }
+
+        $result = [];
+        foreach ($nomors as $type => $nomor) {
+            if (! is_string($type) || ! array_key_exists($type, self::REQUIRED_ATTACHMENT_TYPES)) {
+                continue;
+            }
+            $nomor = trim((string) $nomor);
+            if ($nomor === '') {
+                continue;
+            }
+            $result[$type] = [
+                'nomor' => $nomor,
+                'tanggal' => $tanggals[$type] ?? null,
+            ];
+        }
+
+        return $result ?: null;
+    }
+
     public function registerGaps(\App\Services\KontrakAddendumRegisterGapService $gapService)
     {
         $this->authorizeAdmin();
@@ -186,6 +217,7 @@ class KontrakAddendumController extends Controller
 
             $addendum = $kontrak->addendums()->create([
                 ...$validated,
+                'attachment_nomors' => $this->buildAttachmentNomors($request),
                 'status' => 'draft',
                 'created_by' => auth()->id(),
             ]);
@@ -243,7 +275,10 @@ class KontrakAddendumController extends Controller
             $items = $validated['items'] ?? null;
             unset($validated['items']);
 
-            $kontrakAddendum->update($validated);
+            $kontrakAddendum->update([
+                ...$validated,
+                'attachment_nomors' => $this->buildAttachmentNomors($request),
+            ]);
             $this->linkRegister($kontrakAddendum);
 
             if (is_array($items)) {
@@ -313,8 +348,9 @@ class KontrakAddendumController extends Controller
             'nomor_addendum' => 'required|string|max:100',
             'dokumen' => 'nullable|array',
             'dokumen.*.type' => 'required|string',
-            'dokumen.*.nomor' => 'required|string|max:255',
-            'dokumen.*.tanggal' => 'required|date',
+            // Nomor/tanggal opsional — admin boleh setujui tanpa melengkapi semua.
+            'dokumen.*.nomor' => 'nullable|string|max:255',
+            'dokumen.*.tanggal' => 'nullable|date',
         ]);
 
         // Bila admin tak kirim dokumen, ambil nomor/tanggal dari lampiran yang diupload pengawas.
@@ -335,6 +371,11 @@ class KontrakAddendumController extends Controller
             $this->linkRegister($kontrakAddendum);
 
             foreach ($dokumen as $dok) {
+                // Lewati dokumen tanpa nomor — admin boleh setujui tanpa melengkapi semua.
+                if (empty($dok['nomor'])) {
+                    continue;
+                }
+
                 // Hapus register lama untuk slot yang sama, lalu buat ulang.
                 DocumentRegister::query()
                     ->where('addendum_id', $kontrakAddendum->id)
@@ -369,13 +410,15 @@ class KontrakAddendumController extends Controller
         }
 
         $validated = request()->validate([
-            'nomor_addendum' => 'required|string|max:100',
+            // Nomor opsional — tanpa nomor, pertahankan nomor hasil generate pengawas.
+            'nomor_addendum' => 'nullable|string|max:100',
         ]);
 
-        $this->ensureRequiredAttachmentsExist($kontrakAddendum);
+        // ponytail: kelengkapan lampiran tidak memblokir approve — admin lihat checklist
+        // dan bisa pakai override; ketatkan lagi bila alur wajib-lampiran dikembalikan.
 
         $kontrakAddendum->update([
-            'nomor_addendum' => $validated['nomor_addendum'],
+            'nomor_addendum' => $validated['nomor_addendum'] ?: $kontrakAddendum->nomor_addendum,
             'status' => 'disetujui',
             'approved_by' => auth()->id(),
             'approved_at' => now(),
@@ -425,14 +468,72 @@ class KontrakAddendumController extends Controller
         return new KontrakAddendumResource($kontrakAddendum->fresh()->load(['items', 'media']));
     }
 
+    /**
+     * Admin override/edit nomor & tanggal lampiran (hasil generate pengawas).
+     * Sinkron ke media custom property (bila file sudah ada) dan attachment_nomors.
+     */
+    public function updateAttachmentNumbers(Request $request, KontrakAddendum $kontrakAddendum)
+    {
+        $this->authorizeAdmin();
+        $this->ensureEditable($kontrakAddendum);
+
+        $validated = $request->validate([
+            'numbers' => 'required|array',
+            'numbers.*.nomor' => 'nullable|string|max:255',
+            'numbers.*.tanggal' => 'nullable|date',
+        ]);
+
+        $numbers = $validated['numbers'];
+        $existing = $kontrakAddendum->attachment_nomors ?? [];
+
+        foreach ($numbers as $type => $entry) {
+            if (! array_key_exists($type, self::REQUIRED_ATTACHMENT_TYPES)) {
+                continue;
+            }
+
+            $nomor = trim((string) ($entry['nomor'] ?? ''));
+            $tanggal = $entry['tanggal'] ?? null;
+
+            // Sinkron media custom property bila file lampiran sudah diupload.
+            $kontrakAddendum->getMedia('kontrak/addendum')
+                ->filter(fn ($media) => $media->getCustomProperty('type') === $type)
+                ->each(function ($media) use ($nomor, $tanggal) {
+                    if ($nomor !== '') {
+                        $media->setCustomProperty('nomor', $nomor);
+                    }
+                    if ($tanggal) {
+                        $media->setCustomProperty('tanggal', $tanggal);
+                    }
+                    $media->save();
+                });
+
+            if ($nomor === '' && ! $tanggal) {
+                unset($existing[$type]);
+                continue;
+            }
+
+            $existing[$type] = array_filter([
+                'nomor' => $nomor !== '' ? $nomor : ($existing[$type]['nomor'] ?? null),
+                'tanggal' => $tanggal ?: ($existing[$type]['tanggal'] ?? null),
+            ], fn ($v) => $v !== null);
+        }
+
+        $kontrakAddendum->update(['attachment_nomors' => $existing ?: null]);
+
+        return new KontrakAddendumResource($kontrakAddendum->fresh()->load(['items', 'media']));
+    }
+
     public function upload(Request $request, KontrakAddendum $kontrakAddendum)
     {
         $this->authorizeSubmit($kontrakAddendum);
-        $this->ensureEditable($kontrakAddendum);
+        // ponytail: upload tetap dibolehkan walau sudah disetujui — pelengkapan arsip;
+        // kembalikan ensureEditable bila lampiran harus dikunci setelah approve.
 
         $request->validate([
             'type' => 'required|string',
             'file' => 'required|file|mimes:pdf,doc,docx,xls,xlsx,jpg,jpeg,png|max:10240',
+            'nomor' => 'nullable|string|max:255',
+            'tanggal' => 'nullable|date',
         ]);
 
         $type = $request->input('type');
@@ -446,11 +547,16 @@ class KontrakAddendumController extends Controller
             ->filter(fn ($media) => $media->getCustomProperty('type') === $type)
             ->each->delete();
 
+        $nomor = $request->input('nomor') ?: ($kontrakAddendum->attachment_nomors[$type]['nomor'] ?? null);
+        $tanggal = $request->input('tanggal') ?: ($kontrakAddendum->attachment_nomors[$type]['tanggal'] ?? null);
+
         $kontrakAddendum
             ->addMediaFromRequest('file')
             ->withCustomProperties([
                 'type' => $type,
                 'label' => self::REQUIRED_ATTACHMENT_TYPES[$type],
+                'nomor' => $nomor,
+                'tanggal' => $tanggal,
             ])
             ->toMediaCollection('kontrak/addendum');
 

@@ -13,6 +13,7 @@ class KontrakAddendumResource extends JsonResource
             'kontrak_id' => $this->kontrak_id,
             'addendum_ke' => $this->addendum_ke,
             'nomor_addendum' => $this->nomor_addendum,
+            'attachment_nomors' => $this->attachment_nomors,
             'tanggal_addendum' => $this->tanggal_addendum?->format('Y-m-d'),
             'jenis_addendum' => $this->jenis_addendum,
             'alasan' => $this->alasan,
