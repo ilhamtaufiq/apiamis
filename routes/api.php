@@ -9,6 +9,7 @@ use App\Http\Controllers\BackupController;
 use App\Http\Controllers\GoogleDriveBackupController;
 use App\Http\Controllers\BeritaAcaraController;
 use App\Http\Controllers\BerkasController;
+use App\Http\Controllers\PetaPeripaanController;
 use App\Http\Controllers\ChecklistItemController;
 use App\Http\Controllers\ClientErrorReportController;
 use App\Http\Controllers\ContactController;
@@ -337,6 +338,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('berkas/{berkas}/export-pdf', [BerkasController::class, 'convertToPdf']);
     Route::delete('berkas/bulk', [BerkasController::class, 'bulkDestroy']);
     Route::apiResource('berkas', BerkasController::class)->parameters(['berkas' => 'berkas']);
+    Route::apiResource('peripaan', PetaPeripaanController::class)->only(['index', 'store', 'destroy']);
     Route::post('koordinat/validate', [KoordinatValidationController::class, 'validateKoordinat']);
     Route::delete('foto/bulk', [FotoController::class, 'bulkDestroy']);
     Route::apiResource('foto', FotoController::class);
