@@ -355,15 +355,21 @@ class OpenRouterService
             ];
         }
 
+        // ponytail: factual temp (0.3) saat tools aktif; santai (0.7) untuk sapaan/umum.
+        // Naikkan ke per-tool temp bila model sering kaku/kreatif berlebihan.
         $payload = [
             'model' => $model,
             'messages' => $messages,
-            'temperature' => $options['temperature'] ?? 0.7,
+            'temperature' => $options['temperature'] ?? (isset($options['tools']) ? 0.3 : 0.7),
         ];
 
         if (isset($options['tools'])) {
             $payload['tools'] = $options['tools'];
             $payload['tool_choice'] = $options['tool_choice'] ?? 'auto';
+        }
+
+        if (isset($options['max_tokens'])) {
+            $payload['max_tokens'] = (int) $options['max_tokens'];
         }
 
         try {
@@ -664,8 +670,17 @@ class OpenRouterService
             'model' => $model,
             'messages' => $messages,
             'stream' => true,
-            'temperature' => $options['temperature'] ?? 0.7,
+            'temperature' => $options['temperature'] ?? (isset($options['tools']) ? 0.3 : 0.7),
         ];
+
+        if (isset($options['max_tokens'])) {
+            $payload['max_tokens'] = (int) $options['max_tokens'];
+        }
+
+        if (isset($options['tools'])) {
+            $payload['tools'] = $options['tools'];
+            $payload['tool_choice'] = $options['tool_choice'] ?? 'auto';
+        }
 
         $requestHeaders = array_merge(
             ['Content-Type' => 'application/json', 'Accept' => 'text/event-stream'],
@@ -679,6 +694,7 @@ class OpenRouterService
         $content = '';
         $usage = [];
         $responseModel = $model;
+        $toolCalls = [];
 
         try {
             $response = Http::withHeaders($requestHeaders)
@@ -733,10 +749,33 @@ class OpenRouterService
                         $content .= $delta;
                         $onToken($delta);
                     }
+
+                    $deltaToolCalls = $parsed['choices'][0]['delta']['tool_calls'] ?? null;
+                    if (is_array($deltaToolCalls)) {
+                        foreach ($deltaToolCalls as $tc) {
+                            $idx = $tc['index'] ?? 0;
+                            if (!isset($toolCalls[$idx])) {
+                                $toolCalls[$idx] = [
+                                    'id' => $tc['id'] ?? '',
+                                    'type' => 'function',
+                                    'function' => ['name' => '', 'arguments' => ''],
+                                ];
+                            }
+                            if (!empty($tc['id'])) {
+                                $toolCalls[$idx]['id'] = $tc['id'];
+                            }
+                            if (!empty($tc['function']['name'] ?? null)) {
+                                $toolCalls[$idx]['function']['name'] = $tc['function']['name'];
+                            }
+                            if (isset($tc['function']['arguments'])) {
+                                $toolCalls[$idx]['function']['arguments'] .= $tc['function']['arguments'];
+                            }
+                        }
+                    }
                 }
             }
 
-            if (trim($content) === '') {
+            if (trim($content) === '' && empty($toolCalls)) {
                 return [
                     'success' => false,
                     'message' => 'Model "' . $model . '" tidak mengembalikan teks. Coba model lain atau periksa log 9router.',
@@ -746,6 +785,7 @@ class OpenRouterService
             return [
                 'success' => true,
                 'content' => $content,
+                'tool_calls' => !empty($toolCalls) ? array_values($toolCalls) : null,
                 'model' => $responseModel,
                 'usage' => $usage,
             ];

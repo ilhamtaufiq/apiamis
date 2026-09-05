@@ -78,6 +78,8 @@ class AppSettingController extends Controller
             'chat_base_url' => 'nullable|string|max:255',
             'chat_model' => 'nullable|string|max:128',
             'chat_api_key' => 'nullable|string|max:2000',
+            'chat_price_input_per_1m_idr' => 'nullable|numeric|min:0|max:100000000',
+            'chat_price_output_per_1m_idr' => 'nullable|numeric|min:0|max:100000000',
             'landing_page_active' => 'nullable|string|in:0,1',
             'spm_detail_page_active' => 'nullable|string|in:0,1',
             'capaian_publik_section_active' => 'nullable|string|in:0,1',
@@ -168,6 +170,16 @@ class AppSettingController extends Controller
 
         if ($request->has('chat_api_key') && filled($request->input('chat_api_key'))) {
             $setting = AppSetting::setValue('chat_api_key_local', $request->input('chat_api_key'), 'secret');
+            $updatedSettings[] = $setting;
+        }
+
+        if ($request->has('chat_price_input_per_1m_idr')) {
+            $setting = AppSetting::setValue('chat_price_input_per_1m_idr', $request->chat_price_input_per_1m_idr, 'text');
+            $updatedSettings[] = $setting;
+        }
+
+        if ($request->has('chat_price_output_per_1m_idr')) {
+            $setting = AppSetting::setValue('chat_price_output_per_1m_idr', $request->chat_price_output_per_1m_idr, 'text');
             $updatedSettings[] = $setting;
         }
 

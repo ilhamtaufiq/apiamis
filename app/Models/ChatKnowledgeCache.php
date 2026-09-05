@@ -33,7 +33,7 @@ class ChatKnowledgeCache extends Model
     public static function learn(string $query, string $contextSummary, string $response, int $tokensUsed = 0): self
     {
         $hash = self::hashQuery($query);
-        
+
         return self::updateOrCreate(
             ['query_hash' => $hash],
             [
@@ -43,6 +43,21 @@ class ChatKnowledgeCache extends Model
                 'quality_score' => 0.7, // Default new entries
             ]
         );
+    }
+
+    /**
+     * Turunkan skor entri (vote down). Di bawah 0.5 tak dipakai cache/few-shot.
+     */
+    public static function downvote(string $query): ?self
+    {
+        $cached = self::where('query_hash', self::hashQuery($query))->first();
+        if (!$cached) {
+            return null;
+        }
+
+        $cached->decrement('quality_score', 0.3);
+
+        return $cached->refresh();
     }
 
     /**
