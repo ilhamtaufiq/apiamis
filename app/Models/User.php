@@ -10,14 +10,25 @@ use Laravel\Sanctum\HasApiTokens;
 use Spatie\Permission\Traits\HasRoles;
 use App\Traits\Auditable;
 
-class User extends Authenticatable
+class User extends Authenticatable implements \Spatie\MediaLibrary\HasMedia
 {
     /** @use HasFactory<\Database\Factories\UserFactory> */
-    use HasApiTokens, HasFactory, Notifiable, HasRoles, Auditable;
+    use HasApiTokens, HasFactory, Notifiable, HasRoles, Auditable, \Spatie\MediaLibrary\InteractsWithMedia;
 
     public const PROTECTED_FROM_DELETION_EMAILS = [
         'ilhamtaufiq@gmail.com',
     ];
+
+    public function registerMediaCollections(): void
+    {
+        $this->addMediaCollection('avatar')->singleFile();
+    }
+
+    /** URL avatar hasil upload (prioritas) atau null. */
+    public function getAvatarUrlAttribute(): ?string
+    {
+        return $this->getFirstMedia('avatar')?->getFullUrl();
+    }
 
     /**
      * The attributes that are mass assignable.

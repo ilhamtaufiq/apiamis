@@ -24,15 +24,18 @@ class UserDriveController extends Controller
 
         $parentId = $request->input('parent_id');
         $userId = $request->user()->id;
+        $isAdmin = $request->user()->hasRole('admin');
 
-        $query = UserDriveItem::where(function ($q) use ($userId) {
-            $q->where('user_id', $userId)
-                ->orWhereHas('shares', function ($share) use ($userId) {
-                    $share->whereNull('shared_to_user_id')
-                        ->orWhere('shared_to_user_id', $userId);
-                });
-        })
-            ->with(['media', 'shares'])
+        // Admin melihat semua drive user; user lain hanya miliknya + yang di-share.
+        $query = UserDriveItem::query()
+            ->when(! $isAdmin, fn ($builder) => $builder->where(function ($q) use ($userId) {
+                $q->where('user_id', $userId)
+                    ->orWhereHas('shares', function ($share) use ($userId) {
+                        $share->whereNull('shared_to_user_id')
+                            ->orWhere('shared_to_user_id', $userId);
+                    });
+            }))
+            ->with(['media', 'shares', 'user'])
             ->when(
                 $parentId === null || $parentId === '' || $parentId === 'null',
                 fn ($builder) => $builder->whereNull('parent_id'),
@@ -196,9 +199,11 @@ class UserDriveController extends Controller
             'ids.*' => 'integer',
         ]);
 
-        $items = UserDriveItem::ownedBy($request->user()->id)
-            ->whereIn('id', $validated['ids'])
-            ->get();
+        // canManage (bukan ownedBy) agar admin bisa bulk-delete milik user lain.
+        $items = UserDriveItem::whereIn('id', $validated['ids'])
+            ->get()
+            ->filter(fn ($item) => $item->canManage($request->user()))
+            ->values();
 
         if ($items->isEmpty()) {
             return response()->json(['message' => 'Item drive tidak ditemukan'], 404);

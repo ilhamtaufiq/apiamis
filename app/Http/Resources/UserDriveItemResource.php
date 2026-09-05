@@ -25,6 +25,8 @@ class UserDriveItemResource extends JsonResource
             'file_size' => $fileMedia?->size,
             'media_id' => $fileMedia?->id,
             'can_manage' => $this->canManage($request->user()),
+            'owner' => $this->whenLoaded('user', fn () => $this->user?->only(['id', 'name'])),
+            'is_owner' => $this->user_id === $request->user()->id,
             'shared_to_all' => $this->shares->contains(fn ($s) => $s->shared_to_user_id === null),
             'created_at' => $this->created_at?->toIso8601String(),
             'updated_at' => $this->updated_at?->toIso8601String(),

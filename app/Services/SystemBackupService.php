@@ -345,13 +345,20 @@ class SystemBackupService
 
     public function restoreArchive(string $zipPath): array
     {
+        ignore_user_abort(true);
+        @set_time_limit(0);
+        // Restore of multi-GB archives (extract + SQL + media copy) runs long;
+        // a dropped HTTP connection must not abort mid-restore.
+        @ini_set('memory_limit', '1024M');
+
         $zipSize = File::exists($zipPath) ? File::size($zipPath) : 0;
-        // Need room for extract (~zip size) plus media copy — require ~1.5× archive free.
+        // Peak concurrent usage ≈ zip + extracted contents + copied media.
+        // Media is archived with STORE compression (≈ original size), so require ~3× archive free.
         $freeBytes = @disk_free_space(storage_path('app'));
-        if (is_int($freeBytes) && $zipSize > 0 && $freeBytes < (int) ($zipSize * 1.5)) {
+        if (is_int($freeBytes) && $zipSize > 0 && $freeBytes < (int) ($zipSize * 3)) {
             throw new \RuntimeException(
                 'Ruang disk tidak cukup untuk restore. Butuh sekitar '.
-                round(($zipSize * 1.5) / 1_073_741_824, 1).
+                round(($zipSize * 3) / 1_073_741_824, 1).
                 ' GB bebas; tersedia '.
                 round($freeBytes / 1_073_741_824, 1).
                 ' GB.'
@@ -490,48 +497,65 @@ class SystemBackupService
 
             $s3Disk = $this->getS3Disk();
             $s3Client = $s3Disk->getClient();
-            $s3Client->registerStreamWrapper();
-
             $bucket = AppSetting::getValue('s3_bucket');
-            $s3Path = "s3://{$bucket}/system-backups/{$fileName}";
 
-            $writeStream = fopen($s3Path, 'wb');
-            if ($writeStream === false) {
-                throw new \RuntimeException('Gagal membuka stream ke S3 bucket');
+            // R2/S3 reject a single PutObject >5 GB (EntityTooLarge), and the SDK's
+            // s3:// stream wrapper uploads via putObject (StreamWrapper.php:203).
+            // Spool the zip to php://temp (64MB RAM, then disk) and upload via
+            // ObjectUploader → multipart, works up to 5 TB. R2 supports multipart.
+            // ponytail: temp disk usage ≈ archive size; if that becomes a constraint,
+            // pipe ZipStream output into manual UploadPart calls (zero temp disk).
+            $spool = fopen('php://temp/maxmemory:67108864', 'r+b');
+            if ($spool === false) {
+                throw new \RuntimeException('Gagal menyiapkan buffer upload S3');
             }
 
-            $zip = new ZipStream(
-                operationMode: OperationMode::NORMAL,
-                outputStream: $writeStream,
-                sendHttpHeaders: false,
-            );
+            try {
+                $zip = new ZipStream(
+                    operationMode: OperationMode::NORMAL,
+                    outputStream: $spool,
+                    sendHttpHeaders: false,
+                );
 
-            $dbStream = fopen($sqlTempPath, 'rb');
-            $zip->addFileFromStream('database.sql', $dbStream);
-            fclose($dbStream);
+                $dbStream = fopen($sqlTempPath, 'rb');
+                $zip->addFileFromStream('database.sql', $dbStream);
+                fclose($dbStream);
 
-            $mediaCount = 0;
-            if ($includeMedia) {
-                $this->patchJob($jobId, [
-                    'message' => 'Streaming file media ke S3…',
-                    'progress' => 40,
-                ]);
-                $mediaCount = $this->addMediaFilesToZipStream($zip, function (int $done, int $total) use ($jobId) {
-                    $pct = $total > 0 ? 40 + (int) floor(($done / $total) * 50) : 70;
+                $mediaCount = 0;
+                if ($includeMedia) {
                     $this->patchJob($jobId, [
-                        'message' => "Streaming media {$done}/{$total}",
-                        'progress' => min(90, $pct),
+                        'message' => 'Streaming file media ke S3…',
+                        'progress' => 40,
                     ]);
-                });
+                    $mediaCount = $this->addMediaFilesToZipStream($zip, function (int $done, int $total) use ($jobId) {
+                        $pct = $total > 0 ? 40 + (int) floor(($done / $total) * 50) : 70;
+                        $this->patchJob($jobId, [
+                            'message' => "Streaming media {$done}/{$total}",
+                            'progress' => min(90, $pct),
+                        ]);
+                    });
+                }
+
+                $this->patchJob($jobId, [
+                    'message' => 'Mengunggah arsip ke S3 (multipart)…',
+                    'progress' => 95,
+                ]);
+
+                $zip->finish();
+                rewind($spool);
+
+                $s3Client->upload(
+                    $bucket,
+                    "system-backups/{$fileName}",
+                    $spool,
+                    'private',
+                    ['concurrency' => 3],
+                );
+            } finally {
+                if (is_resource($spool)) {
+                    fclose($spool);
+                }
             }
-
-            $this->patchJob($jobId, [
-                'message' => 'Menutup arsip ZIP di S3…',
-                'progress' => 95,
-            ]);
-
-            $zip->finish();
-            fclose($writeStream);
 
             $size = $s3Disk->size('system-backups/'.$fileName);
 

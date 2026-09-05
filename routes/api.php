@@ -135,6 +135,10 @@ Route::middleware('auth:sanctum')->group(function () {
     });
     Route::post('auth/logout', [AuthController::class, 'logout']);
     Route::get('auth/me', [AuthController::class, 'me']);
+    // Self-service profil & avatar (semua user pada datanya sendiri)
+    Route::put('auth/profile', [AuthController::class, 'updateProfile']);
+    Route::post('auth/avatar', [AuthController::class, 'uploadAvatar']);
+    Route::delete('auth/avatar', [AuthController::class, 'deleteAvatar']);
     Route::post('auth/impersonate/{user}', [AuthController::class, 'impersonate'])->middleware('role:admin');
 
     // Frontend error reporting

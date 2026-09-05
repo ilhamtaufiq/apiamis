@@ -229,6 +229,58 @@ class AuthController extends Controller
     }
 
     /**
+     * Self-service profile update — semua user pada datanya sendiri,
+     * tidak lewat PUT /users/{id} yang admin-only.
+     */
+    public function updateProfile(Request $request)
+    {
+        $validated = $request->validate([
+            'name' => 'sometimes|required|string|max:255',
+            'email' => 'sometimes|required|email|unique:users,email,'.$request->user()->id,
+            'password' => 'nullable|string|min:6',
+            'nip' => 'nullable|string|max:50',
+            'jabatan' => 'nullable|string|max:255',
+            'gender' => 'nullable|string|in:male,female,other',
+            'avatar' => 'nullable|string|max:2048',
+        ]);
+
+        $user = $request->user();
+
+        if (isset($validated['name'])) $user->name = $validated['name'];
+        if (isset($validated['email'])) $user->email = $validated['email'];
+        if (!empty($validated['password'])) $user->password = bcrypt($validated['password']);
+        if (array_key_exists('nip', $validated)) $user->nip = $validated['nip'];
+        if (array_key_exists('jabatan', $validated)) $user->jabatan = $validated['jabatan'];
+        if (array_key_exists('gender', $validated)) $user->gender = $validated['gender'];
+        if (array_key_exists('avatar', $validated)) $user->avatar = $validated['avatar'];
+        $user->save();
+
+        return new UserResource($user->fresh()->load('roles', 'permissions'));
+    }
+
+    /** Upload avatar file — disimpan via Spatie media (collection "avatar"). */
+    public function uploadAvatar(Request $request)
+    {
+        $request->validate([
+            'avatar' => 'required|image|mimes:jpg,jpeg,png,webp,gif|max:5120',
+        ]);
+
+        $user = $request->user();
+        $user->clearMediaCollection('avatar');
+        $user->addMediaFromRequest('avatar')->toMediaCollection('avatar');
+
+        return new UserResource($user->fresh()->load('roles', 'permissions'));
+    }
+
+    public function deleteAvatar(Request $request)
+    {
+        $user = $request->user();
+        $user->clearMediaCollection('avatar');
+
+        return new UserResource($user->fresh()->load('roles', 'permissions'));
+    }
+
+    /**
      * @OA\Post(
      *     path="/api/auth/impersonate/{user}",
      *     summary="Impersonate a user (Admin only)",

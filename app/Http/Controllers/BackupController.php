@@ -141,8 +141,38 @@ class BackupController extends Controller
                 $sourcePath = Storage::disk('local')->path($tempZipPath);
             } else {
                 $this->backups->guardFilename($validated['backup_name']);
-                $sourcePath = $this->backups->backupAbsolutePath($validated['backup_name']);
-                abort_unless(File::exists($sourcePath), 404, 'Backup tidak ditemukan');
+                $filename = $validated['backup_name'];
+                $sourcePath = $this->backups->backupAbsolutePath($filename);
+
+                if (! File::exists($sourcePath)) {
+                    // Backup may live only on S3 (s3_direct backups never land locally).
+                    $disk = $this->backups->getBackupDisk($filename);
+                    if ($disk !== 's3') {
+                        abort(404, 'Backup tidak ditemukan');
+                    }
+
+                    // Pull a local copy first — ZipArchive cannot read s3:// streams.
+                    $s3Disk = $this->backups->getS3Disk();
+                    $s3Path = "system-backups/{$filename}";
+                    abort_unless($s3Disk->exists($s3Path), 404, 'Backup tidak ditemukan');
+
+                    @set_time_limit(0);
+                    $localStream = fopen($sourcePath, 'w+b');
+                    $remoteStream = $s3Disk->readStream($s3Path);
+                    if ($localStream === false || $remoteStream === false) {
+                        if (is_resource($localStream)) {
+                            fclose($localStream);
+                        }
+                        if (is_resource($remoteStream)) {
+                            fclose($remoteStream);
+                        }
+                        abort(502, 'Gagal mengunduh backup dari S3');
+                    }
+                    stream_copy_to_stream($remoteStream, $localStream);
+                    fclose($remoteStream);
+                    fclose($localStream);
+                    $tempZipPath = 'system-backups/'.$filename;
+                }
             }
 
             @set_time_limit(0);
