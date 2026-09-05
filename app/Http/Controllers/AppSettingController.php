@@ -782,6 +782,8 @@ class AppSettingController extends Controller
             'chat_base_url',
             'chat_model',
             'chat_api_key',
+            'chat_price_input_per_1m_idr',
+            'chat_price_output_per_1m_idr',
             'kontrak_nama_ppk',
             'kontrak_nip_ppk',
             'kontrak_nama_pptk',
