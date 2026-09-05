@@ -126,6 +126,11 @@ class ChatDataToolService
             $this->tool('get_ticket_details', 'Detail satu tiket + riwayat komentar. Wajib ID dari search_tickets dulu.', [
                 'id' => ['type' => 'integer', 'description' => 'ID tiket persis dari hasil search_tickets.'],
             ], ['id']),
+            $this->tool('get_project_media', 'Lanjutan galeri satu paket: halaman foto/berkas/output berikutnya. Pakai saat user minta "foto/berkas/output lainnya/lanjutan/lebih banyak" untuk paket yang sudah dibahas. Wajib ID dari search_projects dulu.', [
+                'id' => ['type' => 'integer', 'description' => 'ID paket persis dari hasil search_projects.'],
+                'jenis' => ['type' => 'string', 'description' => 'foto, berkas, atau output.'],
+                'halaman' => ['type' => 'integer', 'description' => 'Halaman mulai dari 1; tiap halaman 5 item.'],
+            ], ['id', 'jenis']),
         ];
     }
 
@@ -155,6 +160,7 @@ class ChatDataToolService
             'get_pengawas_kpi' => $this->getPengawasKpi($args),
             'search_berkas' => $this->searchBerkas($args),
             'get_ticket_details' => $this->getTicketDetails($args),
+            'get_project_media' => $this->getProjectMedia($args),
             default => ['error' => 'Tool tidak ditemukan.'],
         };
     }
@@ -208,6 +214,30 @@ class ChatDataToolService
         return (int) (AppSetting::getValue('tahun_anggaran') ?? date('Y'));
     }
 
+    /** Pecah keyword jadi token AND (maks 8; angka 1 digit ikut, mis. "Paket 6"). */
+    private function keywordTokens(string $keyword): array
+    {
+        $tokens = preg_split('/\s+/u', trim($keyword)) ?: [];
+        $tokens = array_values(array_filter(array_map(
+            fn($t) => trim((string) $t, " \t\n\r\0\x0B\"'.,;:-"),
+            $tokens,
+        ), fn($t) => mb_strlen($t) >= 2 || is_numeric($t)));
+        // Buang typo 1-huruf dari kata umum ("peket"→paket) agar tak bunuh semua AND.
+        $common = ['paket', 'pekerjaan', 'kontrak', 'detail', 'foto', 'berkas', 'output', 'spk', 'tiket'];
+        $tokens = array_values(array_filter($tokens, function ($t) use ($common) {
+            if (mb_strlen($t) < 4) {
+                return true;
+            }
+            foreach ($common as $c) {
+                if (levenshtein(mb_strtolower($t), $c) === 1) {
+                    return false;
+                }
+            }
+            return true;
+        }));
+        return array_slice($tokens, 0, 8);
+    }
+
     /** Ringkasan estimasi satu paket — sumber sama dengan Rekap Progress. */
     private function estimasiOf($project, int $tahun): array
     {
@@ -243,11 +273,18 @@ class ChatDataToolService
 
         if (!empty($args['keyword'])) {
             $keyword = $args['keyword'];
-            $query->where(function ($q) use ($keyword) {
-                $q->where('nama_paket', 'LIKE', "%{$keyword}%")
-                    ->orWhereHas('kecamatan', fn($sub) => $sub->where('n_kec', 'LIKE', "%{$keyword}%"))
-                    ->orWhereHas('desa', fn($sub) => $sub->where('n_desa', 'LIKE', "%{$keyword}%"));
-            });
+            $tokens = $this->keywordTokens($keyword);
+            if ($tokens === []) {
+                return ['results' => collect()];
+            }
+            // Tiap token wajib cocok di salah satu kolom (nama/desa/kecamatan).
+            foreach ($tokens as $t) {
+                $query->where(function ($q) use ($t) {
+                    $q->where('nama_paket', 'LIKE', "%{$t}%")
+                        ->orWhereHas('kecamatan', fn($sub) => $sub->where('n_kec', 'LIKE', "%{$t}%"))
+                        ->orWhereHas('desa', fn($sub) => $sub->where('n_desa', 'LIKE', "%{$t}%"));
+                });
+            }
         }
 
         return [
@@ -313,8 +350,9 @@ class ChatDataToolService
         $project = Pekerjaan::byUserRole()
             ->with([
                 'kontrak.penyedia', 'kontrak.addendums', 'kontrak.registers.type',
+                'kontrakLegacy.penyedia', 'kontrakLegacy.addendums', 'kontrakLegacy.registers.type',
                 'progressEstimasiHistory', 'kecamatan', 'desa', 'kegiatan',
-                'tiket', 'output', 'penerima', 'berkas', 'beritaAcara',
+                'tiket', 'output', 'penerima', 'berkas', 'beritaAcara', 'foto',
                 'pengawas', 'pendamping',
             ])
             ->find($args['id'] ?? null);
@@ -326,7 +364,9 @@ class ChatDataToolService
         $tahun = (int) ($project->kegiatan->tahun_anggaran ?? $this->resolveTahun($args));
         $estimasi = $this->estimasiOf($project, $tahun);
 
-        $addendums = $project->kontrak->flatMap(fn($k) => $k->addendums ?? collect())->values();
+        // Pivot konsolidasi + legacy id_pekerjaan (satu kartu utuh).
+        $kontraks = $project->kontrak->concat($project->kontrakLegacy)->unique('id')->values();
+        $addendums = $kontraks->flatMap(fn($k) => $k->addendums ?? collect())->values();
 
         return [
             'id' => $project->id,
@@ -339,12 +379,14 @@ class ChatDataToolService
             'progress_keuangan' => $estimasi['keuangan_realisasi'],
             'deviasi_fisik' => $estimasi['fisik_deviasi'],
             'deviasi_keuangan' => $estimasi['keuangan_deviasi'],
-            'kontrak' => $project->kontrak->map(fn($k) => [
+            'kontrak' => $kontraks->map(fn($k) => [
+                'id' => $k->id,
                 'nilai' => (float) $k->nilai_kontrak,
                 'nilai_berjalan' => $k->nilaiKontrakBerjalan(),
                 'penyedia' => $k->penyedia->nama ?? 'N/A',
                 'spk' => $k->spk,
-                'tgl_selesai' => $k->tglSelesaiBerjalan(),
+                'tgl_spk' => $k->tgl_spk?->format('Y-m-d'),
+                'tgl_selesai' => $k->tglSelesaiBerjalan()?->format('Y-m-d'),
             ]),
             'addendums' => $addendums->map(fn($a) => [
                 'nomor' => $a->nomor_addendum,
@@ -353,15 +395,33 @@ class ChatDataToolService
                 'nilai_sesudah' => (float) $a->nilai_kontrak_sesudah,
                 'status' => $a->status,
             ]),
-            'dokumen_kontrak' => $project->kontrak->flatMap(fn($k) => $k->registers ?? collect())->map(fn($r) => [
+            'dokumen_kontrak' => $kontraks->flatMap(fn($k) => $k->registers ?? collect())->map(fn($r) => [
                 'jenis' => $r->type->nama ?? $r->attachment_type,
                 'nomor' => $r->nomor,
                 'tanggal' => $r->tanggal?->format('Y-m-d'),
             ])->values(),
             'berita_acara' => $project->beritaAcara ? ($project->beritaAcara->data ?? []) : null,
             'berkas' => $project->berkas->map(fn($b) => $b->jenis_dokumen)->unique()->values(),
+            // Sampel konkret (max 5) agar kartu instant bisa tampilkan tautan/gambar.
+            'berkas_sampel' => $project->berkas->take(5)->map(fn($b) => [
+                'id' => $b->id,
+                'jenis_dokumen' => $b->jenis_dokumen,
+                'file_url' => $b->getFirstMediaUrl('berkas/dokumen'),
+            ])->values(),
+            'foto_sampel' => $project->foto->take(5)->map(fn($f) => [
+                'id' => $f->id,
+                'keterangan' => $f->keterangan,
+                'foto_url' => $f->getFirstMediaUrl('foto/pekerjaan'),
+                'thumb_url' => $f->getFirstMediaUrl('foto/pekerjaan', 'thumb') ?: $f->getFirstMediaUrl('foto/pekerjaan'),
+            ])->values(),
+            'output_sampel' => $project->output->take(5)->map(fn($o) => [
+                'komponen' => $o->komponen,
+                'satuan' => $o->satuan,
+                'volume' => (float) $o->volume,
+            ])->values(),
             'pengawas' => $project->pengawas->nama ?? null,
             'pendamping' => $project->pendamping->nama ?? null,
+            'jumlah_foto' => $project->foto->count(),
             'jumlah_output' => $project->output->count(),
             'jumlah_penerima' => $project->penerima->count(),
             'jumlah_jiwa' => (int) $project->penerima->sum('jumlah_jiwa'),
@@ -375,16 +435,23 @@ class ChatDataToolService
 
     private function searchContracts(array $args): array
     {
-        $query = Kontrak::with(['pekerjaan.kegiatan', 'penyedia'])
-            ->whereHas('pekerjaan', fn($q) => $q->byUserRole());
+        $query = Kontrak::with(['pekerjaan.kegiatan', 'pekerjaans.kegiatan', 'penyedia'])
+            ->linkedToPekerjaan(fn($q) => $q->byUserRole());
 
         if (!empty($args['keyword'])) {
             $keyword = $args['keyword'];
-            $query->where(function ($q) use ($keyword) {
-                $q->where('spk', 'LIKE', "%{$keyword}%")
-                    ->orWhereHas('pekerjaan', fn($sub) => $sub->where('nama_paket', 'LIKE', "%{$keyword}%"))
-                    ->orWhereHas('penyedia', fn($sub) => $sub->where('nama', 'LIKE', "%{$keyword}%"));
-            });
+            $tokens = $this->keywordTokens($keyword);
+            if ($tokens === []) {
+                return ['results' => collect()];
+            }
+            foreach ($tokens as $t) {
+                $query->where(function ($q) use ($t) {
+                    $q->where('spk', 'LIKE', "%{$t}%")
+                        ->orWhereHas('pekerjaan', fn($sub) => $sub->where('nama_paket', 'LIKE', "%{$t}%"))
+                        ->orWhereHas('pekerjaans', fn($sub) => $sub->where('nama_paket', 'LIKE', "%{$t}%"))
+                        ->orWhereHas('penyedia', fn($sub) => $sub->where('nama', 'LIKE', "%{$t}%"));
+                });
+            }
         }
 
         if (!empty($args['tahun'])) {
@@ -394,7 +461,8 @@ class ChatDataToolService
         return [
             'results' => $query->latest()->limit(15)->get()->map(fn($k) => [
                 'id' => $k->id,
-                'paket' => $k->pekerjaan->nama_paket ?? 'N/A',
+                'paket' => $k->pekerjaan->nama_paket ?? $k->pekerjaans->first()->nama_paket ?? 'N/A',
+                'paket_id' => $k->pekerjaan->id ?? $k->pekerjaans->first()->id,
                 'penyedia' => $k->penyedia->nama ?? 'N/A',
                 'spk' => $k->spk,
                 'nilai_kontrak' => (float) $k->nilai_kontrak,
@@ -1003,6 +1071,61 @@ class ChatDataToolService
                 'pesan' => $c->message,
                 'waktu' => $c->created_at?->format('Y-m-d H:i'),
             ]),
+        ];
+    }
+
+    /**
+     * Halaman lanjutan foto/berkas/output satu paket (5 item/halaman).
+     * ponytail: tanpa filter tahun; tambah bila galeri lintas-tahun membingungkan.
+     */
+    private function getProjectMedia(array $args): array
+    {
+        $jenis = strtolower((string) ($args['jenis'] ?? ''));
+        if (!in_array($jenis, ['foto', 'berkas', 'output'], true)) {
+            return ['error' => 'Jenis harus foto, berkas, atau output.'];
+        }
+
+        $project = Pekerjaan::byUserRole()->find($args['id'] ?? null);
+        if (!$project) {
+            return ['error' => 'Paket tidak ditemukan.'];
+        }
+
+        $perPage = 5;
+        $halaman = max(1, (int) ($args['halaman'] ?? 1));
+        $offset = ($halaman - 1) * $perPage;
+
+        $items = match ($jenis) {
+            'foto' => Foto::where('pekerjaan_id', $project->id)->latest()->skip($offset)->take($perPage + 1)->get()
+                ->map(fn($f) => [
+                    'id' => $f->id,
+                    'keterangan' => $f->keterangan,
+                    'foto_url' => $f->getFirstMediaUrl('foto/pekerjaan'),
+                    'thumb_url' => $f->getFirstMediaUrl('foto/pekerjaan', 'thumb') ?: $f->getFirstMediaUrl('foto/pekerjaan'),
+                ]),
+            'berkas' => Berkas::where('pekerjaan_id', $project->id)->latest()->skip($offset)->take($perPage + 1)->get()
+                ->map(fn($b) => [
+                    'id' => $b->id,
+                    'jenis_dokumen' => $b->jenis_dokumen,
+                    'file_url' => $b->getFirstMediaUrl('berkas/dokumen'),
+                ]),
+            default => Output::where('pekerjaan_id', $project->id)->latest()->skip($offset)->take($perPage + 1)->get()
+                ->map(fn($o) => [
+                    'komponen' => $o->komponen,
+                    'satuan' => $o->satuan,
+                    'volume' => (float) $o->volume,
+                ]),
+        };
+
+        $adaLanjut = $items->count() > $perPage;
+        $items = $items->take($perPage)->values();
+
+        return [
+            'paket_id' => $project->id,
+            'paket' => $project->nama_paket,
+            'jenis' => $jenis,
+            'halaman' => $halaman,
+            'ada_lanjut' => $adaLanjut,
+            'items' => $items,
         ];
     }
 

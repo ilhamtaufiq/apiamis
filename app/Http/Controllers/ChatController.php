@@ -867,6 +867,177 @@ class ChatController extends Controller
             }
         }
 
+        // Detail relasi paket: "detail/kontrak paket X" → search top-1 → kartu
+        // kontrak + berkas + foto + output + tiket (tanpa LLM).
+        if (preg_match('/\b(detail|kontrak|spk|relasi|kelengkapan)\b/u', $q)
+            && preg_match('/\b(paket|pekerjaan|proyek)\b/u', $q)
+            && !preg_match('/\b(belum|tanpa)\b/u', $q)) {
+            $keyword = trim((string) preg_replace('/\b(tolong|tampilkan|tampil|lihat|detail|info|data|kontrak|spk|relasi|kelengkapan|paket|pekerjaan|proyek|yang|di|ke|dari|untuk|tahun|\d{4})\b/iu', ' ', $query));
+            $keyword = trim((string) preg_replace('/\s+/', ' ', $keyword));
+            if (mb_strlen($keyword) >= 3) {
+                $found = $this->executeTool('search_projects', ['keyword' => $keyword]);
+                $foundRows = $found['results'] ?? [];
+                $foundRows = is_array($foundRows) ? $foundRows : $foundRows->toArray();
+                // Multi-match → daftar pilih, bukan top-1 diam-diam.
+                if (count($foundRows) > 1) {
+                    $lines = [];
+                    foreach (array_slice($foundRows, 0, 10) as $r) {
+                        $r = is_array($r) ? $r : (array) $r;
+                        $lines[] = '| [' . str_replace('|', '/', $r['nama_paket']) . "](/pekerjaan/{$r['id']}) | {$r['lokasi']} | " . ($r['tahun'] ?? '-') . ' |';
+                    }
+                    return [
+                        'reply' => "Ada " . count($foundRows) . " paket cocok \"{$keyword}\" — pilih salah satu:\n\n| Paket | Lokasi | Tahun |\n|---|---|---|\n" . implode("\n", $lines)
+                            . "\n\nBalas \"detail kontrak paket [nama lengkap]\" untuk kartu relasinya.",
+                        'tool_calls' => [$this->fakeToolCall('search_projects', ['keyword' => $keyword])],
+                    ];
+                }
+                $first = $foundRows[0] ?? null;
+                if ($first !== null) {
+                    $first = is_array($first) ? (array) $first : (array) $first;
+                    $instant = $this->instantProjectCard((int) $first['id']);
+                    if ($instant !== null) {
+                        return $instant;
+                    }
+                }
+            }
+        }
+
+        // Detail kontrak-sentris: "kontrak/SPK/penyedia X" tanpa kata paket
+        // → search_contracts top-1 → kartu paket pemilik kontrak.
+        if (preg_match('/\b(kontrak|spk|penyedia|kontraktor)\b/u', $q)
+            && !preg_match('/\b(paket|pekerjaan|proyek|belum|tanpa)\b/u', $q)) {
+            $keyword = trim((string) preg_replace('/\b(tolong|tampilkan|tampil|lihat|detail|info|data|kontrak|spk|penyedia|kontraktor|pt|cv|yang|di|ke|dari|untuk|tahun|\d{4})\b/iu', ' ', $query));
+            $keyword = trim((string) preg_replace('/\s+/', ' ', $keyword));
+            if (mb_strlen($keyword) >= 2) {
+                $found = $this->executeTool('search_contracts', ['keyword' => $keyword]);
+                $foundRows = $found['results'] ?? [];
+                $foundRows = is_array($foundRows) ? $foundRows : $foundRows->toArray();
+                $first = $foundRows[0] ?? null;
+                if ($first !== null && isset($first['paket_id'])) {
+                    $instant = $this->instantProjectCard((int) $first['paket_id']);
+                    if ($instant !== null) {
+                        return $instant;
+                    }
+                }
+            }
+        }
+
+        // Galeri lanjutan: "foto/berkas/output lainnya/lanjutan/lebih banyak [paket]"
+        // → search top-1 → halaman media berikutnya (tanpa LLM).
+        if (preg_match('/\b(lainnya|lanjutan|lebih banyak|selanjutnya|berikutnya|halaman)\b/u', $q)
+            && preg_match('/\b(foto|berkas|dokumen|output|gambar)\b/u', $q)) {
+            $jenis = str_contains($q, 'berkas') || str_contains($q, 'dokumen') ? 'berkas'
+                : (str_contains($q, 'output') ? 'output' : 'foto');
+            $halaman = 2;
+            if (preg_match('/\bhalaman\s+(\d+)\b/u', $q, $m)) {
+                $halaman = max(1, (int) $m[1]);
+            }
+            $keyword = trim((string) preg_replace('/\b(tolong|tampilkan|tampil|lihat|lainnya|lanjutan|lebih|banyak|selanjutnya|berikutnya|halaman|\d+|foto|berkas|dokumen|output|gambar|paket|pekerjaan|proyek|yang|di|ke|dari|untuk)\b/iu', ' ', $query));
+            $keyword = trim((string) preg_replace('/\s+/', ' ', $keyword));
+            if (mb_strlen($keyword) >= 3) {
+                $found = $this->executeTool('search_projects', ['keyword' => $keyword]);
+                $foundRows = $found['results'] ?? [];
+                $foundRows = is_array($foundRows) ? $foundRows : $foundRows->toArray();
+                $first = $foundRows[0] ?? null;
+                if ($first !== null) {
+                    $first = is_array($first) ? (array) $first : (array) $first;
+                    $instant = $this->instantProjectMedia((int) $first['id'], $jenis, $halaman);
+                    if ($instant !== null) {
+                        return $instant;
+                    }
+                }
+            }
+        }
+
+        // Paket batal: "paket batal/dibatalkan" → search_projects canceled.
+        if (preg_match('/\b(batal|dibatalkan|pembatalan|cancel)\b/u', $q)
+            && preg_match('/\b(paket|pekerjaan|proyek)\b/u', $q)) {
+            $args = ['status' => 'canceled'];
+            if (preg_match('/\b(20\d{2})\b/', $q, $m)) {
+                $args['tahun'] = (int) $m[1];
+            }
+            $result = $this->executeTool('search_projects', $args);
+            $rows = $result['results'] ?? [];
+            if (isset($result['error']) || ($rows instanceof \Countable ? count($rows) === 0 : $rows === [])) {
+                return null;
+            }
+            $rows = array_slice(is_array($rows) ? $rows : $rows->toArray(), 0, 10);
+            $lines = array_map(fn($r) => '| [' . str_replace('|', '/', $r['nama_paket']) . "](/pekerjaan/{$r['id']}) | {$r['lokasi']} | " . number_format((float) $r['pagu'], 0, ',', '.') . ' |', $rows);
+            $reply = "Paket yang statusnya batal:\n\n| Paket | Lokasi | Pagu Rp |\n|---|---|---|\n" . implode("\n", $lines);
+
+            return [
+                'reply' => $reply,
+                'tool_calls' => [$this->fakeToolCall('search_projects', $args)],
+            ];
+        }
+
+        // Belum berkontrak: "belum berkontrak/belum ada kontrak/belum SPK".
+        if (preg_match('/\b(belum|tanpa)\b/u', $q)
+            && preg_match('/\b(berkontrak|dikontrak|kontrak|spk)\b/u', $q)) {
+            $args = ['has_contract' => false];
+            if (preg_match('/\b(20\d{2})\b/', $q, $m)) {
+                $args['tahun'] = (int) $m[1];
+            }
+            $result = $this->executeTool('search_projects', $args);
+            $rows = $result['results'] ?? [];
+            if (isset($result['error']) || ($rows instanceof \Countable ? count($rows) === 0 : $rows === [])) {
+                return null;
+            }
+            $rows = array_slice(is_array($rows) ? $rows : $rows->toArray(), 0, 10);
+            $lines = array_map(fn($r) => '| [' . str_replace('|', '/', $r['nama_paket']) . "](/pekerjaan/{$r['id']}) | {$r['lokasi']} | " . number_format((float) $r['pagu'], 0, ',', '.') . ' |', $rows);
+            $reply = "Paket yang belum berkontrak:\n\n| Paket | Lokasi | Pagu Rp |\n|---|---|---|\n" . implode("\n", $lines);
+
+            return [
+                'reply' => $reply,
+                'tool_calls' => [$this->fakeToolCall('search_projects', $args)],
+            ];
+        }
+
+        // Ringkas wilayah: "per kecamatan/sebaran wilayah/cakupan".
+        if (preg_match('/\b(per kecamatan|sebaran|cakupan|tiap kecamatan|semua kecamatan)\b/u', $q)) {
+            $args = [];
+            if (preg_match('/\b(20\d{2})\b/', $q, $m)) {
+                $args['tahun'] = (int) $m[1];
+            }
+            $result = $this->executeTool('get_wilayah_summary', $args);
+            $rows = $result['results'] ?? [];
+            if (isset($result['error']) || ($rows instanceof \Countable ? count($rows) === 0 : $rows === [])) {
+                return null;
+            }
+            $rows = array_slice(is_array($rows) ? $rows : $rows->toArray(), 0, 15);
+            $lines = array_map(fn($r) => "| {$r['kecamatan']} | {$r['total_paket']} | " . number_format((float) $r['total_pagu'], 0, ',', '.') . " | {$r['rata_progres']}% |", $rows);
+            $reply = "Sebaran paket per kecamatan ({$result['tahun']}):\n\n| Kecamatan | Paket | Pagu Rp | Rata Fisik |\n|---|---|---|---|\n" . implode("\n", $lines);
+
+            return [
+                'reply' => $reply,
+                'tool_calls' => [$this->fakeToolCall('get_wilayah_summary', $args)],
+            ];
+        }
+
+        // Info pengawas: "siapa pengawas/pendamping [nama]" → profil + paket ditangani.
+        if (preg_match('/\b(pengawas|pendamping)\b/u', $q)
+            && !preg_match('/\b(kpi|kinerja|peringkat|skor|nilai)\b/u', $q)) {
+            $nama = trim((string) preg_replace('/\b(tolong|tampilkan|tampil|lihat|siapa|berapa|apa|yang|di|ke|dari|untuk|oleh|daftar|list|pengawas|pendamping|nama|paket|ditangani|tangani|pekerjaan|proyek|tahun|\d{4})\b/iu', ' ', $query));
+            $nama = trim((string) preg_replace('/\s+/', ' ', $nama));
+            if (mb_strlen($nama) >= 3) {
+                $result = $this->executeTool('get_pengawas_info', ['nama' => $nama]);
+                if (!isset($result['error'])) {
+                    $paketList = $result['paket_ditangani'] ?? [];
+                    $paketList = $paketList instanceof \Countable && !is_array($paketList) ? $paketList->toArray() : $paketList;
+                    $pakets = array_slice($paketList, 0, 10);
+                    $lines = array_map(fn($p) => '| [' . str_replace('|', '/', $p['nama_paket']) . "](/pekerjaan/{$p['id']}) | {$p['peran']} | " . ($p['tahun'] ?? '-') . ' |', $pakets);
+                    $reply = "**{$result['nama']}**" . ($result['jabatan'] ? " ({$result['jabatan']})" : '')
+                        . ($result['telepon'] ? " · {$result['telepon']}" : '')
+                        . " menangani " . count($result['paket_ditangani'] ?? []) . " paket:\n\n| Paket | Peran | Tahun |\n|---|---|---|\n" . implode("\n", $lines);
+
+                    return [
+                        'reply' => $reply,
+                        'tool_calls' => [$this->fakeToolCall('get_pengawas_info', ['nama' => $nama])],
+                    ];
+                }
+            }
+        }
+
         // Cari generik: petakan kata kunci → tool search, render tabel instan.
         $searchMap = [
             'search_contracts' => ['kontrak', 'spk', 'penyedia', 'kontraktor', 'pt ', 'cv '],
@@ -891,6 +1062,34 @@ class ChatController extends Controller
                     $toolName = $name;
                     break 2;
                 }
+            }
+        }
+
+        // Nama paket mentah (tanpa kata perintah/tanya): seluruh query = keyword
+        // → 1 match = kartu relasi, >1 = daftar pilih, 0 = lanjut alur normal.
+        // ponytail: cek kata perintah, bukan $toolName — "MCK" cocok keyword
+        // search_spm_sanitasi sehingga $toolName tak pernah null untuk nama paket MCK.
+        $hasCommandWord = preg_match('/\b(cari|cek|lihat|tampil|daftar|list|detail|info|berapa|total|jumlah|siapa|apa|bagaimana|kapan|mengapa|kenapa|apakah|tolong|mohon)\b/u', $q);
+        if (!$hasCommandWord && mb_strlen(trim($query)) >= 10) {
+            $found = $this->executeTool('search_projects', ['keyword' => trim($query)]);
+            $foundRows = $found['results'] ?? [];
+            $foundRows = is_array($foundRows) ? $foundRows : $foundRows->toArray();
+            if (count($foundRows) === 1) {
+                $first = is_array($foundRows[0]) ? $foundRows[0] : (array) $foundRows[0];
+                $instant = $this->instantProjectCard((int) $first['id']);
+                if ($instant !== null) {
+                    return $instant;
+                }
+            } elseif (count($foundRows) > 1) {
+                $lines = [];
+                foreach (array_slice($foundRows, 0, 10) as $r) {
+                    $r = is_array($r) ? $r : (array) $r;
+                    $lines[] = '| [' . str_replace('|', '/', $r['nama_paket']) . "](/pekerjaan/{$r['id']}) | {$r['lokasi']} | " . ($r['tahun'] ?? '-') . ' |';
+                }
+                return [
+                    'reply' => "Ada " . count($foundRows) . " paket cocok — pilih salah satu:\n\n| Paket | Lokasi | Tahun |\n|---|---|---|\n" . implode("\n", $lines),
+                    'tool_calls' => [$this->fakeToolCall('search_projects', ['keyword' => trim($query)])],
+                ];
             }
         }
 
@@ -962,6 +1161,131 @@ class ChatController extends Controller
         }
 
         return null;
+    }
+
+    /**
+     * Kartu relasi satu paket: kontrak + addendum + dokumen + berkas +
+     * foto + output + tiket (tanpa LLM). Return null bila paket tak ada.
+     */
+    private function instantProjectCard(int $projectId): ?array
+    {
+        $d = $this->executeTool('get_project_details', ['id' => $projectId]);
+        if (!is_array($d) || isset($d['error'])) {
+            return null;
+        }
+
+        // Tool mengembalikan Collection Eloquent; jadikan array polos dulu.
+        $toArr = static fn($v) => $v instanceof \Traversable ? iterator_to_array($v, false) : (array) $v;
+        foreach (['kontrak', 'addendums', 'dokumen_kontrak', 'berkas', 'berkas_sampel', 'foto_sampel', 'output_sampel', 'tiket'] as $key) {
+            if (isset($d[$key]) && !is_array($d[$key])) {
+                $d[$key] = $toArr($d[$key]);
+            }
+        }
+
+        $kontrakLines = [];
+        foreach (($d['kontrak'] ?? []) as $k) {
+            $k = is_array($k) ? $k : (array) $k;
+            $tgl = $k['tgl_selesai'] ?? '-';
+            $kontrakLines[] = "- SPK {$k['spk']} · {$k['penyedia']} · Rp "
+                . number_format((float) ($k['nilai_berjalan'] ?? $k['nilai'] ?? 0), 0, ',', '.')
+                . " · selesai {$tgl}";
+        }
+        $addLines = [];
+        foreach (($d['addendums'] ?? []) as $a) {
+            $a = is_array($a) ? $a : (array) $a;
+            $addLines[] = "- {$a['nomor']} ({$a['jenis']}) · Rp "
+                . number_format((float) ($a['nilai_sesudah'] ?? 0), 0, ',', '.')
+                . " · {$a['status']}";
+        }
+        $dokLines = [];
+        foreach (($d['dokumen_kontrak'] ?? []) as $r) {
+            $r = is_array($r) ? $r : (array) $r;
+            $dokLines[] = '| ' . str_replace('|', '/', (string) ($r['jenis'] ?? '-'))
+                . ' | ' . str_replace('|', '/', (string) ($r['nomor'] ?? '-'))
+                . ' | ' . ($r['tanggal'] ?? '-') . ' |';
+        }
+        $berkasSampel = [];
+        foreach (($d['berkas_sampel'] ?? []) as $b) {
+            $b = is_array($b) ? $b : (array) $b;
+            $label = $b['jenis_dokumen'] ?? 'dokumen';
+            $berkasSampel[] = !empty($b['file_url']) ? "[{$label}]({$b['file_url']})" : $label;
+        }
+        $fotoLines = [];
+        foreach (($d['foto_sampel'] ?? []) as $f) {
+            $f = is_array($f) ? $f : (array) $f;
+            $cap = $f['keterangan'] ?: 'foto';
+            $fotoLines[] = !empty($f['foto_url']) ? "![{$cap}]({$f['foto_url']})" : "- {$cap}";
+        }
+        $outputLines = [];
+        foreach (($d['output_sampel'] ?? []) as $o) {
+            $o = is_array($o) ? $o : (array) $o;
+            $outputLines[] = "- {$o['komponen']} · {$o['volume']} {$o['satuan']}";
+        }
+        $tiketOpen = count(array_filter($d['tiket'] ?? [], fn($t) => (($t['status'] ?? '') === 'open')));
+
+        $reply = "**[{$d['nama']}](/pekerjaan/{$d['id']})** ({$d['tahun']}) · {$d['lokasi']}\n"
+            . "Pagu Rp " . number_format((float) $d['pagu'], 0, ',', '.')
+            . " · fisik " . ($d['progress_fisik'] ?? '-') . "% · keuangan " . ($d['progress_keuangan'] ?? '-') . "%\n\n"
+            . "Kontrak (" . count($d['kontrak'] ?? []) . "):\n" . ($kontrakLines === [] ? '- belum ada' : implode("\n", $kontrakLines)) . "\n\n"
+            . ($addLines === [] ? '' : "Addendum (" . count($addLines) . "):\n" . implode("\n", $addLines) . "\n\n")
+            . ($dokLines === [] ? '' : "Register dokumen ([kelola](/pekerjaan/register)):\n\n| Jenis | Nomor | Tanggal |\n|---|---|---|\n" . implode("\n", $dokLines) . "\n\n")
+            . "Berkas (" . count($d['berkas'] ?? []) . " jenis): "
+            . ((($d['berkas'] ?? []) === []) ? '-' : implode(', ', $d['berkas'])) . "\n"
+            . ($berkasSampel === [] ? '' : implode(' · ', $berkasSampel) . "\n")
+            . "Foto: {$d['jumlah_foto']}"
+            . ($fotoLines === [] ? '' : "\n" . implode("\n", array_slice($fotoLines, 0, 3))) . "\n"
+            . "Output: {$d['jumlah_output']}"
+            . ($outputLines === [] ? '' : "\n" . implode("\n", $outputLines)) . "\n"
+            . "Penerima: {$d['jumlah_penerima']} ({$d['jumlah_jiwa']} jiwa)\n"
+            . "Tiket: " . count($d['tiket'] ?? []) . " (terbuka: {$tiketOpen})\n"
+            . "Pengawas: " . ($d['pengawas'] ?? '-') . " · Pendamping: " . ($d['pendamping'] ?? '-');
+
+        return [
+            'reply' => $reply,
+            'tool_calls' => [$this->fakeToolCall('get_project_details', ['id' => $projectId])],
+        ];
+    }
+
+    /**
+     * Halaman galeri lanjutan satu paket (foto/berkas/output, tanpa LLM).
+     * Return null bila kosong / paket tak ada.
+     */
+    private function instantProjectMedia(int $projectId, string $jenis, int $halaman): ?array
+    {
+        $r = $this->executeTool('get_project_media', ['id' => $projectId, 'jenis' => $jenis, 'halaman' => $halaman]);
+        if (!is_array($r) || isset($r['error'])) {
+            return null;
+        }
+        $items = isset($r['items']) && !is_array($r['items'])
+            ? iterator_to_array($r['items'], false)
+            : ($r['items'] ?? []);
+        if ($items === []) {
+            return null;
+        }
+
+        $lines = [];
+        foreach ($items as $it) {
+            $it = is_array($it) ? $it : (array) $it;
+            if ($jenis === 'foto') {
+                $cap = $it['keterangan'] ?: 'foto';
+                $lines[] = !empty($it['foto_url']) ? "![{$cap}]({$it['foto_url']})" : "- {$cap}";
+            } elseif ($jenis === 'berkas') {
+                $label = $it['jenis_dokumen'] ?? 'dokumen';
+                $lines[] = !empty($it['file_url']) ? "- [{$label}]({$it['file_url']})" : "- {$label}";
+            } else {
+                $lines[] = "- {$it['komponen']} · {$it['volume']} {$it['satuan']}";
+            }
+        }
+
+        $label = ['foto' => 'Foto', 'berkas' => 'Berkas', 'output' => 'Output'][$jenis] ?? $jenis;
+        $reply = "{$label} **[{$r['paket']}](/pekerjaan/{$r['paket_id']})** — halaman {$r['halaman']}:\n\n"
+            . implode("\n", $lines)
+            . ($r['ada_lanjut'] ? "\n\nKetik \"{$jenis} lainnya {$r['paket']}\" untuk halaman berikutnya." : '');
+
+        return [
+            'reply' => $reply,
+            'tool_calls' => [$this->fakeToolCall('get_project_media', ['id' => $projectId, 'jenis' => $jenis, 'halaman' => $halaman])],
+        ];
     }
 
     /**
