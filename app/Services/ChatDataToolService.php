@@ -36,10 +36,11 @@ class ChatDataToolService
                 'tahun' => ['type' => 'integer', 'description' => 'Tahun anggaran, mis. 2025. Wajib diisi bila user menyebut tahun atau maksud tahun berjalan.'],
                 'kecamatan' => ['type' => 'string', 'description' => 'Filter nama kecamatan, mis. "Cibeber". Kosongkan bila tidak disebut.'],
             ]),
-            $this->tool('search_projects', 'Langkah 1 untuk cari paket: mengembalikan daftar paket dengan ID. Selalu panggil ini dulu sebelum get_project_details bila hanya tahu nama paket. Contoh: "cari paket SPAM Cibeber" -> {keyword: "SPAM Cibeber"}. Untuk paket batal: {status: "canceled"}.', [
+            $this->tool('search_projects', 'Langkah 1 untuk cari paket: mengembalikan daftar paket dengan ID. Selalu panggil ini dulu sebelum get_project_details bila hanya tahu nama paket. Contoh: "cari paket SPAM Cibeber" -> {keyword: "SPAM Cibeber"}. Untuk paket batal: {status: "canceled"}. Untuk paket belum berkontrak: {has_contract: false}.', [
                 'keyword' => ['type' => 'string', 'description' => 'Kata kunci nama paket, desa, atau kecamatan. Gunakan kata paling spesifik dari pertanyaan user.'],
                 'tahun' => ['type' => 'integer', 'description' => 'Tahun anggaran bila disebut user, mis. 2025.'],
                 'status' => ['type' => 'string', 'description' => 'active (berjalan) atau canceled (batal). Isi "canceled" bila user tanya paket batal/dibatalkan. Default semua status.'],
+                'has_contract' => ['type' => 'boolean', 'description' => 'false = hanya paket belum punya kontrak (pivot maupun legacy). Isi false bila user tanya "belum berkontrak/belum ada kontrak/belum SPK".'],
             ]),
             $this->tool('get_project_details', 'Langkah 2: detail lengkap satu paket (kontrak, progres, tiket, output, penerima). Hanya bisa dipanggil bila ID paket sudah diketahui dari search_projects. Jangan menebak ID.', [
                 'id' => ['type' => 'integer', 'description' => 'ID paket persis dari hasil search_projects.'],
@@ -188,6 +189,10 @@ class ChatDataToolService
 
         if (!empty($args['status']) && in_array($args['status'], ['active', 'canceled'], true)) {
             $query->where('status', $args['status']);
+        }
+
+        if (array_key_exists('has_contract', $args) && $args['has_contract'] === false) {
+            $query->whereDoesntHave('kontrak')->whereDoesntHave('kontrakLegacy');
         }
 
         return $query;
