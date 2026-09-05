@@ -134,6 +134,8 @@ class ChatController extends Controller
                     'content' => $m->content,
                     'tool_calls' => $m->tool_calls,
                     'tokens_used' => $m->tokens_used,
+                    'prompt_tokens' => $m->prompt_tokens,
+                    'completion_tokens' => $m->completion_tokens,
                     'cost_idr' => $m->cost_idr,
                     'created_at' => $m->created_at,
                 ]),
@@ -332,6 +334,8 @@ class ChatController extends Controller
             'content' => $aiReply,
             'tool_calls' => $finalResult['tool_calls'] ?? null,
             'tokens_used' => $tokensUsed,
+            'prompt_tokens' => $finalResult['usage']['prompt_tokens'] ?? null,
+            'completion_tokens' => $finalResult['usage']['completion_tokens'] ?? null,
             'cost_idr' => $this->estimateCostIdr($finalResult['usage'] ?? null),
         ]);
 
@@ -359,6 +363,8 @@ class ChatController extends Controller
             'model' => $finalResult['model'] ?? 'ami-ai',
             'cached' => false,
             'usage' => $finalResult['usage'] ?? null,
+            'prompt_tokens' => $finalResult['usage']['prompt_tokens'] ?? null,
+            'completion_tokens' => $finalResult['usage']['completion_tokens'] ?? null,
             'cost_idr' => $this->estimateCostIdr($finalResult['usage'] ?? null),
         ]);
     }
@@ -603,6 +609,8 @@ class ChatController extends Controller
                 'content' => $aiReply,
                 'tool_calls' => $finalResult['tool_calls'] ?? null,
                 'tokens_used' => $tokensUsed,
+                'prompt_tokens' => $finalResult['usage']['prompt_tokens'] ?? null,
+                'completion_tokens' => $finalResult['usage']['completion_tokens'] ?? null,
                 'cost_idr' => $this->estimateCostIdr($finalResult['usage'] ?? null),
             ]);
 
@@ -625,6 +633,8 @@ class ChatController extends Controller
                 'model' => $finalResult['model'] ?? 'ami-ai',
                 'cached' => false,
                 'usage' => $finalResult['usage'] ?? null,
+                'prompt_tokens' => $finalResult['usage']['prompt_tokens'] ?? null,
+                'completion_tokens' => $finalResult['usage']['completion_tokens'] ?? null,
                 'cost_idr' => $this->estimateCostIdr($finalResult['usage'] ?? null),
             ]);
         }, 200, [
