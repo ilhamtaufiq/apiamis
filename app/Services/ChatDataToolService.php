@@ -131,6 +131,12 @@ class ChatDataToolService
                 'jenis' => ['type' => 'string', 'description' => 'foto, berkas, atau output.'],
                 'halaman' => ['type' => 'integer', 'description' => 'Halaman mulai dari 1; tiap halaman 5 item.'],
             ], ['id', 'jenis']),
+            $this->tool('generate_pekerjaan_report', 'Buat tautan unduh laporan PDF kop Disperkim (digenerate saat user mengunduh). Satu paket: {jenis: "paket", id: <ID dari search_projects>}. Rekap banyak paket: {jenis: "rekap", tahun, kecamatan}. Selalu sertakan tautan markdown [Unduh Laporan PDF](download_url) dari hasil tool di akhir jawaban.', [
+                'jenis' => ['type' => 'string', 'description' => '"paket" untuk laporan satu paket, "rekap" untuk daftar banyak paket.'],
+                'id' => ['type' => 'integer', 'description' => 'ID paket persis dari search_projects (wajib bila jenis=paket).'],
+                'tahun' => ['type' => 'integer', 'description' => 'Tahun anggaran untuk jenis=rekap; default tahun berjalan.'],
+                'kecamatan' => ['type' => 'string', 'description' => 'Filter nama kecamatan untuk jenis=rekap bila disebut.'],
+            ], ['jenis']),
         ];
     }
 
@@ -161,6 +167,7 @@ class ChatDataToolService
             'search_berkas' => $this->searchBerkas($args),
             'get_ticket_details' => $this->getTicketDetails($args),
             'get_project_media' => $this->getProjectMedia($args),
+            'generate_pekerjaan_report' => $this->generatePekerjaanReport($args),
             default => ['error' => 'Tool tidak ditemukan.'],
         };
     }
@@ -244,6 +251,61 @@ class ChatDataToolService
         return $this->estimasiSummary->summarize($project->progressEstimasiHistory ?? collect(), $tahun);
     }
 
+    /**
+     * Tautan unduh laporan PDF. PDF-nya dibangun saat endpoint unduh dipanggil
+     * (PekerjaanReportPdfService) — di sini cukup validasi akses + ringkasan.
+     */
+    private function generatePekerjaanReport(array $args): array
+    {
+        $jenis = $args['jenis'] ?? (!empty($args['id']) ? 'paket' : 'rekap');
+
+        if ($jenis === 'paket') {
+            $project = $this->baseProjectQuery()->with(['kegiatan', 'kecamatan', 'desa'])->find($args['id'] ?? null);
+            if (!$project) {
+                return ['error' => 'Paket tidak ditemukan.'];
+            }
+
+            $tahun = $project->kegiatan->tahun_anggaran ?? null;
+            $query = http_build_query(['jenis' => 'paket', 'id' => $project->id]);
+
+            return [
+                'download_url' => "/chat/reports/download?{$query}",
+                'filename' => "laporan-paket-{$project->id}.pdf",
+                'judul' => 'Laporan Pekerjaan — ' . $project->nama_paket,
+                'ringkasan' => [
+                    'tahun' => $tahun,
+                    'lokasi' => trim(($project->desa->n_desa ?? '') . ', ' . ($project->kecamatan->n_kec ?? ''), ', '),
+                    'pagu' => (float) $project->pagu,
+                    'formatted_pagu' => 'Rp ' . number_format((float) $project->pagu, 0, ',', '.'),
+                ],
+                'hint' => 'Sertakan tautan markdown [Unduh Laporan PDF](download_url) di akhir jawaban agar user bisa mengunduh berkasnya.',
+            ];
+        }
+
+        $tahun = $this->resolveTahun($args);
+        $queryArgs = ['jenis' => 'rekap', 'tahun' => $tahun];
+        $stats = $this->getStatistics(['tahun' => $tahun] + (isset($args['kecamatan']) ? ['kecamatan' => $args['kecamatan']] : []));
+        if (isset($stats['error'])) {
+            return ['error' => 'Tidak ada paket untuk filter yang diberikan.'];
+        }
+        if (!empty($args['kecamatan'])) {
+            $queryArgs['kecamatan'] = $args['kecamatan'];
+        }
+        $query = http_build_query($queryArgs);
+
+        return [
+            'download_url' => "/chat/reports/download?{$query}",
+            'filename' => "laporan-rekap-pekerjaan-{$tahun}.pdf",
+            'judul' => 'Laporan Rekap Pekerjaan' . (!empty($args['kecamatan']) ? ' Kecamatan ' . $args['kecamatan'] : '') . " {$tahun}",
+            'ringkasan' => [
+                'total_pekerjaan' => $stats['total_pekerjaan'],
+                'formatted_total_pagu' => $stats['formatted_total_pagu'],
+                'average_progress_percent' => $stats['average_progress_percent'],
+            ],
+            'hint' => 'Sertakan tautan markdown [Unduh Laporan PDF](download_url) di akhir jawaban agar user bisa mengunduh berkasnya.',
+        ];
+    }
+
     private function getStatistics(array $args): array
     {
         $tahun = $this->resolveTahun($args);
@@ -295,6 +357,7 @@ class ChatDataToolService
                 'tahun' => $p->kegiatan->tahun_anggaran ?? null,
                 'pagu' => (float) $p->pagu,
                 'status' => $p->status ?? 'active',
+                'catatan' => $p->catatan,
                 'progress_fisik' => $this->estimasiOf($p, (int) ($p->kegiatan->tahun_anggaran ?? $tahun))['fisik_realisasi'],
                 'progress_keuangan' => $this->estimasiOf($p, (int) ($p->kegiatan->tahun_anggaran ?? $tahun))['keuangan_realisasi'],
             ]),

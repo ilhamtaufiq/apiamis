@@ -6,6 +6,7 @@ use Illuminate\Http\Request;
 use App\Services\OpenRouterService;
 use App\Services\ChatDataToolService;
 use App\Services\ChatRagContextService;
+use App\Services\PekerjaanReportPdfService;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 use App\Models\Pekerjaan;
 use App\Models\Kontrak;
@@ -30,15 +31,18 @@ class ChatController extends Controller
     protected $openRouter;
     protected $chatDataTools;
     protected $ragContextService;
+    protected $reportPdf;
 
     public function __construct(
         OpenRouterService $openRouter,
         ChatDataToolService $chatDataTools,
         ChatRagContextService $ragContextService,
+        PekerjaanReportPdfService $reportPdf,
     ) {
         $this->openRouter = $openRouter;
         $this->chatDataTools = $chatDataTools;
         $this->ragContextService = $ragContextService;
+        $this->reportPdf = $reportPdf;
     }
 
     // ── Session CRUD ────────────────────────────────────────────────
@@ -118,10 +122,41 @@ class ChatController extends Controller
     }
 
     /**
+     * Unduh laporan PDF yang ditautkan jawaban asisten (tool generate_pekerjaan_report).
+     * PDF dibangun ulang saat unduh; akses divalidasi ulang via byUserRole sesi ini.
+     */
+    public function downloadReport(Request $request)
+    {
+        $request->validate([
+            'jenis' => 'required|in:paket,rekap',
+            'id' => 'nullable|integer',
+            'tahun' => 'nullable|integer',
+            'kecamatan' => 'nullable|string|max:128',
+        ]);
+
+        try {
+            if ($request->input('jenis') === 'paket') {
+                $report = $this->reportPdf->generatePaket((int) $request->input('id'));
+            } else {
+                $report = $this->reportPdf->generateRekap(
+                    $request->filled('tahun') ? (int) $request->input('tahun') : null,
+                    $request->input('kecamatan'),
+                );
+            }
+        } catch (\RuntimeException $e) {
+            return response()->json(['success' => false, 'message' => $e->getMessage()], 404);
+        }
+
+        return response($report['pdf'], 200, [
+            'Content-Type' => 'application/pdf',
+            'Content-Disposition' => 'attachment; filename="' . $report['filename'] . '"',
+        ]);
+    }
+
+    /**
      * Get messages for a session
      */
-    public function sessionMessages(Request $request, $id)
-    {
+    public function sessionMessages(Request $request, $id)    {
         $session = ChatSession::where('user_id', $request->user()->id)->findOrFail($id);
 
         return response()->json([
@@ -667,8 +702,10 @@ class ChatController extends Controller
                 continue;
             }
 
-            // Slot-filling: get_project_details butuh ID; bila absen, cari dulu dari pesan user.
-            if ($name === 'get_project_details' && empty($args['id']) && $userMessage !== '') {
+            // Slot-filling: get_project_details & laporan paket butuh ID; bila absen, cari dulu dari pesan user.
+            $needsProjectId = $name === 'get_project_details'
+                || ($name === 'generate_pekerjaan_report' && ($args['jenis'] ?? 'paket') === 'paket');
+            if ($needsProjectId && empty($args['id']) && $userMessage !== '') {
                 $resolved = $this->resolveProjectId($userMessage);
                 if ($resolved !== null) {
                     $args['id'] = $resolved;
@@ -727,6 +764,7 @@ class ChatController extends Controller
         return match ($name) {
             'get_project_details' => 'Panggil search_projects dengan kata kunci lebih umum, lalu gunakan ID yang tepat.',
             'get_contractor_info' => 'Coba search_contracts dengan sebagian nama penyedia untuk ejaan yang benar.',
+            'generate_pekerjaan_report' => 'Panggil search_projects dulu untuk mendapatkan ID paket, lalu ulangi generate_pekerjaan_report dengan jenis "paket" dan ID tersebut.',
             default => 'Coba longgarkan filter (hapus tahun/kata kunci spesifik) lalu ulangi.',
         };
     }
@@ -867,6 +905,75 @@ class ChatController extends Controller
             }
         }
 
+        // Laporan PDF: "laporan/cetak/pdf/unduh [paket|rekap]" → tautan unduh instan
+        // (PDF dibangun saat endpoint unduh dipanggil — 0 token LLM).
+        if (preg_match('/\b(laporan|cetak|pdf|unduh|ekspor|export)\b/u', $q)
+            && preg_match('/\b(paket|pekerjaan|proyek|rekap|rekapitulasi)\b/u', $q)) {
+            // Mode rekap: banyak paket (filter tahun/kecamatan).
+            if (preg_match('/\b(rekap|rekapitulasi|semua paket|daftar paket|semua pekerjaan|daftar pekerjaan)\b/u', $q)) {
+                $args = [];
+                if (preg_match('/\b(20\d{2})\b/', $q, $m)) {
+                    $args['tahun'] = (int) $m[1];
+                }
+                if (preg_match('/\bkecamatan\s+([a-z\s]+?)(?=\s+tahun|\s+\d{4}|$)/iu', $query, $mKec)) {
+                    $args['kecamatan'] = trim($mKec[1]);
+                }
+
+                $report = $this->executeTool('generate_pekerjaan_report', $args + ['jenis' => 'rekap']);
+                if (!isset($report['error'])) {
+                    $s = $report['ringkasan'] ?? [];
+                    $reply = "Siap! Laporan rekap {$s['total_pekerjaan']} paket"
+                        . " · pagu {$s['formatted_total_pagu']}"
+                        . " · rata fisik {$s['average_progress_percent']}%"
+                        . ($report['judul'] ? " — {$report['judul']}" : '') . ":\n\n"
+                        . "📄 [Unduh Laporan PDF]({$report['download_url']})\n\n"
+                        . 'PDF kop Disperkim dibuat saat tombol diklik.';
+
+                    return [
+                        'reply' => $reply,
+                        'tool_calls' => [$this->fakeToolCall('generate_pekerjaan_report', $args + ['jenis' => 'rekap'])],
+                    ];
+                }
+            }
+
+            // Mode paket tunggal: keyword dari pesan → search top-1 → tautan unduh.
+            $keyword = trim((string) preg_replace('/\b(tolong|buat|buatkan|generate|laporan|cetak|pdf|unduh|ekspor|export|kan|paket|pekerjaan|proyek|untuk|tentang|yang|di|ke|dari|tahun|\d{4})\b/iu', ' ', $query));
+            $keyword = trim((string) preg_replace('/\s+/', ' ', $keyword));
+            if (mb_strlen($keyword) >= 3) {
+                $found = $this->executeTool('search_projects', ['keyword' => $keyword]);
+                $foundRows = $found['results'] ?? [];
+                $foundRows = is_array($foundRows) ? $foundRows : $foundRows->toArray();
+                if (count($foundRows) > 1) {
+                    $lines = [];
+                    foreach (array_slice($foundRows, 0, 10) as $r) {
+                        $r = is_array($r) ? $r : (array) $r;
+                        $lines[] = '| [' . str_replace('|', '/', $r['nama_paket']) . "](/pekerjaan/{$r['id']}) | {$r['lokasi']} | " . ($r['tahun'] ?? '-') . ' |';
+                    }
+
+                    return [
+                        'reply' => "Ada " . count($foundRows) . " paket cocok \"{$keyword}\" — sebutkan nama lengkapnya untuk laporan PDF:\n\n| Paket | Lokasi | Tahun |\n|---|---|---|\n" . implode("\n", $lines),
+                        'tool_calls' => [$this->fakeToolCall('search_projects', ['keyword' => $keyword])],
+                    ];
+                }
+                $first = $foundRows[0] ?? null;
+                if ($first !== null) {
+                    $first = is_array($first) ? (array) $first : (array) $first;
+                    $report = $this->executeTool('generate_pekerjaan_report', ['jenis' => 'paket', 'id' => (int) $first['id']]);
+                    if (!isset($report['error'])) {
+                        $reply = "Siap! Laporan PDF untuk **{$first['nama_paket']}**"
+                            . (isset($report['ringkasan']['formatted_pagu']) ? " (pagu {$report['ringkasan']['formatted_pagu']})" : '') . ":\n\n"
+                            . "📄 [Unduh Laporan PDF]({$report['download_url']})\n\n"
+                            . 'Isinya: identitas paket, progres, kontrak/SPK, output, penerima manfaat, dan dokumentasi foto. PDF dibuat saat tombol diklik.';
+
+                        return [
+                            'reply' => $reply,
+                            'tool_calls' => [$this->fakeToolCall('generate_pekerjaan_report', ['jenis' => 'paket', 'id' => (int) $first['id']])],
+                        ];
+                    }
+                }
+            }
+        }
+
         // Detail relasi paket: "detail/kontrak paket X" → search top-1 → kartu
         // kontrak + berkas + foto + output + tiket (tanpa LLM).
         if (preg_match('/\b(detail|kontrak|spk|relasi|kelengkapan)\b/u', $q)
@@ -962,8 +1069,8 @@ class ChatController extends Controller
                 return null;
             }
             $rows = array_slice(is_array($rows) ? $rows : $rows->toArray(), 0, 10);
-            $lines = array_map(fn($r) => '| [' . str_replace('|', '/', $r['nama_paket']) . "](/pekerjaan/{$r['id']}) | {$r['lokasi']} | " . number_format((float) $r['pagu'], 0, ',', '.') . ' |', $rows);
-            $reply = "Paket yang statusnya batal:\n\n| Paket | Lokasi | Pagu Rp |\n|---|---|---|\n" . implode("\n", $lines);
+            $lines = array_map(fn($r) => '| [' . str_replace('|', '/', $r['nama_paket']) . "](/pekerjaan/{$r['id']}) | {$r['lokasi']} | " . number_format((float) $r['pagu'], 0, ',', '.') . ' | ' . str_replace('|', '/', (string) ($r['catatan'] ?? '-')) . ' |', $rows);
+            $reply = "Paket yang statusnya batal:\n\n| Paket | Lokasi | Pagu Rp | Keterangan |\n|---|---|---|---|\n" . implode("\n", $lines);
 
             return [
                 'reply' => $reply,
@@ -1363,6 +1470,10 @@ class ChatController extends Controller
 
         $q = mb_strtolower($query);
         $groups = [
+            'laporan' => ['generate_pekerjaan_report'],
+            'pdf' => ['generate_pekerjaan_report'],
+            'cetak' => ['generate_pekerjaan_report'],
+            'unduh' => ['generate_pekerjaan_report'],
             'kegiatan' => ['search_kegiatan'],
             'tren' => ['get_progress_trend'],
             'addendum' => ['search_addendums'],
