@@ -360,7 +360,17 @@ class ChatController extends Controller
             return response()->json($finalResult, 500);
         }
 
-        $aiReply = $finalResult['content'];
+        // Guard: loop tool habis tanpa jawaban (content null + tool_calls sisa)
+        // → fallback jelas, bukan reply kosong.
+        if (trim((string) ($finalResult['content'] ?? '')) === '' && !empty($finalResult['tool_calls'])) {
+            $names = array_values(array_unique(array_map(
+                fn($tc) => $tc['function']['name'] ?? $tc['name'] ?? 'data',
+                $finalResult['tool_calls']
+            )));
+            $aiReply = 'Data sudah saya ambil (' . implode(', ', $names) . '), tapi ringkasannya gagal disusun. Coba ulangi pertanyaan dengan lebih spesifik — mis. sebutkan nama paket atau tahunnya.';
+        } else {
+            $aiReply = $finalResult['content'];
+        }
         $tokensUsed = $finalResult['usage']['total_tokens'] ?? 0;
 
         $assistantMsg = ChatMessage::create([
@@ -635,7 +645,14 @@ class ChatController extends Controller
                 return;
             }
 
-            $aiReply = (string) ($finalResult['content'] ?? '');
+            $aiReply = trim((string) ($finalResult['content'] ?? ''));
+            if ($aiReply === '' && !empty($finalResult['tool_calls'])) {
+                $names = array_values(array_unique(array_map(
+                    fn($tc) => $tc['function']['name'] ?? $tc['name'] ?? 'data',
+                    $finalResult['tool_calls']
+                )));
+                $aiReply = 'Data sudah saya ambil (' . implode(', ', $names) . '), tapi ringkasannya gagal disusun. Coba ulangi pertanyaan dengan lebih spesifik — mis. sebutkan nama paket atau tahunnya.';
+            }
             $tokensUsed = $finalResult['usage']['total_tokens'] ?? 0;
 
             $assistantMsg = ChatMessage::create([
@@ -1077,6 +1094,39 @@ class ChatController extends Controller
                     }
                 }
             }
+        }
+
+        // Anomali: "anomali/janggal/bermasalah/mencurigakan/tidak wajar paket".
+        if (preg_match('/\b(anomali|anomali-|janggal|mencurigakan|tidak wajar|bermasalah|menyimpang)\b/u', $q)
+            && preg_match('/\b(paket|pekerjaan|proyek)\b/u', $q)) {
+            $args = ['limit' => 25];
+            if (preg_match('/\b(20\d{2})\b/', $q, $m)) {
+                $args['tahun'] = (int) $m[1];
+            }
+            foreach (['terlambat' => ['terlambat', 'telat', 'deviasi'], 'mandek' => ['mandek', 'macet', 'nol'], 'keuangan' => ['keuangan', 'bayar', 'cair'], 'kontrak' => ['kontrak', 'spk'], 'foto' => ['foto', 'dokumentasi']] as $jenis => $syns) {
+                foreach ($syns as $syn) {
+                    if (str_contains($q, $syn)) {
+                        $args['jenis'] = $jenis;
+                        break 2;
+                    }
+                }
+            }
+            $result = $this->executeTool('get_anomalies', $args);
+            $rows = $result['results'] ?? [];
+            $rows = is_array($rows) ? $rows : $rows->toArray();
+            if (isset($result['error']) || $rows === []) {
+                return null;
+            }
+            $lines = array_map(fn($r) => '| [' . str_replace('|', '/', $r['nama_paket']) . "](/pekerjaan/{$r['id']}) | " . implode(', ', $r['anomali'] ?? []) . ' | ' . str_replace('|', '/', (string) ($r['keterangan'] ?? '-')) . ' |', $rows);
+            $total = $result['total'] ?? count($rows);
+
+            return $this->pagedTableReply(
+                "Anomali paket ({$result['tahun']}) — {$total} temuan:\n\n| Paket | Jenis | Keterangan |\n|---|---|---|",
+                $lines,
+                'get_anomalies',
+                $args,
+                $userId,
+            );
         }
 
         // Paket batal: "paket batal/dibatalkan" → search_projects canceled.
@@ -1609,6 +1659,11 @@ class ChatController extends Controller
             'deviasi' => ['search_projects_by_progress'],
             'progres rendah' => ['search_projects_by_progress'],
             'progress rendah' => ['search_projects_by_progress'],
+            'anomali' => ['get_anomalies'],
+            'janggal' => ['get_anomalies'],
+            'mencurigakan' => ['get_anomalies'],
+            'bermasalah' => ['get_anomalies'],
+            'tidak wajar' => ['get_anomalies'],
             'statistik' => ['get_statistics'],
             'total' => ['get_statistics'],
             'berapa' => ['get_statistics'],

@@ -131,6 +131,11 @@ class ChatDataToolService
                 'jenis' => ['type' => 'string', 'description' => 'foto, berkas, atau output.'],
                 'halaman' => ['type' => 'integer', 'description' => 'Halaman mulai dari 1; tiap halaman 5 item.'],
             ], ['id', 'jenis']),
+            $this->tool('get_anomalies', 'Deteksi anomali paket: deviasi fisik negatif (terlambat), fisik 0% (mandek), keuangan jauh di atas fisik (>20 poin, indikasi bayar dulu), belum berkontrak, tanpa foto dokumentasi. Pakai untuk "anomali/janggal/bermasalah/mencurigakan/tidak wajar". Contoh: "cek anomali paket 2026" -> {tahun: 2026}.', [
+                'tahun' => ['type' => 'integer', 'description' => 'Tahun anggaran bila disebut user.'],
+                'kecamatan' => ['type' => 'string', 'description' => 'Filter nama kecamatan bila disebut.'],
+                'jenis' => ['type' => 'string', 'description' => 'terlambat, mandek, keuangan, kontrak, foto, atau kosongkan untuk semua.'],
+            ]),
             $this->tool('generate_pekerjaan_report', 'Buat tautan unduh laporan PDF kop Disperkim (digenerate saat user mengunduh). Satu paket: {jenis: "paket", id: <ID dari search_projects>}. Rekap banyak paket: {jenis: "rekap", tahun, kecamatan}. Selalu sertakan tautan markdown [Unduh Laporan PDF](download_url) dari hasil tool di akhir jawaban.', [
                 'jenis' => ['type' => 'string', 'description' => '"paket" untuk laporan satu paket, "rekap" untuk daftar banyak paket.'],
                 'id' => ['type' => 'integer', 'description' => 'ID paket persis dari search_projects (wajib bila jenis=paket).'],
@@ -167,6 +172,7 @@ class ChatDataToolService
             'search_berkas' => $this->searchBerkas($args),
             'get_ticket_details' => $this->getTicketDetails($args),
             'get_project_media' => $this->getProjectMedia($args),
+            'get_anomalies' => $this->getAnomalies($args),
             'generate_pekerjaan_report' => $this->generatePekerjaanReport($args),
             default => ['error' => 'Tool tidak ditemukan.'],
         };
@@ -408,6 +414,78 @@ class ChatDataToolService
             ->values();
 
         return ['results' => $pakets, 'kondisi' => $kondisi, 'tahun' => $tahun];
+    }
+
+    /**
+     * Anomali paket per jenis: terlambat (deviasi<0), mandek (fisik<=0),
+     * keuangan (keuangan-fisik>20), kontrak (tanpa kontrak), foto (tanpa foto).
+     * ponytail: ambang 20 poin heuristik; jadikan argumen bila user minta tuning.
+     */
+    private function getAnomalies(array $args): array
+    {
+        $tahun = $this->resolveTahun($args);
+        $jenis = $args['jenis'] ?? 'semua';
+        $limit = min(50, max(1, (int) ($args['limit'] ?? 25)));
+
+        $pakets = $this->baseProjectQuery($args)
+            ->with(['kecamatan', 'desa', 'kegiatan', 'progressEstimasiHistory'])
+            ->withCount(['kontrak', 'kontrakLegacy', 'foto'])
+            ->limit(300)
+            ->get();
+
+        $out = [];
+        foreach ($pakets as $p) {
+            $t = (int) ($p->kegiatan->tahun_anggaran ?? $tahun);
+            $e = $this->estimasiOf($p, $t);
+            $fisik = $e['fisik_realisasi'];
+            $keu = $e['keuangan_realisasi'];
+            $dev = $e['fisik_deviasi'] ?? 0;
+            $punyaKontrak = (($p->kontrak_count ?? 0) + ($p->kontrak_legacy_count ?? 0)) > 0;
+            $punyaFoto = ($p->foto_count ?? 0) > 0;
+
+            $temuan = [];
+            if ($dev < 0) {
+                $temuan[] = ['jenis' => 'terlambat', 'detail' => "deviasi {$dev}%"];
+            }
+            if ($fisik !== null && $fisik <= 0 && $punyaKontrak) {
+                $temuan[] = ['jenis' => 'mandek', 'detail' => 'fisik 0% padahal sudah berkontrak'];
+            }
+            if ($fisik !== null && $keu !== null && ($keu - $fisik) > 20) {
+                $temuan[] = ['jenis' => 'keuangan', 'detail' => "keuangan {$keu}% jauh di atas fisik {$fisik}%"];
+            }
+            if (!$punyaKontrak) {
+                $temuan[] = ['jenis' => 'kontrak', 'detail' => 'belum berkontrak'];
+            }
+            if ($punyaKontrak && !$punyaFoto) {
+                $temuan[] = ['jenis' => 'foto', 'detail' => 'tanpa dokumentasi foto'];
+            }
+
+            if ($jenis !== 'semua') {
+                $temuan = array_values(array_filter($temuan, fn($x) => $x['jenis'] === $jenis));
+            }
+            if ($temuan === []) {
+                continue;
+            }
+
+            $out[] = [
+                'id' => $p->id,
+                'nama_paket' => $p->nama_paket,
+                'lokasi' => ($p->desa->n_desa ?? '-') . ', ' . ($p->kecamatan->n_kec ?? '-'),
+                'tahun' => $p->kegiatan->tahun_anggaran ?? null,
+                'pagu' => (float) $p->pagu,
+                'progress_fisik' => $fisik,
+                'progress_keuangan' => $keu,
+                'anomali' => array_column($temuan, 'jenis'),
+                'keterangan' => implode('; ', array_column($temuan, 'detail')),
+            ];
+        }
+
+        return [
+            'results' => array_slice($out, 0, $limit),
+            'total' => count($out),
+            'tahun' => $tahun,
+            'jenis' => $jenis,
+        ];
     }
 
     private function getProjectDetails(array $args): array
