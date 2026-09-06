@@ -258,7 +258,7 @@ class ChatController extends Controller
         }
 
         // Jawaban instan: pola query jelas → tabel langsung dari DB (<1s), tanpa LLM.
-        $instant = $this->tryInstantAnswer($userMessage);
+        $instant = $this->tryInstantAnswer($userMessage, $user->id);
         if ($instant !== null) {
             ChatMessage::create([
                 'chat_session_id' => $session->id,
@@ -480,7 +480,7 @@ class ChatController extends Controller
             }
 
             // Jawaban instan: tabel langsung dari DB, tanpa LLM.
-            $instant = $this->tryInstantAnswer($userMessage);
+            $instant = $this->tryInstantAnswer($userMessage, $user->id);
             if ($instant !== null) {
                 foreach (preg_split('/(\s+)/u', $instant['reply'], -1, PREG_SPLIT_DELIM_CAPTURE) as $chunk) {
                     if ($chunk !== '') {
@@ -778,9 +778,17 @@ class ChatController extends Controller
      * Jawaban instan ala search-table: pola query jelas → render tabel langsung
      * dari tool DB tanpa LLM (<1s, 0 token). Return null bila tak cocok pola.
      */
-    private function tryInstantAnswer(string $query): ?array
+    private function tryInstantAnswer(string $query, ?int $userId = null): ?array
     {
         $q = mb_strtolower(trim($query));
+
+        // Lanjutan halaman: "berikutnya/lanjutan/sisanya/10 berikutnya".
+        if (preg_match('/\b(berikutnya|lanjutan|sisanya|selanjutnya|lanjut|more)\b/u', $q)) {
+            $next = $this->nextInstantPage($userId);
+            if ($next !== null) {
+                return $next;
+            }
+        }
 
         // Total/ringkasan makro: "berapa total pekerjaan [tahun X]"
         if (preg_match('/\b(berapa|total|jumlah)\b.*\b(pekerjaan|paket)\b/u', $q)) {
@@ -828,14 +836,16 @@ class ChatController extends Controller
                 return null;
             }
 
-            $rows = array_slice(is_array($rows) ? $rows : $rows->toArray(), 0, 10);
+            $rows = is_array($rows) ? $rows : $rows->toArray();
             $lines = array_map(fn($r) => '| [' . str_replace('|', '/', $r['nama_paket']) . "](/pekerjaan/{$r['id']}) | {$r['lokasi']} | " . ($r['progress_fisik'] ?? '-') . '% |', $rows);
-            $reply = "Paket yang fisiknya belum 100%:\n\n| Paket | Lokasi | Fisik % |\n|---|---|---|\n" . implode("\n", $lines);
 
-            return [
-                'reply' => $reply,
-                'tool_calls' => [$this->fakeToolCall('search_projects_by_progress', $args)],
-            ];
+            return $this->pagedTableReply(
+                "Paket yang fisiknya belum 100%:\n\n| Paket | Lokasi | Fisik % |\n|---|---|---|",
+                $lines,
+                'search_projects_by_progress',
+                $args,
+                $userId,
+            );
         }
 
         // KPI pengawas: "kpi pengawas [nama]" / "peringkat pengawas"
@@ -860,12 +870,19 @@ class ChatController extends Controller
                 $reply = "KPI **{$result['nama']}** ({$result['tahun']}): skor rata-rata **" . ($s['score_per_pekerjaan'] ?? '-') . "**"
                     . " · {$s['pekerjaan_count']} paket · {$s['foto_count']} foto · {$s['output_count']} output.";
             } else {
-                $rows = array_slice($result['peringkat'] ?? [], 0, 10);
+                $rows = $result['peringkat'] ?? [];
                 if ($rows === []) {
                     return null;
                 }
                 $lines = array_map(fn($r) => "| {$r['rank']} | {$r['nama']} | {$r['skor_rata']} | {$r['paket']} |", $rows);
-                $reply = "Peringkat KPI pengawas {$result['tahun']}:\n\n| # | Nama | Skor | Paket |\n|---|---|---|---|\n" . implode("\n", $lines);
+
+                return $this->pagedTableReply(
+                    "Peringkat KPI pengawas {$result['tahun']}:\n\n| # | Nama | Skor | Paket |\n|---|---|---|---|",
+                    $lines,
+                    'get_pengawas_kpi',
+                    $args,
+                    $userId,
+                );
             }
 
             return [
@@ -945,15 +962,18 @@ class ChatController extends Controller
                 $foundRows = is_array($foundRows) ? $foundRows : $foundRows->toArray();
                 if (count($foundRows) > 1) {
                     $lines = [];
-                    foreach (array_slice($foundRows, 0, 10) as $r) {
+                    foreach ($foundRows as $r) {
                         $r = is_array($r) ? $r : (array) $r;
                         $lines[] = '| [' . str_replace('|', '/', $r['nama_paket']) . "](/pekerjaan/{$r['id']}) | {$r['lokasi']} | " . ($r['tahun'] ?? '-') . ' |';
                     }
 
-                    return [
-                        'reply' => "Ada " . count($foundRows) . " paket cocok \"{$keyword}\" — sebutkan nama lengkapnya untuk laporan PDF:\n\n| Paket | Lokasi | Tahun |\n|---|---|---|\n" . implode("\n", $lines),
-                        'tool_calls' => [$this->fakeToolCall('search_projects', ['keyword' => $keyword])],
-                    ];
+                    return $this->pagedTableReply(
+                        "Ada " . count($foundRows) . " paket cocok \"{$keyword}\" — sebutkan nama lengkapnya untuk laporan PDF:\n\n| Paket | Lokasi | Tahun |\n|---|---|---|",
+                        $lines,
+                        'search_projects',
+                        ['keyword' => $keyword],
+                        $userId,
+                    );
                 }
                 $first = $foundRows[0] ?? null;
                 if ($first !== null) {
@@ -988,15 +1008,18 @@ class ChatController extends Controller
                 // Multi-match → daftar pilih, bukan top-1 diam-diam.
                 if (count($foundRows) > 1) {
                     $lines = [];
-                    foreach (array_slice($foundRows, 0, 10) as $r) {
+                    foreach ($foundRows as $r) {
                         $r = is_array($r) ? $r : (array) $r;
                         $lines[] = '| [' . str_replace('|', '/', $r['nama_paket']) . "](/pekerjaan/{$r['id']}) | {$r['lokasi']} | " . ($r['tahun'] ?? '-') . ' |';
                     }
-                    return [
-                        'reply' => "Ada " . count($foundRows) . " paket cocok \"{$keyword}\" — pilih salah satu:\n\n| Paket | Lokasi | Tahun |\n|---|---|---|\n" . implode("\n", $lines)
-                            . "\n\nBalas \"detail kontrak paket [nama lengkap]\" untuk kartu relasinya.",
-                        'tool_calls' => [$this->fakeToolCall('search_projects', ['keyword' => $keyword])],
-                    ];
+
+                    return $this->pagedTableReply(
+                        "Ada " . count($foundRows) . " paket cocok \"{$keyword}\" — pilih salah satu, lalu balas \"detail kontrak paket [nama lengkap]\" untuk kartu relasinya:\n\n| Paket | Lokasi | Tahun |\n|---|---|---|",
+                        $lines,
+                        'search_projects',
+                        ['keyword' => $keyword],
+                        $userId,
+                    );
                 }
                 $first = $foundRows[0] ?? null;
                 if ($first !== null) {
@@ -1068,19 +1091,16 @@ class ChatController extends Controller
             if (isset($result['error']) || ($rows instanceof \Countable ? count($rows) === 0 : $rows === [])) {
                 return null;
             }
-            $all = is_array($rows) ? $rows : $rows->toArray();
-            $total = count($all);
-            $rows = array_slice($all, 0, 20);
+            $rows = is_array($rows) ? $rows : $rows->toArray();
             $lines = array_map(fn($r) => '| [' . str_replace('|', '/', $r['nama_paket']) . "](/pekerjaan/{$r['id']}) | {$r['lokasi']} | " . number_format((float) $r['pagu'], 0, ',', '.') . ' | ' . str_replace('|', '/', (string) ($r['catatan'] ?? '-')) . ' |', $rows);
-            $reply = "Paket yang statusnya batal:\n\n| Paket | Lokasi | Pagu Rp | Keterangan |\n|---|---|---|---|\n" . implode("\n", $lines);
-            if ($total > count($rows)) {
-                $reply .= "\n\nMenampilkan " . count($rows) . " dari {$total} paket — sebutkan nama paket untuk detailnya.";
-            }
 
-            return [
-                'reply' => $reply,
-                'tool_calls' => [$this->fakeToolCall('search_projects', $args)],
-            ];
+            return $this->pagedTableReply(
+                "Paket yang statusnya batal:\n\n| Paket | Lokasi | Pagu Rp | Keterangan |\n|---|---|---|---|",
+                $lines,
+                'search_projects',
+                $args,
+                $userId,
+            );
         }
 
         // Belum berkontrak: "belum berkontrak/belum ada kontrak/belum SPK".
@@ -1095,14 +1115,16 @@ class ChatController extends Controller
             if (isset($result['error']) || ($rows instanceof \Countable ? count($rows) === 0 : $rows === [])) {
                 return null;
             }
-            $rows = array_slice(is_array($rows) ? $rows : $rows->toArray(), 0, 10);
+            $rows = is_array($rows) ? $rows : $rows->toArray();
             $lines = array_map(fn($r) => '| [' . str_replace('|', '/', $r['nama_paket']) . "](/pekerjaan/{$r['id']}) | {$r['lokasi']} | " . number_format((float) $r['pagu'], 0, ',', '.') . ' |', $rows);
-            $reply = "Paket yang belum berkontrak:\n\n| Paket | Lokasi | Pagu Rp |\n|---|---|---|\n" . implode("\n", $lines);
 
-            return [
-                'reply' => $reply,
-                'tool_calls' => [$this->fakeToolCall('search_projects', $args)],
-            ];
+            return $this->pagedTableReply(
+                "Paket yang belum berkontrak:\n\n| Paket | Lokasi | Pagu Rp |\n|---|---|---|",
+                $lines,
+                'search_projects',
+                $args,
+                $userId,
+            );
         }
 
         // Ringkas wilayah: "per kecamatan/sebaran wilayah/cakupan".
@@ -1116,14 +1138,16 @@ class ChatController extends Controller
             if (isset($result['error']) || ($rows instanceof \Countable ? count($rows) === 0 : $rows === [])) {
                 return null;
             }
-            $rows = array_slice(is_array($rows) ? $rows : $rows->toArray(), 0, 15);
+            $rows = is_array($rows) ? $rows : $rows->toArray();
             $lines = array_map(fn($r) => "| {$r['kecamatan']} | {$r['total_paket']} | " . number_format((float) $r['total_pagu'], 0, ',', '.') . " | {$r['rata_progres']}% |", $rows);
-            $reply = "Sebaran paket per kecamatan ({$result['tahun']}):\n\n| Kecamatan | Paket | Pagu Rp | Rata Fisik |\n|---|---|---|---|\n" . implode("\n", $lines);
 
-            return [
-                'reply' => $reply,
-                'tool_calls' => [$this->fakeToolCall('get_wilayah_summary', $args)],
-            ];
+            return $this->pagedTableReply(
+                "Sebaran paket per kecamatan ({$result['tahun']}):\n\n| Kecamatan | Paket | Pagu Rp | Rata Fisik |\n|---|---|---|---|",
+                $lines,
+                'get_wilayah_summary',
+                $args,
+                $userId,
+            );
         }
 
         // Info pengawas: "siapa pengawas/pendamping [nama]" → profil + paket ditangani.
@@ -1136,16 +1160,12 @@ class ChatController extends Controller
                 if (!isset($result['error'])) {
                     $paketList = $result['paket_ditangani'] ?? [];
                     $paketList = $paketList instanceof \Countable && !is_array($paketList) ? $paketList->toArray() : $paketList;
-                    $pakets = array_slice($paketList, 0, 10);
-                    $lines = array_map(fn($p) => '| [' . str_replace('|', '/', $p['nama_paket']) . "](/pekerjaan/{$p['id']}) | {$p['peran']} | " . ($p['tahun'] ?? '-') . ' |', $pakets);
-                    $reply = "**{$result['nama']}**" . ($result['jabatan'] ? " ({$result['jabatan']})" : '')
+                    $lines = array_map(fn($p) => '| [' . str_replace('|', '/', $p['nama_paket']) . "](/pekerjaan/{$p['id']}) | {$p['peran']} | " . ($p['tahun'] ?? '-') . ' |', $paketList);
+                    $header = "**{$result['nama']}**" . ($result['jabatan'] ? " ({$result['jabatan']})" : '')
                         . ($result['telepon'] ? " · {$result['telepon']}" : '')
-                        . " menangani " . count($result['paket_ditangani'] ?? []) . " paket:\n\n| Paket | Peran | Tahun |\n|---|---|---|\n" . implode("\n", $lines);
+                        . " menangani " . count($result['paket_ditangani'] ?? []) . " paket:\n\n| Paket | Peran | Tahun |\n|---|---|---|";
 
-                    return [
-                        'reply' => $reply,
-                        'tool_calls' => [$this->fakeToolCall('get_pengawas_info', ['nama' => $nama])],
-                    ];
+                    return $this->pagedTableReply($header, $lines, 'get_pengawas_info', ['nama' => $nama], $userId);
                 }
             }
         }
@@ -1194,14 +1214,18 @@ class ChatController extends Controller
                 }
             } elseif (count($foundRows) > 1) {
                 $lines = [];
-                foreach (array_slice($foundRows, 0, 10) as $r) {
+                foreach ($foundRows as $r) {
                     $r = is_array($r) ? $r : (array) $r;
                     $lines[] = '| [' . str_replace('|', '/', $r['nama_paket']) . "](/pekerjaan/{$r['id']}) | {$r['lokasi']} | " . ($r['tahun'] ?? '-') . ' |';
                 }
-                return [
-                    'reply' => "Ada " . count($foundRows) . " paket cocok — pilih salah satu:\n\n| Paket | Lokasi | Tahun |\n|---|---|---|\n" . implode("\n", $lines),
-                    'tool_calls' => [$this->fakeToolCall('search_projects', ['keyword' => trim($query)])],
-                ];
+
+                return $this->pagedTableReply(
+                    "Ada " . count($foundRows) . " paket cocok — pilih salah satu:\n\n| Paket | Lokasi | Tahun |\n|---|---|---|",
+                    $lines,
+                    'search_projects',
+                    ['keyword' => trim($query)],
+                    $userId,
+                );
             }
         }
 
@@ -1241,12 +1265,15 @@ class ChatController extends Controller
                 if (isset($result['error']) || $tags === []) {
                     return null;
                 }
-                $lines = array_map(fn($t) => "| {$t['nama']} | {$t['jumlah_paket']} |", array_slice($tags, 0, 15));
+                $lines = array_map(fn($t) => "| {$t['nama']} | {$t['jumlah_paket']} |", $tags);
 
-                return [
-                    'reply' => "Daftar tag paket:\n\n| Tag | Paket |\n|---|---|\n" . implode("\n", $lines),
-                    'tool_calls' => [$this->fakeToolCall($toolName, [])],
-                ];
+                return $this->pagedTableReply(
+                    "Daftar tag paket:\n\n| Tag | Paket |\n|---|---|",
+                    $lines,
+                    $toolName,
+                    [],
+                    $userId,
+                );
             }
 
             // search_by_tags dengan kata kunci → argumen 'tag', bukan 'keyword'.
@@ -1261,15 +1288,12 @@ class ChatController extends Controller
                 return null;
             }
 
-            $reply = $this->renderInstantTable($toolName, $keyword, is_array($rows) ? $rows : $rows->toArray());
-            if ($reply === null) {
+            $table = $this->renderInstantTable($toolName, $keyword, is_array($rows) ? $rows : $rows->toArray());
+            if ($table === null) {
                 return null;
             }
 
-            return [
-                'reply' => $reply,
-                'tool_calls' => [$this->fakeToolCall($toolName, $args)],
-            ];
+            return $this->pagedTableReply($table[0], $table[1], $toolName, $args, $userId);
         }
 
         return null;
@@ -1404,9 +1428,9 @@ class ChatController extends Controller
      * Render tabel markdown generik dari hasil tool search.
      * Kolom = 3 field string/angka pertama tiap baris (id disembunyikan).
      */
-    private function renderInstantTable(string $toolName, string $keyword, array $rows): ?string
+    /** @return array{0: string, 1: string[]}|null [header, baris] */
+    private function renderInstantTable(string $toolName, string $keyword, array $rows): ?array
     {
-        $rows = array_slice($rows, 0, 10);
         if ($rows === []) {
             return null;
         }
@@ -1449,7 +1473,7 @@ class ChatController extends Controller
             return '| ' . implode(' | ', $cells) . ' |';
         }, $rows);
 
-        return $label . ":\n\n" . $header . "\n|" . str_repeat('---|', count($cols)) . "\n" . implode("\n", $lines);
+        return [$label . ":\n\n" . $header . "\n|" . str_repeat('---|', count($cols)), $lines];
     }
 
     private function fakeToolCall(string $name, array $args): array
@@ -1458,6 +1482,62 @@ class ChatController extends Controller
             'id' => 'instant-' . $name,
             'type' => 'function',
             'function' => ['name' => $name, 'arguments' => json_encode($args, JSON_UNESCAPED_UNICODE)],
+        ];
+    }
+
+    /**
+     * Potong baris tabel + footer sisa ("Menampilkan X dari Y — balas
+     * 'berikutnya' untuk sisanya"). Simpan sisa baris di cache per user.
+     * ponytail: cache 10 menit; halaman selalu 10 baris agar chat ringkas.
+     */
+    private function pagedTableReply(string $header, array $lines, string $toolName, array $args, ?int $userId, int $perPage = 10): array
+    {
+        $total = count($lines);
+        $shown = array_slice($lines, 0, $perPage);
+        $rest = array_slice($lines, $perPage);
+        $reply = $header . "\n" . implode("\n", $shown);
+        if ($rest !== [] && $userId !== null) {
+            Cache::put("ami_instant_next_u{$userId}", [
+                'header' => $header,
+                'lines' => $rest,
+                'tool' => $toolName,
+                'args' => $args,
+            ], now()->addMinutes(10));
+            $reply .= "\n\nMenampilkan " . count($shown) . " dari {$total} — balas **\"berikutnya\"** untuk sisanya.";
+        }
+
+        return [
+            'reply' => $reply,
+            'tool_calls' => [$this->fakeToolCall($toolName, $args)],
+        ];
+    }
+
+    /** Halaman lanjutan dari cache pagedTableReply. */
+    private function nextInstantPage(?int $userId): ?array
+    {
+        if ($userId === null) {
+            return null;
+        }
+        $cached = Cache::get("ami_instant_next_u{$userId}");
+        if (!is_array($cached) || empty($cached['lines'])) {
+            return null;
+        }
+        $shown = array_slice($cached['lines'], 0, 10);
+        $rest = array_slice($cached['lines'], 10);
+        if ($rest === []) {
+            Cache::forget("ami_instant_next_u{$userId}");
+        } else {
+            $cached['lines'] = $rest;
+            Cache::put("ami_instant_next_u{$userId}", $cached, now()->addMinutes(10));
+        }
+        $reply = $cached['header'] . "\n" . implode("\n", $shown);
+        if ($rest !== []) {
+            $reply .= "\n\nMasih ada " . count($rest) . " lagi — balas **\"berikutnya\"** untuk lanjut.";
+        }
+
+        return [
+            'reply' => $reply,
+            'tool_calls' => [$this->fakeToolCall($cached['tool'] ?? 'search_projects', $cached['args'] ?? [])],
         ];
     }
 
