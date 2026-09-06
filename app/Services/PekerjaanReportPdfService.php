@@ -40,6 +40,7 @@ class PekerjaanReportPdfService
 
         $kontraks = $project->kontrak->concat($project->kontrakLegacy)->unique('id')->values();
         $tiketOpen = $project->tiket->where('status', 'open')->count();
+        $penilaian = $this->penilaianKelengkapan($project);
 
         $html = View::make('exports.laporan-paket-pdf', [
             'logoDataUrl' => $this->logoDataUrl(),
@@ -78,7 +79,11 @@ class PekerjaanReportPdfService
                 'komponen' => $o->komponen,
                 'satuan' => $o->satuan,
                 'volume' => (float) $o->volume,
+                'foto_done' => $penilaian['foto_per_output'][$o->id]['done'] ?? 0,
+                'foto_target' => $penilaian['foto_per_output'][$o->id]['target'] ?? 0,
+                'foto_lengkap' => $penilaian['foto_per_output'][$o->id]['lengkap'] ?? false,
             ])->all(),
+            'penilaian' => $penilaian,
             'penerima' => $project->penerima->map(fn($p) => [
                 'nama' => $p->nama,
                 'jumlah_jiwa' => (int) $p->jumlah_jiwa,
@@ -193,6 +198,82 @@ class PekerjaanReportPdfService
         $bytes = is_readable($path) ? (string) file_get_contents($path) : '';
 
         return $bytes !== '' ? 'data:image/png;base64,' . base64_encode($bytes) : '';
+    }
+
+    /**
+     * Penilaian kelengkapan — port logika tab Foto/Penerima/Output:
+     * target foto = unit output × 5 slot (komunal non-unit = 1 unit),
+     * penerima cukup bila total >= volume output satuan unit,
+     * koordinat invalid = ada koordinat tapi validasi desa gagal.
+     */
+    private function penilaianKelengkapan(Pekerjaan $project): array
+    {
+        $fotoPerOutput = [];
+        $fotoLengkapSemua = true;
+        foreach ($project->output as $o) {
+            $units = $o->penerima_is_optional
+                ? (strtolower((string) $o->satuan) === 'unit' ? max(1, (int) round((float) $o->volume)) : 1)
+                : max(1, (int) round((float) $o->volume));
+            $target = $units * 5;
+            $done = $project->foto->where('komponen_id', $o->id)->count();
+            $lengkap = $target > 0 && $done >= $target;
+            if (!$lengkap) {
+                $fotoLengkapSemua = false;
+            }
+            $fotoPerOutput[$o->id] = [
+                'komponen' => $o->komponen,
+                'satuan' => $o->satuan,
+                'volume' => (float) $o->volume,
+                'units' => $units,
+                'done' => $done,
+                'target' => $target,
+                'lengkap' => $lengkap,
+            ];
+        }
+
+        $kebutuhanPenerima = [];
+        foreach ($project->output as $o) {
+            if ($o->penerima_is_optional || strtolower((string) $o->satuan) !== 'unit') {
+                continue;
+            }
+            $kebutuhanPenerima[] = [
+                'komponen' => $o->komponen,
+                'target' => max(1, (int) round((float) $o->volume)),
+            ];
+        }
+        $penerimaTotal = $project->penerima->count();
+        $penerimaCukup = true;
+        foreach ($kebutuhanPenerima as &$k) {
+            $k['tersedia'] = $penerimaTotal;
+            $k['cukup'] = $penerimaTotal >= $k['target'];
+            if (!$k['cukup']) {
+                $penerimaCukup = false;
+            }
+        }
+        unset($k);
+
+        $koordinatInvalid = $project->foto->filter(
+            fn($f) => !empty($f->koordinat) && $f->validasi_koordinat === false
+        )->values();
+        $koordinatTanpa = $project->foto->filter(fn($f) => empty($f->koordinat))->count();
+
+        $lengkap = $fotoLengkapSemua && $penerimaCukup && $koordinatInvalid->isEmpty();
+
+        return [
+            'lengkap' => $lengkap,
+            'foto_lengkap' => $fotoLengkapSemua,
+            'foto_per_output' => $fotoPerOutput,
+            'penerima_cukup' => $penerimaCukup,
+            'penerima_total' => $penerimaTotal,
+            'penerima_kebutuhan' => $kebutuhanPenerima,
+            'koordinat_invalid' => $koordinatInvalid->map(fn($f) => [
+                'keterangan' => $f->keterangan,
+                'koordinat' => $f->koordinat,
+                'pesan' => $f->validasi_koordinat_message,
+            ])->all(),
+            'koordinat_invalid_count' => $koordinatInvalid->count(),
+            'koordinat_tanpa' => $koordinatTanpa,
+        ];
     }
 
     /** Thumbnail foto dokumentasi sebagai data URI (aman dari chroot dompdf). */
