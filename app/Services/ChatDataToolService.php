@@ -554,6 +554,8 @@ class ChatDataToolService
             ])->values(),
             'berita_acara' => $project->beritaAcara ? ($project->beritaAcara->data ?? []) : null,
             'berkas' => $project->berkas->map(fn($b) => $b->jenis_dokumen)->unique()->values(),
+            'berkas_count' => $project->berkas->count(),
+            'berkas_per_jenis' => $project->berkas->groupBy(fn($b) => $b->jenis_dokumen ?? '-')->map(fn($g) => $g->count())->all(),
             // Sampel konkret (max 5) agar kartu instant bisa tampilkan tautan/gambar.
             'berkas_sampel' => $project->berkas->take(5)->map(fn($b) => [
                 'id' => $b->id,

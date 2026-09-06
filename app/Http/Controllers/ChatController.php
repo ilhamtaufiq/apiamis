@@ -1350,6 +1350,36 @@ class ChatController extends Controller
     }
 
     /**
+     * Blok berkas kartu instant: ≤10 jenis → inline; >10 → tabel
+     * Jenis|Jumlah + tautan unduh 5 sampel pertama.
+     */
+    private function berkasBlock(array $d, array $berkasSampel): string
+    {
+        $jenis = $d['berkas'] ?? [];
+        if ($jenis === []) {
+            return "Berkas: -\n";
+        }
+        $total = $d['berkas_count'] ?? count($jenis);
+        $head = "Berkas ({$total} file, " . count($jenis) . " jenis)";
+        if (count($jenis) <= 10) {
+            $out = $head . ': ' . implode(', ', $jenis) . "\n";
+        } else {
+            $perJenis = $d['berkas_per_jenis'] ?? [];
+            $rows = [];
+            foreach ($jenis as $j) {
+                $n = $perJenis[$j] ?? null;
+                $rows[] = '| ' . str_replace('|', '/', (string) $j) . ' | ' . ($n ?? '-') . ' |';
+            }
+            $out = $head . ":\n\n| Jenis | File |\n|---|---|\n" . implode("\n", $rows) . "\n";
+        }
+        if ($berkasSampel !== []) {
+            $out .= implode(' · ', array_slice($berkasSampel, 0, 5)) . "\n";
+        }
+
+        return $out;
+    }
+
+    /**
      * Kartu relasi satu paket: kontrak + addendum + dokumen + berkas +
      * foto + output + tiket (tanpa LLM). Return null bila paket tak ada.
      */
@@ -1415,9 +1445,7 @@ class ChatController extends Controller
             . "Kontrak (" . count($d['kontrak'] ?? []) . "):\n" . ($kontrakLines === [] ? '- belum ada' : implode("\n", $kontrakLines)) . "\n\n"
             . ($addLines === [] ? '' : "Addendum (" . count($addLines) . "):\n" . implode("\n", $addLines) . "\n\n")
             . ($dokLines === [] ? '' : "Register dokumen ([kelola](/pekerjaan/register)):\n\n| Jenis | Nomor | Tanggal |\n|---|---|---|\n" . implode("\n", $dokLines) . "\n\n")
-            . "Berkas (" . count($d['berkas'] ?? []) . " jenis): "
-            . ((($d['berkas'] ?? []) === []) ? '-' : implode(', ', $d['berkas'])) . "\n"
-            . ($berkasSampel === [] ? '' : implode(' · ', $berkasSampel) . "\n")
+            . $this->berkasBlock($d, $berkasSampel)
             . "Foto: {$d['jumlah_foto']}"
             . ($fotoLines === [] ? '' : "\n" . implode("\n", array_slice($fotoLines, 0, 3))) . "\n"
             . "Output: {$d['jumlah_output']}"
