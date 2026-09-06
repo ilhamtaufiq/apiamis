@@ -807,6 +807,21 @@ class ChatController extends Controller
             }
         }
 
+        // Konfirmasi draf tulis: "ya/simpan/setuju" → eksekusi pending.
+        if (preg_match('/^(ya|iya|yaudah|setuju|simpan|oke|ok|lanjut|betul|benar)\.?$/u', $q)) {
+            $confirmed = $this->confirmPendingWrite($userId);
+            if ($confirmed !== null) {
+                return $confirmed;
+            }
+        }
+
+        // Niat tulis: "tambah output/komponen ... paket X" / "tambah penerima ... paket X"
+        // → simpan draf + minta konfirmasi, JANGAN langsung tulis.
+        $writeDraft = $this->draftWriteIntent($query, $userId);
+        if ($writeDraft !== null) {
+            return $writeDraft;
+        }
+
         // Total/ringkasan makro: "berapa total pekerjaan [tahun X]"
         if (preg_match('/\b(berapa|total|jumlah)\b.*\b(pekerjaan|paket)\b/u', $q)) {
             $args = [];
@@ -1590,6 +1605,163 @@ class ChatController extends Controller
         ];
     }
 
+    /**
+     * Niat tulis via chat: parse "tambah output|komponen|penerima ... paket X".
+     * Simpan draf di cache + minta konfirmasi. Return null bila bukan niat tulis.
+     * ponytail: parser regex sederhana; serahkan ke LLM bila pola user melebar.
+     */
+    private function draftWriteIntent(string $query, ?int $userId): ?array
+    {
+        $q = mb_strtolower(trim($query));
+        $isOutput = preg_match('/\b(tambah|tambahkan|buat|buatkan|input|isi)\b/u', $q)
+            && preg_match('/\b(output|komponen)\b/u', $q);
+        $isPenerima = preg_match('/\b(tambah|tambahkan|buat|buatkan|input|isi|daftar)\b/u', $q)
+            && preg_match('/\b(penerima|warga|kk)\b/u', $q);
+        if (!$isOutput && !$isPenerima) {
+            return null;
+        }
+        if ($userId === null) {
+            return null;
+        }
+
+        // Paket: "paket <nama>" → search top-1; ambigu/gagal → minta klarifikasi.
+        $paketKeyword = '';
+        if (preg_match('/\bpaket\s+(.+?)(?:\s+(?:komponen|output|penerima|dengan|bernama|volume|satuan|sebanyak|sejumlah|untuk)|\s*$)/iu', $query, $m)) {
+            $paketKeyword = trim($m[1]);
+        }
+        if (mb_strlen($paketKeyword) < 3) {
+            return [
+                'reply' => 'Paket mana? Sebutkan nama paketnya — mis. "tambah output pipa 100 meter paket Cibodas".',
+                'tool_calls' => [$this->fakeToolCall($isOutput ? 'create_output' : 'create_penerima', ['draft' => true])],
+            ];
+        }
+        $found = $this->executeTool('search_projects', ['keyword' => $paketKeyword]);
+        $rows = $found['results'] ?? [];
+        $rows = is_array($rows) ? $rows : $rows->toArray();
+        if (count($rows) !== 1) {
+            $names = array_slice(array_map(fn($r) => (is_array($r) ? $r : (array) $r)['nama_paket'] ?? '-', $rows), 0, 5);
+            $reply = count($rows) === 0
+                ? "Paket \"{$paketKeyword}\" tidak ketemu. Cek lagi namanya?"
+                : 'Ada ' . count($rows) . " paket cocok — sebutkan satu: " . implode('; ', $names);
+            if (count($rows) > 0) {
+                $reply .= "\n\n" . $this->pagedTableReply(
+                    'Pilih paket:',
+                    array_map(fn($r) => '| ' . str_replace('|', '/', (is_array($r) ? $r : (array) $r)['nama_paket']) . ' |', $rows),
+                    'search_projects',
+                    ['keyword' => $paketKeyword],
+                    $userId,
+                )['reply'];
+            }
+
+            return [
+                'reply' => $reply,
+                'tool_calls' => [$this->fakeToolCall('search_projects', ['keyword' => $paketKeyword])],
+            ];
+        }
+        $paket = is_array($rows[0]) ? $rows[0] : (array) $rows[0];
+
+        if ($isOutput) {
+            // "komponen X [satuan Y] [volume N]" — satuan default Unit, volume default 1.
+            $komponen = '';
+            if (preg_match('/\b(?:output|komponen)\s+(.+?)(?:\s+(?:satuan|volume|sebanyak|sejumlah|paket)|\s*$)/iu', $query, $m)) {
+                $komponen = trim($m[1]);
+                // Strip angka + satuan yang menempel ("Pipa 100 meter" → "Pipa").
+                $komponen = trim((string) preg_replace('/\s+\d+(?:[.,]\d+)?\s*(unit|meter|m|buah|titik|paket)?\s*$/iu', '', $komponen));
+            }
+            $satuan = 'Unit';
+            if (preg_match('/\bsatuan\s+([a-z]+)/iu', $query, $m)) {
+                $satuan = ucfirst(strtolower(trim($m[1])));
+            }
+            $volume = 1;
+            if (preg_match('/\b(?:volume|sebanyak|sejumlah)\s+([\d.,]+)/iu', $query, $m)) {
+                $volume = (float) str_replace(',', '.', $m[1]);
+            } elseif (preg_match('/\b(\d+(?:[.,]\d+)?)\s*(unit|meter|m\b|buah|titik|paket)/iu', $query, $m)) {
+                $volume = (float) str_replace(',', '.', $m[1]);
+                if (stripos($m[2], 'meter') !== false || strtolower($m[2]) === 'm') {
+                    $satuan = 'Meter';
+                }
+            }
+            if (mb_strlen($komponen) < 2) {
+                return [
+                    'reply' => "Komponen apa? Mis. \"tambah output Sambungan Rumah 40 unit paket {$paket['nama_paket']}\".",
+                    'tool_calls' => [$this->fakeToolCall('create_output', ['draft' => true])],
+                ];
+            }
+            $draft = [
+                'tool' => 'create_output',
+                'args' => [
+                    'pekerjaan_id' => (int) $paket['id'],
+                    'komponen' => $komponen,
+                    'satuan' => $satuan,
+                    'volume' => $volume,
+                ],
+                'summary' => "Tambah output **{$komponen}** ({$volume} {$satuan}) ke paket **{$paket['nama_paket']}**?",
+            ];
+        } else {
+            // "penerima <nama> [N jiwa] [komunal]" paket X.
+            $nama = '';
+            if (preg_match('/\b(?:penerima|warga)\s+(.+?)(?:\s+(?:\d+\s*jiwa|komunal|paket)|\s*$)/iu', $query, $m)) {
+                $nama = trim($m[1]);
+            }
+            $jiwa = 1;
+            if (preg_match('/\b(\d+)\s*jiwa/iu', $query, $m)) {
+                $jiwa = max(1, (int) $m[1]);
+            }
+            $komunal = (bool) preg_match('/\bkomunal\b/iu', $query);
+            if (mb_strlen($nama) < 2) {
+                return [
+                    'reply' => "Penerima siapa? Mis. \"tambah penerima Asep 4 jiwa paket {$paket['nama_paket']}\".",
+                    'tool_calls' => [$this->fakeToolCall('create_penerima', ['draft' => true])],
+                ];
+            }
+            $draft = [
+                'tool' => 'create_penerima',
+                'args' => [
+                    'pekerjaan_id' => (int) $paket['id'],
+                    'nama' => $nama,
+                    'jumlah_jiwa' => $jiwa,
+                    'is_komunal' => $komunal,
+                ],
+                'summary' => "Tambah penerima **{$nama}** ({$jiwa} jiwa" . ($komunal ? ', komunal' : '') . ") ke paket **{$paket['nama_paket']}**?",
+            ];
+        }
+
+        Cache::put("ami_write_draft_u{$userId}", $draft, now()->addMinutes(10));
+
+        return [
+            'reply' => $draft['summary'] . "\n\nBalas **\"ya\"** untuk menyimpan, atau kirim ulang dengan perbaikan.",
+            'tool_calls' => [$this->fakeToolCall($draft['tool'], $draft['args'] + ['draft' => true])],
+        ];
+    }
+
+    /** Eksekusi draf tulis yang dikonfirmasi ("ya"). */
+    private function confirmPendingWrite(?int $userId): ?array
+    {
+        if ($userId === null) {
+            return null;
+        }
+        $draft = Cache::get("ami_write_draft_u{$userId}");
+        if (!is_array($draft) || empty($draft['tool']) || empty($draft['args'])) {
+            return null;
+        }
+        Cache::forget("ami_write_draft_u{$userId}");
+        $result = $this->executeTool($draft['tool'], $draft['args']);
+        if (isset($result['error'])) {
+            return [
+                'reply' => 'Gagal menyimpan: ' . $result['error'],
+                'tool_calls' => [$this->fakeToolCall($draft['tool'], $draft['args'])],
+            ];
+        }
+        $what = $draft['tool'] === 'create_output'
+            ? "Output **{$result['komponen']}** ({$result['volume']} {$result['satuan']})"
+            : "Penerima **{$result['nama']}** ({$result['jumlah_jiwa']} jiwa)";
+
+        return [
+            'reply' => "Tersimpan. {$what} masuk ke paket **{$result['paket']}**.",
+            'tool_calls' => [$this->fakeToolCall($draft['tool'], $draft['args'])],
+        ];
+    }
+
     /** Halaman lanjutan dari cache pagedTableReply. */
     private function nextInstantPage(?int $userId): ?array
     {
@@ -1687,6 +1859,9 @@ class ChatController extends Controller
             'deviasi' => ['search_projects_by_progress'],
             'progres rendah' => ['search_projects_by_progress'],
             'progress rendah' => ['search_projects_by_progress'],
+            'tambah output' => ['create_output'],
+            'tambah komponen' => ['create_output'],
+            'tambah penerima' => ['create_penerima'],
             'anomali' => ['get_anomalies'],
             'janggal' => ['get_anomalies'],
             'mencurigakan' => ['get_anomalies'],

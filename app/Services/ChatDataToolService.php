@@ -140,6 +140,18 @@ class ChatDataToolService
                 'jenis' => ['type' => 'string', 'description' => 'foto, berkas, atau output.'],
                 'halaman' => ['type' => 'integer', 'description' => 'Halaman mulai dari 1; tiap halaman 5 item.'],
             ], ['id', 'jenis']),
+            $this->tool('create_output', 'Tambah komponen output ke paket. HANYA panggil setelah user mengonfirmasi draf ("ya/simpan"). ID paket wajib dari search_projects. Contoh: {pekerjaan_id: 648, komponen: "Sambungan Rumah", satuan: "Unit", volume: 40}.', [
+                'pekerjaan_id' => ['type' => 'integer', 'description' => 'ID paket persis dari search_projects.'],
+                'komponen' => ['type' => 'string', 'description' => 'Nama komponen, mis. "Sambungan Rumah".'],
+                'satuan' => ['type' => 'string', 'description' => 'Satuan, mis. "Unit", "Meter".'],
+                'volume' => ['type' => 'number', 'description' => 'Volume pekerjaan.'],
+            ], ['pekerjaan_id', 'komponen', 'satuan', 'volume']),
+            $this->tool('create_penerima', 'Tambah penerima manfaat ke paket. HANYA panggil setelah user mengonfirmasi draf ("ya/simpan"). ID paket wajib dari search_projects. Contoh: {pekerjaan_id: 648, nama: "Asep", jumlah_jiwa: 4}.', [
+                'pekerjaan_id' => ['type' => 'integer', 'description' => 'ID paket persis dari search_projects.'],
+                'nama' => ['type' => 'string', 'description' => 'Nama penerima.'],
+                'jumlah_jiwa' => ['type' => 'integer', 'description' => 'Jumlah jiwa, default 1.'],
+                'is_komunal' => ['type' => 'boolean', 'description' => 'True bila penerima komunal.'],
+            ], ['pekerjaan_id', 'nama']),
             $this->tool('get_anomalies', 'Deteksi anomali paket: deviasi fisik negatif (terlambat), fisik 0% (mandek), keuangan jauh di atas fisik (>20 poin, indikasi bayar dulu), belum berkontrak, tanpa foto dokumentasi. Pakai untuk "anomali/janggal/bermasalah/mencurigakan/tidak wajar". Contoh: "cek anomali paket 2026" -> {tahun: 2026}.', [
                 'tahun' => ['type' => 'integer', 'description' => 'Tahun anggaran bila disebut user.'],
                 'kecamatan' => ['type' => 'string', 'description' => 'Filter nama kecamatan bila disebut.'],
@@ -181,6 +193,8 @@ class ChatDataToolService
             'search_berkas' => $this->searchBerkas($args),
             'get_ticket_details' => $this->getTicketDetails($args),
             'get_project_media' => $this->getProjectMedia($args),
+            'create_output' => $this->createOutput($args),
+            'create_penerima' => $this->createPenerima($args),
             'get_anomalies' => $this->getAnomalies($args),
             'generate_pekerjaan_report' => $this->generatePekerjaanReport($args),
             default => ['error' => 'Tool tidak ditemukan.'],
@@ -423,6 +437,69 @@ class ChatDataToolService
             ->values();
 
         return ['results' => $pakets, 'kondisi' => $kondisi, 'tahun' => $tahun];
+    }
+
+    /**
+     * Tulis via chat: selalu validasi akses paket dulu (controller store
+     * tak cek byUserRole). Return error ramah bila paket tak berhak.
+     */
+    private function writableProject(int $id): ?Pekerjaan
+    {
+        return Pekerjaan::byUserRole()->find($id);
+    }
+
+    private function createOutput(array $args): array
+    {
+        $project = $this->writableProject((int) ($args['pekerjaan_id'] ?? 0));
+        if (!$project) {
+            return ['error' => 'Paket tidak ditemukan atau bukan wewenang Anda.'];
+        }
+        if (empty($args['komponen']) || empty($args['satuan']) || !isset($args['volume'])) {
+            return ['error' => 'Data belum lengkap: butuh komponen, satuan, dan volume.'];
+        }
+        $output = Output::create([
+            'pekerjaan_id' => $project->id,
+            'komponen' => $args['komponen'],
+            'satuan' => $args['satuan'],
+            'volume' => (float) $args['volume'],
+            'penerima_is_optional' => (bool) ($args['penerima_is_optional'] ?? false),
+        ]);
+
+        return [
+            'success' => true,
+            'id' => $output->id,
+            'paket' => $project->nama_paket,
+            'komponen' => $output->komponen,
+            'satuan' => $output->satuan,
+            'volume' => (float) $output->volume,
+        ];
+    }
+
+    private function createPenerima(array $args): array
+    {
+        $project = $this->writableProject((int) ($args['pekerjaan_id'] ?? 0));
+        if (!$project) {
+            return ['error' => 'Paket tidak ditemukan atau bukan wewenang Anda.'];
+        }
+        if (empty($args['nama'])) {
+            return ['error' => 'Data belum lengkap: butuh nama penerima.'];
+        }
+        $penerima = Penerima::create([
+            'pekerjaan_id' => $project->id,
+            'nama' => $args['nama'],
+            'jumlah_jiwa' => max(1, (int) ($args['jumlah_jiwa'] ?? 1)),
+            'nik' => $args['nik'] ?? null,
+            'alamat' => $args['alamat'] ?? null,
+            'is_komunal' => (bool) ($args['is_komunal'] ?? false),
+        ]);
+
+        return [
+            'success' => true,
+            'id' => $penerima->id,
+            'paket' => $project->nama_paket,
+            'nama' => $penerima->nama,
+            'jumlah_jiwa' => (int) $penerima->jumlah_jiwa,
+        ];
     }
 
     /**
