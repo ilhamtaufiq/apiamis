@@ -26,6 +26,15 @@ use Illuminate\Http\Request;
 
 class ChatDataToolService
 {
+    /** Label jenis addendum — selaras frontend KontrakAddendumDetail. */
+    private const JENIS_ADDENDUM_LABEL = [
+        'teknis' => 'Teknis',
+        'biaya' => 'Biaya',
+        'waktu' => 'Waktu',
+        'teknis_biaya' => 'Teknis & Biaya',
+        'lainnya' => 'Lainnya',
+    ];
+
     public function __construct(
         private readonly PekerjaanProgressEstimasiSummaryService $estimasiSummary,
     ) {}
@@ -533,13 +542,13 @@ class ChatDataToolService
             ]),
             'addendums' => $addendums->map(fn($a) => [
                 'nomor' => $a->nomor_addendum,
-                'jenis' => $a->jenis_addendum,
+                'jenis' => self::JENIS_ADDENDUM_LABEL[$a->jenis_addendum] ?? $a->jenis_addendum,
                 'nilai_sebelum' => (float) $a->nilai_kontrak_sebelum,
                 'nilai_sesudah' => (float) $a->nilai_kontrak_sesudah,
                 'status' => $a->status,
             ]),
             'dokumen_kontrak' => $kontraks->flatMap(fn($k) => $k->registers ?? collect())->map(fn($r) => [
-                'jenis' => $r->type->nama ?? $r->attachment_type,
+                'jenis' => $r->type->name ?? $r->attachment_type ?? '-',
                 'nomor' => $r->nomor,
                 'tanggal' => $r->tanggal?->format('Y-m-d'),
             ])->values(),
@@ -931,7 +940,7 @@ class ChatDataToolService
                 'addendum_ke' => $a->addendum_ke,
                 'paket' => $a->kontrak->pekerjaan->nama_paket ?? 'N/A',
                 'penyedia' => $a->kontrak->penyedia->nama ?? 'N/A',
-                'jenis' => $a->jenis_addendum,
+                'jenis' => self::JENIS_ADDENDUM_LABEL[$a->jenis_addendum] ?? $a->jenis_addendum,
                 'nilai_sebelum' => (float) $a->nilai_kontrak_sebelum,
                 'nilai_sesudah' => (float) $a->nilai_kontrak_sesudah,
                 'selesai_sebelum' => $a->tgl_selesai_sebelum?->format('Y-m-d'),
