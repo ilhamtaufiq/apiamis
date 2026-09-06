@@ -1059,7 +1059,7 @@ class ChatController extends Controller
         // Paket batal: "paket batal/dibatalkan" → search_projects canceled.
         if (preg_match('/\b(batal|dibatalkan|pembatalan|cancel)\b/u', $q)
             && preg_match('/\b(paket|pekerjaan|proyek)\b/u', $q)) {
-            $args = ['status' => 'canceled'];
+            $args = ['status' => 'canceled', 'limit' => 25];
             if (preg_match('/\b(20\d{2})\b/', $q, $m)) {
                 $args['tahun'] = (int) $m[1];
             }
@@ -1068,9 +1068,14 @@ class ChatController extends Controller
             if (isset($result['error']) || ($rows instanceof \Countable ? count($rows) === 0 : $rows === [])) {
                 return null;
             }
-            $rows = array_slice(is_array($rows) ? $rows : $rows->toArray(), 0, 10);
+            $all = is_array($rows) ? $rows : $rows->toArray();
+            $total = count($all);
+            $rows = array_slice($all, 0, 20);
             $lines = array_map(fn($r) => '| [' . str_replace('|', '/', $r['nama_paket']) . "](/pekerjaan/{$r['id']}) | {$r['lokasi']} | " . number_format((float) $r['pagu'], 0, ',', '.') . ' | ' . str_replace('|', '/', (string) ($r['catatan'] ?? '-')) . ' |', $rows);
             $reply = "Paket yang statusnya batal:\n\n| Paket | Lokasi | Pagu Rp | Keterangan |\n|---|---|---|---|\n" . implode("\n", $lines);
+            if ($total > count($rows)) {
+                $reply .= "\n\nMenampilkan " . count($rows) . " dari {$total} paket — sebutkan nama paket untuk detailnya.";
+            }
 
             return [
                 'reply' => $reply,

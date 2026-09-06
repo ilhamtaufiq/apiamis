@@ -349,8 +349,10 @@ class ChatDataToolService
             }
         }
 
+        $limit = min(50, max(1, (int) ($args['limit'] ?? 15)));
+
         return [
-            'results' => $query->limit(15)->get()->map(fn($p) => [
+            'results' => $query->limit($limit)->get()->map(fn($p) => [
                 'id' => $p->id,
                 'nama_paket' => $p->nama_paket,
                 'lokasi' => ($p->desa->n_desa ?? '-') . ', ' . ($p->kecamatan->n_kec ?? '-'),
