@@ -342,7 +342,7 @@ class ChatController extends Controller
                 'tools' => $tools,
                 'tool_choice' => 'auto',
                 // 500rb: jawaban rekap/ekspor tak terpotong; biaya out naik proporsional.
-                'max_tokens' => 500000,
+                'max_tokens' => 10000,
             ]);
 
             if (!$result['success']) {
@@ -617,7 +617,7 @@ class ChatController extends Controller
                     $nextResult = $this->openRouter->chatDirect($requestedProvider, $messages, [
                         'tools' => $tools,
                         'tool_choice' => 'auto',
-                        'max_tokens' => 500000,
+                        'max_tokens' => 10000,
                     ]);
 
                     if (!$nextResult['success']) {
