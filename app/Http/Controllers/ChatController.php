@@ -341,8 +341,8 @@ class ChatController extends Controller
             $result = $this->openRouter->chatDirect($requestedProvider, $messages, [
                 'tools' => $tools,
                 'tool_choice' => 'auto',
-                // ponytail: 1500 potong jawaban panjang; naikkan bila ringkasan eksekutif terpotong.
-                'max_tokens' => 1500,
+                // 4000: jawaban rekap/ekspor tak terpotong; biaya out naik proporsional.
+                'max_tokens' => 4000,
             ]);
 
             if (!$result['success']) {
@@ -579,7 +579,7 @@ class ChatController extends Controller
                 function (string $token) use ($emit): void {
                     $emit(['type' => 'token', 'content' => $token]);
                 },
-                ['tools' => $tools, 'tool_choice' => 'auto', 'max_tokens' => 1500]
+                ['tools' => $tools, 'tool_choice' => 'auto', 'max_tokens' => 4000]
             );
 
             if (!($streamResult['success'] ?? false) && empty($streamResult['tool_calls'])) {
@@ -617,7 +617,7 @@ class ChatController extends Controller
                     $nextResult = $this->openRouter->chatDirect($requestedProvider, $messages, [
                         'tools' => $tools,
                         'tool_choice' => 'auto',
-                        'max_tokens' => 1500,
+                        'max_tokens' => 4000,
                     ]);
 
                     if (!$nextResult['success']) {
