@@ -555,7 +555,9 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('chat/sessions', [\App\Http\Controllers\ChatController::class, 'sessions']);
     Route::post('chat/sessions', [\App\Http\Controllers\ChatController::class, 'createSession']);
     Route::delete('chat/sessions/{id}', [\App\Http\Controllers\ChatController::class, 'deleteSession']);
+    Route::patch('chat/sessions/{id}', [\App\Http\Controllers\ChatController::class, 'renameSession']);
     Route::get('chat/sessions/{id}/messages', [\App\Http\Controllers\ChatController::class, 'sessionMessages']);
     Route::post('chat/messages/{id}/vote', [\App\Http\Controllers\ChatController::class, 'voteMessage']);
+    Route::get('chat/reports/download', [\App\Http\Controllers\ChatController::class, 'downloadReport']);
 
 });

@@ -93,6 +93,18 @@ class ChatController extends Controller
     }
 
     /**
+     * Rename judul session milik user sendiri.
+     */
+    public function renameSession(Request $request, $id)
+    {
+        $request->validate(['title' => 'required|string|max:255']);
+        $session = ChatSession::where('user_id', $request->user()->id)->findOrFail($id);
+        $session->update(['title' => $request->input('title')]);
+
+        return response()->json(['success' => true, 'data' => ['id' => $session->id, 'title' => $session->title]]);
+    }
+
+    /**
      * Vote jawaban asisten: latih (up) atau tolak (down) entri knowledge.
      */
     public function voteMessage(Request $request, $id)
