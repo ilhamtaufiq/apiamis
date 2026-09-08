@@ -579,7 +579,7 @@ class ChatController extends Controller
                 function (string $token) use ($emit): void {
                     $emit(['type' => 'token', 'content' => $token]);
                 },
-                ['tools' => $tools, 'tool_choice' => 'auto', 'max_tokens' => 500000]
+                ['tools' => $tools, 'tool_choice' => 'auto', 'max_tokens' => 20000]
             );
 
             if (!($streamResult['success'] ?? false) && empty($streamResult['tool_calls'])) {
