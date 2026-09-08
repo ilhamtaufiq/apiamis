@@ -4,6 +4,7 @@ namespace App\Traits;
 
 use App\Events\PekerjaanUpdated;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\Log;
 
 trait BroadcastsPekerjaanRealtime
 {
@@ -40,12 +41,21 @@ trait BroadcastsPekerjaanRealtime
         $resource = strtolower(class_basename($model));
         $resourceId = $model->getKey();
 
-        broadcast(new PekerjaanUpdated(
-            pekerjaanId: (int) $pekerjaanId,
-            resource: $resource,
-            action: $action,
-            resourceId: $resourceId ? (int) $resourceId : null,
-        ));
+        try {
+            broadcast(new PekerjaanUpdated(
+                pekerjaanId: (int) $pekerjaanId,
+                resource: $resource,
+                action: $action,
+                resourceId: $resourceId ? (int) $resourceId : null,
+            ));
+        } catch (\Throwable $e) {
+            // Realtime best-effort: jangan gagalkan store/update karena Pusher/Reverb down.
+            Log::warning('Broadcast pekerjaan gagal: '.$e->getMessage(), [
+                'pekerjaan_id' => $pekerjaanId,
+                'resource' => $resource,
+                'action' => $action,
+            ]);
+        }
     }
 
     protected static function resolvePekerjaanIdForBroadcast(Model $model): ?int
