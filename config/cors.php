@@ -33,9 +33,13 @@ return [
         'https://arumanis.cianjur.space',
         'https://bun.cianjur.space',
         'https://apiamis.cianjur.space',
+        'https://ami.cianjur.space',
     ],
 
-    'allowed_origins_patterns' => [],
+    'allowed_origins_patterns' => [
+        // Preview deployments Cloudflare Pages (ami-asisten)
+        '#^https://[a-z0-9-]+\.pages\.dev$#',
+    ],
 
     'allowed_headers' => ['*'],
 
