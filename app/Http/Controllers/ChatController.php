@@ -45,6 +45,23 @@ class ChatController extends Controller
         $this->reportPdf = $reportPdf;
     }
 
+    /**
+     * Gate akses AMI asisten AI: hanya role terdaftar di setting
+     * ami_access_roles (JSON array). Kosong/tidak ada setting = semua role.
+     */
+    public static function userHasAmiAccess($user): bool
+    {
+        $rolesJson = AppSetting::getValue('ami_access_roles');
+        if ($rolesJson === null || trim($rolesJson) === '' || $rolesJson === '[]') {
+            return true;
+        }
+        $allowed = json_decode($rolesJson, true);
+        if (!is_array($allowed)) {
+            return true;
+        }
+        return $user->hasAnyRole(...$allowed);
+    }
+
     // ── Session CRUD ────────────────────────────────────────────────
 
     /**
@@ -52,6 +69,10 @@ class ChatController extends Controller
      */
     public function sessions(Request $request)
     {
+        if (!self::userHasAmiAccess($request->user())) {
+            return response()->json(['success' => false, 'message' => 'Anda tidak memiliki akses ke AMI asisten AI.'], 403);
+        }
+
         $sessions = ChatSession::where('user_id', $request->user()->id)
             ->withCount('messages')
             ->orderByDesc('updated_at')
@@ -73,6 +94,10 @@ class ChatController extends Controller
      */
     public function createSession(Request $request)
     {
+        if (!self::userHasAmiAccess($request->user())) {
+            return response()->json(['success' => false, 'message' => 'Anda tidak memiliki akses ke AMI asisten AI.'], 403);
+        }
+
         $session = ChatSession::create([
             'user_id' => $request->user()->id,
             'title' => 'Percakapan Baru',
@@ -203,6 +228,10 @@ class ChatController extends Controller
             'history' => 'nullable|array',
             'provider' => 'nullable|string|max:64',
         ]);
+
+        if (!self::userHasAmiAccess($request->user())) {
+            return response()->json(['success' => false, 'message' => 'Anda tidak memiliki akses ke AMI asisten AI.'], 403);
+        }
 
         $userMessage = $request->input('message');
         $isAutoReport = $userMessage === '__AUTO_MORNING_REPORT__';
@@ -434,6 +463,10 @@ class ChatController extends Controller
             'history' => 'nullable|array',
             'provider' => 'nullable|string|max:64',
         ]);
+
+        if (!self::userHasAmiAccess($request->user())) {
+            return response()->json(['success' => false, 'message' => 'Anda tidak memiliki akses ke AMI asisten AI.'], 403);
+        }
 
         $userMessage = $request->input('message');
         $user = $request->user();
