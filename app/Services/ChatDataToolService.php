@@ -51,7 +51,7 @@ class ChatDataToolService
                 'status' => ['type' => 'string', 'description' => 'active (berjalan) atau canceled (batal). Isi "canceled" bila user tanya paket batal/dibatalkan. Default semua status.'],
                 'has_contract' => ['type' => 'boolean', 'description' => 'false = hanya paket belum punya kontrak (pivot maupun legacy). Isi false bila user tanya "belum berkontrak/belum ada kontrak/belum SPK".'],
             ]),
-            $this->tool('get_project_details', 'Langkah 2: detail lengkap satu paket (kontrak, progres, tiket, output, penerima). Hanya bisa dipanggil bila ID paket sudah diketahui dari search_projects. Jangan menebak ID.', [
+            $this->tool('get_project_details', 'Langkah 2: detail lengkap satu paket (kontrak, progres, tiket, output, penerima). Kontrak menyertakan cover_url/docx_url untuk unduh cover & dokumen kontrak — sertakan tautan markdown bila user minta unduh. Hanya bisa dipanggil bila ID paket sudah diketahui dari search_projects. Jangan menebak ID.', [
                 'id' => ['type' => 'integer', 'description' => 'ID paket persis dari hasil search_projects.'],
             ], ['id']),
             $this->tool('search_projects_by_progress', 'Cari paket berdasarkan kondisi progres fisik. Pakai untuk "belum 100%/belum selesai/deviasi/progres rendah/nol persen".', [
@@ -59,7 +59,7 @@ class ChatDataToolService
                 'tahun' => ['type' => 'integer', 'description' => 'Tahun anggaran bila disebut user.'],
                 'kecamatan' => ['type' => 'string', 'description' => 'Filter nama kecamatan bila disebut.'],
             ]),
-            $this->tool('search_contracts', 'Cari kontrak/SPK berdasarkan nama paket, nomor SPK, atau nama penyedia. Contoh: "kontrak PT Maju" -> {keyword: "Maju"}.', [
+            $this->tool('search_contracts', 'Cari kontrak/SPK berdasarkan nama paket, nomor SPK, atau nama penyedia. Contoh: "kontrak PT Maju" -> {keyword: "Maju"}. Hasil menyertakan cover_url (unduh cover kontrak DOCX) dan docx_url (unduh dokumen kontrak) — sertakan tautan markdown [Unduh Cover](cover_url) / [Unduh Kontrak DOCX](docx_url) bila user minta unduh.', [
                 'keyword' => ['type' => 'string', 'description' => 'Nama paket, nomor SPK, atau nama penyedia.'],
                 'tahun' => ['type' => 'integer', 'description' => 'Tahun anggaran bila disebut user.'],
             ]),
@@ -131,6 +131,7 @@ class ChatDataToolService
             $this->tool('search_berkas', 'Cari arsip dokumen per paket. Pakai untuk "berkas/dokumen/arsip/file paket".', [
                 'keyword' => ['type' => 'string', 'description' => 'Jenis dokumen atau nama paket.'],
                 'tahun' => ['type' => 'integer', 'description' => 'Tahun anggaran bila disebut user.'],
+                'paket_id' => ['type' => 'integer', 'description' => 'ID paket persis dari search_projects; isi bila user minta berkas paket tertentu.'],
             ]),
             $this->tool('get_ticket_details', 'Detail satu tiket + riwayat komentar. Wajib ID dari search_tickets dulu.', [
                 'id' => ['type' => 'integer', 'description' => 'ID tiket persis dari hasil search_tickets.'],
@@ -616,6 +617,8 @@ class ChatDataToolService
                 'spk' => $k->spk,
                 'tgl_spk' => $k->tgl_spk?->format('Y-m-d'),
                 'tgl_selesai' => $k->tglSelesaiBerjalan()?->format('Y-m-d'),
+                'cover_url' => "/kontrak/{$k->id}/export-cover",
+                'docx_url' => "/kontrak/{$k->id}/export",
             ]),
             'addendums' => $addendums->map(fn($a) => [
                 'nomor' => $a->nomor_addendum,
@@ -698,6 +701,8 @@ class ChatDataToolService
                 'spk' => $k->spk,
                 'nilai_kontrak' => (float) $k->nilai_kontrak,
                 'tahun' => $k->pekerjaan->kegiatan->tahun_anggaran ?? null,
+                'cover_url' => "/kontrak/{$k->id}/export-cover",
+                'docx_url' => "/kontrak/{$k->id}/export",
             ]),
         ];
     }
@@ -1255,6 +1260,10 @@ class ChatDataToolService
                 $q->where('jenis_dokumen', 'LIKE', "%{$keyword}%")
                     ->orWhereHas('pekerjaan', fn($sub) => $sub->where('nama_paket', 'LIKE', "%{$keyword}%"));
             });
+        }
+
+        if (!empty($args['paket_id'])) {
+            $query->where('pekerjaan_id', (int) $args['paket_id']);
         }
 
         if (!empty($args['tahun'])) {
