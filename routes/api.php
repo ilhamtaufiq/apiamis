@@ -553,6 +553,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('arumanis-insight', [\App\Http\Controllers\ArumanisInsightController::class, 'index']);
     Route::post('chat', [\App\Http\Controllers\ChatController::class, 'chat']);
     Route::post('chat/stream', [\App\Http\Controllers\ChatController::class, 'chatStream']);
+    Route::get('chat/models', [\App\Http\Controllers\ChatController::class, 'listModels']);
     Route::get('chat/sessions', [\App\Http\Controllers\ChatController::class, 'sessions']);
     Route::post('chat/sessions', [\App\Http\Controllers\ChatController::class, 'createSession']);
     Route::delete('chat/sessions/{id}', [\App\Http\Controllers\ChatController::class, 'deleteSession']);

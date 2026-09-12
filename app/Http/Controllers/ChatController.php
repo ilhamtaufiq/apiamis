@@ -68,6 +68,56 @@ class ChatController extends Controller
     /**
      * List user's chat sessions
      */
+    /**
+     * Daftar model dari gateway AI (GET {chat_base_url}/models) untuk dropdown AMI.
+     */
+    public function listModels(Request $request)
+    {
+        if (!self::userHasAmiAccess($request->user())) {
+            return response()->json(['success' => false, 'message' => 'Anda tidak memiliki akses ke AMI asisten AI.'], 403);
+        }
+
+        $baseUrl = rtrim((string) AppSetting::getValue('chat_base_url', ''), '/');
+        $apiKey = AppSetting::getValue('chat_api_key_local');
+
+        if ($baseUrl === '' || !filter_var($baseUrl, FILTER_VALIDATE_URL)) {
+            return response()->json(['models' => [], 'error' => 'URL AI belum diset.']);
+        }
+
+        $headers = ['Accept' => 'application/json'];
+        if (filled($apiKey)) {
+            $headers['Authorization'] = 'Bearer ' . $apiKey;
+        }
+
+        try {
+            $res = \Illuminate\Support\Facades\Http::withHeaders($headers)
+                ->timeout(10)
+                ->get($baseUrl . '/models');
+
+            if (!$res->successful()) {
+                return response()->json([
+                    'models' => [],
+                    'error' => 'HTTP ' . $res->status() . ': ' . substr($res->body(), 0, 120),
+                ]);
+            }
+
+            $data = $res->json('data') ?? [];
+            $models = collect($data)
+                ->map(fn($m) => [
+                    'id' => $m['id'] ?? null,
+                    'available' => (bool) ($m['available'] ?? true),
+                    'min_tier' => $m['min_tier'] ?? null,
+                ])
+                ->filter(fn($m) => is_string($m['id']) && $m['id'] !== '')
+                ->values()
+                ->all();
+
+            return response()->json(['models' => $models]);
+        } catch (\Throwable $e) {
+            return response()->json(['models' => [], 'error' => 'Gagal terhubung: ' . $e->getMessage()]);
+        }
+    }
+
     public function sessions(Request $request)
     {
         if (!self::userHasAmiAccess($request->user())) {
@@ -228,6 +278,7 @@ class ChatController extends Controller
             'session_id' => 'nullable|integer',
             'history' => 'nullable|array',
             'provider' => 'nullable|string|max:64',
+            'model' => 'nullable|string|max:128',
         ]);
 
         if (!self::userHasAmiAccess($request->user())) {
@@ -360,6 +411,7 @@ class ChatController extends Controller
         $requestedProvider = $request->input('provider')
             ?? AppSetting::getValue('chat_provider')
             ?? OpenRouterService::LOCAL_PROVIDER;
+        $modelOverride = $request->input('model');
 
         $knowledgeBase = $needsKnowledge
             ? $this->ragContextService->retrieveKnowledge($userMessage)
@@ -377,6 +429,7 @@ class ChatController extends Controller
                 'tool_choice' => 'auto',
                 // 500rb: jawaban rekap/ekspor tak terpotong; biaya out naik proporsional.
                 'max_tokens' => 10000,
+                'model' => $modelOverride,
             ]);
 
             if (!$result['success']) {
@@ -478,6 +531,7 @@ class ChatController extends Controller
             'session_id' => 'nullable|integer',
             'history' => 'nullable|array',
             'provider' => 'nullable|string|max:64',
+            'model' => 'nullable|string|max:128',
         ]);
 
         if (!self::userHasAmiAccess($request->user())) {
@@ -618,6 +672,7 @@ class ChatController extends Controller
             $requestedProvider = $request->input('provider')
                 ?? AppSetting::getValue('chat_provider')
                 ?? OpenRouterService::LOCAL_PROVIDER;
+            $modelOverride = $request->input('model');
 
             $knowledgeBase = $needsKnowledge
                 ? $this->ragContextService->retrieveKnowledge($userMessage)
@@ -632,7 +687,7 @@ class ChatController extends Controller
                 function (string $token) use ($emit): void {
                     $emit(['type' => 'token', 'content' => $token]);
                 },
-                ['tools' => $tools, 'tool_choice' => 'auto', 'max_tokens' => 20000]
+                ['tools' => $tools, 'tool_choice' => 'auto', 'max_tokens' => 20000, 'model' => $modelOverride]
             );
 
             if (!($streamResult['success'] ?? false) && empty($streamResult['tool_calls'])) {
@@ -671,6 +726,7 @@ class ChatController extends Controller
                         'tools' => $tools,
                         'tool_choice' => 'auto',
                         'max_tokens' => 10000,
+                        'model' => $modelOverride,
                     ]);
 
                     if (!$nextResult['success']) {
