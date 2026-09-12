@@ -19,12 +19,59 @@ class ChatKnowledgeCache extends Model
         $cached = self::where('query_hash', $hash)
             ->where('quality_score', '>=', 0.5) // Only use high-quality cached responses
             ->first();
-        
+
         if ($cached) {
             $cached->increment('hit_count');
+            return $cached;
         }
-        
-        return $cached;
+
+        // Fuzzy match fallback for similar questions (e.g. "foto mck 2024" vs "foto mck tahun lalu")
+        $normalized = self::normalizeText($query);
+        $words = array_values(array_filter(explode(' ', $normalized), fn($w) => mb_strlen($w) >= 3));
+
+        if (count($words) >= 2) {
+            $candidates = self::where('quality_score', '>=', 0.6)
+                ->where(function ($q) use ($words) {
+                    foreach ($words as $w) {
+                        $q->orWhere('query', 'LIKE', '%' . $w . '%');
+                    }
+                })
+                ->limit(20)
+                ->get();
+
+            $bestMatch = null;
+            $bestScore = 0.0;
+
+            foreach ($candidates as $cand) {
+                $candNorm = self::normalizeText($cand->query);
+                $candWords = array_values(array_filter(explode(' ', $candNorm), fn($w) => mb_strlen($w) >= 3));
+
+                $intersection = count(array_intersect($words, $candWords));
+                $union = count(array_unique(array_merge($words, $candWords)));
+                $jaccard = $union > 0 ? ($intersection / $union) : 0;
+
+                if ($jaccard >= 0.5 && $jaccard > $bestScore) {
+                    $bestScore = $jaccard;
+                    $bestMatch = $cand;
+                }
+            }
+
+            if ($bestMatch) {
+                $bestMatch->increment('hit_count');
+                return $bestMatch;
+            }
+        }
+
+        return null;
+    }
+
+    private static function normalizeText(string $text): string
+    {
+        $stopWords = ['apa', 'bagaimana', 'siapa', 'dimana', 'kapan', 'tampilkan', 'lihat', 'cari', 'dong', 'sih', 'ya', 'kah', 'tolong', 'bisa', 'boleh', 'yang', 'di', 'ke', 'dari', 'dan', 'atau'];
+        $clean = preg_replace('/[^\w\s]/u', '', mb_strtolower(trim($text)));
+        $words = explode(' ', (string) $clean);
+        $filtered = array_filter($words, fn($w) => !in_array($w, $stopWords, true) && mb_strlen($w) > 1);
+        return implode(' ', $filtered);
     }
 
     /**

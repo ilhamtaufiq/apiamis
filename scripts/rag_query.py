@@ -21,6 +21,7 @@ except (TypeError, ValueError):
 
 try:
     import chromadb
+    from chromadb.utils import embedding_functions
 except ImportError:
     print(json.dumps({'content': '', 'chunks': [], 'error': 'chromadb not installed'}, ensure_ascii=False))
     sys.exit(0)
@@ -30,7 +31,13 @@ db_path = os.path.join(base_dir, 'storage', 'ai', 'vector_db')
 
 try:
     client = chromadb.PersistentClient(path=db_path)
-    collection = client.get_collection('langchain')
+    ef = embedding_functions.DefaultEmbeddingFunction()
+
+    # Prioritaskan koleksi vector 384-dim (langchain_v2), fallback ke langchain
+    try:
+        collection = client.get_collection('langchain_v2', embedding_function=ef)
+    except Exception:
+        collection = client.get_collection('langchain')
 except Exception as e:
     print(json.dumps({'content': '', 'chunks': [], 'error': f'Koleksi tidak ditemukan: {e}'}, ensure_ascii=False))
     sys.exit(0)
@@ -39,32 +46,42 @@ if not query.strip():
     print(json.dumps({'content': 'Pengetahuan sistem masih kosong.', 'chunks': [], 'error': None}, ensure_ascii=False))
     sys.exit(0)
 
-# ponytail: keyword search, bukan embedding. Koleksi di-embed 1536-dim
-# (OpenAI), default lokal 384-dim -> mismatch. Korpus kecil (118 docs),
-# keyword cukup. Upgrade: samakan embedding_fn saat index ulang.
-STOP = set('dan di ke dari yang ini itu dengan untuk pada adalah bisa tidak akan sudah telah saya kami anda kamu apa siapa kapan dimana bagaimana kenapa the is are this that with for and not can will has have been was were ada atau juga agar oleh sebagai dalam antara'.split())
+chunks = []
 
-tokens = [t for t in re.findall(r'\w+', query.lower()) if len(t) > 2 and t not in STOP]
-if not tokens:
-    tokens = re.findall(r'\w+', query.lower())
-
+# 1. Semantic vector search via ChromaDB
 try:
-    data = collection.get(include=['documents', 'metadatas'])
-except Exception as e:
-    print(json.dumps({'content': '', 'chunks': [], 'error': str(e)}, ensure_ascii=False))
-    sys.exit(0)
+    res = collection.query(query_texts=[query], n_results=n_results)
+    if res and res.get('documents') and res['documents'][0]:
+        for doc, meta in zip(res['documents'][0], res['metadatas'][0] if res.get('metadatas') else []):
+            src = (meta or {}).get('source', 'unknown')
+            chunks.append(f"--- {src} ---\n{doc}")
+except Exception:
+    pass
 
-scored = []
-for i, doc in enumerate(data.get('documents') or []):
-    low = doc.lower()
-    score = sum(low.count(t) for t in tokens)
-    if score > 0:
-        meta = (data.get('metadatas') or [{}])[i] or {}
-        scored.append((score, meta.get('source', 'unknown'), doc))
+# 2. Fallback keyword search jika vector query kosong/gagal
+if not chunks:
+    STOP = set('dan di ke dari yang ini itu dengan untuk pada adalah bisa tidak akan sudah telah saya kami anda kamu apa siapa kapan dimana bagaimana kenapa the is are this that with for and not can will has have been was were ada atau juga agar oleh sebagai dalam antara'.split())
 
-scored.sort(key=lambda x: -x[0])
-top = scored[:n_results]
-chunks = [f"--- {src} ---\n{doc}" for _, src, doc in top]
+    tokens = [t for t in re.findall(r'\w+', query.lower()) if len(t) > 2 and t not in STOP]
+    if not tokens:
+        tokens = re.findall(r'\w+', query.lower())
+
+    try:
+        data = collection.get(include=['documents', 'metadatas'])
+        scored = []
+        for i, doc in enumerate(data.get('documents') or []):
+            low = doc.lower()
+            score = sum(low.count(t) for t in tokens)
+            if score > 0:
+                meta = (data.get('metadatas') or [{}])[i] or {}
+                scored.append((score, meta.get('source', 'unknown'), doc))
+
+        scored.sort(key=lambda x: -x[0])
+        top = scored[:n_results]
+        chunks = [f"--- {src} ---\n{doc}" for _, src, doc in top]
+    except Exception as e:
+        print(json.dumps({'content': '', 'chunks': [], 'error': str(e)}, ensure_ascii=False))
+        sys.exit(0)
 
 content = '\n\n'.join(chunks) if chunks else 'Pengetahuan sistem masih kosong.'
 print(json.dumps({'content': content, 'chunks': chunks, 'error': None}, ensure_ascii=False))

@@ -191,6 +191,16 @@ class OpenRouterService
         return 'chat_api_key_' . str_replace('-', '_', $provider);
     }
 
+    private function normalizeModelName(mixed $model, string $default): string
+    {
+        $str = (string) $model;
+        if (str_contains($str, ',')) {
+            $parts = array_values(array_filter(array_map('trim', explode(',', $str))));
+            return $parts[0] ?? $default;
+        }
+        return $str !== '' ? $str : $default;
+    }
+
     private function getProviderConfig(string $provider): array
     {
         if ($provider === self::LOCAL_PROVIDER) {
@@ -225,14 +235,15 @@ class OpenRouterService
                 ?? AppSetting::getValue('chat_base_url')
                 ?? 'http://localhost:11434/v1';
             $apiKey = $options['api_key'] ?? AppSetting::getValue($this->providerSettingKey(self::LOCAL_PROVIDER));
-            $model = $options['model']
+            $rawModel = $options['model']
                 ?? AppSetting::getValue('chat_model')
                 ?? self::DEFAULT_LOCAL_MODEL;
+            $model = $this->normalizeModelName($rawModel, self::DEFAULT_LOCAL_MODEL);
 
             return [
                 'base_url' => rtrim((string) $baseUrl, '/'),
                 'api_key' => $apiKey ?: null,
-                'model' => (string) $model,
+                'model' => $model,
                 'headers' => $options['headers'] ?? [],
                 'requires_api_key' => true,
             ];
@@ -241,8 +252,9 @@ class OpenRouterService
         $baseUrl = $options['base_url']
             ?? ($providerConfig['base_url'] ?? $this->baseUrl ?? 'https://openrouter.ai/api/v1');
         $apiKey = $options['api_key'] ?? $this->resolveApiKey($provider, $providerConfig);
-        $model = $options['model']
+        $rawModel = $options['model']
             ?? ($providerConfig['default_model'] ?? $this->model ?? config('services.openrouter.model', 'openai/gpt-oss-120b:free'));
+        $model = $this->normalizeModelName($rawModel, 'openai/gpt-oss-120b:free');
 
         return [
             'base_url' => rtrim((string) $baseUrl, '/'),

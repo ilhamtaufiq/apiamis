@@ -382,7 +382,7 @@ class ChatController extends Controller
 
         $dbHistory = $session->messages()
             ->orderByDesc('id')
-            ->limit(10)
+            ->limit(20)
             ->get()
             ->reverse()
             ->values();
@@ -722,14 +722,21 @@ class ChatController extends Controller
                 $maxLoops = 5;
 
                 while ($loopCount < $maxLoops) {
-                    $nextResult = $this->openRouter->chatDirect($requestedProvider, $messages, [
-                        'tools' => $tools,
-                        'tool_choice' => 'auto',
-                        'max_tokens' => 10000,
-                        'model' => $modelOverride,
-                    ]);
+                    $nextResult = $this->openRouter->streamDirect(
+                        $requestedProvider,
+                        $messages,
+                        function (string $token) use ($emit): void {
+                            $emit(['type' => 'token', 'content' => $token]);
+                        },
+                        [
+                            'tools' => $tools,
+                            'tool_choice' => 'auto',
+                            'max_tokens' => 10000,
+                            'model' => $modelOverride,
+                        ]
+                    );
 
-                    if (!$nextResult['success']) {
+                    if (!($nextResult['success'] ?? false)) {
                         break;
                     }
 
@@ -737,6 +744,12 @@ class ChatController extends Controller
                         $finalResult = $nextResult;
                         break;
                     }
+
+                    $toolNames = array_values(array_unique(array_map(
+                        fn($tc) => $tc['function']['name'] ?? $tc['name'] ?? 'data',
+                        $nextResult['tool_calls']
+                    )));
+                    $emit(['type' => 'status', 'message' => 'Mengambil data (' . implode(', ', $toolNames) . ')...']);
 
                     $messages[] = [
                         'role' => 'assistant',
@@ -749,12 +762,9 @@ class ChatController extends Controller
                     $loopCount++;
                 }
 
-                // Emit final content as tokens (first pass only had tool calls)
-                $finalContent = (string) ($finalResult['content'] ?? '');
-                foreach (preg_split('/(\s+)/u', $finalContent, -1, PREG_SPLIT_DELIM_CAPTURE) as $chunk) {
-                    if ($chunk !== '') {
-                        $emit(['type' => 'token', 'content' => $chunk]);
-                    }
+                // Tokens were already streamed live during streamDirect
+                if (empty($finalResult['content']) && !empty($nextResult['content'])) {
+                    $finalResult['content'] = $nextResult['content'];
                 }
             }
 
@@ -854,8 +864,21 @@ class ChatController extends Controller
                 || ($name === 'generate_pekerjaan_report' && ($args['jenis'] ?? 'paket') === 'paket');
             if ($needsProjectId && empty($args['id']) && $userMessage !== '') {
                 $resolved = $this->resolveProjectId($userMessage);
-                if ($resolved !== null) {
+                if (is_int($resolved)) {
                     $args['id'] = $resolved;
+                } elseif (is_array($resolved)) {
+                    $currentToolResults[] = [
+                        'tool_call_id' => $callId,
+                        'role' => 'tool',
+                        'name' => $name,
+                        'content' => json_encode([
+                            'ambiguous' => true,
+                            'message' => 'Ditemukan beberapa kandidat paket yang cocok.',
+                            'candidates' => $resolved,
+                            'hint' => 'Tampilkan daftar/tabel kandidat (format markdown link [Nama Paket](/pekerjaan/ID)) dan minta user memilih paket mana yang dimaksud.',
+                        ]),
+                    ];
+                    continue;
                 } else {
                     $currentToolResults[] = [
                         'tool_call_id' => $callId,
@@ -886,10 +909,10 @@ class ChatController extends Controller
     }
 
     /**
-     * Cari ID paket dari pesan user via search_projects (top-1).
-     * Return null bila tidak ada / ambigu (biar LLM klarifikasi).
+     * Cari ID paket dari pesan user via search_projects.
+     * Return int bila 1 match, array candidates bila 2-5 match, null bila 0/>5 match.
      */
-    private function resolveProjectId(string $userMessage): ?int
+    private function resolveProjectId(string $userMessage): array|int|null
     {
         $keyword = trim(preg_replace('/\b(tolong|tolongkan|tampilkan|tampil|lihat|detail|info|data|paket|pekerjaan|proyek|cari|cek|berapa|apa|yang|di|ke|dari|untuk|tahun|\d{4})\b/iu', ' ', $userMessage));
         $keyword = trim(preg_replace('/\s+/', ' ', $keyword));
@@ -899,11 +922,21 @@ class ChatController extends Controller
 
         $result = $this->executeTool('search_projects', ['keyword' => $keyword]);
         $results = $result['results'] ?? [];
-        if (count($results) !== 1) {
-            return null;
+
+        if (count($results) === 1) {
+            return (int) $results[0]['id'];
         }
 
-        return (int) $results[0]['id'];
+        if (count($results) >= 2 && count($results) <= 5) {
+            return array_map(fn($r) => [
+                'id' => (int) $r['id'],
+                'nama_paket' => $r['nama_paket'] ?? '',
+                'kecamatan' => $r['kecamatan'] ?? '',
+                'tahun' => $r['tahun'] ?? null,
+            ], $results);
+        }
+
+        return null;
     }
 
     private function toolErrorHint(string $name): string

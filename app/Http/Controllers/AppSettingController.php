@@ -194,10 +194,21 @@ class AppSettingController extends Controller
 
         // Role yang boleh akses AMI asisten AI (JSON array nama role, kosong = semua role).
         if ($request->has('ami_access_roles')) {
-            $request->validate(['ami_access_roles' => 'nullable|array', 'ami_access_roles.*' => 'string|max:64']);
+            $rawRoles = $request->input('ami_access_roles');
+            if (is_string($rawRoles)) {
+                $decoded = json_decode($rawRoles, true);
+                $rawRoles = is_array($decoded) ? $decoded : array_filter(explode(',', $rawRoles));
+            }
+            $rolesArray = is_array($rawRoles) ? $rawRoles : [];
+            $validator = \Illuminate\Support\Facades\Validator::make(
+                ['ami_access_roles' => $rolesArray],
+                ['ami_access_roles' => 'nullable|array', 'ami_access_roles.*' => 'string|max:64']
+            );
+            $validator->validate();
+
             $setting = AppSetting::setValue(
                 'ami_access_roles',
-                collect($request->input('ami_access_roles', []))->map(fn($r) => (string) $r)->unique()->values()->toJson(),
+                collect($rolesArray)->map(fn($r) => (string) $r)->unique()->values()->toJson(),
                 'text',
             );
             $updatedSettings[] = $setting;
