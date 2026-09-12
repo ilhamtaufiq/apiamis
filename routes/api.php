@@ -89,6 +89,7 @@ Route::get('app-settings/maintenance', [AppSettingController::class, 'maintenanc
 Route::get('app-settings/storage-stats', [AppSettingController::class, 'storageStats'])->middleware(['auth:sanctum', 'role:admin']);
 Route::post('app-settings', [AppSettingController::class, 'store'])->middleware(['auth:sanctum', 'role:admin']);
 Route::post('app-settings/test-ai-connection', [AppSettingController::class, 'testAiConnection'])->middleware(['auth:sanctum', 'role:admin']);
+Route::post('app-settings/list-ai-models', [AppSettingController::class, 'listAiModels'])->middleware(['auth:sanctum', 'role:admin']);
 Route::post('app-settings/test-mail-connection', [AppSettingController::class, 'testMailConnection'])->middleware(['auth:sanctum', 'role:admin']);
 Route::get('app-settings/mail-templates', [AppSettingController::class, 'mailTemplates'])->middleware(['auth:sanctum', 'role:admin']);
 Route::post('app-settings/mail-templates', [AppSettingController::class, 'storeMailTemplates'])->middleware(['auth:sanctum', 'role:admin']);

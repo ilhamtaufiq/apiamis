@@ -710,6 +710,58 @@ class AppSettingController extends Controller
     }
 
     /**
+     * Ambil daftar model dari gateway AI (GET {base_url}/models).
+     * Proxy karena CORS + API key tersimpan di backend.
+     */
+    public function listAiModels(Request $request)
+    {
+        $baseUrl = rtrim(
+            (string) ($request->input('base_url') ?: AppSetting::getValue('chat_base_url', '')),
+            '/'
+        );
+        $apiKey = $request->input('api_key') ?: AppSetting::getValue('chat_api_key_local');
+
+        if ($baseUrl === '' || !filter_var($baseUrl, FILTER_VALIDATE_URL)) {
+            return response()->json(['error' => 'URL tidak valid.'], 400);
+        }
+
+        $headers = ['Accept' => 'application/json'];
+        if (filled($apiKey)) {
+            $headers['Authorization'] = 'Bearer ' . $apiKey;
+        }
+
+        try {
+            $res = Http::withHeaders($headers)
+                ->timeout(10)
+                ->get($baseUrl . '/models');
+
+            if (!$res->successful()) {
+                return response()->json([
+                    'error' => 'HTTP ' . $res->status() . ': ' . substr($res->body(), 0, 120),
+                ], 422);
+            }
+
+            $data = $res->json('data') ?? [];
+            $models = collect($data)
+                ->map(fn($m) => [
+                    'id' => $m['id'] ?? null,
+                    'available' => (bool) ($m['available'] ?? true),
+                    'min_tier' => $m['min_tier'] ?? null,
+                ])
+                ->filter(fn($m) => is_string($m['id']) && $m['id'] !== '')
+                ->values()
+                ->all();
+
+            return response()->json([
+                'models' => $models,
+                'used_stored_key' => !$request->filled('api_key'),
+            ]);
+        } catch (\Throwable $e) {
+            return response()->json(['error' => 'Gagal terhubung: ' . $e->getMessage()], 502);
+        }
+    }
+
+    /**
      * Get storage statistics (sizes of photos, files, and database)
      */
     public function storageStats()
