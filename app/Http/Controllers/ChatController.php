@@ -21,6 +21,7 @@ use App\Models\Event;
 use App\Models\ChatSession;
 use App\Models\ChatMessage;
 use App\Models\ChatKnowledgeCache;
+use App\Models\ChatUserMemory;
 use App\Models\AppSetting;
 use App\Models\Foto;
 use Illuminate\Support\Facades\DB;
@@ -346,6 +347,10 @@ class ChatController extends Controller
 
         $fewShotExamples = $needsKnowledge ? $this->ragContextService->getFewShotExamples() : [];
 
+        // L2: ringkasan sesi (sekali per sesi, murah) + L3: memori user.
+        $sessionSummary = $this->ragContextService->summarizeSession($session);
+        $userMemory = ChatUserMemory::forUser($user->id);
+
         $formattedHistory = $dbHistory->map(fn($msg) => [
             'role' => $msg->role,
             'content' => mb_substr((string) $msg->content, 0, 2000),
@@ -359,7 +364,7 @@ class ChatController extends Controller
         $knowledgeBase = $needsKnowledge
             ? $this->ragContextService->retrieveKnowledge($userMessage)
             : '';
-        $systemPrompt = $this->ragContextService->buildSystemPrompt($knowledgeBase, $context, $fewShotExamples);
+        $systemPrompt = $this->ragContextService->buildSystemPrompt($knowledgeBase, $context, $fewShotExamples, $userMemory, $sessionSummary);
         $messages = $this->openRouter->buildChatMessages($systemPrompt, $formattedHistory, $userMessage);
 
         $finalResult = null;
@@ -429,6 +434,17 @@ class ChatController extends Controller
         // Jawaban tanpa tool (ngobrol/ngawur) tak dilatih agar tak mencemari cache.
         if (!$isDataQuery && !empty($finalResult['tool_calls']) && mb_strlen($aiReply) > 100) {
             ChatKnowledgeCache::learn($userMessage, $context, $aiReply, $tokensUsed);
+        }
+
+        // L3: ekstrak fakta tahan-lama user (1 LLM call murah, non-blocking gagal diam).
+        if (!$isAutoReport) {
+            try {
+                foreach ($this->ragContextService->extractFacts($userMessage, $aiReply) as $fact) {
+                    ChatUserMemory::learn($fact, $user->id);
+                }
+            } catch (\Throwable $e) {
+                Log::warning('Chat fact extraction failed', ['error' => $e->getMessage()]);
+            }
         }
 
         if ($isAutoReport) {
@@ -587,6 +603,10 @@ class ChatController extends Controller
 
             $fewShotExamples = $needsKnowledge ? $this->ragContextService->getFewShotExamples() : [];
 
+            // L2: ringkasan sesi + L3: memori user.
+            $sessionSummary = $this->ragContextService->summarizeSession($session);
+            $userMemory = ChatUserMemory::forUser($user->id);
+
             $formattedHistory = $dbHistory->map(fn($msg) => [
                 'role' => $msg->role,
                 // ponytail: histori panjang bikin prompt gemuk → TTFT naik.
@@ -602,7 +622,7 @@ class ChatController extends Controller
             $knowledgeBase = $needsKnowledge
                 ? $this->ragContextService->retrieveKnowledge($userMessage)
                 : '';
-            $systemPrompt = $this->ragContextService->buildSystemPrompt($knowledgeBase, $context, $fewShotExamples);
+            $systemPrompt = $this->ragContextService->buildSystemPrompt($knowledgeBase, $context, $fewShotExamples, $userMemory, $sessionSummary);
             $messages = $this->openRouter->buildChatMessages($systemPrompt, $formattedHistory, $userMessage);
 
             // Stream with tools (first pass emits tokens live)
@@ -713,6 +733,15 @@ class ChatController extends Controller
 
             if (!$isDataQuery && !empty($finalResult['tool_calls']) && mb_strlen($aiReply) > 100) {
                 ChatKnowledgeCache::learn($userMessage, $context, $aiReply, $tokensUsed);
+            }
+
+            // L3: ekstrak fakta tahan-lama user.
+            try {
+                foreach ($this->ragContextService->extractFacts($userMessage, $aiReply) as $fact) {
+                    ChatUserMemory::learn($fact, $user->id);
+                }
+            } catch (\Throwable $e) {
+                Log::warning('Chat fact extraction failed', ['error' => $e->getMessage()]);
             }
 
             if ($isNewSession) {

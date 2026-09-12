@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\AppSetting;
 use App\Models\ChatKnowledgeCache;
+use App\Models\ChatSession;
 use App\Models\Pekerjaan;
 use App\Models\Tiket;
 use Illuminate\Support\Facades\Cache;
@@ -14,6 +15,7 @@ class ChatRagContextService
 {
     public function __construct(
         private readonly ChatDataToolService $chatDataTools,
+        private readonly OpenRouterService $openRouter,
     ) {}
 
     public function retrieveKnowledge(string $query): string
@@ -50,10 +52,21 @@ class ChatRagContextService
         });
     }
 
-    public function buildSystemPrompt(string $knowledgeBase, string $context, array $fewShotExamples): string
+    public function buildSystemPrompt(string $knowledgeBase, string $context, array $fewShotExamples, string $userMemory = '', string $sessionSummary = ''): string
     {
         $fewShot = $this->formatFewShotExamples($fewShotExamples);
         $defaultYear = AppSetting::getValue('tahun_anggaran') ?? (int) date('Y');
+
+        $memoryBlock = '';
+        if ($userMemory !== '' || $sessionSummary !== '') {
+            $memoryBlock = "\n\nINGATAN KONTEKS (dari percakapan sebelumnya):\n";
+            if ($sessionSummary !== '') {
+                $memoryBlock .= "Ringkasan sesi ini:\n{$sessionSummary}\n\n";
+            }
+            if ($userMemory !== '') {
+                $memoryBlock .= "Kebiasaan/kepentingan user:\n{$userMemory}";
+            }
+        }
 
         return <<<PROMPT
 Anda adalah 'Ami', asisten AI untuk aplikasi Arumanis (air minum dan sanitasi Kabupaten Cianjur).
@@ -87,7 +100,7 @@ ATURAN TAMPILAN (WAJIB):
 - Bila tool mengembalikan file_url: tampilkan sebagai link [jenis_dokumen](file_url).
 
 KONTEKS WILAYAH: Kabupaten Cianjur.
-
+{$memoryBlock}
 CONTOH JAWABAN TERBAIK (FEW-SHOT):
 {$fewShot}
 
@@ -140,6 +153,97 @@ PROMPT;
     public function getFewShotExamples(int $limit = 2): array
     {
         return ChatKnowledgeCache::getFewShotExamples($limit);
+    }
+
+    /**
+     * L2: ringkas pesan lama sesi jadi paragraf pendek (1 LLM call ringan,
+     * hasil disimpan di chat_sessions.context_summary — tak diulang tiap chat).
+     * Return string kosong bila tak perlu/tak berhasil.
+     */
+    public function summarizeSession(ChatSession $session): string
+    {
+        $allCount = $session->messages()->count();
+
+        // Ringkas hanya bila ada pesan lama yang sudah keluar dari jendela 10 terakhir.
+        $window = 10;
+        if ($allCount <= $window) {
+            return (string) $session->context_summary;
+        }
+
+        $uptoId = $session->messages()
+            ->orderByDesc('id')
+            ->skip($window)
+            ->value('id');
+
+        if ($uptoId && (int) $uptoId === (int) ($session->summary_upto_id ?? 0) && $session->context_summary) {
+            return (string) $session->context_summary; // Sudah tercakup.
+        }
+
+        $old = $session->messages()
+            ->where('id', '<=', $uptoId)
+            ->orderBy('id')
+            ->get(['role', 'content']);
+
+        if ($old->isEmpty()) {
+            return (string) $session->context_summary;
+        }
+
+        $transcript = $old->map(fn($m) => ucfirst($m->role) . ': ' . mb_substr((string) $m->content, 0, 400))
+            ->implode("\n");
+
+        $summary = $this->askCheapModel(
+            "Ringkas percakapan berikut dalam maksimal 120 kata Bahasa Indonesia. Fokus: paket/pekerjaan yang dibahas (sebutkan namanya), keputusan, dan pertanyaan berulang user. Tanpa pembuka.\n\n{$transcript}",
+        );
+
+        if ($summary !== '') {
+            $session->update(['context_summary' => $summary, 'summary_upto_id' => $uptoId]);
+        }
+
+        return $summary !== '' ? $summary : (string) $session->context_summary;
+    }
+
+    /**
+     * L3: ekstrak fakta tahan-lama dari 1 giliran percakapan.
+     * Return array fact (0..2 item) — murah, dipanggil pasca-jawaban.
+     */
+    public function extractFacts(string $userMessage, string $aiReply): array
+    {
+        if (mb_strlen($userMessage) < 15) {
+            return [];
+        }
+
+        $raw = $this->askCheapModel(
+            "Dari percakapan berikut, ekstrak 0-2 fakta tahan-lama tentang user (kepentingan/kebiasaan, mis. \"Sering memantau progres SPAM Cibinong\", \"Fokus pada tahun anggaran 2026\"). Bukan data sesaat (angka hari ini, hasil query). Jawab satu fakta per baris, tanpa nomor. Kosong bila tidak ada.\n\nUser: " . mb_substr($userMessage, 0, 500) . "\nAsisten: " . mb_substr($aiReply, 0, 800),
+        );
+
+        return collect(preg_split('/\r?\n/', $raw))
+            ->map(fn($l) => trim(preg_replace('/^[-*\d.\s]+/u', '', $l)))
+            ->filter(fn($l) => mb_strlen($l) >= 10 && mb_strlen($l) <= 300)
+            ->take(2)
+            ->values()
+            ->all();
+    }
+
+    /**
+     * LLM call murah untuk tugas ringkasan.
+     */
+    private function askCheapModel(string $prompt): string
+    {
+        try {
+            $result = $this->openRouter->chat(
+                [
+                    ['role' => 'system', 'content' => 'Kamu asisten ringkas. Jawab hanya sesuai perintah, tanpa pembuka/penutup.'],
+                    ['role' => 'user', 'content' => $prompt],
+                ],
+                ['max_tokens' => 1500, 'temperature' => 0.2],
+            );
+
+            return trim((string) ($result['content'] ?? ''));
+        } catch (\Throwable $e) {
+            Log::warning('Chat memory LLM call failed', ['error' => $e->getMessage()]);
+
+            return '';
+        }
     }
 
     private function buildToolHints(string $query): string
