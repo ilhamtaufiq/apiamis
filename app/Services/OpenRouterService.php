@@ -6,7 +6,6 @@ use App\Models\AppSetting;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Process;
 
 class OpenRouterService
 {
@@ -425,117 +424,6 @@ class OpenRouterService
         }
     }
 
-    private function runLangChainAttempt(string $provider, string $message, string $context, array $history, array $options = []): array
-    {
-        if (in_array($provider, self::UNSUPPORTED_PROVIDERS, true)) {
-            return [
-                'success' => false,
-                'message' => 'Provider AI "' . $provider . '" belum didukung oleh bridge chat saat ini.',
-            ];
-        }
-
-        $runtime = $this->resolveProviderRuntime($provider, $options);
-        $apiKey = $runtime['api_key'];
-        $baseUrl = $runtime['base_url'];
-        $headers = $runtime['headers'];
-
-        if ($runtime['requires_api_key'] && empty($apiKey)) {
-            return [
-                'success' => false,
-                'message' => $provider === self::LOCAL_PROVIDER
-                    ? 'API key AI lokal belum diset di pengaturan aplikasi.'
-                    : 'API key untuk provider "' . $provider . '" belum diset.',
-            ];
-        }
-
-        $isWindows = PHP_OS_FAMILY === 'Windows';
-        $pythonPath = $isWindows
-            ? base_path('venv/Scripts/python.exe')
-            : base_path('venv/bin/python');
-        $scriptPath = base_path('scripts/chat_langchain.py');
-
-        if (!file_exists($pythonPath)) {
-            return [
-                'success' => false,
-                'message' => 'Python venv not found at ' . $pythonPath,
-            ];
-        }
-
-        $model = $runtime['model'];
-
-        $input = [
-            'api_key' => $apiKey,
-            'provider' => $provider,
-            'model' => $model,
-            'base_url' => $baseUrl,
-            'headers' => $headers,
-            'message' => $message,
-            'context' => $context,
-            'history' => $history,
-            'tools' => $options['tools'] ?? null,
-            'tool_history' => $options['tool_history'] ?? null,
-            'few_shot_examples' => $options['few_shot_examples'] ?? [],
-            'knowledge_base' => $options['knowledge_base'] ?? null,
-            'system_prompt' => $options['system_prompt'] ?? null,
-            'stream' => (bool) ($options['stream'] ?? false),
-        ];
-
-        try {
-            $result = Process::input(json_encode($input))
-                ->timeout(120)
-                ->run([$pythonPath, $scriptPath]);
-
-            if ($result->failed()) {
-                Log::error('LangChain Script Error', [
-                    'provider' => $provider,
-                    'error' => $result->errorOutput(),
-                    'output' => $result->output(),
-                    'model' => $input['model'],
-                ]);
-
-                if (($options['allow_model_fallback'] ?? true) && $model !== $this->fallbackModel) {
-                    return $this->runLangChainAttempt($provider, $message, $context, $history, array_merge($options, [
-                        'model' => $this->fallbackModel,
-                        'base_url' => $baseUrl,
-                        'api_key' => $apiKey,
-                        'headers' => $headers,
-                        'allow_model_fallback' => false,
-                    ]));
-                }
-
-                return [
-                    'success' => false,
-                    'message' => 'LangChain execution failed: ' . ($result->errorOutput() ?: 'Unknown error'),
-                ];
-            }
-
-            $output = json_decode($result->output(), true);
-
-            if (!$output || !isset($output['success'])) {
-                Log::error('LangChain Invalid Output', ['provider' => $provider, 'output' => $result->output()]);
-
-                return [
-                    'success' => false,
-                    'model' => $input['model'],
-                    'message' => 'Invalid output format from LangChain script',
-                ];
-            }
-
-            if (!isset($output['model'])) {
-                $output['model'] = $input['model'];
-            }
-
-            return $output;
-        } catch (\Exception $e) {
-            Log::error('LangChain Bridge Exception', ['provider' => $provider, 'message' => $e->getMessage()]);
-
-            return [
-                'success' => false,
-                'message' => 'Bridge error: ' . $e->getMessage(),
-            ];
-        }
-    }
-
     private function runWithRotation(string $requestedProvider, callable $attempt, array $options = []): array
     {
         $providersToTry = $requestedProvider === 'auto'
@@ -595,18 +483,6 @@ class OpenRouterService
 
         return $this->runWithRotation($requestedProvider, function (string $provider, array $attemptOptions) use ($messages) {
             return $this->runHttpAttempt($provider, $messages, $attemptOptions);
-        }, $options);
-    }
-
-    /**
-     * Call AI using LangChain Python Bridge
-     */
-    public function chatWithLangChain(string $message, string $context, array $history, array $options = [])
-    {
-        $requestedProvider = $options['provider'] ?? $this->provider;
-
-        return $this->runWithRotation($requestedProvider, function (string $provider, array $attemptOptions) use ($message, $context, $history) {
-            return $this->runLangChainAttempt($provider, $message, $context, $history, $attemptOptions);
         }, $options);
     }
 
