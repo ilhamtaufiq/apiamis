@@ -1,30 +1,78 @@
-# Dependencies
+# ============ Dependencies (jangan kirim ke daemon) ============
 /vendor
 /node_modules
-.agent
-.smart-coding-cache
-.git
+**/node_modules
+/venv
+/.venv
+__pycache__/
+*.py[cod]
+/scripts/venv
+
+# ============ Build outputs (dibangun ulang di dalam image) ============
+/public/build
+/public/hot
+/public/storage
+
+# ============ Uploads & runtime data (BESAR: storage/app lokal 2.2GB) ============
+# storage/app/public = upload user (PDF/foto/video), storage/app/private = backup.
+# Keduanya data runtime (volume Coolify), BUKAN bagian image.
+# storage/app/templates WAJIB ikut image (dipakai KontrakTemplateService).
+/storage/app/private/**
+/storage/app/public/**
+/storage/app/temp-video/**
+/storage/ai/vector_db/**
+/storage/logs/**
+/storage/framework/cache/**
+/storage/framework/sessions/**
+/storage/framework/views/**
+/storage/*.key
+/storage/pail
+
+# ============ Berkas besar sekali pakai (tidak dipakai aplikasi) ============
+/RKA Parsial.pdf
+/Template_Kontrak.docx
+/docs
+*.log
+*.cache
+# File kunci sementara Microsoft Office
+~$*
+
+# ============ Test & scaffolding lokal ============
+/tests
 /scratch
 /tmp_template
-/tests
+/phpunit.xml
+phpunit.result.cache
+
+# ============ Config/metadata lokal & IDE ============
+.git
+.gitattributes
 .env
 .env.*
+!.env.example
+.agent
+.automaker
+.claude
+.smart-coding-cache
+/.fleet
+/.idea
+/.nova
+/.vscode
+/.zed
+/auth.json
+Homestead.json
+Homestead.yaml
+Thumbs.db
+.DS_Store
+
+# ============ Util dev satu file (tidak dibutuhkan runtime) ============
+/analisa-apiamis.md
+/debug_*.php
+/dump_context.php
+/check_schema.php
 /README.md
 /CHANGELOG.md
 /CONTINUITY.md
 /HORIZION.md
-/analisa-apiamis.md
-/debug_*.php
-/dump_context.php
-storage/*.key
-*.log
-*.cache
-
-# Cached files (may contain hardcoded local paths)
-/bootstrap/cache/*.php
-/storage/framework/cache/*
-/storage/framework/sessions/*
-/storage/framework/views/*
-/storage/logs/*
-/scripts/venv
-/venv
+/rencana_*.md
+/ROUTE_PERMISSIONS_GUIDE.md

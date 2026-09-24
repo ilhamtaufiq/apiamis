@@ -35,8 +35,8 @@ php artisan config:cache
 php artisan route:cache
 php artisan view:cache
 
-# Run AI Knowledge Indexing
-if [ -f "scripts/index_knowledge.py" ]; then
+# Run AI Knowledge Indexing (hanya bila script dan venv python tersedia)
+if [ -f "scripts/index_knowledge.py" ] && [ -x "venv/bin/python" ]; then
     log "Running AI Knowledge Indexing..."
     ./venv/bin/python scripts/index_knowledge.py || log "AI Indexing failed, but continuing..."
 fi

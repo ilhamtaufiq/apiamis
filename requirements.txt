@@ -1,4 +1,5 @@
-langchain-openai
-langchain-core
-openpyxl
-tiktoken
+# Hanya dep Python yang benar-benar dipakai di production.
+# Pemakai: scripts/rag_query.py (dipanggil ChatRagContextService::retrieveKnowledge).
+# Versi dipin ke yang sudah terbukti jalan di venv lokal dan punya wheel
+# prebuilt manylinux agar pip tidak mengkompilasi dari source saat build.
+chromadb==1.5.9
