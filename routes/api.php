@@ -567,10 +567,12 @@ Route::middleware('auth:sanctum')->group(function () {
     // Paperless-ngx Integration
     Route::prefix('paperless')->group(function () {
         Route::post('sync-all', [PaperlessController::class, 'syncAll']);
+        Route::post('synced-ids', [PaperlessController::class, 'syncedIds']);
         Route::post('media/{media}/sync', [PaperlessController::class, 'sync']);
         Route::get('media/{media}', [PaperlessController::class, 'show']);
         Route::get('media/{media}/download', [PaperlessController::class, 'download']);
         Route::get('documents', [PaperlessController::class, 'search']);
+        Route::get('reconcile', [PaperlessController::class, 'reconcile']);
     });
 
 });

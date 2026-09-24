@@ -21,6 +21,33 @@ class PaperlessController extends Controller
         ]);
     }
 
+    /**
+     * Batch status: media_id mana saja yang sudah tersinkron.
+     * Satu request pengganti N query status per kartu (hindari N+1 di UI).
+     */
+    public function syncedIds(Request $request): JsonResponse
+    {
+        $ids = collect($request->input('media_ids', []))
+            ->map(fn($id) => (int) $id)
+            ->filter(fn($id) => $id > 0)
+            ->unique()
+            ->take(500)
+            ->values();
+
+        if ($ids->isEmpty()) {
+            return response()->json(['synced_ids' => []]);
+        }
+
+        $synced = Media::query()
+            ->whereIn('id', $ids)
+            ->whereNotNull('custom_properties->paperless_id')
+            ->pluck('id')
+            ->map(fn($id) => (int) $id)
+            ->values();
+
+        return response()->json(['synced_ids' => $synced]);
+    }
+
     public function syncAll(Request $request): JsonResponse
     {
         $model = $request->input('model_type');
@@ -95,5 +122,149 @@ class PaperlessController extends Controller
         $res = $service->searchDocuments($query, $page);
 
         return response()->json($res->json(), $res->status());
+    }
+
+    /**
+     * Cek dua arah (read-only, tanpa write):
+     * Arah 1 Laravel -> Paperless: status task pending + verifikasi dokumen paperless_id.
+     * Arah 2 Paperless -> Laravel: dokumen Paperless yang tidak tertaut ke media mana pun.
+     */
+    public function reconcile(Request $request, PaperlessService $service): JsonResponse
+    {
+        $limit = max(1, min((int) $request->query('limit', 50), 200));
+
+        $pending = Media::query()
+            ->whereNotNull('custom_properties->paperless_task_id')
+            ->whereNull('custom_properties->paperless_id')
+            ->take($limit)
+            ->get(['id', 'file_name', 'custom_properties']);
+
+        $pendingStatus = [];
+        foreach ($pending as $media) {
+            $taskUuid = (string) $media->getCustomProperty('paperless_task_id');
+            $state = $this->resolveTaskState($service, $taskUuid);
+            $pendingStatus[] = [
+                'media_id' => $media->id,
+                'file_name' => $media->file_name,
+                'task_id' => $taskUuid,
+                'state' => $state['state'],
+                'paperless_id' => $state['paperless_id'],
+            ];
+        }
+
+        $linked = Media::query()
+            ->whereNotNull('custom_properties->paperless_id')
+            ->take($limit)
+            ->get(['id', 'custom_properties']);
+
+        $verified = ['ok' => [], 'missing' => []];
+        $linkedIds = [];
+        foreach ($linked as $media) {
+            $docId = (int) $media->getCustomProperty('paperless_id');
+            $linkedIds[] = $docId;
+            $res = $service->getDocument($docId);
+            if ($res->status() === Response::HTTP_NOT_FOUND) {
+                $verified['missing'][] = ['media_id' => $media->id, 'paperless_id' => $docId];
+            } elseif ($res->successful()) {
+                $verified['ok'][] = $media->id;
+            }
+        }
+
+        $paperlessIds = $this->collectPaperlessIds($service, 200);
+        $orphans = array_values(array_diff($paperlessIds, $linkedIds));
+
+        return response()->json([
+            'summary' => [
+                'unsynced_count' => Media::query()
+                    ->whereNull('custom_properties->paperless_task_id')
+                    ->whereNull('custom_properties->paperless_id')
+                    ->count(),
+                'pending_count' => Media::query()
+                    ->whereNotNull('custom_properties->paperless_task_id')
+                    ->whereNull('custom_properties->paperless_id')
+                    ->count(),
+                'linked_count' => Media::query()
+                    ->whereNotNull('custom_properties->paperless_id')
+                    ->count(),
+                'paperless_total' => $this->paperlessTotal($service),
+                'orphan_count' => count($orphans),
+            ],
+            'pending' => $pendingStatus,
+            'verified' => $verified,
+            'orphan_paperless_ids' => $orphans,
+        ]);
+    }
+
+    /**
+     * @return array{state: string, paperless_id: int|null}
+     */
+    private function resolveTaskState(PaperlessService $service, string $taskUuid): array
+    {
+        if ($taskUuid === '') {
+            return ['state' => 'stale', 'paperless_id' => null];
+        }
+
+        $res = $service->getTaskByUuid($taskUuid);
+        if ($res->failed()) {
+            return ['state' => 'unknown', 'paperless_id' => null];
+        }
+
+        $task = $res->json('results.0');
+        if (!is_array($task)) {
+            return ['state' => 'stale', 'paperless_id' => null];
+        }
+
+        $status = (string) ($task['status'] ?? '');
+        if (in_array($status, ['pending', 'started'], true)) {
+            return ['state' => 'processing', 'paperless_id' => null];
+        }
+
+        if ($status === 'success') {
+            $docId = $task['related_document_ids'][0] ?? $task['result_data']['document_id'] ?? null;
+
+            return ['state' => 'synced', 'paperless_id' => is_numeric($docId) ? (int) $docId : null];
+        }
+
+        return ['state' => 'failed', 'paperless_id' => null];
+    }
+
+    /** @return int[] */
+    private function collectPaperlessIds(PaperlessService $service, int $cap): array
+    {
+        $ids = [];
+        $page = 1;
+        while (count($ids) < $cap) {
+            $res = $service->listDocuments($page, 100);
+            if ($res->failed()) {
+                break;
+            }
+            $results = $res->json('results', []);
+            if (!is_array($results) || $results === []) {
+                break;
+            }
+            foreach ($results as $doc) {
+                if (isset($doc['id'])) {
+                    $ids[] = (int) $doc['id'];
+                }
+            }
+            if ($res->json('next') === null) {
+                break;
+            }
+            $page++;
+        }
+
+        return array_values(array_unique(array_slice($ids, 0, $cap)));
+    }
+
+    private function paperlessTotal(PaperlessService $service): ?int
+    {
+        $res = $service->listDocuments(1, 1);
+        if ($res->failed()) {
+            return null;
+        }
+
+        $count = $res->json('count');
+
+        return is_numeric($count) ? (int) $count : null;
     }
 }

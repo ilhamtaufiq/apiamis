@@ -64,4 +64,19 @@ class PaperlessService
             'page' => $page,
         ]);
     }
+
+    public function listDocuments(int $page = 1, int $pageSize = 25): Response
+    {
+        return $this->client()->timeout(15)->get('/api/documents/', [
+            'page' => $page,
+            'page_size' => $pageSize,
+        ]);
+    }
+
+    public function getTaskByUuid(string $taskUuid): Response
+    {
+        return $this->client()->timeout(15)->get('/api/tasks/', [
+            'task_id' => $taskUuid,
+        ]);
+    }
 }
