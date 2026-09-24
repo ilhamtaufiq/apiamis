@@ -17,6 +17,7 @@ class BerkasResource extends JsonResource
             'uploaded_by' => $this->uploaded_by,
             'berkas_url' => $media?->getUrl() ?? $this->getFirstMediaUrl('berkas/dokumen'),
             'file_name' => $media?->file_name,
+            'original_name' => $media?->name,
             'mime_type' => $media?->mime_type,
             'size' => $media?->size,
             'media_id' => $media?->id,

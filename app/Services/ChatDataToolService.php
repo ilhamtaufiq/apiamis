@@ -169,7 +169,7 @@ class ChatDataToolService
 
     public function execute(string $name, array $args): array
     {
-        return match ($name) {
+        $out = match ($name) {
             'get_statistics' => $this->getStatistics($args),
             'search_projects' => $this->searchProjects($args),
             'search_projects_by_progress' => $this->searchProjectsByProgress($args),
@@ -200,6 +200,46 @@ class ChatDataToolService
             'generate_pekerjaan_report' => $this->generatePekerjaanReport($args),
             default => ['error' => 'Tool tidak ditemukan.'],
         };
+
+        return $this->slimForLlm($out);
+    }
+
+    /** Escape wildcard LIKE (`%`, `_`) agar keyword user tidak jadi pola SQL. */
+    public function like(string $keyword): string
+    {
+        return '%' . addcslashes($keyword, '%_') . '%';
+    }
+
+    /**
+     * Buang atribut yang tidak berguna bagi LLM (timestamp, token internal).
+     *
+     * @param  mixed  $data
+     * @return mixed
+     */
+    private function slimForLlm(mixed $data): mixed
+    {
+        if (!is_array($data)) {
+            return $data;
+        }
+
+        static $drop = [
+            'created_at' => true,
+            'updated_at' => true,
+            'deleted_at' => true,
+            'tokens_used' => true,
+            'prompt_tokens' => true,
+            'completion_tokens' => true,
+        ];
+
+        $out = [];
+        foreach ($data as $key => $value) {
+            if (is_string($key) && isset($drop[$key])) {
+                continue;
+            }
+            $out[$key] = $this->slimForLlm($value);
+        }
+
+        return $out;
     }
 
     private function tool(string $name, string $description, array $properties, array $required = []): array
@@ -372,9 +412,9 @@ class ChatDataToolService
             // Tiap token wajib cocok di salah satu kolom (nama/desa/kecamatan).
             foreach ($tokens as $t) {
                 $query->where(function ($q) use ($t) {
-                    $q->where('nama_paket', 'LIKE', "%{$t}%")
-                        ->orWhereHas('kecamatan', fn($sub) => $sub->where('n_kec', 'LIKE', "%{$t}%"))
-                        ->orWhereHas('desa', fn($sub) => $sub->where('n_desa', 'LIKE', "%{$t}%"));
+                    $q->where('nama_paket', 'LIKE', $this->like($t))
+                        ->orWhereHas('kecamatan', fn($sub) => $sub->where('n_kec', 'LIKE', $this->like($t)))
+                        ->orWhereHas('desa', fn($sub) => $sub->where('n_desa', 'LIKE', $this->like($t)));
                 });
             }
         }
@@ -680,10 +720,10 @@ class ChatDataToolService
             }
             foreach ($tokens as $t) {
                 $query->where(function ($q) use ($t) {
-                    $q->where('spk', 'LIKE', "%{$t}%")
-                        ->orWhereHas('pekerjaan', fn($sub) => $sub->where('nama_paket', 'LIKE', "%{$t}%"))
-                        ->orWhereHas('pekerjaans', fn($sub) => $sub->where('nama_paket', 'LIKE', "%{$t}%"))
-                        ->orWhereHas('penyedia', fn($sub) => $sub->where('nama', 'LIKE', "%{$t}%"));
+                    $q->where('spk', 'LIKE', $this->like($t))
+                        ->orWhereHas('pekerjaan', fn($sub) => $sub->where('nama_paket', 'LIKE', $this->like($t)))
+                        ->orWhereHas('pekerjaans', fn($sub) => $sub->where('nama_paket', 'LIKE', $this->like($t)))
+                        ->orWhereHas('penyedia', fn($sub) => $sub->where('nama', 'LIKE', $this->like($t)));
                 });
             }
         }
@@ -709,7 +749,7 @@ class ChatDataToolService
 
     private function getContractorInfo(array $args): array
     {
-        $provider = Penyedia::where('nama', 'LIKE', '%' . ($args['nama'] ?? '') . '%')->first();
+        $provider = Penyedia::where('nama', 'LIKE', $this->like((string) ($args['nama'] ?? '')))->first();
         if (!$provider) {
             return ['error' => 'Penyedia tidak ditemukan.'];
         }
@@ -740,7 +780,7 @@ class ChatDataToolService
                 ->orWhereHas('pekerjaan', fn($sub) => $sub->byUserRole()));
 
         if (!empty($args['keyword'])) {
-            $query->where('subjek', 'LIKE', "%{$args['keyword']}%");
+            $query->where('subjek', 'LIKE', $this->like((string) $args['keyword']));
         }
         if (!empty($args['status'])) {
             $query->where('status', $args['status']);
@@ -769,9 +809,9 @@ class ChatDataToolService
         if (!empty($args['keyword'])) {
             $keyword = $args['keyword'];
             $query->where(function ($q) use ($keyword) {
-                $q->where('keterangan', 'LIKE', "%{$keyword}%")
-                    ->orWhereHas('pekerjaan', fn($sub) => $sub->where('nama_paket', 'LIKE', "%{$keyword}%"))
-                    ->orWhereHas('komponen', fn($sub) => $sub->where('komponen', 'LIKE', "%{$keyword}%"));
+                $q->where('keterangan', 'LIKE', $this->like($keyword))
+                    ->orWhereHas('pekerjaan', fn($sub) => $sub->where('nama_paket', 'LIKE', $this->like($keyword)))
+                    ->orWhereHas('komponen', fn($sub) => $sub->where('komponen', 'LIKE', $this->like($keyword)));
             });
         }
 
@@ -801,8 +841,8 @@ class ChatDataToolService
         if (!empty($args['keyword'])) {
             $keyword = $args['keyword'];
             $query->where(function ($q) use ($keyword) {
-                $q->where('komponen', 'LIKE', "%{$keyword}%")
-                    ->orWhereHas('pekerjaan', fn($sub) => $sub->where('nama_paket', 'LIKE', "%{$keyword}%"));
+                $q->where('komponen', 'LIKE', $this->like($keyword))
+                    ->orWhereHas('pekerjaan', fn($sub) => $sub->where('nama_paket', 'LIKE', $this->like($keyword)));
             });
         }
 
@@ -830,8 +870,8 @@ class ChatDataToolService
         if (!empty($args['keyword'])) {
             $keyword = $args['keyword'];
             $query->where(function ($q) use ($keyword) {
-                $q->where('nama', 'LIKE', "%{$keyword}%")
-                    ->orWhereHas('pekerjaan', fn($sub) => $sub->where('nama_paket', 'LIKE', "%{$keyword}%"));
+                $q->where('nama', 'LIKE', $this->like($keyword))
+                    ->orWhereHas('pekerjaan', fn($sub) => $sub->where('nama_paket', 'LIKE', $this->like($keyword)));
             });
         }
 
@@ -858,9 +898,9 @@ class ChatDataToolService
         if (!empty($args['keyword'])) {
             $keyword = $args['keyword'];
             $query->where(function ($q) use ($keyword) {
-                $q->where('nama_program', 'LIKE', "%{$keyword}%")
-                    ->orWhere('nama_kegiatan', 'LIKE', "%{$keyword}%")
-                    ->orWhere('nama_sub_kegiatan', 'LIKE', "%{$keyword}%");
+                $q->where('nama_program', 'LIKE', $this->like($keyword))
+                    ->orWhere('nama_kegiatan', 'LIKE', $this->like($keyword))
+                    ->orWhere('nama_sub_kegiatan', 'LIKE', $this->like($keyword));
             });
         }
 
@@ -869,7 +909,7 @@ class ChatDataToolService
         }
 
         if (!empty($args['sumber_dana'])) {
-            $query->where('sumber_dana', 'LIKE', "%{$args['sumber_dana']}%");
+            $query->where('sumber_dana', 'LIKE', $this->like((string) $args['sumber_dana']));
         }
 
         $rows = $query->latest('tahun_anggaran')->limit(15)->get();
@@ -981,7 +1021,7 @@ class ChatDataToolService
         }
 
         $query = Pekerjaan::byUserRole()
-            ->whereHas('tags', fn($q) => $q->where('name', 'LIKE', "%{$args['tag']}%")->orWhere('slug', 'LIKE', "%{$args['tag']}%"))
+            ->whereHas('tags', fn($q) => $q->where('name', 'LIKE', $this->like((string) $args['tag']))->orWhere('slug', 'LIKE', $this->like((string) $args['tag'])))
             ->with(['tags', 'kecamatan', 'desa', 'kegiatan']);
 
         if (!empty($args['tahun'])) {
@@ -1007,9 +1047,9 @@ class ChatDataToolService
         if (!empty($args['keyword'])) {
             $keyword = $args['keyword'];
             $query->where(function ($q) use ($keyword) {
-                $q->where('nomor_addendum', 'LIKE', "%{$keyword}%")
-                    ->orWhereHas('kontrak', fn($sub) => $sub->where('spk', 'LIKE', "%{$keyword}%"))
-                    ->orWhereHas('kontrak.pekerjaan', fn($sub) => $sub->where('nama_paket', 'LIKE', "%{$keyword}%"));
+                $q->where('nomor_addendum', 'LIKE', $this->like($keyword))
+                    ->orWhereHas('kontrak', fn($sub) => $sub->where('spk', 'LIKE', $this->like($keyword)))
+                    ->orWhereHas('kontrak.pekerjaan', fn($sub) => $sub->where('nama_paket', 'LIKE', $this->like($keyword)));
             });
         }
 
@@ -1040,7 +1080,7 @@ class ChatDataToolService
 
         $query = Kecamatan::realWilayah()->withCount('desa');
         if (!empty($args['kecamatan'])) {
-            $query->where('n_kec', 'LIKE', "%{$args['kecamatan']}%");
+            $query->where('n_kec', 'LIKE', $this->like((string) $args['kecamatan']));
         }
 
         return [
@@ -1076,10 +1116,10 @@ class ChatDataToolService
         if (!empty($args['keyword'])) {
             $keyword = $args['keyword'];
             $query->where(function ($q) use ($keyword) {
-                $q->where('perihal', 'LIKE', "%{$keyword}%")
-                    ->orWhere('ringkasan', 'LIKE', "%{$keyword}%")
-                    ->orWhere('nama_pengusul', 'LIKE', "%{$keyword}%")
-                    ->orWhere('nomor_surat_masuk', 'LIKE', "%{$keyword}%");
+                $q->where('perihal', 'LIKE', $this->like($keyword))
+                    ->orWhere('ringkasan', 'LIKE', $this->like($keyword))
+                    ->orWhere('nama_pengusul', 'LIKE', $this->like($keyword))
+                    ->orWhere('nomor_surat_masuk', 'LIKE', $this->like($keyword));
             });
         }
 

@@ -137,12 +137,14 @@ class AnalyticsController extends Controller
                     $count++;
                 }
 
+                // hasProgress=false: kecamatan ada paketnya tapi belum ada realisasi.
+                // Jangan dibuang — kalau dibuang, tabel wilayah kehilangan baris.
                 return [
                     'name' => $kec->n_kec,
                     'value' => $count > 0 ? round($totalProgress / $count, 2) : 0,
+                    'hasProgress' => $count > 0,
                 ];
             })
-            ->filter(fn($r) => $r['value'] > 0)
             ->values();
 
         // 3. Category distribution (e.g. by Sumber Dana)

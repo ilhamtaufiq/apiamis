@@ -15,6 +15,9 @@ class UserPresenceController extends Controller
         $validated = $request->validate([
             'app' => ['sometimes', 'string', 'max:32'],
             'koordinat' => ['sometimes', 'nullable', 'string', 'max:64', 'regex:/^-?\d+(?:\.\d+)?\s*,\s*-?\d+(?:\.\d+)?$/'],
+            'office_room' => ['sometimes', 'nullable', 'string', 'max:32'],
+            'office_x' => ['sometimes', 'nullable', 'numeric', 'min:0', 'max:100'],
+            'office_y' => ['sometimes', 'nullable', 'numeric', 'min:0', 'max:100'],
         ]);
 
         $app = (string) ($validated['app'] ?? 'portal');
@@ -23,7 +26,16 @@ class UserPresenceController extends Controller
             $koordinat = null;
         }
 
-        $this->presence->heartbeat($request->user(), $app, $koordinat);
+        $office = [
+            'room' => isset($validated['office_room']) ? trim((string) $validated['office_room']) : null,
+            'x' => isset($validated['office_x']) ? (float) $validated['office_x'] : null,
+            'y' => isset($validated['office_y']) ? (float) $validated['office_y'] : null,
+        ];
+        if (($office['room'] ?? '') === '') {
+            $office['room'] = null;
+        }
+
+        $this->presence->heartbeat($request->user(), $app, $koordinat, $office);
 
         return response()->json([
             'data' => [

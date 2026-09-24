@@ -38,7 +38,10 @@ class UserPresenceService
      *     app: string,
      *     last_seen_at: string,
      *     koordinat: ?string,
-     *     koordinat_at: ?string
+     *     koordinat_at: ?string,
+     *     office_room: ?string,
+     *     office_x: ?float,
+     *     office_y: ?float
      * }>
      */
     public function listOnline(): array

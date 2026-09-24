@@ -192,7 +192,9 @@ class BerkasController extends Controller
 
         if ($request->hasFile('file')) {
             $berkas->clearMediaCollection('berkas/dokumen');
+            $originalName = $request->file('file')->getClientOriginalName();
             $berkas->addMediaFromRequest('file')
+                ->usingName(pathinfo($originalName, PATHINFO_FILENAME) ?: $originalName)
                 ->usingFileName(Str::uuid() . '.' . $request->file('file')->getClientOriginalExtension())
                 ->toMediaCollection('berkas/dokumen');
         }

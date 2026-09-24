@@ -31,6 +31,7 @@ use App\Http\Controllers\MenuPermissionController;
 use App\Http\Controllers\OnlyOfficeController;
 use App\Http\Controllers\OutputController;
 use App\Http\Controllers\PanduanPageController;
+use App\Http\Controllers\PaperlessController;
 use App\Http\Controllers\PekerjaanChecklistController;
 use App\Http\Controllers\PekerjaanController;
 use App\Http\Controllers\PekerjaanProgressEstimasiController;
@@ -336,6 +337,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('kontrak/{kontrak}/bap-context', [KontrakController::class, 'bapContext']);
     Route::get('kontrak/{kontrak}/export-bap', [KontrakController::class, 'exportBAP']);
     Route::get('penerima/summary', [PenerimaController::class, 'summary']);
+    Route::get('penerima/rekap', [PenerimaController::class, 'rekap']);
     Route::apiResource('penerima', PenerimaController::class);
     // Harus sebelum apiResource agar tidak tertangkap {berkas}
     Route::get('berkas/jenis-dokumen', [BerkasController::class, 'jenisDokumen']);
@@ -561,5 +563,14 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('chat/sessions/{id}/messages', [\App\Http\Controllers\ChatController::class, 'sessionMessages']);
     Route::post('chat/messages/{id}/vote', [\App\Http\Controllers\ChatController::class, 'voteMessage']);
     Route::get('chat/reports/download', [\App\Http\Controllers\ChatController::class, 'downloadReport']);
+
+    // Paperless-ngx Integration
+    Route::prefix('paperless')->group(function () {
+        Route::post('sync-all', [PaperlessController::class, 'syncAll']);
+        Route::post('media/{media}/sync', [PaperlessController::class, 'sync']);
+        Route::get('media/{media}', [PaperlessController::class, 'show']);
+        Route::get('media/{media}/download', [PaperlessController::class, 'download']);
+        Route::get('documents', [PaperlessController::class, 'search']);
+    });
 
 });

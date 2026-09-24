@@ -203,13 +203,88 @@ class PenerimaController extends Controller
             'non_komunal_count' => $total - $komunal,
         ]);
     }
+    /**
+     * Rekap penerima per tahun anggaran → bidang (kegiatan.sub_bidang) → kecamatan → desa.
+     * Hanya grup yang punya penerima yang dikembalikan (tahun kosong tidak muncul).
+     */
+    public function rekap(Request $request)
+    {
+        $rows = \DB::table('tbl_penerima as p')
+            ->join('tbl_pekerjaan as pk', 'pk.id', '=', 'p.pekerjaan_id')
+            ->leftJoin('tbl_kegiatan as k', 'k.id', '=', 'pk.kegiatan_id')
+            ->leftJoin('tbl_kecamatan as kc', 'kc.id', '=', 'pk.kecamatan_id')
+            ->leftJoin('tbl_desa as d', 'd.id', '=', 'pk.desa_id')
+            // Paket jasa konsultansi tidak punya desa/kecamatan — kecualikan.
+            ->where(function ($q) {
+                $q->where('pk.is_konsultan', false)->orWhereNull('pk.is_konsultan');
+            })
+            ->when($request->filled('tahun'), fn ($q) => $q->where('k.tahun_anggaran', $request->tahun))
+            ->when($request->filled('bidang'), fn ($q) => $q->where('k.sub_bidang', $request->bidang))
+            ->select('k.tahun_anggaran', 'k.sub_bidang', 'kc.n_kec', 'd.n_desa')
+            ->selectRaw('count(*) as penerima_kk, coalesce(sum(p.jumlah_jiwa), 0) as total_jiwa')
+            ->groupBy('k.tahun_anggaran', 'k.sub_bidang', 'kc.n_kec', 'd.n_desa')
+            ->orderByDesc('k.tahun_anggaran')
+            ->orderBy('k.sub_bidang')
+            ->orderBy('kc.n_kec')
+            ->orderBy('d.n_desa')
+            ->get();
+
+        // Susun pohon tahun → bidang → kecamatan → desa.
+        $tahun = [];
+        foreach ($rows as $row) {
+            $t = $row->tahun_anggaran ?: '(Tanpa tahun)';
+            $b = $row->sub_bidang ?: 'Lainnya';
+            $kc = $row->n_kec ?: '(Tanpa kecamatan)';
+            $ds = $row->n_desa ?: '(Tanpa desa)';
+
+            $tahun[$t] ??= ['tahun' => $t, 'penerima_kk' => 0, 'total_jiwa' => 0, 'bidang' => []];
+            $tahun[$t]['bidang'][$b] ??= ['bidang' => $b, 'penerima_kk' => 0, 'total_jiwa' => 0, 'kecamatan' => []];
+            $tahun[$t]['bidang'][$b]['kecamatan'][$kc] ??= ['kecamatan' => $kc, 'penerima_kk' => 0, 'total_jiwa' => 0, 'desa' => []];
+            $tahun[$t]['bidang'][$b]['kecamatan'][$kc]['desa'][$ds] = [
+                'desa' => $ds,
+                'penerima_kk' => (int) $row->penerima_kk,
+                'total_jiwa' => (int) $row->total_jiwa,
+            ];
+
+            $tahun[$t]['penerima_kk'] += $row->penerima_kk;
+            $tahun[$t]['total_jiwa'] += $row->total_jiwa;
+            $tahun[$t]['bidang'][$b]['penerima_kk'] += $row->penerima_kk;
+            $tahun[$t]['bidang'][$b]['total_jiwa'] += $row->total_jiwa;
+            $tahun[$t]['bidang'][$b]['kecamatan'][$kc]['penerima_kk'] += $row->penerima_kk;
+            $tahun[$t]['bidang'][$b]['kecamatan'][$kc]['total_jiwa'] += $row->total_jiwa;
+        }
+
+        return response()->json([
+            'data' => array_values(array_map(function ($t) {
+                $t['bidang'] = array_values(array_map(function ($b) {
+                    $b['kecamatan'] = array_values(array_map(function ($kc) {
+                        $kc['desa'] = array_values($kc['desa']);
+                        return $kc;
+                    }, $b['kecamatan']));
+                    return $b;
+                }, $t['bidang']));
+                return $t;
+            }, $tahun)),
+        ]);
+    }
+
     public function summary(Request $request)
     {
-        $query = Penerima::query();
+        $query = Penerima::query()
+            // Paket jasa konsultansi tidak punya desa/kecamatan — kecualikan.
+            ->whereHas('pekerjaan', function ($q) {
+                $q->where('is_konsultan', false)->orWhereNull('is_konsultan');
+            });
 
         if ($request->has('tahun') && $request->tahun) {
             $query->whereHas('pekerjaan.kegiatan', function($q) use ($request) {
                 $q->where('tahun_anggaran', $request->tahun);
+            });
+        }
+
+        if ($request->filled('bidang')) {
+            $query->whereHas('pekerjaan.kegiatan', function ($q) use ($request) {
+                $q->where('sub_bidang', $request->bidang);
             });
         }
 

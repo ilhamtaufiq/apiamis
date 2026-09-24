@@ -1,5 +1,7 @@
 <IfModule mod_headers.c>
-    Header set Access-Control-Allow-Origin "*"
+    SetEnvIf Origin "^(http://localhost:3000|http://127.0.0.1:3000|http://localhost:5173|http://127.0.0.1:5173|http://localhost:8787|http://127.0.0.1:8787|http://apiamis.test|http://bun.test)$" CORS_ORIGIN=$0
+    Header set Access-Control-Allow-Origin "%{CORS_ORIGIN}e" env=CORS_ORIGIN
+    Header set Access-Control-Allow-Credentials "true"
     Header set Access-Control-Allow-Methods "GET, POST, OPTIONS, DELETE, PUT"
     Header set Access-Control-Allow-Headers "X-Requested-With, Content-Type, Origin, Authorization, Accept, Client-Security-Token, Accept-Encoding, X-Auth-Token, x-xsrf-token"
 </IfModule>

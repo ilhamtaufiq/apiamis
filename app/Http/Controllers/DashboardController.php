@@ -22,17 +22,33 @@ class DashboardController extends Controller
     public function stats(Request $request)
     {
         $tahun = $request->query('tahun');
+        $kecamatanIds = $request->query('kecamatan_ids');
+        if ($kecamatanIds && is_string($kecamatanIds)) {
+            $kecamatanIds = explode(',', $kecamatanIds);
+        }
+        $kecamatanIds = $kecamatanIds
+            ? array_map('intval', array_filter((array) $kecamatanIds, fn($v) => $v !== ''))
+            : null;
         $user = auth()->user();
-        
+
         // Bump key segment when stats payload / kontrak konsolidasi logic changes
         $version = \Illuminate\Support\Facades\Cache::get('dashboard_stats_version', 1);
-        $cacheKey = "dashboard_stats_v{$version}_fk2_" . ($tahun ?? 'all') . "_" . ($user ? $user->id : 'guest');
+        $cacheKey = "dashboard_stats_v{$version}_fk4_" . ($tahun ?? 'all')
+            . "_k" . ($kecamatanIds ? implode('-', $kecamatanIds) : 'all')
+            . "_" . ($user ? $user->id : 'guest');
 
-        return \Illuminate\Support\Facades\Cache::remember($cacheKey, now()->addMinutes(30), function () use ($request, $tahun) {
+        return \Illuminate\Support\Facades\Cache::remember($cacheKey, now()->addMinutes(30), function () use ($request, $tahun, $kecamatanIds) {
             // Base query
             $query = Kegiatan::query();
             if ($tahun) {
                 $query->where('tahun_anggaran', $tahun);
+            }
+            if ($kecamatanIds) {
+                $query->whereIn('id', function ($sub) use ($kecamatanIds) {
+                    $sub->select('kegiatan_id')
+                        ->from('tbl_pekerjaan')
+                        ->whereIn('kecamatan_id', $kecamatanIds);
+                });
             }
 
             // Total kegiatan
@@ -62,6 +78,162 @@ class DashboardController extends Controller
                         'value' => $item->value
                     ];
                 });
+
+            // Pekerjaan aktif (exclude dibatalkan) — dipakai sub kegiatan, metrik, dan rekap di bawah.
+            $pekerjaanQuery = Pekerjaan::query()->notCanceled();
+            if ($tahun) {
+                $pekerjaanQuery->whereHas('kegiatan', fn($q) => $q->where('tahun_anggaran', $tahun));
+            }
+            if ($kecamatanIds) {
+                $pekerjaanQuery->whereIn('kecamatan_id', $kecamatanIds);
+            }
+
+            // All pekerjaan query (include canceled) — dipakai untuk rekap batal & belum kontrak per sub kegiatan
+            $pekerjaanAllQuery = Pekerjaan::query();
+            if ($tahun) {
+                $pekerjaanAllQuery->whereHas('kegiatan', fn($q) => $q->where('tahun_anggaran', $tahun));
+            }
+            if ($kecamatanIds) {
+                $pekerjaanAllQuery->whereIn('kecamatan_id', $kecamatanIds);
+            }
+
+            // Sub Kegiatan stats: pagu dihitung dari pekerjaan aktif sudah berkontrak (bukan pagu kegiatan),
+            // progress = rata-rata progress berbobot paket di sub kegiatan tsb.
+            // Exclude batal & belum berkontrak.
+            $subKegiatanRows = (clone $pekerjaanQuery)->withKontrak()
+                ->select('tbl_kegiatan.nama_sub_kegiatan as name', DB::raw('count(*) as count'), DB::raw('sum(tbl_pekerjaan.pagu) as pagu'))
+                ->join('tbl_kegiatan', 'tbl_pekerjaan.kegiatan_id', '=', 'tbl_kegiatan.id')
+                ->whereNotNull('tbl_kegiatan.nama_sub_kegiatan')
+                ->where('tbl_kegiatan.nama_sub_kegiatan', '!=', '')
+                ->groupBy('tbl_kegiatan.nama_sub_kegiatan')
+                ->get();
+
+            // Batal per sub kegiatan
+            $batalBySub = (clone $pekerjaanAllQuery)
+                ->where('status', \App\Models\Pekerjaan::STATUS_CANCELED)
+                ->join('tbl_kegiatan', 'tbl_pekerjaan.kegiatan_id', '=', 'tbl_kegiatan.id')
+                ->whereNotNull('tbl_kegiatan.nama_sub_kegiatan')
+                ->select('tbl_kegiatan.nama_sub_kegiatan as name', DB::raw('count(*) as batal'))
+                ->groupBy('tbl_kegiatan.nama_sub_kegiatan')
+                ->pluck('batal', 'name');
+
+            // Belum berkontrak per sub kegiatan (dari paket aktif saja, pakai scope withKontrak)
+            $belumBerkontrakBySub = (clone $pekerjaanAllQuery)
+                ->notCanceled()
+                ->whereDoesntHave('kontraks')
+                ->join('tbl_kegiatan', 'tbl_pekerjaan.kegiatan_id', '=', 'tbl_kegiatan.id')
+                ->whereNotNull('tbl_kegiatan.nama_sub_kegiatan')
+                ->select('tbl_kegiatan.nama_sub_kegiatan as name', DB::raw('count(*) as belum'))
+                ->groupBy('tbl_kegiatan.nama_sub_kegiatan')
+                ->pluck('belum', 'name');
+
+            // Progress & SP2D per sub kegiatan dari PekerjaanProgressEstimasiHistory
+            $subKegiatanPekerjaan = (clone $pekerjaanQuery)
+                ->select('tbl_pekerjaan.id', 'tbl_pekerjaan.kegiatan_id')
+                ->with('kegiatan:id,nama_sub_kegiatan')
+                ->get();
+
+            $progressAcc = [];
+            $sp2dAcc = [];
+            $kontrakAcc = [];
+            $pekerjaanIdsSub = $subKegiatanPekerjaan->pluck('id')->toArray();
+
+            if (!empty($pekerjaanIdsSub)) {
+                // Latest realisasi fisik per pekerjaan (persen)
+                $latestFisik = PekerjaanProgressEstimasiHistory::query()
+                    ->whereIn('pekerjaan_id', $pekerjaanIdsSub)
+                    ->where('tipe', 'realisasi')
+                    ->where('jenis', 'fisik')
+                    ->orderBy('tanggal', 'desc')
+                    ->orderBy('id', 'desc')
+                    ->get()
+                    ->keyBy('pekerjaan_id');
+
+                // Total SP2D keuangan per pekerjaan (nilai asli)
+                $sp2dPerPekerjaan = PekerjaanProgressEstimasiHistory::query()
+                    ->whereIn('pekerjaan_id', $pekerjaanIdsSub)
+                    ->where('tipe', 'realisasi')
+                    ->where('jenis', 'keuangan')
+                    ->select('pekerjaan_id', DB::raw('sum(nilai) as total_sp2d'))
+                    ->groupBy('pekerjaan_id')
+                    ->pluck('total_sp2d', 'pekerjaan_id');
+
+                foreach ($subKegiatanPekerjaan as $p) {
+                    $name = $p->kegiatan?->nama_sub_kegiatan;
+                    if (!$name) continue;
+
+                    // Progress dari estimasi realisasi fisik
+                    $fisik = $latestFisik[$p->id] ?? null;
+                    if ($fisik) {
+                        $progressAcc[$name] ??= ['sum' => 0.0, 'n' => 0];
+                        $progressAcc[$name]['sum'] += (float) $fisik->persen;
+                        $progressAcc[$name]['n']++;
+                    }
+
+                    // SP2D dari realisasi keuangan
+                    $sp2d = (float) ($sp2dPerPekerjaan[$p->id] ?? 0);
+                    if ($sp2d > 0) {
+                        $sp2dAcc[$name] = ($sp2dAcc[$name] ?? 0) + $sp2d;
+                    }
+                }
+
+                // Nilai kontrak per sub kegiatan (distinct per kontrak; 1 kontrak
+                // konsolidasi multi-paket dihitung penuh di tiap sub terkait).
+                // Mendukung tautan legacy (tbl_kontrak.id_pekerjaan) + pivot.
+                $legacyLinks = DB::table('tbl_kontrak')
+                    ->join('tbl_pekerjaan', 'tbl_pekerjaan.id', '=', 'tbl_kontrak.id_pekerjaan')
+                    ->join('tbl_kegiatan', 'tbl_kegiatan.id', '=', 'tbl_pekerjaan.kegiatan_id')
+                    ->whereIn('tbl_kontrak.id_pekerjaan', $pekerjaanIdsSub)
+                    ->whereNotNull('tbl_kegiatan.nama_sub_kegiatan')
+                    ->select('tbl_kontrak.id as kid', 'tbl_kegiatan.nama_sub_kegiatan as name')
+                    ->get();
+                $pivotLinks = DB::table('kontrak_pekerjaan')
+                    ->join('tbl_pekerjaan', 'tbl_pekerjaan.id', '=', 'kontrak_pekerjaan.pekerjaan_id')
+                    ->join('tbl_kegiatan', 'tbl_kegiatan.id', '=', 'tbl_pekerjaan.kegiatan_id')
+                    ->whereIn('kontrak_pekerjaan.pekerjaan_id', $pekerjaanIdsSub)
+                    ->whereNotNull('tbl_kegiatan.nama_sub_kegiatan')
+                    ->select('kontrak_pekerjaan.kontrak_id as kid', 'tbl_kegiatan.nama_sub_kegiatan as name')
+                    ->get();
+                $kontrakIdsBySub = [];
+                foreach ([$legacyLinks, $pivotLinks] as $rows) {
+                    foreach ($rows as $row) {
+                        if ($row->kid === null) continue;
+                        $kontrakIdsBySub[$row->name][$row->kid] = true;
+                    }
+                }
+                if (!empty($kontrakIdsBySub)) {
+                    $allKontrakIds = collect($kontrakIdsBySub)
+                        ->flatMap(fn($set) => array_keys($set))
+                        ->unique()
+                        ->values()
+                        ->toArray();
+                    $nilaiByKontrakId = DB::table('tbl_kontrak')
+                        ->whereIn('id', $allKontrakIds)
+                        ->pluck('nilai_kontrak', 'id');
+                    foreach ($kontrakIdsBySub as $name => $set) {
+                        $sum = 0.0;
+                        foreach (array_keys($set) as $kid) {
+                            $sum += (float) ($nilaiByKontrakId[$kid] ?? 0);
+                        }
+                        $kontrakAcc[$name] = $sum;
+                    }
+                }
+            }
+
+            $subKegiatanStats = $subKegiatanRows->map(function ($item) use ($progressAcc, $sp2dAcc, $kontrakAcc, $batalBySub, $belumBerkontrakBySub) {
+                $acc = $progressAcc[$item->name] ?? null;
+                return [
+                    'name' => $item->name,
+                    'count' => (int) $item->count,
+                    'paguM' => round((float) $item->pagu / 1000000, 2),
+                    'progress' => $acc ? round($acc['sum'] / $acc['n'], 1) : 0,
+                    'hasProgress' => $acc !== null,
+                    'sp2dTotal' => round($sp2dAcc[$item->name] ?? 0),
+                    'kontrakTotal' => round($kontrakAcc[$item->name] ?? 0),
+                    'batal' => (int) ($batalBySub[$item->name] ?? 0),
+                    'belumBerkontrak' => (int) ($belumBerkontrakBySub[$item->name] ?? 0),
+                ];
+            });
             
             // Pagu per tahun anggaran (dalam jutaan)
             $paguPerTahun = (clone $query)->select('tahun_anggaran as name', DB::raw('sum(pagu) / 1000000 as value'))
@@ -82,13 +254,6 @@ class DashboardController extends Controller
                 ->pluck('tahun_anggaran');
 
             // Pekerjaan statistics (rekap status dulu, lalu hitung metrik utama tanpa canceled)
-            $pekerjaanAllQuery = \App\Models\Pekerjaan::query();
-            if ($tahun) {
-                $pekerjaanAllQuery->whereHas('kegiatan', function ($q) use ($tahun) {
-                    $q->where('tahun_anggaran', $tahun);
-                });
-            }
-
             $pekerjaanBatal = (clone $pekerjaanAllQuery)
                 ->where('status', \App\Models\Pekerjaan::STATUS_CANCELED)
                 ->count();
@@ -124,6 +289,7 @@ class DashboardController extends Controller
             // Metrik operasional hanya paket aktif (exclude dibatalkan)
             $pekerjaanQuery = (clone $pekerjaanAllQuery)->notCanceled();
             $pekerjaanFisikQuery = (clone $pekerjaanQuery)->where(function ($q) {
+
                 $q->where('is_konsultan', false)->orWhereNull('is_konsultan');
             });
             $pekerjaanKonsultanQuery = (clone $pekerjaanQuery)->where('is_konsultan', true);
@@ -146,18 +312,22 @@ class DashboardController extends Controller
                     ];
                 });
             
-            // Pekerjaan per desa (top 10)
+            // Pekerjaan per desa + pagu asli per desa
             $pekerjaanPerDesa = (clone $pekerjaanQuery)
-                ->select('desa_id', DB::raw('count(*) as value'))
+                ->select(
+                    'desa_id',
+                    DB::raw('count(*) as value'),
+                    DB::raw('sum(pagu) / 1000000 as paguJt')
+                )
                 ->with('desa:id,n_desa')
                 ->groupBy('desa_id')
                 ->orderBy('value', 'desc')
-                ->limit(10)
                 ->get()
                 ->map(function ($item) {
                     return [
                         'name' => $item->desa->n_desa ?? 'N/A',
-                        'value' => $item->value
+                        'value' => (int) $item->value,
+                        'paguJt' => round((float) $item->paguJt, 2),
                     ];
                 });
             
@@ -291,6 +461,7 @@ class DashboardController extends Controller
                     'totalPagu' => $totalPagu,
                     'kegiatanPerTahun' => $kegiatanPerTahun,
                     'kegiatanPerSumberDana' => $kegiatanPerSumberDana,
+                    'subKegiatanStats' => $subKegiatanStats,
                     'paguPerTahun' => $paguPerTahun,
                     'availableYears' => $availableYears,
                     'totalPekerjaan' => $totalPekerjaan,
@@ -300,6 +471,7 @@ class DashboardController extends Controller
                     'pekerjaanBatal' => $pekerjaanBatal,
                     'pekerjaanBerkontrak' => $pekerjaanBerkontrak,
                     'pekerjaanBelumBerkontrak' => $pekerjaanBelumBerkontrak,
+                    'pekerjaanBatal' => $pekerjaanBatal,
                     'pekerjaanFisik' => $pekerjaanFisik,
                     'pekerjaanKonsultan' => $pekerjaanKonsultan,
                     'pekerjaanFisikBerkontrak' => $pekerjaanFisikBerkontrak,
@@ -331,10 +503,20 @@ class DashboardController extends Controller
     {
         $tahun = (int) ($request->query('tahun') ?? date('Y'));
         $pekerjaanIds = $request->query('pekerjaan_ids');
+        $kecamatanIds = $request->query('kecamatan_ids');
+        if ($kecamatanIds && is_string($kecamatanIds)) {
+            $kecamatanIds = explode(',', $kecamatanIds);
+        }
+        $kecamatanIds = $kecamatanIds
+            ? array_map('intval', array_filter((array) $kecamatanIds, fn($v) => $v !== ''))
+            : null;
 
         // Active pekerjaan for tahun (exclude canceled)
         $basePekerjaanQuery = Pekerjaan::notCanceled()
             ->whereHas('kegiatan', fn($q) => $q->where('tahun_anggaran', $tahun));
+        if ($kecamatanIds) {
+            $basePekerjaanQuery->whereIn('kecamatan_id', $kecamatanIds);
+        }
 
         if ($pekerjaanIds) {
             $activeIds = $basePekerjaanQuery->pluck('id')->map('intval')->toArray();
@@ -362,10 +544,9 @@ class DashboardController extends Controller
             9 => 'Sep', 10 => 'Okt', 11 => 'Nov', 12 => 'Des',
         ];
 
-        // All realisasi entries newest-first
+        // Semua entri estimasi (rencana + realisasi) tahun ini, terbaru dulu
         $historyRecords = PekerjaanProgressEstimasiHistory::query()
             ->whereIn('pekerjaan_id', $ids)
-            ->where('tipe', 'realisasi')
             ->whereRaw('YEAR(tanggal) = ?', [$tahun])
             ->orderBy('tanggal', 'desc')
             ->orderBy('id', 'desc')
@@ -373,67 +554,65 @@ class DashboardController extends Controller
 
         $paguByPekerjaan = Pekerjaan::whereIn('id', $ids)->pluck('pagu', 'id');
 
-        // Latest persen per (pekerjaan_id, jenis, month)
-        // Rows are newest-first, first hit wins
-        $latest = [];
+        // 1. Realisasi fisik: latest persen per (pekerjaan, bulan) — carry forward
+        // 2. Rencana fisik: rencana% per (pekerjaan, bulan)
+        // 3. Keuangan: nominal SP2D asli (kolom `nilai`) dari realisasi/keuangan
+        $latestFisik = [];     // pid => [month => persen]
+        $latestRencana = [];   // pid => [month => persen]
+        $sp2dByMonth = [];     // month => sum of nilai
+
         foreach ($historyRecords as $r) {
             $pid = (int) $r->pekerjaan_id;
             $m = (int) $r->tanggal->month;
-            $jenis = $r->jenis;
-            $latest[$pid][$jenis][$m] ??= (float) $r->persen;
+
+            if ($r->tipe === 'realisasi' && $r->jenis === 'fisik') {
+                $latestFisik[$pid][$m] ??= (float) $r->persen;
+            } elseif ($r->tipe === 'rencana' && $r->jenis === 'fisik') {
+                $latestRencana[$pid][$m] ??= (float) $r->persen;
+            } elseif ($r->tipe === 'realisasi' && $r->jenis === 'keuangan') {
+                // Ambil nilai SP2D asli, bukan estimasi (delta% × pagu)
+                $sp2dByMonth[$m] = ($sp2dByMonth[$m] ?? 0) + (float) ($r->nilai ?? 0);
+            }
         }
 
-        // Aggregate by month (carry forward cross-month)
+        // Aggregate fisik: carry forward per-paket
         $months = range(1, 12);
         $fisikSum = array_fill(1, 12, 0.0);
+        $rencanaSum = array_fill(1, 12, 0.0);
         $fisikCount = array_fill(1, 12, 0);
-        $keuanganNominal = array_fill(1, 12, 0.0);
+        $rencanaCount = array_fill(1, 12, 0);
 
-        foreach ($latest as $pid => $byJenis) {
-            $pagu = (float) ($paguByPekerjaan[$pid] ?? 0);
-            if ($pagu <= 0) continue;
-
-            $prevFisik = null;
-            $prevKeuangan = null;
-
+        foreach ($latestFisik as $pid => $byMonth) {
+            $prev = null;
             foreach ($months as $m) {
-                // Cumulative before this month's update (for delta)
-                $keuanganBefore = $prevKeuangan;
-
-                // Current month value or carry forward
-                if (isset($byJenis['fisik'][$m])) {
-                    $prevFisik = $byJenis['fisik'][$m];
-                }
-                if (isset($byJenis['keuangan'][$m])) {
-                    $prevKeuangan = $byJenis['keuangan'][$m];
-                }
-
-                if ($prevFisik !== null) {
-                    $fisikSum[$m] += $prevFisik;
+                if (isset($byMonth[$m])) $prev = $byMonth[$m];
+                if ($prev !== null) {
+                    $fisikSum[$m] += $prev;
                     $fisikCount[$m]++;
                 }
-
-                // Incremental disbursement = cumulative % now minus before
-                if ($prevKeuangan !== null && $pagu > 0) {
-                    $delta = max(0, $prevKeuangan - ($keuanganBefore ?? 0));
-                    $keuanganNominal[$m] += ($delta / 100) * $pagu;
+            }
+        }
+        foreach ($latestRencana as $pid => $byMonth) {
+            $prev = null;
+            foreach ($months as $m) {
+                if (isset($byMonth[$m])) $prev = $byMonth[$m];
+                if ($prev !== null) {
+                    $rencanaSum[$m] += $prev;
+                    $rencanaCount[$m]++;
                 }
             }
         }
 
-        // Denominator: total pekerjaan yang pernah input fisik realisasi di tahun ini.
-        // Pembagi tetap supaya rata-rata tidak turun saat lebih banyak paket masuk datanya.
-        $totalFisikJobs = 0;
-        foreach ($latest as $byJenis) {
-            if (!empty($byJenis['fisik'])) $totalFisikJobs++;
-        }
+        $totalFisikJobs = count($latestFisik);
 
         $monthlyTrend = [];
         foreach ($months as $m) {
             $monthlyTrend[] = [
                 'month' => $monthNames[$m] ?? "B{$m}",
-                'fisik_avg' => $totalFisikJobs > 0 ? round($fisikSum[$m] / $totalFisikJobs, 1) : 0,
-                'keuangan_sum' => round($keuanganNominal[$m]),
+                'fisik_avg'  => $fisikCount[$m] > 0 ? round($fisikSum[$m] / $fisikCount[$m], 1) : 0,
+                'rencana_avg' => $rencanaCount[$m] > 0 ? round($rencanaSum[$m] / $rencanaCount[$m], 1) : 0,
+                // nominal SP2D asli dari tabel history (bukan estimasi)
+                'keuangan_sum' => round($sp2dByMonth[$m] ?? 0),
             ];
         }
 
@@ -442,9 +621,48 @@ class DashboardController extends Controller
             'data' => [
                 'monthly_trend' => $monthlyTrend,
                 'totals' => [
-                    'keuangan_total' => round(array_sum($keuanganNominal)),
+                    // Total SP2D asli tahun berjalan
+                    'keuangan_total' => round(array_sum($sp2dByMonth)),
                 ],
             ],
         ]);
+    }
+
+    /**
+     * Progress berbobot 0–100 dari content JSON tbl_progress.
+     * Return null kalau paket belum punya item valid (biar tidak dihitung sebagai 0%).
+     */
+    private static function weightedProgressFromContent(?array $content): ?float
+    {
+        $items = $content['items'] ?? [];
+        if (!$items) {
+            return null;
+        }
+
+        $weighted = 0.0;
+        $weight = 0.0;
+
+        foreach ($items as $item) {
+            $bobot = (float) ($item['bobot'] ?? 0);
+            $targetVolume = (float) ($item['target_volume'] ?? 0);
+            if ($bobot <= 0 || $targetVolume <= 0) {
+                continue;
+            }
+
+            $realisasi = 0.0;
+            foreach ($item['weekly_data'] ?? [] as $week) {
+                $realisasi += (float) ($week['realisasi'] ?? 0);
+            }
+
+            $weighted += ($realisasi / $targetVolume) * $bobot;
+            $weight += $bobot;
+        }
+
+        if ($weight <= 0) {
+            return null;
+        }
+
+        // Normalisasi kalau total bobot tidak genap 100.
+        return min(100.0, $weighted * (100.0 / $weight));
     }
 }

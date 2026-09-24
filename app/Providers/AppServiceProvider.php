@@ -2,13 +2,16 @@
 
 namespace App\Providers;
 
+use App\Listeners\SendMediaToPaperlessListener;
 use App\Services\MailConfigService;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\URL;
 use Illuminate\Support\ServiceProvider;
+use Spatie\MediaLibrary\MediaCollections\Events\MediaHasBeenAdded;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -71,5 +74,10 @@ class AppServiceProvider extends ServiceProvider
         } catch (\Throwable) {
             // Ignore during install/migrate when DB is unavailable.
         }
+
+        Event::listen(
+            MediaHasBeenAdded::class,
+            SendMediaToPaperlessListener::class
+        );
     }
 }
