@@ -111,7 +111,7 @@ class SpseProcurementController extends Controller
     {
         $validated = $request->validate([
             'sync_run_id' => 'nullable|integer|exists:tbl_procurement_sync_runs,id',
-            'match_status' => 'nullable|string|in:unmatched,exact_kode_paket,fuzzy_nama_paket,manual_map',
+            'match_status' => 'nullable|string|in:unmatched,exact_kode_paket,fuzzy_nama_paket,manual_map,promoted_draft',
             'search' => 'nullable|string|max:200',
             'tahun' => 'nullable|string|max:4',
             'page' => 'nullable|integer|min:1',
@@ -120,9 +120,19 @@ class SpseProcurementController extends Controller
 
         $query = ProcurementStagingPaket::query()
             ->with(['pekerjaan:id,nama_paket', 'kontrak:id,kode_paket,spk'])
+            ->whereHas('syncRun', function ($q) {
+                $q->where('user_id', auth()->id());
+            })
             ->orderByDesc('id');
 
         if (! empty($validated['sync_run_id'])) {
+            $owned = ProcurementSyncRun::query()
+                ->where('id', $validated['sync_run_id'])
+                ->where('user_id', auth()->id())
+                ->exists();
+            if (! $owned) {
+                return response()->json(['message' => 'Sync run tidak ditemukan.'], 403);
+            }
             $query->where('sync_run_id', $validated['sync_run_id']);
         } else {
             $latestRunId = ProcurementSyncRun::query()
@@ -245,7 +255,10 @@ class SpseProcurementController extends Controller
         $skipped = 0;
         $results = [];
 
-        $items = ProcurementStagingPaket::query()->whereIn('id', $validated['ids'])->get();
+        $items = ProcurementStagingPaket::query()
+            ->whereIn('id', $validated['ids'])
+            ->whereHas('syncRun', fn ($q) => $q->where('user_id', auth()->id()))
+            ->get();
         foreach ($items as $item) {
             if ($item->match_status === 'unmatched' && ! $item->matched_pekerjaan_id) {
                 $skipped++;
@@ -426,7 +439,9 @@ class SpseProcurementController extends Controller
             'pekerjaan_id' => 'required|integer|exists:tbl_pekerjaan,id',
         ]);
 
-        $staging = ProcurementStagingPaket::query()->findOrFail($validated['id']);
+        $staging = ProcurementStagingPaket::query()
+            ->whereHas('syncRun', fn ($q) => $q->where('user_id', auth()->id()))
+            ->findOrFail($validated['id']);
         $pekerjaan = \App\Models\Pekerjaan::query()->findOrFail($validated['pekerjaan_id']);
         $kontrak = $pekerjaan->kontrak()->first();
 
@@ -458,7 +473,10 @@ class SpseProcurementController extends Controller
         $skipped = 0;
         $results = [];
 
-        $items = ProcurementStagingPaket::query()->whereIn('id', $validated['ids'])->get();
+        $items = ProcurementStagingPaket::query()
+            ->whereIn('id', $validated['ids'])
+            ->whereHas('syncRun', fn ($q) => $q->where('user_id', auth()->id()))
+            ->get();
         foreach ($items as $item) {
             try {
                 $result = $matchingService->promoteToDraft($item, [
