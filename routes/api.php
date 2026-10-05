@@ -284,7 +284,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('survey-lokasi/{survey_lokasi}/verifikasi', [SurveyLokasiController::class, 'verifikasi'])->middleware('role:admin');
     Route::post('survey-lokasi/{survey_lokasi}/foto', [SurveyLokasiController::class, 'uploadFoto']);
     Route::delete('survey-lokasi/{survey_lokasi}/foto/{mediaId}', [SurveyLokasiController::class, 'deleteFoto']);
-    Route::apiResource('survey-tugas', SurveyTugasController::class)->except(['store', 'update', 'destroy']);
+    Route::apiResource('survey-tugas', SurveyTugasController::class)->except(['store', 'update', 'destroy'])->parameters(['survey-tugas' => 'survey_tugas']);
     Route::post('survey-tugas', [SurveyTugasController::class, 'store'])->middleware('role:admin');
     Route::put('survey-tugas/{survey_tugas}', [SurveyTugasController::class, 'update'])->middleware('role:admin');
     Route::patch('survey-tugas/{survey_tugas}', [SurveyTugasController::class, 'update'])->middleware('role:admin');
