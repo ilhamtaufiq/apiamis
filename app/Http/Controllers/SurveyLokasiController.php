@@ -78,6 +78,30 @@ class SurveyLokasiController extends Controller
     }
 
     /**
+     * Peran yang boleh mengisi survey lapangan (selain admin).
+     */
+    public const SURVEY_ROLES = ['tfl', 'operator', 'pengawas', 'konsultan_pengawas'];
+
+    private function canSurvey($user): bool
+    {
+        if (!$user) {
+            return false;
+        }
+        if ($user->hasRole('admin')) {
+            return true;
+        }
+
+        return $user->hasRole(self::SURVEY_ROLES);
+    }
+
+    private function denySurveyRole()
+    {
+        return response()->json([
+            'message' => 'Forbidden. Hanya admin, TFL, operator, pengawas, atau konsultan pengawas yang dapat mengisi survey.',
+        ], 403);
+    }
+
+    /**
      * Normalisasi `detail` yang dikirim sebagai string JSON (mode multipart
      * + foto dari aplikasi survey) menjadi array sebelum validasi.
      */
@@ -278,6 +302,10 @@ class SurveyLokasiController extends Controller
             return response()->json(['message' => 'Unauthorized'], 401);
         }
 
+        if (!$this->canSurvey($user)) {
+            return $this->denySurveyRole();
+        }
+
         if ($request->filled('tugas_id')) {
             $earlyTugas = \App\Models\SurveyTugas::find($request->tugas_id);
             if ($earlyTugas && $earlyTugas->jenis && empty($request->jenis)) {
@@ -362,6 +390,10 @@ class SurveyLokasiController extends Controller
 
         $isAdmin = $user->hasRole('admin');
 
+        if (!$isAdmin && !$this->canSurvey($user)) {
+            return $this->denySurveyRole();
+        }
+
         if (!$isAdmin && $surveyLokasi->user_id !== $user->id) {
             return response()->json(['message' => 'Forbidden'], 403);
         }
@@ -428,6 +460,10 @@ class SurveyLokasiController extends Controller
 
         $isAdmin = $user->hasRole('admin');
 
+        if (!$isAdmin && !$this->canSurvey($user)) {
+            return $this->denySurveyRole();
+        }
+
         if (!$isAdmin && $surveyLokasi->user_id !== $user->id) {
             return response()->json(['message' => 'Forbidden'], 403);
         }
@@ -487,6 +523,10 @@ class SurveyLokasiController extends Controller
 
         $isAdmin = $user->hasRole('admin');
 
+        if (!$isAdmin && !$this->canSurvey($user)) {
+            return $this->denySurveyRole();
+        }
+
         if (!$isAdmin && $surveyLokasi->user_id !== $user->id) {
             return response()->json(['message' => 'Forbidden'], 403);
         }
@@ -525,6 +565,10 @@ class SurveyLokasiController extends Controller
         }
 
         $isAdmin = $user->hasRole('admin');
+
+        if (!$isAdmin && !$this->canSurvey($user)) {
+            return $this->denySurveyRole();
+        }
 
         if (!$isAdmin && $surveyLokasi->user_id !== $user->id) {
             return response()->json(['message' => 'Forbidden'], 403);

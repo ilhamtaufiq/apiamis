@@ -55,6 +55,8 @@ class CheckRoutePermission
         '/events',
         '/tags',
         '/spam-units',
+        '/survey-lokasi',
+        '/survey-tugas',
         '/checklist-items',
         '/pekerjaan-checklist',
         '/pengawas',
