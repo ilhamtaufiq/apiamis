@@ -53,6 +53,8 @@ use App\Http\Controllers\SimulationNetworkController;
 use App\Http\Controllers\ArumanisInsightController;
 use App\Http\Controllers\SpamUnitController;
 use App\Http\Controllers\SpmSanitasiController;
+use App\Http\Controllers\SurveyLokasiController;
+use App\Http\Controllers\SurveyTugasController;
 use App\Http\Controllers\SpseProcurementController;
 use App\Http\Controllers\SipdPekerjaanLinkController;
 use App\Http\Controllers\TagController;
@@ -276,6 +278,17 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('spm-sanitasi/import/template', [SpmSanitasiController::class, 'downloadTemplate']);
     Route::post('spm-sanitasi/import', [SpmSanitasiController::class, 'import']);
     Route::apiResource('spm-sanitasi', SpmSanitasiController::class);
+    // Survei Lokasi Pembangunan (SPAM, sumur bor, MCK) — stats sebelum apiResource
+    Route::get('survey-lokasi/stats', [SurveyLokasiController::class, 'stats']);
+    Route::apiResource('survey-lokasi', SurveyLokasiController::class);
+    Route::post('survey-lokasi/{survey_lokasi}/verifikasi', [SurveyLokasiController::class, 'verifikasi'])->middleware('role:admin');
+    Route::post('survey-lokasi/{survey_lokasi}/foto', [SurveyLokasiController::class, 'uploadFoto']);
+    Route::delete('survey-lokasi/{survey_lokasi}/foto/{mediaId}', [SurveyLokasiController::class, 'deleteFoto']);
+    Route::apiResource('survey-tugas', SurveyTugasController::class)->except(['store', 'update', 'destroy']);
+    Route::post('survey-tugas', [SurveyTugasController::class, 'store'])->middleware('role:admin');
+    Route::put('survey-tugas/{survey_tugas}', [SurveyTugasController::class, 'update'])->middleware('role:admin');
+    Route::patch('survey-tugas/{survey_tugas}', [SurveyTugasController::class, 'update'])->middleware('role:admin');
+    Route::delete('survey-tugas/{survey_tugas}', [SurveyTugasController::class, 'destroy'])->middleware('role:admin');
     Route::apiResource('kecamatan', KecamatanController::class);
     Route::post('desa/sync-kk', [DesaController::class, 'syncKk']);
     Route::get('desa/{desa}/profile', [DesaController::class, 'profile']);
