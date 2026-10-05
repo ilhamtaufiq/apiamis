@@ -328,7 +328,7 @@ class SurveyLokasiController extends Controller
                 return response()->json(['message' => 'Tugas survey tidak ditemukan.'], 404);
             }
             $isAdmin = $user->hasRole('admin');
-            if (!$isAdmin && $tugas->assignee_id !== $user->id) {
+            if (!$isAdmin && !$tugas->isAssignee($user->id)) {
                 return response()->json(['message' => 'Forbidden'], 403);
             }
             if ($tugas->jenis) {
@@ -415,7 +415,7 @@ class SurveyLokasiController extends Controller
             if (!$tugas) {
                 return response()->json(['message' => 'Tugas survey tidak ditemukan.'], 404);
             }
-            if (!$isAdmin && $tugas->assignee_id !== $user->id) {
+            if (!$isAdmin && !$tugas->isAssignee($user->id)) {
                 return response()->json(['message' => 'Forbidden'], 403);
             }
             if ($tugas->jenis) {

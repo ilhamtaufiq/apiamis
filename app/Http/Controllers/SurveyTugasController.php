@@ -21,10 +21,13 @@ class SurveyTugasController extends Controller
             return response()->json(['message' => 'Unauthorized'], 401);
         }
 
-        $query = SurveyTugas::with(['pekerjaan', 'kecamatan', 'desa', 'assignee'])->withCount('surveys');
+        $query = SurveyTugas::with(['pekerjaan', 'kecamatan', 'desa', 'assignee', 'assignees'])->withCount('surveys');
 
         if (!$user->hasRole('admin')) {
-            $query->where('assignee_id', $user->id);
+            $query->where(function ($q) use ($user) {
+                $q->where('assignee_id', $user->id)
+                    ->orWhereHas('assignees', fn ($a) => $a->where('users.id', $user->id));
+            });
         }
 
         if ($request->filled('tahun_anggaran')) {
@@ -36,7 +39,10 @@ class SurveyTugasController extends Controller
         }
 
         if ($request->filled('assignee_id') && $user->hasRole('admin')) {
-            $query->where('assignee_id', $request->assignee_id);
+            $query->where(function ($q) use ($request) {
+                $q->where('assignee_id', $request->assignee_id)
+                    ->orWhereHas('assignees', fn ($a) => $a->where('users.id', $request->assignee_id));
+            });
         }
 
         if ($request->filled('search')) {
@@ -71,10 +77,45 @@ class SurveyTugasController extends Controller
             'desa_id' => 'nullable|exists:tbl_desa,id',
             'lokasi_catatan' => 'nullable|string',
             'assignee_id' => $required . '|exists:users,id',
+            'assignee_ids' => 'nullable|array|min:1|max:20',
+            'assignee_ids.*' => 'exists:users,id',
             'status' => 'nullable|in:ditugaskan,dikerjakan,selesai',
             'batas_waktu' => 'nullable|date',
             'catatan_admin' => 'nullable|string',
         ];
+    }
+
+    private const SURVEY_ROLE_NAMES = ['admin', 'tfl', 'pengawas', 'konsultan_pengawas', 'operator'];
+
+    /**
+     * @return array{ids: list<int>|null, error: \Illuminate\Http\JsonResponse|null}
+     */
+    private function resolveAssignees(Request $request): array
+    {
+        $ids = $request->input('assignee_ids');
+        if ($ids === null && $request->filled('assignee_id')) {
+            $ids = [$request->assignee_id];
+        }
+        if (!is_array($ids) || empty($ids)) {
+            return ['ids' => null, 'error' => null];
+        }
+
+        $ids = array_values(array_unique(array_map('intval', $ids)));
+        $users = User::whereIn('id', $ids)->get()->keyBy('id');
+        foreach ($ids as $id) {
+            $u = $users->get($id);
+            if (!$u || !$u->hasRole(self::SURVEY_ROLE_NAMES)) {
+                return [
+                    'ids' => null,
+                    'error' => response()->json([
+                        'message' => 'Validation error',
+                        'errors' => ['assignee_ids' => ['Penanggung jawab harus memiliki salah satu role: admin, tfl, pengawas, konsultan_pengawas, operator.']],
+                    ], 422),
+                ];
+            }
+        }
+
+        return ['ids' => $ids, 'error' => null];
     }
 
     /**
@@ -93,12 +134,18 @@ class SurveyTugasController extends Controller
             return response()->json(['message' => 'Validation error', 'errors' => $validator->errors()], 422);
         }
 
-        $assignee = User::find($request->assignee_id);
-        if (!$assignee || !$assignee->hasRole(['admin', 'tfl', 'pengawas', 'konsultan_pengawas', 'operator'])) {
-            return response()->json([
-                'message' => 'Validation error',
-                'errors' => ['assignee_id' => ['Penanggung jawab harus memiliki salah satu role: admin, tfl, pengawas, konsultan_pengawas, operator.']],
-            ], 422);
+        $resolved = $this->resolveAssignees($request);
+        if ($resolved['error']) {
+            return $resolved['error'];
+        }
+        if ($resolved['ids'] === null) {
+            $assignee = User::find($request->assignee_id);
+            if (!$assignee || !$assignee->hasRole(self::SURVEY_ROLE_NAMES)) {
+                return response()->json([
+                    'message' => 'Validation error',
+                    'errors' => ['assignee_id' => ['Penanggung jawab harus memiliki salah satu role: admin, tfl, pengawas, konsultan_pengawas, operator.']],
+                ], 422);
+            }
         }
 
         $data = $request->only([
@@ -124,9 +171,14 @@ class SurveyTugasController extends Controller
             }
         }
 
-        $tugas = SurveyTugas::create($data);
+        if ($resolved['ids'] !== null) {
+            $data['assignee_id'] = $resolved['ids'][0];
+        }
 
-        return (new SurveyTugasResource($tugas->load(['pekerjaan', 'kecamatan', 'desa', 'assignee', 'creator'])->loadCount('surveys')))
+        $tugas = SurveyTugas::create($data);
+        $tugas->syncAssignees($resolved['ids'] ?? [$tugas->assignee_id]);
+
+        return (new SurveyTugasResource($tugas->load(['pekerjaan', 'kecamatan', 'desa', 'assignee', 'assignees', 'creator'])->loadCount('surveys')))
             ->response()
             ->setStatusCode(201);
     }
@@ -142,11 +194,11 @@ class SurveyTugasController extends Controller
         }
 
         $isAdmin = $user->hasRole('admin');
-        if (!$isAdmin && $surveyTugas->assignee_id !== $user->id) {
+        if (!$isAdmin && !$surveyTugas->isAssignee($user->id)) {
             return response()->json(['message' => 'Forbidden'], 403);
         }
 
-        $surveyTugas->load(['pekerjaan', 'kecamatan', 'desa', 'assignee', 'creator']);
+        $surveyTugas->load(['pekerjaan', 'kecamatan', 'desa', 'assignee', 'assignees', 'creator']);
         $surveyTugas->load(['surveys' => function ($q) {
             $q->with('user')->latest();
         }]);
@@ -165,13 +217,13 @@ class SurveyTugasController extends Controller
             return response()->json(['message' => 'Validation error', 'errors' => $validator->errors()], 422);
         }
 
-        if ($request->filled('assignee_id')) {
-            $assignee = User::find($request->assignee_id);
-            if (!$assignee || !$assignee->hasRole(['admin', 'tfl', 'pengawas', 'konsultan_pengawas', 'operator'])) {
-                return response()->json([
-                    'message' => 'Validation error',
-                    'errors' => ['assignee_id' => ['Penanggung jawab harus memiliki salah satu role: admin, tfl, pengawas, konsultan_pengawas, operator.']],
-                ], 422);
+        if ($request->filled('assignee_id') || $request->has('assignee_ids')) {
+            $resolved = $this->resolveAssignees($request);
+            if ($resolved['error']) {
+                return $resolved['error'];
+            }
+            if ($resolved['ids'] !== null) {
+                $request->merge(['assignee_id' => $resolved['ids'][0]]);
             }
         }
 
@@ -189,7 +241,14 @@ class SurveyTugasController extends Controller
             'catatan_admin',
         ]));
 
-        return new SurveyTugasResource($surveyTugas->load(['pekerjaan', 'kecamatan', 'desa', 'assignee', 'creator'])->loadCount('surveys'));
+        $assigneeIds = $request->input('assignee_ids');
+        if (is_array($assigneeIds) && !empty($assigneeIds)) {
+            $surveyTugas->syncAssignees($assigneeIds);
+        } elseif ($request->filled('assignee_id')) {
+            $surveyTugas->assignees()->syncWithoutDetaching([(int) $request->assignee_id]);
+        }
+
+        return new SurveyTugasResource($surveyTugas->load(['pekerjaan', 'kecamatan', 'desa', 'assignee', 'assignees', 'creator'])->loadCount('surveys'));
     }
 
     /**

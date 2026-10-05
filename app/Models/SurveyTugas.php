@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Traits\Auditable;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -66,5 +67,41 @@ class SurveyTugas extends Model
     public function surveys(): HasMany
     {
         return $this->hasMany(SurveyLokasi::class, 'tugas_id');
+    }
+
+    /**
+     * Semua penanggung jawab (assignee_id = utama, pertama di daftar).
+     */
+    public function assignees(): BelongsToMany
+    {
+        return $this->belongsToMany(User::class, 'tbl_survey_tugas_assignees', 'survey_tugas_id', 'user_id')
+            ->withTimestamps();
+    }
+
+    public function isAssignee(int|string|null $userId): bool
+    {
+        if ($userId === null) {
+            return false;
+        }
+        if ((string) $this->assignee_id === (string) $userId) {
+            return true;
+        }
+
+        return $this->assignees()->where('users.id', $userId)->exists();
+    }
+
+    /**
+     * @param list<int|string> $userIds
+     */
+    public function syncAssignees(array $userIds): void
+    {
+        $ids = array_values(array_unique(array_map('intval', array_filter($userIds))));
+        if (empty($ids)) {
+            return;
+        }
+        $this->assignees()->sync($ids);
+        if ((string) $this->assignee_id !== (string) $ids[0]) {
+            $this->forceFill(['assignee_id' => $ids[0]])->save();
+        }
     }
 }

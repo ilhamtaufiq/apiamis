@@ -59,6 +59,12 @@ class SurveyTugasResource extends JsonResource
                     'name' => $this->assignee->name,
                 ] : null;
             }),
+            'assignees' => $this->whenLoaded('assignees', function () {
+                return $this->assignees->map(fn ($u) => [
+                    'id' => $u->id,
+                    'name' => $u->name,
+                ])->values()->all();
+            }),
             'creator' => $this->whenLoaded('creator', function () {
                 return $this->creator ? [
                     'id' => $this->creator->id,
