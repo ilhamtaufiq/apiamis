@@ -164,8 +164,10 @@ class SpseKontrakPushService
                 );
             }
             $token = $this->httpClient->resolveAuthenticityToken($session, $spkFormPath);
+            $spkSaveResult = null;
 
             $steps[] = $this->runStep('simpan_spk', function () use (
+                &$spkSaveResult,
                 $session,
                 $token,
                 $sppbjId,
@@ -206,6 +208,7 @@ class SpseKontrakPushService
                     $fields,
                     $spkFormPath,
                 );
+                $spkSaveResult = $result;
                 $this->assertSaveOk($result, 'SPK');
 
                 return [
@@ -217,9 +220,7 @@ class SpseKontrakPushService
                 ];
             });
 
-            $listHtml = $this->httpClient->fetchPage($session, $listPath, '/beranda/nontender');
-            $parsed = $this->htmlParser->extractKontrakListStatus($listHtml);
-            $existingSpkId = $parsed['spk_id'] ?? $existingSpkId;
+            $existingSpkId = $this->resolveSpkIdAfterSave($session, $spkSaveResult, $listPath, $spkFormPath, $existingSpkId);
         }
 
         $spkId = $existingSpkId;
@@ -388,6 +389,61 @@ class SpseKontrakPushService
             'sppbjId tidak ditemukan setelah simpan SPPBJ.'
             .$hint
             .($location !== '' ? " Redirect SPSE: {$location}" : ''),
+        );
+    }
+
+    /**
+     * Cari spkId setelah simpan SPK: redirect, body respons, daftar kontrak, lalu form SPK.
+     * Bila tetap tidak ada, laporkan pesan penolakan dari SPSE agar penyebabnya terlihat.
+     *
+     * @param  array{status: int, body: string, location: ?string}|null  $saveResult
+     */
+    private function resolveSpkIdAfterSave(
+        SpseSession $session,
+        ?array $saveResult,
+        string $listPath,
+        string $spkFormPath,
+        ?string $fallback,
+    ): string {
+        $location = (string) ($saveResult['location'] ?? '');
+        $body = (string) ($saveResult['body'] ?? '');
+
+        $fromSave = $this->htmlParser->extractQueryParam($location, 'spkId')
+            ?? $this->htmlParser->extractQueryParam($body, 'spkId')
+            ?? $this->htmlParser->extractHiddenValue($body, 'spk.spk_id');
+        if ($fromSave && ctype_digit($fromSave)) {
+            return $fromSave;
+        }
+
+        $listHtml = $this->httpClient->fetchPage($session, $listPath, '/beranda/nontender');
+        $status = $this->htmlParser->extractKontrakListStatus($listHtml);
+        $fromList = $status['spk_id']
+            ?? $this->htmlParser->extractQueryParam($listHtml, 'spkId');
+        if ($fromList) {
+            return $fromList;
+        }
+
+        // Form SPK yang dibuka ulang terisi spk.spk_id bila SPK sudah tersimpan.
+        $formHtml = $this->httpClient->fetchPage($session, $spkFormPath, $listPath);
+        $fromForm = $this->htmlParser->extractHiddenValue($formHtml, 'spk.spk_id');
+        if ($fromForm && ctype_digit($fromForm)) {
+            return $fromForm;
+        }
+
+        if ($fallback !== null && $fallback !== '' && ctype_digit($fallback)) {
+            return $fallback;
+        }
+
+        $messages = array_merge(
+            $this->htmlParser->extractSpseUserMessages($body),
+            $this->htmlParser->extractSpseUserMessages($formHtml),
+        );
+        $hint = $messages !== [] ? ' Pesan SPSE: '.implode(' | ', array_unique($messages)).'.' : '';
+        $detail = ' (HTTP '.($saveResult['status'] ?? '?').($location !== '' ? ', redirect '.$location : '').')';
+
+        throw new \RuntimeException(
+            'SPK tidak tercatat di SPSE setelah simpan'.$detail.'.'.$hint
+            .' Periksa isian SPK (nomor/tanggal SPK, nilai) di SPSE untuk paket ini.',
         );
     }
 
