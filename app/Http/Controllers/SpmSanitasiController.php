@@ -286,6 +286,12 @@ class SpmSanitasiController extends Controller
     public function store(Request $request): JsonResponse
     {
         $validated = $this->validatePayload($request);
+        // Auto-create dari paket pekerjaan menandai nilainya sebagai hasil integrasi,
+        // sehingga ikut diperbarui saat tautan paket berubah.
+        $validated += $request->validate([
+            'pemanfaat_dari_integrasi' => 'sometimes|boolean',
+            'pembiayaan_dari_integrasi' => 'sometimes|boolean',
+        ]);
         $item = SpmSanitasi::create($validated);
 
         return response()->json([
@@ -298,6 +304,18 @@ class SpmSanitasiController extends Controller
     public function update(Request $request, SpmSanitasi $spmSanitasi): JsonResponse
     {
         $validated = $this->validatePayload($request, false);
+
+        // Nilai yang diubah manual tidak lagi ditimpa oleh sinkronisasi paket tertaut.
+        if ($this->changedAny($spmSanitasi, $validated, ['jumlah_pemanfaat_kk', 'jumlah_pemanfaat_jiwa'])) {
+            $validated['pemanfaat_dari_integrasi'] = false;
+        }
+        if ($this->changedAny($spmSanitasi, $validated, [
+            'pembiayaan_apbn', 'pembiayaan_apbd', 'pembiayaan_dak', 'pembiayaan_hibah',
+            'pembiayaan_csr', 'pembiayaan_lain', 'pembiayaan_total',
+        ])) {
+            $validated['pembiayaan_dari_integrasi'] = false;
+        }
+
         $spmSanitasi->update($validated);
 
         return response()->json([
@@ -362,6 +380,29 @@ class SpmSanitasiController extends Controller
     public function downloadTemplate()
     {
         return Excel::download(new SpmSanitasiExport(), 'template_spm_sanitasi.xlsx');
+    }
+
+    /**
+     * @param  array<string, mixed>  $validated
+     * @param  list<string>  $fields
+     */
+    private function changedAny(SpmSanitasi $item, array $validated, array $fields): bool
+    {
+        foreach ($fields as $field) {
+            if (! array_key_exists($field, $validated)) {
+                continue;
+            }
+            $before = $item->getAttribute($field);
+            $after = $validated[$field];
+            if ($before === null && $after === null) {
+                continue;
+            }
+            if ($before === null || $after === null || (float) $before !== (float) $after) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private function validatePayload(Request $request, bool $requireJenis = true): array

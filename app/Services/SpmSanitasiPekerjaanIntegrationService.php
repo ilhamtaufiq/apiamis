@@ -6,6 +6,7 @@ use App\Models\Desa;
 use App\Models\Output;
 use App\Models\Pekerjaan;
 use App\Models\SpmSanitasi;
+use App\Support\OutputSatuan;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
 
@@ -42,8 +43,9 @@ class SpmSanitasiPekerjaanIntegrationService
         // 1) SPALDT / IPAL / IPLT (terpusat) — HARUS sebelum SPALDS.
         //    Bug lama: "SPALD-T" → "spald t" lolos rule spald+s (huruf s di "spald")
         //    dan terklasifikasi sebagai tangki septik / SPALDS.
-        $isTerpusat = str_contains($compact, 'ipal')
-            || str_contains($compact, 'iplt')
+        // IPAL/IPLT harus di awal kata: bentuk compact membuat "pipa lateral" → "pipalateral"
+        // dan "pipa lingkungan" → "pipalingkungan" ikut cocok dengan "ipal".
+        $isTerpusat = (bool) preg_match('/\b(ipal|iplt)/u', $normalized)
             || str_contains($compact, 'spaldt')
             || (bool) preg_match('/\bspald\s*t\b/u', $normalized);
 
@@ -354,6 +356,10 @@ class SpmSanitasiPekerjaanIntegrationService
 
         $unit = 0;
         foreach ($this->sanitasiOutputsForPekerjaan($pekerjaan) as $output) {
+            // Abaikan volume bersatuan panjang/volume/LS (mis. "SPALD-T pipa 1.200 m").
+            if (! OutputSatuan::isCountable($output['satuan'] ?? null)) {
+                continue;
+            }
             $unit += (int) round((float) $output['volume']);
         }
 
@@ -404,30 +410,87 @@ class SpmSanitasiPekerjaanIntegrationService
         return $parsed >= 1900 && $parsed <= 2100 ? $parsed : null;
     }
 
+    /**
+     * Perbarui master infrastruktur dari paket tertaut.
+     *
+     * - Pemanfaat (KK/jiwa) & pembiayaan diisi dari paket bila kosong atau sebelumnya
+     *   memang berasal dari integrasi (flag *_dari_integrasi). Isian manual tidak ditimpa.
+     * - Bila semua tautan dilepas, nilai yang berasal dari integrasi direset.
+     * - Satu paket bisa tertaut ke beberapa master (mis. IPAL → SPALDT & IPLT, atau
+     *   IPAL + MCK). KK & biaya paket hanya dihitung pada master dengan id terkecil
+     *   agar capaian dan investasi tidak dobel.
+     */
     public function syncInfrastrukturFromLinkedPekerjaan(SpmSanitasi $spmSanitasi): SpmSanitasi
     {
-        $spmSanitasi->load(['pekerjaan.kegiatan', 'pekerjaan.kontrak']);
+        $spmSanitasi->load([
+            'pekerjaan.kegiatan',
+            'pekerjaan.kontrak',
+            'pekerjaan.output',
+            'pekerjaan.penerima',
+            'pekerjaan.progress',
+            'pekerjaan.spmSanitasi',
+        ]);
+
+        $updates = [];
 
         if ($spmSanitasi->pekerjaan->isEmpty()) {
-            return $spmSanitasi;
+            if ($spmSanitasi->pemanfaat_dari_integrasi) {
+                $updates += [
+                    'jumlah_pemanfaat_kk' => null,
+                    'jumlah_pemanfaat_jiwa' => null,
+                    'pemanfaat_dari_integrasi' => false,
+                ];
+            }
+            if ($spmSanitasi->pembiayaan_dari_integrasi) {
+                $updates += [
+                    'pembiayaan_total' => null,
+                    'pembiayaan_dari_integrasi' => false,
+                ];
+            }
+            if ($updates !== []) {
+                $spmSanitasi->update($updates);
+            }
+
+            return $spmSanitasi->fresh();
         }
 
+        $kkTotal = 0;
+        $jiwaTotal = 0;
         $pembiayaanTotal = 0.0;
         $tahunCandidates = [];
 
         foreach ($spmSanitasi->pekerjaan as $pekerjaan) {
-            $pembiayaanTotal += $this->resolvePembiayaanFromPekerjaan($pekerjaan);
-
             $tahun = $this->resolveTahunKonstruksiFromPekerjaan($pekerjaan);
             if ($tahun !== null) {
                 $tahunCandidates[] = $tahun;
             }
+
+            $ownerId = (int) $pekerjaan->spmSanitasi->min('id');
+            if ($ownerId !== (int) $spmSanitasi->id) {
+                continue;
+            }
+
+            $metrics = $this->derivedMetricsForPekerjaan($pekerjaan);
+            $kkTotal += $metrics['kk'];
+            $jiwaTotal += $metrics['jiwa'];
+            $pembiayaanTotal += $metrics['nilai_kontrak'];
         }
 
-        $updates = [];
+        $pemanfaatKosong = ((int) ($spmSanitasi->jumlah_pemanfaat_kk ?? 0)) === 0;
+        if ($spmSanitasi->pemanfaat_dari_integrasi || ($pemanfaatKosong && $kkTotal > 0)) {
+            $updates += [
+                'jumlah_pemanfaat_kk' => $kkTotal > 0 ? $kkTotal : null,
+                'jumlah_pemanfaat_jiwa' => $kkTotal > 0 ? $jiwaTotal : null,
+                'pemanfaat_dari_integrasi' => true,
+            ];
+        }
 
-        if ($pembiayaanTotal > 0) {
-            $updates['pembiayaan_total'] = $pembiayaanTotal;
+        $pembiayaanKosong = ((float) ($spmSanitasi->pembiayaan_total ?? 0)) <= 0;
+        if ($spmSanitasi->pembiayaan_dari_integrasi || ($pembiayaanKosong && $pembiayaanTotal > 0)) {
+            $updates += [
+                'pembiayaan_total' => $pembiayaanTotal > 0 ? $pembiayaanTotal : null,
+                'pembiayaan_dari_integrasi' => true,
+            ];
         }
 
         if ($spmSanitasi->tahun_konstruksi === null && $tahunCandidates !== []) {
@@ -439,6 +502,21 @@ class SpmSanitasiPekerjaanIntegrationService
         }
 
         return $spmSanitasi->fresh();
+    }
+
+    /**
+     * Sinkronkan ulang semua master yang tertaut ke paket ini (kepemilikan KK/biaya
+     * paket bisa berpindah saat tautan ditambah/dilepas).
+     */
+    private function resyncInfrastrukturSharingPekerjaan(SpmSanitasi $current, int $pekerjaanId): void
+    {
+        $this->syncInfrastrukturFromLinkedPekerjaan($current);
+
+        SpmSanitasi::query()
+            ->where('id', '!=', $current->id)
+            ->whereHas('pekerjaan', fn (Builder $q) => $q->where('tbl_pekerjaan.id', $pekerjaanId))
+            ->get()
+            ->each(fn (SpmSanitasi $other) => $this->syncInfrastrukturFromLinkedPekerjaan($other));
     }
 
     public function formatSanitasiPekerjaan(Pekerjaan $pekerjaan, ?int $linkedSpmId = null): array
@@ -723,7 +801,7 @@ class SpmSanitasiPekerjaanIntegrationService
             $pekerjaanId => ['output_id' => $resolvedOutputId],
         ]);
 
-        $this->syncInfrastrukturFromLinkedPekerjaan($spmSanitasi);
+        $this->resyncInfrastrukturSharingPekerjaan($spmSanitasi, $pekerjaanId);
     }
 
     public static function outputMatchesSpmJenis(?string $outputType, string $spmJenis): bool
@@ -748,7 +826,7 @@ class SpmSanitasiPekerjaanIntegrationService
     {
         $spmSanitasi->pekerjaan()->detach($pekerjaanId);
 
-        $this->syncInfrastrukturFromLinkedPekerjaan($spmSanitasi);
+        $this->resyncInfrastrukturSharingPekerjaan($spmSanitasi, $pekerjaanId);
     }
 
     /**
