@@ -26,20 +26,34 @@ class SpseHttpClient
 
     public function validateSession(SpseSession $session): bool
     {
+        return $this->diagnoseSession($session) === null;
+    }
+
+    /**
+     * @return string|null null bila session valid, selain itu alasan singkat kegagalan.
+     */
+    public function diagnoseSession(SpseSession $session): ?string
+    {
         try {
             $response = $this->request($session)->get($this->baseUrl($session).'/home');
-
-            if (! $response->successful()) {
-                return false;
-            }
-
-            $body = $response->body();
-
-            return ! str_contains(strtolower($body), 'loginctr')
-                && ! str_contains(strtolower($body), 'login ctr');
-        } catch (ConnectionException) {
-            return false;
+        } catch (\Throwable $e) {
+            return 'Tidak dapat terhubung ke SPSE: '.$e->getMessage();
         }
+
+        if (in_array($response->status(), [401, 403], true)) {
+            return 'SPSE menolak cookie (HTTP '.$response->status().').';
+        }
+
+        if (! $response->successful()) {
+            return 'SPSE membalas HTTP '.$response->status().'.';
+        }
+
+        $finalPath = strtolower((string) parse_url((string) $response->effectiveUri(), PHP_URL_PATH));
+        if (str_contains($finalPath, '/login') || $this->looksLikeLoginPage($response->body())) {
+            return 'Cookie SPSE_SESSION sudah kedaluwarsa atau belum login (diarahkan ke halaman login).';
+        }
+
+        return null;
     }
 
     /**

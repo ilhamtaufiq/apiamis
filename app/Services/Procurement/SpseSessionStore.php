@@ -3,6 +3,7 @@
 namespace App\Services\Procurement;
 
 use App\Models\SpseSession;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Date;
 
 class SpseSessionStore
@@ -30,25 +31,31 @@ class SpseSessionStore
             throw new \InvalidArgumentException('Cookie SPSE_SESSION wajib ada. Pastikan sudah login ke SPSE.');
         }
 
-        SpseSession::query()
-            ->where('user_id', $userId)
-            ->update(['is_active' => false]);
-
-        $session = SpseSession::create([
+        $candidate = new SpseSession([
             'user_id' => $userId,
             'encrypted_cookies' => $parsed,
             'lpse_slug' => $lpseSlug ?: config('services.spse.lpse_slug', 'cianjurkab'),
-            'expires_at' => now()->addHours(8),
-            'last_validated_at' => now(),
-            'is_active' => true,
         ]);
 
-        if (! $this->httpClient->validateSession($session)) {
-            $session->update(['is_active' => false]);
-            throw new \RuntimeException('Session SPSE tidak valid. Login ulang dan kirim cookie lagi.');
+        // Validasi dulu: session lama tetap aktif bila yang baru ternyata tidak valid.
+        $reason = $this->httpClient->diagnoseSession($candidate);
+        if ($reason !== null) {
+            throw new \RuntimeException('Session SPSE tidak valid. '.$reason);
         }
 
-        return $session->fresh();
+        return DB::transaction(function () use ($userId, $candidate) {
+            SpseSession::query()
+                ->where('user_id', $userId)
+                ->update(['is_active' => false]);
+
+            $candidate->fill([
+                'expires_at' => now()->addHours(8),
+                'last_validated_at' => now(),
+                'is_active' => true,
+            ])->save();
+
+            return $candidate->fresh();
+        });
     }
 
     public function revoke(int $userId): void

@@ -26,6 +26,10 @@ class SpseCookieParser
         }
 
         $cookies = [];
+        // Hasil copy DevTools bisa berisi prefix "Cookie:", baris baru, atau tanda kutip pembungkus.
+        $cookieHeader = trim(preg_replace('/^\s*cookie\s*:\s*/i', '', trim($cookieHeader)) ?? '');
+        $cookieHeader = trim(str_replace(["\r", "\n"], '', $cookieHeader), "\"' ");
+
         foreach (explode(';', $cookieHeader) as $part) {
             $part = trim($part);
             if ($part === '' || ! str_contains($part, '=')) {
@@ -34,7 +38,7 @@ class SpseCookieParser
 
             [$name, $value] = explode('=', $part, 2);
             $name = trim($name);
-            if ($name === '') {
+            if ($name === '' || preg_match('/[\s,"]/', $name)) {
                 continue;
             }
 
