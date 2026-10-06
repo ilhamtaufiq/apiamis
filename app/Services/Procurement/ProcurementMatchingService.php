@@ -15,9 +15,9 @@ class ProcurementMatchingService
 
     public function matchStaging(ProcurementStagingPaket $staging): ProcurementStagingPaket
     {
-        $kontrak = Kontrak::query()
-            ->where('kode_paket', $staging->kode_paket)
-            ->first();
+        $kontrak = trim((string) $staging->kode_paket) === ''
+            ? null
+            : Kontrak::query()->where('kode_paket', $staging->kode_paket)->first();
 
         if ($kontrak) {
             $pekerjaan = $kontrak->pekerjaans()->first() ?? $kontrak->pekerjaan;
@@ -167,6 +167,9 @@ class ProcurementMatchingService
 
         return $candidates->first(function (Pekerjaan $p) use ($target) {
             $normalized = $this->normalizeLookupText($p->nama_paket);
+            if ($normalized === '') {
+                return false;
+            }
 
             return str_contains($normalized, $target) || str_contains($target, $normalized);
         });
