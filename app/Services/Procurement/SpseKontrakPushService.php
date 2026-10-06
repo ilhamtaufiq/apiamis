@@ -72,7 +72,6 @@ class SpseKontrakPushService
             $steps[] = $this->skippedStep('pengecekan_blacklist', 'SPPBJ sudah ada di SPSE.');
             $steps[] = $this->skippedStep('simpan_sppbj', 'SPPBJ sudah ada di SPSE.');
         } else {
-            $this->assertFilled($kontrak, ['sppbj' => 'Nomor SPPBJ'], 'SPPBJ');
             $sppbjFormPath = '/sppbj-pl/sppbjppkpl?plId='.$plId;
             $sppbjFormHtml = $sppbjFormHtml ?? $this->httpClient->fetchPage($session, $sppbjFormPath, $listPath);
             $rekananId = $this->htmlParser->resolveRekananId(
@@ -149,7 +148,6 @@ class SpseKontrakPushService
         if ($listStatus['spk_complete']) {
             $steps[] = $this->skippedStep('simpan_spk', 'SPK sudah ada di SPSE.');
         } else {
-            $this->assertFilled($kontrak, ['spk' => 'Nomor SPK', 'tgl_spk' => 'Tanggal SPK'], 'SPK');
             $spkFormPath = '/spk-pl/spkpl?sppbjId='.$sppbjId;
             $spkFormHtml = $this->httpClient->fetchPage($session, $spkFormPath, $listPath);
             $existingSpkId = $kontrak->spse_spk_id ?: $this->htmlParser->extractHiddenValue($spkFormHtml, 'spk.spk_id');
@@ -258,7 +256,6 @@ class SpseKontrakPushService
         if ($listStatus['spmk_complete']) {
             $steps[] = $this->skippedStep('simpan_spmk', 'SPMK sudah ada di SPSE.');
         } else {
-            $this->assertFilled($kontrak, ['spmk' => 'Nomor SPMK', 'tgl_spmk' => 'Tanggal SPMK', 'tgl_selesai' => 'Tanggal selesai'], 'SPMK');
             $spmkFormPath = '/spk-pl/spmknon?sppbjId='.$sppbjId;
             $token = $this->httpClient->resolveAuthenticityToken($session, $spmkFormPath);
             $tglSpmk = $kontrak->tgl_spmk;
@@ -406,31 +403,13 @@ class SpseKontrakPushService
         return $parts['path'].$query;
     }
 
-    /**
-     * @param  array<string, string>  $fields  atribut kontrak => label
-     */
-    private function assertFilled(Kontrak $kontrak, array $fields, string $step): void
-    {
-        $missing = [];
-        foreach ($fields as $attr => $label) {
-            if (trim((string) $kontrak->{$attr}) === '') {
-                $missing[] = $label;
-            }
-        }
-
-        if ($missing !== []) {
-            throw new \InvalidArgumentException("Data kontrak belum lengkap untuk {$step}: ".implode(', ', $missing).'.');
-        }
-    }
-
     private function waktuPenyelesaian(?\Carbon\CarbonInterface $mulai, ?\Carbon\CarbonInterface $selesai): string
     {
-        if ($mulai && $selesai && $selesai->greaterThanOrEqualTo($mulai)) {
-            // Inklusif: SPMK 1 Jan s.d. selesai 30 Jan = 30 hari kalender.
-            return ($mulai->diffInDays($selesai) + 1).' Hari Kalender';
+        if (! $mulai || ! $selesai) {
+            return '';
         }
 
-        throw new \InvalidArgumentException('Tanggal selesai SPMK tidak boleh sebelum tanggal SPMK.');
+        return ($mulai->diffInDays($selesai, false) + 1).' Hari Kalender';
     }
 
     private function verifyCompleteInSpse(SpseSession $session, string $listPath): void
