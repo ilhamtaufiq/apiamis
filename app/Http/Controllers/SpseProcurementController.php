@@ -425,6 +425,10 @@ class SpseProcurementController extends Controller
             $result = $pushService->push($kontrak, $session);
 
             return response()->json($result);
+        } catch (\App\Services\Procurement\SpseSessionExpiredException $e) {
+            $session->update(['is_active' => false]);
+
+            return response()->json(['message' => $e->getMessage()], 401);
         } catch (\InvalidArgumentException $e) {
             return response()->json(['message' => $e->getMessage()], 422);
         } catch (\Throwable $e) {

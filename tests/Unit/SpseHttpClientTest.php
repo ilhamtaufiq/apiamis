@@ -17,4 +17,13 @@ class SpseHttpClientTest extends TestCase
             $client->extractTokenFromHtml($html),
         );
     }
+
+    public function test_detects_login_page_but_not_datatable_json(): void
+    {
+        $client = new SpseHttpClient(new \App\Services\Procurement\SpseCookieParser());
+
+        $this->assertTrue($client->looksLikeLoginPage('<html><body><form id="loginCtr"></form></body></html>'));
+        $this->assertFalse($client->looksLikeLoginPage('{"draw":"1","data":[["1","Paket loginctr"]]}'));
+        $this->assertFalse($client->looksLikeLoginPage(''));
+    }
 }

@@ -4,6 +4,7 @@ namespace App\Services\Procurement;
 
 use App\Models\Kontrak;
 use App\Models\SpseSession;
+use Illuminate\Support\Facades\Cache;
 
 class SpseKontrakPushService
 {
@@ -18,6 +19,24 @@ class SpseKontrakPushService
      * @return array<string, mixed>
      */
     public function push(Kontrak $kontrak, SpseSession $session): array
+    {
+        // Cegah klik ganda / dua user mendorong kontrak yang sama bersamaan (duplikat SPPBJ/SPK di SPSE).
+        $lock = Cache::lock('spse-push:'.$kontrak->id, 300);
+        if (! $lock->get()) {
+            throw new \InvalidArgumentException('Push kontrak ini sedang berjalan. Tunggu hingga selesai.');
+        }
+
+        try {
+            return $this->doPush($kontrak->fresh(['penyedia', 'pekerjaans']) ?? $kontrak, $session);
+        } finally {
+            $lock->release();
+        }
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function doPush(Kontrak $kontrak, SpseSession $session): array
     {
         $kontrak->loadMissing(['penyedia', 'pekerjaans']);
 
@@ -239,7 +258,7 @@ class SpseKontrakPushService
         } else {
             $spmkFormPath = '/spk-pl/spmknon?sppbjId='.$sppbjId;
             $token = $this->httpClient->resolveAuthenticityToken($session, $spmkFormPath);
-            $tglSpmk = $kontrak->tgl_spmk ?? $kontrak->tgl_spk;
+            $tglSpmk = $kontrak->tgl_spmk;
 
             $steps[] = $this->runStep('simpan_spmk', function () use (
                 $session,
@@ -256,7 +275,7 @@ class SpseKontrakPushService
                     'pesanan.pes_no' => (string) ($kontrak->spmk ?? ''),
                     'pesanan.pes_tgl' => $this->formatter->formatDate($tglSpmk),
                     'tgl_diterima' => $this->formatter->formatDate($tglSpmk),
-                    'content.waktu_penyelesaian' => SpseFieldDefaults::get('waktu_penyelesaian'),
+                    'content.waktu_penyelesaian' => $this->waktuPenyelesaian($tglSpmk, $kontrak->tgl_selesai),
                     'tgl_selesai' => $this->formatter->formatDate($kontrak->tgl_selesai),
                     'content.kota_pesanan' => SpseFieldDefaults::get('satker_kota'),
                     'content.wakil_sah_rekanan' => (string) ($penyedia?->direktur ?: $penyedia?->nama ?? ''),
@@ -279,6 +298,8 @@ class SpseKontrakPushService
                 ];
             });
         }
+
+        $this->verifyCompleteInSpse($session, $listPath);
 
         $log = [
             'pushed_at' => now()->toIso8601String(),
@@ -380,6 +401,35 @@ class SpseKontrakPushService
         $query = isset($parts['query']) ? '?'.$parts['query'] : '';
 
         return $parts['path'].$query;
+    }
+
+    private function waktuPenyelesaian(?\Carbon\CarbonInterface $mulai, ?\Carbon\CarbonInterface $selesai): string
+    {
+        if (! $mulai || ! $selesai) {
+            return '';
+        }
+
+        return ($mulai->diffInDays($selesai, false) + 1).' Hari Kalender';
+    }
+
+    private function verifyCompleteInSpse(SpseSession $session, string $listPath): void
+    {
+        $status = $this->htmlParser->extractKontrakListStatus(
+            $this->httpClient->fetchPage($session, $listPath, '/beranda/nontender'),
+        );
+
+        $missing = [];
+        foreach (['sppbj_complete' => 'SPPBJ', 'spk_complete' => 'SPK', 'spmk_complete' => 'SPMK'] as $key => $label) {
+            if (! $status[$key]) {
+                $missing[] = $label;
+            }
+        }
+
+        if ($missing !== []) {
+            throw new \RuntimeException(
+                'SPSE belum mencatat '.implode(', ', $missing).' setelah simpan (kemungkinan ditolak validasi SPSE). Cek paket di SPSE lalu coba lagi.',
+            );
+        }
     }
 
     private function assertPushable(Kontrak $kontrak): void

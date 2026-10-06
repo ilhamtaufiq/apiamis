@@ -4,10 +4,14 @@ namespace App\Services\Procurement;
 
 use App\Models\SpseSession;
 use Illuminate\Http\Client\ConnectionException;
+use Illuminate\Http\Client\RequestException;
 use Illuminate\Support\Facades\Http;
 
 class SpseHttpClient
 {
+    /** @var array<string, string> */
+    private array $tokenCache = [];
+
     public function __construct(
         private readonly SpseCookieParser $cookieParser,
     ) {
@@ -57,12 +61,24 @@ class SpseHttpClient
         $body = $this->buildDataTablesBody($draw, $start, $length, $token);
 
         $response = $this->request($session)
+            ->retry(
+                2,
+                500,
+                fn (\Throwable $e) => $e instanceof ConnectionException
+                    || ($e instanceof RequestException && $e->response->serverError()),
+                throw: false,
+            )
             ->asForm()
             ->withHeaders([
                 'Referer' => $referer,
                 'X-Requested-With' => 'XMLHttpRequest',
             ])
             ->post($url, $body);
+
+        if (in_array($response->status(), [401, 403], true) || $this->looksLikeLoginPage($response->body())) {
+            unset($this->tokenCache[$this->tokenCacheKey($session, $refererPath)]);
+            throw new SpseSessionExpiredException('Session SPSE expired. Login ulang di SPSE lalu kirim cookie lagi.');
+        }
 
         if (! $response->successful()) {
             throw new \RuntimeException('SPSE DataTable gagal: HTTP '.$response->status());
@@ -76,7 +92,47 @@ class SpseHttpClient
         return $json;
     }
 
+    public function looksLikeLoginPage(string $body): bool
+    {
+        $head = strtolower(substr(ltrim($body), 0, 20000));
+
+        if ($head === '' || ! str_starts_with($head, '<')) {
+            return false;
+        }
+
+        return str_contains($head, 'loginctr') || str_contains($head, 'login ctr');
+    }
+
+    /**
+     * SPSE membalas sesi kedaluwarsa dengan redirect/halaman login (sering HTTP 200/302),
+     * yang tanpa pengecekan ini dianggap "simpan berhasil".
+     */
+    private function assertAuthenticated(\Illuminate\Http\Client\Response $response): void
+    {
+        $location = strtolower((string) $response->header('Location'));
+        $isLoginRedirect = $location !== '' && (str_contains($location, '/login') || str_contains($location, 'loginctr'));
+
+        if (in_array($response->status(), [401, 403], true) || $isLoginRedirect || $this->looksLikeLoginPage($response->body())) {
+            throw new SpseSessionExpiredException('Session SPSE expired. Login ulang di SPSE lalu kirim cookie lagi.');
+        }
+    }
+
+    private function tokenCacheKey(SpseSession $session, ?string $refererPath): string
+    {
+        return ($session->id ?? 'new').'|'.($refererPath ?? '');
+    }
+
     public function resolveAuthenticityToken(SpseSession $session, ?string $refererPath = null): string
+    {
+        $cacheKey = $this->tokenCacheKey($session, $refererPath);
+        if (isset($this->tokenCache[$cacheKey])) {
+            return $this->tokenCache[$cacheKey];
+        }
+
+        return $this->tokenCache[$cacheKey] = $this->fetchAuthenticityToken($session, $refererPath);
+    }
+
+    private function fetchAuthenticityToken(SpseSession $session, ?string $refererPath): string
     {
         $fromCookie = $this->extractTokenFromSpseSessionCookie($session);
         if ($fromCookie) {
@@ -203,6 +259,8 @@ class SpseHttpClient
             ->withHeaders($headers)
             ->get($url);
 
+        $this->assertAuthenticated($response);
+
         if (! $response->successful()) {
             throw new \RuntimeException('SPSE halaman gagal: HTTP '.$response->status().' ('.$path.')');
         }
@@ -210,13 +268,6 @@ class SpseHttpClient
         return $response->body();
     }
 
-    /**
-     * @return array{body: string, content_type: ?string, content_disposition: ?string, final_url: string}
-     */
-    /**
-     * @param  array<string, string>  $fields
-     * @return array{status: int, body: string, headers: array<string, string>, location: ?string}
-     */
     /**
      * @return array{status: int, body: string, headers: array<string, string>, location: ?string}
      */
@@ -236,6 +287,8 @@ class SpseHttpClient
             ->withOptions(['allow_redirects' => false])
             ->post($url);
 
+        $this->assertAuthenticated($response);
+
         return [
             'status' => $response->status(),
             'body' => $response->body(),
@@ -244,6 +297,10 @@ class SpseHttpClient
         ];
     }
 
+    /**
+     * @param  array<string, string>  $fields
+     * @return array{status: int, body: string, headers: array<string, string>, location: ?string}
+     */
     public function postMultipart(
         SpseSession $session,
         string $urlOrPath,
@@ -270,6 +327,8 @@ class SpseHttpClient
             ->withOptions(['allow_redirects' => false])
             ->post($url, $multipart);
 
+        $this->assertAuthenticated($response);
+
         $location = $response->header('Location');
 
         return [
@@ -280,6 +339,9 @@ class SpseHttpClient
         ];
     }
 
+    /**
+     * @return array{body: string, content_type: ?string, content_disposition: ?string, final_url: string}
+     */
     public function downloadBinary(SpseSession $session, string $urlOrPath): array
     {
         $url = $this->absoluteUrl($session, $urlOrPath);
