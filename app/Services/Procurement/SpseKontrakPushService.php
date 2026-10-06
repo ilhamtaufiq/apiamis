@@ -258,10 +258,10 @@ class SpseKontrakPushService
         if ($listStatus['spmk_complete']) {
             $steps[] = $this->skippedStep('simpan_spmk', 'SPMK sudah ada di SPSE.');
         } else {
-            $this->assertFilled($kontrak, ['spmk' => 'Nomor SPMK', 'tgl_selesai' => 'Tanggal selesai'], 'SPMK');
+            $this->assertFilled($kontrak, ['spmk' => 'Nomor SPMK', 'tgl_spmk' => 'Tanggal SPMK', 'tgl_selesai' => 'Tanggal selesai'], 'SPMK');
             $spmkFormPath = '/spk-pl/spmknon?sppbjId='.$sppbjId;
             $token = $this->httpClient->resolveAuthenticityToken($session, $spmkFormPath);
-            $tglSpmk = $kontrak->tgl_spmk ?? $kontrak->tgl_spk;
+            $tglSpmk = $kontrak->tgl_spmk;
 
             $steps[] = $this->runStep('simpan_spmk', function () use (
                 $session,
@@ -430,7 +430,7 @@ class SpseKontrakPushService
             return ($mulai->diffInDays($selesai) + 1).' Hari Kalender';
         }
 
-        return SpseFieldDefaults::get('waktu_penyelesaian');
+        throw new \InvalidArgumentException('Tanggal selesai SPMK tidak boleh sebelum tanggal SPMK.');
     }
 
     private function verifyCompleteInSpse(SpseSession $session, string $listPath): void
