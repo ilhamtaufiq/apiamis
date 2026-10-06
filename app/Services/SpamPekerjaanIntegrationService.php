@@ -1293,7 +1293,9 @@ class SpamPekerjaanIntegrationService
             return 'no_pekerjaan';
         }
 
-        if ($linkedCount > 0) {
+        // Matched hanya bila seluruh paket pekerjaan sudah tertaut ke unit;
+        // sebagian tertaut atau belum sama sekali berarti masih ada selisih (partial).
+        if ($linkedCount >= $pekerjaanCount) {
             return 'matched';
         }
 
