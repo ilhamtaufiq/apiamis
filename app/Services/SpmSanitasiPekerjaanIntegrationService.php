@@ -6,6 +6,7 @@ use App\Models\Desa;
 use App\Models\Output;
 use App\Models\Pekerjaan;
 use App\Models\SpmSanitasi;
+use App\Support\OutputSatuan;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
 
@@ -42,8 +43,9 @@ class SpmSanitasiPekerjaanIntegrationService
         // 1) SPALDT / IPAL / IPLT (terpusat) — HARUS sebelum SPALDS.
         //    Bug lama: "SPALD-T" → "spald t" lolos rule spald+s (huruf s di "spald")
         //    dan terklasifikasi sebagai tangki septik / SPALDS.
-        $isTerpusat = str_contains($compact, 'ipal')
-            || str_contains($compact, 'iplt')
+        // IPAL/IPLT harus di awal kata: bentuk compact membuat "pipa lateral" → "pipalateral"
+        // dan "pipa lingkungan" → "pipalingkungan" ikut cocok dengan "ipal".
+        $isTerpusat = (bool) preg_match('/\b(ipal|iplt)/u', $normalized)
             || str_contains($compact, 'spaldt')
             || (bool) preg_match('/\bspald\s*t\b/u', $normalized);
 
@@ -354,6 +356,10 @@ class SpmSanitasiPekerjaanIntegrationService
 
         $unit = 0;
         foreach ($this->sanitasiOutputsForPekerjaan($pekerjaan) as $output) {
+            // Abaikan volume bersatuan panjang/volume/LS (mis. "SPALD-T pipa 1.200 m").
+            if (! OutputSatuan::isCountable($output['satuan'] ?? null)) {
+                continue;
+            }
             $unit += (int) round((float) $output['volume']);
         }
 

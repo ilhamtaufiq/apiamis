@@ -8,6 +8,7 @@ use App\Models\Pekerjaan;
 use App\Models\SpamAchievement;
 use App\Models\SpamBudget;
 use App\Models\UnitSpam;
+use App\Support\OutputSatuan;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -371,8 +372,11 @@ class SpamPekerjaanIntegrationService
                     continue;
                 }
 
-                // SR/sambungan rumah + sumur/BJP + output tak terklasifikasi → KK BJP
-                if ($type === 'sambungan_rumah' || $type === 'bjp' || $type === null) {
+                // SR/sambungan rumah + sumur/BJP → KK BJP.
+                // Output tak terklasifikasi hanya bila satuannya hitungan (bukan m/m3/LS/paket).
+                if ($type === 'sambungan_rumah' || $type === 'bjp') {
+                    $volumeAsKk += $vol;
+                } elseif ($type === null && OutputSatuan::isCountable($output['satuan'] ?? null)) {
                     $volumeAsKk += $vol;
                 }
             }
@@ -805,6 +809,18 @@ class SpamPekerjaanIntegrationService
 
     public function detachPekerjaan(UnitSpam $unitSpam, int $pekerjaanId): void
     {
+        // Hapus anggaran integrasi milik paket ini. Pembersihan di sync hanya menjangkau
+        // paket yang lolos airMinumQuery di desa unit, sehingga paket BJP (tanpa output
+        // air minum) atau paket desa lain meninggalkan anggaran basi setelah dilepas.
+        $pekerjaan = $unitSpam->pekerjaan()->with('kegiatan')->find($pekerjaanId);
+        $tahun = (string) ($pekerjaan?->kegiatan?->tahun_anggaran ?? '');
+        if ($pekerjaan && self::isAccumulationTahun($tahun)) {
+            $unitSpam->budgets()
+                ->where('tahun', $tahun)
+                ->where('nama_paket', $pekerjaan->nama_paket)
+                ->delete();
+        }
+
         $unitSpam->pekerjaan()->detach($pekerjaanId);
 
         $this->syncUnitAccumulationFromLinks($unitSpam);
@@ -1288,7 +1304,7 @@ class SpamPekerjaanIntegrationService
      * }>
      */
     /**
-     * @return Collection<int|string, object{desa_id: int, sr: int|string, kk: int|string, jiwa: int|string}>
+     * @return Collection<int|string, object{desa_id: int, sr: int|string, kk: int|string, jiwa: int|string, bjp_kk: int|string}>
      */
     private function groupedAchievementsByDesa(
         ?string $tahun = null,
@@ -1300,7 +1316,8 @@ class SpamPekerjaanIntegrationService
                 'tbl_unit_spam.desa_id',
                 DB::raw('SUM(tbl_spam_achievements.jumlah_sr) as sr'),
                 DB::raw('SUM(tbl_spam_achievements.jumlah_kk) as kk'),
-                DB::raw('SUM(tbl_spam_achievements.jumlah_jiwa) as jiwa')
+                DB::raw('SUM(tbl_spam_achievements.jumlah_jiwa) as jiwa'),
+                DB::raw('SUM(tbl_spam_achievements.jumlah_bjp_kk) as bjp_kk')
             )
             ->join('tbl_unit_spam', 'tbl_spam_achievements.unit_spam_id', '=', 'tbl_unit_spam.id');
 
@@ -1342,19 +1359,21 @@ class SpamPekerjaanIntegrationService
             ->realWilayah()
             ->with('kecamatan:id,n_kec')
             ->orderBy('n_desa')
-            ->get(['id', 'n_desa', 'kecamatan_id', 'target'])
+            ->get(['id', 'n_desa', 'kecamatan_id', 'target', 'bjp_master'])
             ->map(function (Desa $desa) use ($unitCounts, $achievements, $baselineByDesa, $integrasiByDesa) {
                 if ($achievements !== null) {
                     $row = $achievements->get($desa->id);
                     $sr = (int) ($row->sr ?? 0);
                     $kk = (int) ($row->kk ?? 0);
                     $jiwa = (int) ($row->jiwa ?? 0);
+                    $bjpUnit = (int) ($row->bjp_kk ?? 0);
                 } else {
                     $baselineRow = $baselineByDesa?->get($desa->id);
                     $integrasiRow = $integrasiByDesa?->get($desa->id);
                     $sr = (int) ($baselineRow->sr ?? 0) + (int) ($integrasiRow->sr ?? 0);
                     $kk = (int) ($baselineRow->kk ?? 0) + (int) ($integrasiRow->kk ?? 0);
                     $jiwa = (int) ($baselineRow->jiwa ?? 0) + (int) ($integrasiRow->jiwa ?? 0);
+                    $bjpUnit = (int) ($baselineRow->bjp_kk ?? 0) + (int) ($integrasiRow->bjp_kk ?? 0);
                 }
 
                 return [
@@ -1366,6 +1385,9 @@ class SpamPekerjaanIntegrationService
                     'sr' => $sr,
                     'kk' => $kk,
                     'jiwa' => $jiwa,
+                    // BJP (bukan jaringan perpipaan): master desa tidak bertahun, unit dari achievement.
+                    'bjp_master' => (int) ($desa->bjp_master ?? 0),
+                    'bjp_unit' => $bjpUnit,
                 ];
             })
             ->values()
