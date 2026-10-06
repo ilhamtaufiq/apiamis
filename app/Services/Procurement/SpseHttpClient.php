@@ -103,6 +103,20 @@ class SpseHttpClient
         return str_contains($head, 'loginctr') || str_contains($head, 'login ctr');
     }
 
+    /**
+     * SPSE membalas sesi kedaluwarsa dengan redirect/halaman login (sering HTTP 200/302),
+     * yang tanpa pengecekan ini dianggap "simpan berhasil".
+     */
+    private function assertAuthenticated(\Illuminate\Http\Client\Response $response): void
+    {
+        $location = strtolower((string) $response->header('Location'));
+        $isLoginRedirect = $location !== '' && (str_contains($location, '/login') || str_contains($location, 'loginctr'));
+
+        if (in_array($response->status(), [401, 403], true) || $isLoginRedirect || $this->looksLikeLoginPage($response->body())) {
+            throw new SpseSessionExpiredException('Session SPSE expired. Login ulang di SPSE lalu kirim cookie lagi.');
+        }
+    }
+
     private function tokenCacheKey(SpseSession $session, ?string $refererPath): string
     {
         return ($session->id ?? 'new').'|'.($refererPath ?? '');
@@ -245,6 +259,8 @@ class SpseHttpClient
             ->withHeaders($headers)
             ->get($url);
 
+        $this->assertAuthenticated($response);
+
         if (! $response->successful()) {
             throw new \RuntimeException('SPSE halaman gagal: HTTP '.$response->status().' ('.$path.')');
         }
@@ -270,6 +286,8 @@ class SpseHttpClient
             ->withHeaders($headers)
             ->withOptions(['allow_redirects' => false])
             ->post($url);
+
+        $this->assertAuthenticated($response);
 
         return [
             'status' => $response->status(),
@@ -308,6 +326,8 @@ class SpseHttpClient
             ->asMultipart()
             ->withOptions(['allow_redirects' => false])
             ->post($url, $multipart);
+
+        $this->assertAuthenticated($response);
 
         $location = $response->header('Location');
 
