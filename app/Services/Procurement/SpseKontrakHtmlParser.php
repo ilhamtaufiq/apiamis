@@ -95,6 +95,62 @@ class SpseKontrakHtmlParser
         return $this->extractInputValue($html, $name);
     }
 
+    /**
+     * Kumpulkan field form seperti yang dikirim browser (input, textarea, select terpilih),
+     * agar field bawaan SPSE (PPK, ID tersembunyi, token) ikut terkirim.
+     *
+     * @return array<string, string>
+     */
+    public function extractFormFields(string $html, ?string $formId = null): array
+    {
+        $previous = libxml_use_internal_errors(true);
+        $doc = new \DOMDocument();
+        $doc->loadHTML('<?xml encoding="utf-8" ?>'.$html);
+        libxml_clear_errors();
+        libxml_use_internal_errors($previous);
+
+        $xpath = new \DOMXPath($doc);
+        $root = $formId ? $xpath->query('//form[@id='.$this->xpathLiteral($formId).']')->item(0) : null;
+        $context = $root ?? $doc->documentElement;
+        if (! $context) {
+            return [];
+        }
+
+        $fields = [];
+
+        foreach ($xpath->query('.//input[@name]', $context) as $input) {
+            $type = strtolower($input->getAttribute('type') ?: 'text');
+            if (in_array($type, ['submit', 'button', 'image', 'file', 'reset'], true)) {
+                continue;
+            }
+            if (in_array($type, ['checkbox', 'radio'], true) && ! $input->hasAttribute('checked')) {
+                continue;
+            }
+            $fields[$input->getAttribute('name')] = $input->getAttribute('value');
+        }
+
+        foreach ($xpath->query('.//textarea[@name]', $context) as $textarea) {
+            $fields[$textarea->getAttribute('name')] = $textarea->textContent;
+        }
+
+        foreach ($xpath->query('.//select[@name]', $context) as $select) {
+            $value = null;
+            foreach ($xpath->query('.//option', $select) as $option) {
+                if ($value === null || $option->hasAttribute('selected')) {
+                    $value = $option->getAttribute('value');
+                }
+            }
+            $fields[$select->getAttribute('name')] = (string) $value;
+        }
+
+        return $fields;
+    }
+
+    private function xpathLiteral(string $value): string
+    {
+        return "'".str_replace("'", '', $value)."'";
+    }
+
     public function extractQueryParam(string $urlOrText, string $param): ?string
     {
         $pattern = '/[?&]'.preg_quote($param, '/').'=(\d+)/i';

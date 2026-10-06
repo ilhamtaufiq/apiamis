@@ -176,21 +176,29 @@ class SpseKontrakPushService
                 $existingSpkId,
                 $penyedia,
                 $spkNilaiSpse,
+                $spkFormHtml,
             ) {
                 $bank = trim((string) ($penyedia?->bank ?? ''));
                 $norek = trim((string) ($penyedia?->norek ?? ''));
 
-                $fields = [
+                $tglMulai = $this->formatter->formatDate($kontrak->tgl_spmk);
+                $form = $this->htmlParser->extractFormFields($spkFormHtml, 'formPesanan');
+                $fromForm = fn (string $key, string $default) => trim((string) ($form[$key] ?? '')) !== ''
+                    ? (string) $form[$key]
+                    : $default;
+
+                // Dasar = isi form SPSE (PPK, ID tersembunyi, dll), lalu ditimpa data kontrak apiamis.
+                $fields = array_merge($form, [
                     'authenticityToken' => $token,
                     'spk.kontrak_lingkup_pekerjaan' => SpseFieldDefaults::get('lingkup_pekerjaan'),
                     'spk.spk_id' => (string) ($existingSpkId ?? ''),
                     'spk.spk_no' => (string) ($kontrak->spk ?? ''),
                     'spk.spk_tgl' => $this->formatter->formatDate($kontrak->tgl_spk),
                     'content.kota_pesanan' => SpseFieldDefaults::get('satker_kota'),
-                    'spk.nama_ppk_kontrak' => SpseFieldDefaults::get('ppk_nama'),
-                    'spk.nip_ppk_kontrak' => SpseFieldDefaults::get('ppk_nip'),
-                    'spk.jabatan_ppk_kontrak' => SpseFieldDefaults::get('ppk_jabatan'),
-                    'spk.no_sk_ppk_kontrak' => SpseFieldDefaults::get('ppk_no_sk'),
+                    'spk.nama_ppk_kontrak' => $fromForm('spk.nama_ppk_kontrak', SpseFieldDefaults::get('ppk_nama')),
+                    'spk.nip_ppk_kontrak' => $fromForm('spk.nip_ppk_kontrak', SpseFieldDefaults::get('ppk_nip')),
+                    'spk.jabatan_ppk_kontrak' => $fromForm('spk.jabatan_ppk_kontrak', SpseFieldDefaults::get('ppk_jabatan')),
+                    'spk.no_sk_ppk_kontrak' => $fromForm('spk.no_sk_ppk_kontrak', SpseFieldDefaults::get('ppk_no_sk')),
                     'spk.spk_wakil_penyedia' => (string) ($penyedia?->direktur ?: $penyedia?->nama ?? ''),
                     'spk.spk_jabatan_wakil' => SpseFieldDefaults::get('jabatan_wakil'),
                     'spk.spk_nama_bank' => $bank !== '' ? $bank : SpseFieldDefaults::get('bank'),
@@ -198,9 +206,13 @@ class SpseKontrakPushService
                     'spk.spk_nilai' => $spkNilaiSpse,
                     'spk.nilai_pdn' => $spkNilaiSpse,
                     'spk.nilai_umk' => $spkNilaiSpse,
+                    // Form SPK di SPSE juga mewajibkan masa pelaksanaan (sama dengan SPMK).
+                    'content.waktu_penyelesaian' => $this->waktuPenyelesaian($kontrak->tgl_spmk, $kontrak->tgl_selesai),
+                    'tgl_diterima' => $tglMulai,
+                    'tgl_selesai' => $this->formatter->formatDate($kontrak->tgl_selesai),
                     'ubahnilai' => 'false',
                     'spk.alasanubah_s' => '',
-                ];
+                ]);
 
                 $result = $this->httpClient->postMultipart(
                     $session,
@@ -258,7 +270,9 @@ class SpseKontrakPushService
             $steps[] = $this->skippedStep('simpan_spmk', 'SPMK sudah ada di SPSE.');
         } else {
             $spmkFormPath = '/spk-pl/spmknon?sppbjId='.$sppbjId;
-            $token = $this->httpClient->resolveAuthenticityToken($session, $spmkFormPath);
+            $spmkFormHtml = $this->httpClient->fetchPage($session, $spmkFormPath, $listPath);
+            $spmkForm = $this->htmlParser->extractFormFields($spmkFormHtml);
+            $token = $spmkForm['authenticityToken'] ?? $this->httpClient->resolveAuthenticityToken($session, $spmkFormPath);
             $tglSpmk = $kontrak->tgl_spmk;
 
             $steps[] = $this->runStep('simpan_spmk', function () use (
@@ -270,8 +284,9 @@ class SpseKontrakPushService
                 $spmkFormPath,
                 $penyedia,
                 $tglSpmk,
+                $spmkForm,
             ) {
-                $fields = [
+                $fields = array_merge($spmkForm, [
                     'authenticityToken' => $token,
                     'pesanan.pes_no' => (string) ($kontrak->spmk ?? ''),
                     'pesanan.pes_tgl' => $this->formatter->formatDate($tglSpmk),
@@ -282,7 +297,7 @@ class SpseKontrakPushService
                     'content.wakil_sah_rekanan' => (string) ($penyedia?->direktur ?: $penyedia?->nama ?? ''),
                     'content.jabatan_wakil_rekanan' => SpseFieldDefaults::get('jabatan_wakil'),
                     'simpan' => '',
-                ];
+                ]);
 
                 $result = $this->httpClient->postMultipart(
                     $session,
