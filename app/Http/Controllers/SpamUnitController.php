@@ -640,8 +640,10 @@ class SpamUnitController extends Controller
         $validated['jumlah_bjp_kk'] = $validated['jumlah_bjp_kk'] ?? 0;
         $validated['jumlah_bjp_jiwa'] = $validated['jumlah_bjp_jiwa'] ?? ($validated['jumlah_bjp_kk'] * 5);
 
+        // Rekam manual disimpan terpisah dari rekam integrasi paket pada tahun yang sama,
+        // sehingga tidak saling menimpa. Total capaian tahun = manual + integrasi.
         $achievement = $unitSpam->achievements()->updateOrCreate(
-            ['tahun' => $validated['tahun']],
+            ['tahun' => $validated['tahun'], 'sumber' => SpamAchievement::SUMBER_MANUAL],
             $validated
         );
 

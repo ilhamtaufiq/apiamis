@@ -21,6 +21,9 @@ class SpamPekerjaanIntegrationService
     /** Integrasi / akumulasi pekerjaan dimulai dari tahun ini. */
     public const ACCUMULATION_START_TAHUN = '2026';
 
+    /** Catatan pada rekam achievement hasil integrasi paket. */
+    public const INTEGRASI_CATATAN = 'Akumulasi dari paket pekerjaan tertaut';
+
     public static function isProtectedBaselineTahun(?string $tahun): bool
     {
         if ($tahun === null || $tahun === '' || $tahun === 'unknown') {
@@ -809,13 +812,14 @@ class SpamPekerjaanIntegrationService
 
     public function detachPekerjaan(UnitSpam $unitSpam, int $pekerjaanId): void
     {
-        // Hapus anggaran integrasi milik paket ini. Pembersihan di sync hanya menjangkau
-        // paket yang lolos airMinumQuery di desa unit, sehingga paket BJP (tanpa output
-        // air minum) atau paket desa lain meninggalkan anggaran basi setelah dilepas.
+        // Anggaran lama (sebelum ada kolom pekerjaan_id) hanya dikenali dari tahun + nama paket.
+        // Pembersihan di sync hanya menjangkau paket yang lolos airMinumQuery di desa unit,
+        // sehingga paket BJP / desa lain meninggalkan anggaran basi — hapus di sini.
         $pekerjaan = $unitSpam->pekerjaan()->with('kegiatan')->find($pekerjaanId);
         $tahun = (string) ($pekerjaan?->kegiatan?->tahun_anggaran ?? '');
         if ($pekerjaan && self::isAccumulationTahun($tahun)) {
             $unitSpam->budgets()
+                ->whereNull('pekerjaan_id')
                 ->where('tahun', $tahun)
                 ->where('nama_paket', $pekerjaan->nama_paket)
                 ->delete();
@@ -827,6 +831,13 @@ class SpamPekerjaanIntegrationService
     }
 
     /**
+     * Tulis ulang rekam integrasi unit dari paket tertaut.
+     *
+     * - Achievement integrasi disimpan sebagai baris `sumber = integrasi` per tahun,
+     *   terpisah dari rekam manual pada tahun yang sama (tidak saling menimpa).
+     * - Anggaran integrasi dikunci per `pekerjaan_id`, sehingga dua paket bernama sama
+     *   pada tahun yang sama tidak saling menimpa.
+     *
      * @return array<string, mixed>
      */
     public function syncUnitAccumulationFromLinks(UnitSpam $unitSpam): array
@@ -848,35 +859,34 @@ class SpamPekerjaanIntegrationService
                     continue;
                 }
 
-                $activeIntegrasiTahun[] = $tahun;
+                $activeIntegrasiTahun[] = (string) $tahun;
                 $derived = $this->aggregateDerived($group);
 
                 $results['achievements'][] = $unitSpam->achievements()->updateOrCreate(
-                    ['tahun' => $tahun],
+                    ['tahun' => (string) $tahun, 'sumber' => SpamAchievement::SUMBER_INTEGRASI],
                     [
                         'jumlah_sr' => $derived['sr'],
                         'jumlah_kk' => $derived['kk'],
                         'jumlah_jiwa' => $derived['jiwa'],
                         'jumlah_bjp_kk' => $derived['bjp_kk'] ?? 0,
                         'jumlah_bjp_jiwa' => $derived['bjp_jiwa'] ?? 0,
-                        'catatan' => 'Akumulasi dari paket pekerjaan tertaut',
+                        'catatan' => self::INTEGRASI_CATATAN,
                     ]
                 );
             }
 
-            $integrasiAchievementQuery = $unitSpam->achievements()
-                ->where('catatan', 'Akumulasi dari paket pekerjaan tertaut')
-                ->where('tahun', '>=', self::ACCUMULATION_START_TAHUN);
-
-            if ($activeIntegrasiTahun !== []) {
-                $integrasiAchievementQuery
-                    ->whereNotIn('tahun', $activeIntegrasiTahun)
-                    ->delete();
-            } else {
-                $integrasiAchievementQuery->delete();
-            }
+            // Hapus rekam integrasi untuk tahun yang tidak lagi punya paket tertaut.
+            // Rekam manual (sumber = manual) tidak pernah disentuh.
+            $unitSpam->achievements()
+                ->where('sumber', SpamAchievement::SUMBER_INTEGRASI)
+                ->when(
+                    $activeIntegrasiTahun !== [],
+                    fn ($q) => $q->whereNotIn('tahun', $activeIntegrasiTahun)
+                )
+                ->delete();
 
             $linkedIds = $linkedPekerjaan->pluck('id');
+            $keptBudgetIds = [];
 
             foreach ($linkedPekerjaan as $item) {
                 $metrics = $this->derivedMetricsForPekerjaan($item);
@@ -886,18 +896,39 @@ class SpamPekerjaanIntegrationService
                     continue;
                 }
 
-                $results['budgets'][] = $unitSpam->budgets()->updateOrCreate(
-                    [
-                        'tahun' => $tahun,
-                        'nama_paket' => $item->nama_paket,
-                    ],
-                    [
-                        'nilai_kontrak' => $metrics['nilai_kontrak'],
-                        'sumber_dana' => $item->kegiatan?->sumber_dana,
-                    ]
-                );
+                $budget = $unitSpam->budgets()->where('pekerjaan_id', $item->id)->first()
+                    // Anggaran lama (sebelum kolom pekerjaan_id) diklaim sekali oleh paket pertama
+                    ?? $unitSpam->budgets()
+                        ->whereNull('pekerjaan_id')
+                        ->where('tahun', $tahun)
+                        ->where('nama_paket', $item->nama_paket)
+                        ->first();
+
+                $attributes = [
+                    'pekerjaan_id' => $item->id,
+                    'tahun' => $tahun,
+                    'nama_paket' => $item->nama_paket,
+                    'nilai_kontrak' => $metrics['nilai_kontrak'],
+                    'sumber_dana' => $item->kegiatan?->sumber_dana ?? 'APBD',
+                ];
+
+                if ($budget) {
+                    $budget->update($attributes);
+                } else {
+                    $budget = $unitSpam->budgets()->create($attributes);
+                }
+
+                $keptBudgetIds[] = $budget->id;
+                $results['budgets'][] = $budget;
             }
 
+            // Anggaran integrasi milik paket yang sudah tidak tertaut / tidak lagi memenuhi syarat.
+            $unitSpam->budgets()
+                ->whereNotNull('pekerjaan_id')
+                ->when($keptBudgetIds !== [], fn ($q) => $q->whereNotIn('id', $keptBudgetIds))
+                ->delete();
+
+            // Anggaran lama tanpa pekerjaan_id: bersihkan yang namanya cocok paket desa tak tertaut.
             $desaPekerjaan = $this->airMinumQuery(null, null, $unitSpam->desa_id, null, null, null, null, true)
                 ->with('kegiatan')
                 ->get();
@@ -913,6 +944,7 @@ class SpamPekerjaanIntegrationService
                 }
 
                 $unitSpam->budgets()
+                    ->whereNull('pekerjaan_id')
                     ->where('tahun', $tahun)
                     ->where('nama_paket', $candidate->nama_paket)
                     ->delete();

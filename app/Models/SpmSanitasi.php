@@ -52,6 +52,8 @@ class SpmSanitasi extends Model
         'jumlah_ritasi',
         'jarak_maksimal_pelayanan_km',
         'alokasi_biaya_operasional',
+        'pemanfaat_dari_integrasi',
+        'pembiayaan_dari_integrasi',
     ];
 
     protected $casts = [
@@ -76,6 +78,8 @@ class SpmSanitasi extends Model
         'jumlah_ritasi' => 'integer',
         'jarak_maksimal_pelayanan_km' => 'float',
         'alokasi_biaya_operasional' => 'float',
+        'pemanfaat_dari_integrasi' => 'boolean',
+        'pembiayaan_dari_integrasi' => 'boolean',
     ];
 
     public function desa(): BelongsTo

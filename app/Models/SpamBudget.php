@@ -15,6 +15,7 @@ class SpamBudget extends Model
 
     protected $fillable = [
         'unit_spam_id',
+        'pekerjaan_id',
         'nilai_kontrak',
         'tahun',
         'nama_paket',

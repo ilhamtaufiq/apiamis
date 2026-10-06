@@ -13,9 +13,16 @@ class SpamAchievement extends Model
     use NotifiesAdminsOnChanges, Auditable;
     protected $table = 'tbl_spam_achievements';
 
+    /** Rekam diisi manual (form / import). */
+    public const SUMBER_MANUAL = 'manual';
+
+    /** Rekam hasil akumulasi paket pekerjaan tertaut (tahun integrasi). */
+    public const SUMBER_INTEGRASI = 'integrasi';
+
     protected $fillable = [
         'unit_spam_id',
         'tahun',
+        'sumber',
         'jumlah_sr',
         'jumlah_kk',
         'jumlah_jiwa',
