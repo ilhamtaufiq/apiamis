@@ -26,4 +26,14 @@ class SpseCookieParserTest extends TestCase
 
         $this->assertSame('SPSE_SESSION=a', $parser->toHeader($cookies));
     }
+
+    public function test_strips_cookie_prefix_and_newlines_from_pasted_header(): void
+    {
+        $parser = new SpseCookieParser();
+        $cookies = $parser->parse("Cookie: SPSE_SESSION=abc-___AT=1&x=2;\n foo=bar");
+
+        $this->assertSame('SPSE_SESSION', $cookies[0]['name']);
+        $this->assertSame('abc-___AT=1&x=2', $cookies[0]['value']);
+        $this->assertSame('foo', $cookies[1]['name']);
+    }
 }

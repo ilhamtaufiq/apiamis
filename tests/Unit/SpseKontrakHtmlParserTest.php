@@ -140,4 +140,16 @@ class SpseKontrakHtmlParserTest extends TestCase
 
         $this->assertSame(['Nomor SPPBJ sudah digunakan'], $this->parser->extractSpseUserMessages($html));
     }
+
+    public function test_extracts_form_fields_like_a_browser_submit(): void
+    {
+        $html = '<form id="formPesanan"><input name="spk.nama_ppk_kontrak" value="BUDI">'
+            .'<textarea name="a">x</textarea><select name="s"><option value="1">a</option><option value="2" selected>b</option></select>'
+            .'<input type="checkbox" name="c" value="1"><button name="simpan">go</button></form>'
+            .'<form id="other"><input name="zz" value="1"></form>';
+
+        $fields = (new \App\Services\Procurement\SpseKontrakHtmlParser())->extractFormFields($html, 'formPesanan');
+
+        $this->assertSame(['spk.nama_ppk_kontrak' => 'BUDI', 'a' => 'x', 's' => '2'], $fields);
+    }
 }
