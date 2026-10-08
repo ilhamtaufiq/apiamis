@@ -18,6 +18,7 @@ pub mod lookup;
 pub mod maintenance;
 pub mod pagination;
 pub mod pekerjaan;
+pub mod pekerjaan_rel;
 pub mod penyedia;
 pub mod progress_estimasi;
 pub mod progress_metrics;

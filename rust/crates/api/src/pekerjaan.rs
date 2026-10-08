@@ -30,7 +30,7 @@ use crate::{
 
 pub const FULL_ACCESS_ROLES: &[&str] = &["admin", "manager", "super-admin", "operator"];
 
-pub const PARTIAL_HEADER: &str = "pekerjaan: progres, foto, kontrak, assignment_sources, search kontrak.penyedia, sort penerima_count belum dipindah";
+pub const PARTIAL_HEADER: &str = "pekerjaan: foto_required_count dan foto_* saat summary, output dan draft saat summary, registers kontrak saat summary belum dipindah";
 
 const SORTABLE: &[&str] = &[
     "id",
@@ -162,9 +162,12 @@ impl PekerjaanFilter {
                 " AND (p.nama_paket LIKE ? OR p.kode_rekening LIKE ? \
                  OR p.desa_id IN (SELECT id FROM tbl_desa WHERE n_desa LIKE ?) \
                  OR p.kecamatan_id IN (SELECT id FROM tbl_kecamatan WHERE n_kec LIKE ?) \
-                 OR p.pengawas_id IN (SELECT id FROM pengawas WHERE nama LIKE ?))",
+                 OR p.pengawas_id IN (SELECT id FROM pengawas WHERE nama LIKE ?) \
+                 OR p.id IN (SELECT kp.pekerjaan_id FROM kontrak_pekerjaan kp \
+                   JOIN tbl_kontrak k ON k.id = kp.kontrak_id \
+                   JOIN tbl_penyedia py ON py.id = k.id_penyedia WHERE py.nama LIKE ?))",
             );
-            for _ in 0..5 {
+            for _ in 0..6 {
                 b.push(like.clone());
             }
         }
@@ -173,7 +176,9 @@ impl PekerjaanFilter {
 
     fn order_sql(&self) -> String {
         let dir = if self.sort_desc { "DESC" } else { "ASC" };
-        if SORTABLE.contains(&self.sort_by.as_str()) {
+        if self.sort_by == "penerima_count" {
+            format!(" ORDER BY (SELECT COUNT(*) FROM tbl_penerima x WHERE x.pekerjaan_id = p.id) {dir}, p.id {dir}")
+        } else if SORTABLE.contains(&self.sort_by.as_str()) {
             format!(" ORDER BY p.{} {dir}", self.sort_by)
         } else {
             " ORDER BY p.created_at DESC".to_string()
@@ -237,12 +242,48 @@ pub struct Loaded {
     pub progress: HashMap<u64, crate::progress_metrics::Metrics>,
     /// Estimasi per pekerjaan. Terisi hanya bila `summary` aktif (`None` = tidak dimuat, key null).
     pub estimasi: Option<HashMap<u64, crate::progress_estimasi::Summary>>,
+    pub counts: HashMap<u64, crate::pekerjaan_rel::Counts>,
+    pub kontrak: HashMap<u64, Vec<Value>>,
+    pub sources: HashMap<u64, Vec<&'static str>>,
+    pub mode: Mode,
+    /// Relasi tags dan kontrak ikut dimuat (Laravel: tidak dimuat pada `per_page=-1` tanpa summary).
+    pub tags_loaded: bool,
+    pub kontrak_loaded: bool,
 }
 
-async fn load(
+impl Loaded {
+    /// Relasi kosong, untuk tes unit.
+    pub fn empty(mode: Mode) -> Self {
+        Self {
+            kecamatan: HashMap::new(),
+            desa: HashMap::new(),
+            kegiatan: HashMap::new(),
+            pengawas: HashMap::new(),
+            tags: HashMap::new(),
+            progress: HashMap::new(),
+            estimasi: None,
+            counts: HashMap::new(),
+            kontrak: HashMap::new(),
+            sources: HashMap::new(),
+            mode,
+            tags_loaded: !mode.unbounded || mode.summary,
+            kontrak_loaded: !mode.unbounded || mode.summary,
+        }
+    }
+}
+
+/// Mode permintaan: `summary` (`$request->boolean('summary')`) dan `unbounded` (`per_page=-1`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Mode {
+    pub summary: bool,
+    pub unbounded: bool,
+}
+
+pub async fn load(
     pool: &MySqlPool,
     rows: &[PekerjaanRow],
-    with_estimasi: bool,
+    mode: Mode,
+    viewer: &crate::pekerjaan_rel::Viewer,
 ) -> Result<Loaded, sqlx::Error> {
     let mut kec_ids: Vec<i64> = rows.iter().filter_map(|r| r.kecamatan_id).collect();
     let mut desa_ids: Vec<i64> = rows.iter().filter_map(|r| r.desa_id).collect();
@@ -266,12 +307,22 @@ async fn load(
         kegiatan: HashMap::new(),
         pengawas: HashMap::new(),
         tags: HashMap::new(),
-        progress: progress_for(pool, &pekerjaan_ids).await?,
-        estimasi: if with_estimasi {
+        progress: if mode.unbounded {
+            HashMap::new()
+        } else {
+            progress_for(pool, &pekerjaan_ids).await?
+        },
+        estimasi: if mode.summary {
             Some(estimasi_for(pool, rows).await?)
         } else {
             None
         },
+        counts: HashMap::new(),
+        kontrak: HashMap::new(),
+        sources: HashMap::new(),
+        mode,
+        tags_loaded: !mode.unbounded || mode.summary,
+        kontrak_loaded: !mode.unbounded || mode.summary,
     };
 
     for id in &kec_ids {
@@ -295,7 +346,10 @@ async fn load(
             out.pengawas.insert(*id, p);
         }
     }
-    for pid in &pekerjaan_ids {
+    for pid in pekerjaan_ids
+        .iter()
+        .filter(|_| !mode.unbounded || mode.summary)
+    {
         let rows = sqlx::query(
             "SELECT t.id, t.name, t.slug, t.color, t.created_at, t.updated_at FROM pekerjaan_tag pt \
              JOIN tbl_tags t ON t.id = pt.tag_id WHERE pt.pekerjaan_id = ? ORDER BY t.name",
@@ -316,6 +370,34 @@ async fn load(
             tags.push(crate::lookup::tag_resource(&tag));
         }
         out.tags.insert(*pid, tags);
+    }
+    for p in rows {
+        out.counts
+            .insert(p.id, crate::pekerjaan_rel::counts_for(pool, p.id).await?);
+        if out.kontrak_loaded {
+            out.kontrak.insert(
+                p.id,
+                crate::pekerjaan_rel::kontrak_items(pool, p.id, mode.summary).await?,
+            );
+        }
+        let pengawas_nip = p
+            .pengawas_id
+            .and_then(|id| out.pengawas.get(&id))
+            .and_then(|v| v["nip"].as_str().map(str::to_string));
+        let pendamping_nip = p
+            .pendamping_id
+            .and_then(|id| out.pengawas.get(&id))
+            .and_then(|v| v["nip"].as_str().map(str::to_string));
+        let src = crate::pekerjaan_rel::assignment_sources(
+            pool,
+            viewer,
+            p.id,
+            p.kegiatan_id,
+            pengawas_nip.as_deref(),
+            pendamping_nip.as_deref(),
+        )
+        .await?;
+        out.sources.insert(p.id, src);
     }
     Ok(out)
 }
@@ -423,6 +505,7 @@ pub fn to_resource(p: &PekerjaanRow, rel: &Loaded) -> Value {
     let desa_key = p.desa_id.and_then(|id| rel.desa.get(&id).cloned());
     let keg_key = p.kegiatan_id.and_then(|id| rel.kegiatan.get(&id).cloned());
     let progress = rel.progress.get(&p.id);
+    let counts = rel.counts.get(&p.id).copied().unwrap_or_default();
     let estimasi = match &rel.estimasi {
         Some(map) => map
             .get(&p.id)
@@ -433,7 +516,7 @@ pub fn to_resource(p: &PekerjaanRow, rel: &Loaded) -> Value {
     let pend = p
         .pendamping_id
         .and_then(|id| rel.pengawas.get(&id).cloned());
-    json!({
+    let mut v = json!({
         "id": p.id,
         "kode_rekening": p.kode_rekening,
         "nama_paket": p.nama_paket,
@@ -442,8 +525,8 @@ pub fn to_resource(p: &PekerjaanRow, rel: &Loaded) -> Value {
         "status": p.status.clone().filter(|s| !s.is_empty()).unwrap_or_else(|| "active".to_string()),
         "catatan": p.catatan,
         // BELUM DIPINDAH: null, bukan nilai yang salah.
-        "has_kontrak": Value::Null,
-        "kontrak_count": Value::Null,
+        "has_kontrak": counts.has_kontrak(),
+        "kontrak_count": counts.kontrak_count(),
         "progress_total": number_like_php(progress.map_or(0.0, |m| m.progress_total)),
         "deviasi": number_like_php(progress.map_or(0.0, |m| m.deviasi)),
         "progress_estimasi_fisik": estimasi["progress_estimasi_fisik"],
@@ -451,25 +534,38 @@ pub fn to_resource(p: &PekerjaanRow, rel: &Loaded) -> Value {
         "progress_estimasi_keuangan_nilai": estimasi["progress_estimasi_keuangan_nilai"],
         "deviasi_estimasi_fisik": estimasi["deviasi_estimasi_fisik"],
         "deviasi_estimasi_keuangan": estimasi["deviasi_estimasi_keuangan"],
-        "foto_count": Value::Null,
+        "foto_count": counts.foto,
         "foto_required_count": Value::Null,
-        "foto_status": Value::Null,
+        "foto_status": if rel.mode.summary && !rel.mode.unbounded {
+            Value::Null
+        } else {
+            json!(counts.foto_status())
+        },
         "kecamatan_id": p.kecamatan_id,
         "desa_id": p.desa_id,
         "kegiatan_id": p.kegiatan_id,
         "pengawas_id": p.pengawas_id,
         "pendamping_id": p.pendamping_id,
-        "assignment_sources": Value::Null,
+        "assignment_sources": rel.sources.get(&p.id).cloned().unwrap_or_default(),
         "kecamatan": kec_key,
         "desa": desa_key,
         "kegiatan": keg_key,
         "pengawas": peng,
         "pendamping": pend,
         "tags": rel.tags.get(&p.id).cloned().unwrap_or_default(),
-        "kontrak": Value::Null,
+        "kontrak": rel.kontrak.get(&p.id).cloned().unwrap_or_default(),
+        "penerima_count": counts.penerima,
+        "sipd_links_count": counts.sipd_links,
         "created_at": iso8601_utc(p.created_at),
         "updated_at": iso8601_utc(p.updated_at),
-    })
+    });
+    if !rel.tags_loaded {
+        v.as_object_mut().map(|m| m.remove("tags"));
+    }
+    if !rel.kontrak_loaded {
+        v.as_object_mut().map(|m| m.remove("kontrak"));
+    }
+    v
 }
 
 /// Estimasi belum dimuat (summary tidak aktif): semua key null.
@@ -525,12 +621,16 @@ pub async fn index(
     Query(query): Query<HashMap<String, String>>,
 ) -> Result<Response, ApiError> {
     let user = require_auth(&state, &headers).await?;
-    let roles = auth::permission::user_role_names(&state.pool, user.user_id)
+    let roles_full = auth::login::roles_of(&state.pool, user.user_id)
         .await
         .map_err(internal)?;
-    if !has_full_access(&roles) {
+    let role_names: Vec<String> = roles_full.iter().map(|(_, n)| n.clone()).collect();
+    if !has_full_access(&role_names) {
         return Ok(forbidden());
     }
+    let viewer = crate::pekerjaan_rel::viewer(&state.pool, user.user_id, &roles_full)
+        .await
+        .map_err(internal)?;
 
     let filter = PekerjaanFilter::from_query(&query);
 
@@ -538,9 +638,17 @@ pub async fn index(
         let (rows, _) = list(&state.pool, &filter, None, Some(80))
             .await
             .map_err(internal)?;
-        let rel = load(&state.pool, &rows, summary_requested(&query))
-            .await
-            .map_err(internal)?;
+        let rel = load(
+            &state.pool,
+            &rows,
+            Mode {
+                summary: summary_requested(&query),
+                unbounded: true,
+            },
+            &viewer,
+        )
+        .await
+        .map_err(internal)?;
         let data: Vec<Value> = rows.iter().map(|p| to_resource(p, &rel)).collect();
         return Ok(partial_header(
             Json(json!({ "data": data })).into_response(),
@@ -563,9 +671,17 @@ pub async fn index(
     let (rows, total) = list(&state.pool, &filter, Some((per_page, offset)), None)
         .await
         .map_err(internal)?;
-    let rel = load(&state.pool, &rows, summary_requested(&query))
-        .await
-        .map_err(internal)?;
+    let rel = load(
+        &state.pool,
+        &rows,
+        Mode {
+            summary: summary_requested(&query),
+            unbounded: false,
+        },
+        &viewer,
+    )
+    .await
+    .map_err(internal)?;
     let data: Vec<Value> = rows.iter().map(|p| to_resource(p, &rel)).collect();
     let base = format!("{}/api/pekerjaan", state.app_url.trim_end_matches('/'));
     let body = pagination::paginate_with_query(
@@ -584,20 +700,32 @@ pub async fn show(
     Path(id): Path<String>,
 ) -> Result<Response, ApiError> {
     let user = require_auth(&state, &headers).await?;
-    let roles = auth::permission::user_role_names(&state.pool, user.user_id)
+    let roles_full = auth::login::roles_of(&state.pool, user.user_id)
         .await
         .map_err(internal)?;
-    if !has_full_access(&roles) {
+    let role_names: Vec<String> = roles_full.iter().map(|(_, n)| n.clone()).collect();
+    if !has_full_access(&role_names) {
         return Ok(forbidden());
     }
+    let viewer = crate::pekerjaan_rel::viewer(&state.pool, user.user_id, &roles_full)
+        .await
+        .map_err(internal)?;
     let row = match id.parse::<u64>() {
         Ok(id) => find(&state.pool, id).await.map_err(internal)?,
         Err(_) => None,
     };
     let row = row.ok_or_else(ApiError::not_found)?;
-    let rel = load(&state.pool, std::slice::from_ref(&row), false)
-        .await
-        .map_err(internal)?;
+    let rel = load(
+        &state.pool,
+        std::slice::from_ref(&row),
+        Mode {
+            summary: false,
+            unbounded: false,
+        },
+        &viewer,
+    )
+    .await
+    .map_err(internal)?;
     Ok(partial_header(
         Json(json!({ "data": to_resource(&row, &rel) })).into_response(),
     ))
@@ -660,19 +788,14 @@ mod tests {
             created_at: None,
             updated_at: None,
         };
-        let rel = Loaded {
-            kecamatan: HashMap::new(),
-            desa: HashMap::new(),
-            kegiatan: HashMap::new(),
-            pengawas: HashMap::new(),
-            tags: HashMap::new(),
-            progress: HashMap::new(),
-            estimasi: None,
-        };
+        let rel = Loaded::empty(Mode {
+            summary: false,
+            unbounded: false,
+        });
         let v = to_resource(&p, &rel);
         assert_eq!(v["progress_total"], 0);
         assert_eq!(v["deviasi"], 0);
-        assert_eq!(v["assignment_sources"], Value::Null);
+        assert_eq!(v["assignment_sources"], json!([]));
         assert_eq!(v["status"], "active");
         assert_eq!(v["pagu"], 1000);
     }
