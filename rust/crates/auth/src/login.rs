@@ -90,6 +90,33 @@ pub async fn find_by_email(pool: &MySqlPool, email: &str) -> Result<Option<UserR
     .transpose()
 }
 
+/// Satu user berdasarkan id, dengan kolom yang sama seperti `find_by_email`.
+pub async fn find_by_id(pool: &MySqlPool, id: u64) -> Result<Option<UserRow>, sqlx::Error> {
+    let row = sqlx::query(
+        "SELECT id, name, email, avatar, gender, nip, jabatan, email_verified_at, password, \
+         created_at, updated_at FROM users WHERE id = ? LIMIT 1",
+    )
+    .bind(id)
+    .fetch_optional(pool)
+    .await?;
+    row.map(|r| {
+        Ok(UserRow {
+            id: r.try_get("id")?,
+            name: r.try_get("name")?,
+            email: r.try_get("email")?,
+            avatar: r.try_get("avatar")?,
+            gender: r.try_get("gender")?,
+            nip: r.try_get("nip")?,
+            jabatan: r.try_get("jabatan")?,
+            email_verified_at: r.try_get("email_verified_at")?,
+            password: r.try_get("password")?,
+            created_at: r.try_get("created_at")?,
+            updated_at: r.try_get("updated_at")?,
+        })
+    })
+    .transpose()
+}
+
 /// `(id, name)` role user, urut `id` role.
 pub async fn roles_of(pool: &MySqlPool, user_id: u64) -> Result<Vec<(u64, String)>, sqlx::Error> {
     let rows = sqlx::query(

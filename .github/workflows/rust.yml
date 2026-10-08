@@ -70,6 +70,7 @@ jobs:
           mysql -h127.0.0.1 -uroot -ptest apiamis < fixtures/maintenance_schema.sql
           mysql -h127.0.0.1 -uroot -ptest apiamis < fixtures/login_schema.sql
           mysql -h127.0.0.1 -uroot -ptest apiamis < fixtures/lookup_schema.sql
+          mysql -h127.0.0.1 -uroot -ptest apiamis < fixtures/tiket_checklist_schema.sql
       - name: test integrasi auth
         run: cargo test -p auth --test db_lookup -- --ignored
       - name: test integrasi kecamatan
@@ -84,3 +85,5 @@ jobs:
         run: cargo test -p api --test lookup_db -- --ignored
       - name: test integrasi penyedia dan document types
         run: cargo test -p api --test penyedia_db -- --ignored
+      - name: test integrasi tiket dan checklist
+        run: cargo test -p api --test tiket_checklist_db -- --ignored

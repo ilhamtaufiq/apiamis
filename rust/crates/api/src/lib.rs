@@ -10,6 +10,7 @@ use axum::{
 use serde_json::{json, Value};
 use shared::{ApiError, Config};
 pub mod auth_routes;
+pub mod checklist;
 pub mod desa;
 pub mod format;
 pub mod kecamatan;
@@ -24,6 +25,8 @@ pub mod progress_estimasi;
 pub mod progress_metrics;
 pub mod ratelimit;
 pub mod route_permission;
+pub mod tiket;
+pub mod users;
 
 use tower_http::{
     cors::{AllowHeaders, AllowMethods, AllowOrigin, CorsLayer},
@@ -111,6 +114,11 @@ pub fn app(config: &Config, state: AppState) -> Router {
         .route("/api/pekerjaan", get(pekerjaan::index))
         .route("/api/pekerjaan/{id}", get(pekerjaan::show))
         .route("/api/penyedia/{id}", get(penyedia::show))
+        .route("/api/tiket", get(tiket::index))
+        .route("/api/tiket/{id}", get(tiket::show))
+        .route("/api/checklist-items", get(checklist::items_index))
+        .route("/api/checklist-items/{id}", get(checklist::items_show))
+        .route("/api/pekerjaan-checklist", get(checklist::pekerjaan_index))
         // Catch-all untuk /api: route yang belum ada di Rust tetap lewat pengecekan
         // permission (Laravel menolak lebih dulu, bukan 404).
         .route("/api/{*rest}", any(not_found))
