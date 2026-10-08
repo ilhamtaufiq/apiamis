@@ -64,7 +64,7 @@ fn map_row(r: &sqlx::mysql::MySqlRow) -> Result<BerkasRow, sqlx::Error> {
     })
 }
 
-async fn find_row<'e, E>(exec: E, id: i64) -> Result<Option<BerkasRow>, sqlx::Error>
+pub(crate) async fn find_row<'e, E>(exec: E, id: i64) -> Result<Option<BerkasRow>, sqlx::Error>
 where
     E: sqlx::Executor<'e, Database = MySql>,
 {
@@ -83,7 +83,7 @@ fn col_json(row: &BerkasRow, col: &str) -> Value {
 }
 
 /// `getAttributes()` untuk audit `created` dan `deleted`.
-fn attributes(row: &BerkasRow) -> Map<String, Value> {
+pub(crate) fn attributes(row: &BerkasRow) -> Map<String, Value> {
     let mut m = Map::new();
     m.insert("id".into(), json!(row.id));
     for col in COLUMNS {
@@ -95,7 +95,7 @@ fn attributes(row: &BerkasRow) -> Map<String, Value> {
 }
 
 /// `BerkasResource`. `uploader` hanya ada bila relasi dimuat (daftar dan store, bukan show dan update).
-async fn resource(
+pub(crate) async fn resource(
     pool: &MySqlPool,
     app_url: &str,
     row: &BerkasRow,
