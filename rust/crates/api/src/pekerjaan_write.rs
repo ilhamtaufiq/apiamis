@@ -480,6 +480,19 @@ pub async fn update(
         .await
         .map_err(internal)?
         .ok_or_else(ApiError::not_found)?;
+    // T31: scope `byUserRole()` diperiksa di sini. Laravel hanya mengandalkan route permission.
+    let roles = auth::login::roles_of(&state.pool, user.user_id)
+        .await
+        .map_err(internal)?;
+    if !crate::access::user_can_access(&state.pool, user.user_id, &roles, id)
+        .await
+        .map_err(internal)?
+    {
+        return Err(ApiError::new(
+            axum::http::StatusCode::FORBIDDEN,
+            "Anda tidak memiliki akses untuk pekerjaan ini",
+        ));
+    }
 
     let parsed =
         parse(&body).map_err(|e| ApiError::validation("The given data was invalid.", e))?;

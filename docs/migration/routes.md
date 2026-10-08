@@ -12,9 +12,9 @@ Sumber: `routes/api.php` (branch `rust`, dari `main` SHA `c19fd06`). Dibuat deng
 
 ### Status paritas (diperbarui)
 
-- Sudah di Rust: **28** (termasuk auth, lookup, kecamatan, desa, kegiatan, penyedia, tiket GET, checklist GET, foto show/store/update/destroy)
-- Parsial di Rust: **3** (`GET /api/pekerjaan`, `GET /api/pekerjaan/{id}`, dan `PUT/PATCH /api/pekerjaan/{id}`, lihat T25 dan K12)
-- Belum: **455** (termasuk daftar foto `GET /api/foto`, seluruh `PUT/PATCH` yang belum dipindah, dan POST/DELETE lain selain yang sudah tercantum)
+- Sudah di Rust: **29** (termasuk auth, lookup, kecamatan, desa, kegiatan, penyedia, tiket GET, checklist GET, foto seluruh rute)
+- Parsial di Rust: **3** (`GET /api/pekerjaan`, `GET /api/pekerjaan/{id}`, dan `PUT/PATCH /api/pekerjaan/{id}`; scope sudah ada, tetapi relasi belum lengkap: lihat T21, T25, dan T31)
+- Belum: **454** (termasuk seluruh `PUT/PATCH` yang belum dipindah, dan POST/DELETE lain selain yang sudah tercantum)
 
 Cara menghitung: cocokkan method dan path (`{param}` dinormalisasi) dengan route yang terdaftar di `rust/crates/api/src/lib.rs`.
 
@@ -527,7 +527,7 @@ Kolom **Status** diisi saat modul dipindah ke Rust. Awalnya semua `belum`.
 | No | Method | Path | Controller@action | Middleware | Status |
 | --- | --- | --- | --- | --- | --- |
 | 1 | DELETE | `/api/foto/bulk` | FotoController@bulkDestroy | auth:sanctum | rust |
-| 2 | GET | `/api/foto` | FotoController@index | auth:sanctum | belum |
+| 2 | GET | `/api/foto` | FotoController@index | auth:sanctum | rust |
 | 3 | POST | `/api/foto` | FotoController@store | auth:sanctum | rust |
 | 4 | GET | `/api/foto/{id}` | FotoController@show | auth:sanctum | rust |
 | 5 | PUT/PATCH | `/api/foto/{id}` | FotoController@update | auth:sanctum | rust |

@@ -1,13 +1,13 @@
 //! `/api/foto`: port `FotoController` untuk show, store, update, destroy, dan bulk destroy.
 //! Daftar (`index`) belum dipindah.
 //!
-//! Thumbnail tidak dibuat (lihat `docs/migration/foto-berkas.md`), jadi `foto_thumb_url` memakai URL asli.
-//! Relasi `penerima` dan `komponen` yang tidak ada dikirim `null` (lihat T33).
+//! Thumbnail dibuat saat upload (lihat `media.rs`). Relasi `penerima` dan `komponen` yang tidak ada
+//! dikirim `null` (lihat T33).
 
-use std::{collections::BTreeMap, path::PathBuf};
+use std::{collections::BTreeMap, collections::HashMap, path::PathBuf};
 
 use axum::{
-    extract::{Multipart, Path, State},
+    extract::{Multipart, Path, Query, RawQuery, State},
     http::{HeaderMap, StatusCode},
     response::{IntoResponse, Response},
     Json,
@@ -19,7 +19,7 @@ use sqlx::{mysql::MySqlRow, MySql, MySqlPool, QueryBuilder, Row};
 
 use crate::{
     access, audit, crypt, format::iso8601_utc, koordinat, lookup::carbon_json, media, notify,
-    require_auth, AppState,
+    pagination, require_auth, AppState,
 };
 
 pub const COLLECTION: &str = "foto/pekerjaan";
@@ -460,10 +460,9 @@ fn decrypt_nik(nik: Option<String>) -> Result<Value, ApiError> {
 
 /// `FotoResource` (dengan relasi pekerjaan, penerima, dan komponen).
 pub async fn resource(pool: &MySqlPool, app_url: &str, row: &FotoRow) -> Result<Value, ApiError> {
-    let foto_url = media::first_url(pool, app_url, MODEL, row.id as u64, COLLECTION)
+    let (foto_url, thumb_url) = media::first_urls(pool, app_url, MODEL, row.id as u64, COLLECTION)
         .await
-        .map_err(media::internal)?
-        .unwrap_or_default();
+        .map_err(media::internal)?;
 
     let pekerjaan = match row.pekerjaan_id {
         Some(p) => sqlx::query(
@@ -531,8 +530,8 @@ pub async fn resource(pool: &MySqlPool, app_url: &str, row: &FotoRow) -> Result<
         "validasi_koordinat_message": row.validasi_koordinat_message,
         "unit_index": row.unit_index,
         "foto_url": foto_url,
-        // Thumbnail tidak dibuat, jadi `foto_thumb_url` jatuh ke URL asli (perilaku `?:` di Laravel).
-        "foto_thumb_url": foto_url,
+        // `getFirstMediaUrl(.., 'thumb') ?: getFirstMediaUrl(..)`.
+        "foto_thumb_url": if thumb_url.is_empty() { foto_url.clone() } else { thumb_url },
         "pekerjaan": pekerjaan,
         "penerima": penerima,
         "komponen": komponen,
@@ -563,6 +562,132 @@ pub async fn show(
     ensure_access(&state, user.user_id, &roles, row.pekerjaan_id).await?;
     let data = resource(&state.pool, &state.app_url, &row).await?;
     Ok(Json(json!({ "data": data })).into_response())
+}
+
+/// Filter daftar foto yang bernilai benar seperti PHP: kosong dan `"0"` dianggap tidak aktif.
+fn truthy(value: Option<&String>) -> bool {
+    value.is_some_and(|v| !v.is_empty() && v != "0")
+}
+
+/// `GET /api/foto`. Foto difilter lewat pekerjaan induknya dengan scope `byUserRole()`.
+/// `pekerjaan_id` (jika ada) mengembalikan semua foto tanpa paginasi, seperti Laravel.
+pub async fn index(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    RawQuery(raw): RawQuery,
+    Query(query): Query<HashMap<String, String>>,
+) -> Result<Response, ApiError> {
+    let user = require_auth(&state, &headers).await?;
+    let roles = auth::login::roles_of(&state.pool, user.user_id)
+        .await
+        .map_err(media::internal)?;
+    let scope = access::restriction(user.user_id, &roles, "p");
+
+    // Setiap klausa punya nilai bind berurutan (semua dikirim sebagai string, MySQL mengonversinya).
+    let mut clauses: Vec<(String, Vec<String>)> = vec![(
+        format!(
+            "f.pekerjaan_id IN (SELECT p.id FROM tbl_pekerjaan p WHERE 1=1{})",
+            scope.sql
+        ),
+        scope.binds.iter().map(u64::to_string).collect(),
+    )];
+    if truthy(query.get("tahun")) {
+        clauses.push((
+            "f.pekerjaan_id IN (SELECT p.id FROM tbl_pekerjaan p JOIN tbl_kegiatan k ON k.id = p.kegiatan_id WHERE k.tahun_anggaran = ?)"
+                .into(),
+            vec![query["tahun"].clone()],
+        ));
+    }
+    if let Some(term) = query.get("search").filter(|v| !v.is_empty()) {
+        let like = format!("%{term}%");
+        clauses.push((
+            "f.pekerjaan_id IN (SELECT p.id FROM tbl_pekerjaan p WHERE (p.nama_paket LIKE ? OR p.kode_rekening LIKE ? \
+             OR p.id IN (SELECT kp.pekerjaan_id FROM kontrak_pekerjaan kp JOIN tbl_kontrak k ON k.id = kp.kontrak_id \
+             JOIN tbl_penyedia py ON py.id = k.id_penyedia WHERE py.nama LIKE ?)))"
+                .into(),
+            vec![like.clone(), like.clone(), like],
+        ));
+    }
+    if truthy(query.get("latest_only")) {
+        clauses.push((
+            "f.id IN (SELECT MAX(id) FROM tbl_foto GROUP BY pekerjaan_id)".into(),
+            Vec::new(),
+        ));
+    }
+    let by_pekerjaan = query.contains_key("pekerjaan_id");
+    if by_pekerjaan {
+        clauses.push((
+            "f.pekerjaan_id = ?".into(),
+            vec![query["pekerjaan_id"].clone()],
+        ));
+    }
+
+    let where_sql = format!(
+        " WHERE {}",
+        clauses
+            .iter()
+            .map(|(c, _)| c.as_str())
+            .collect::<Vec<_>>()
+            .join(" AND ")
+    );
+    let binds: Vec<String> = clauses.into_iter().flat_map(|(_, b)| b).collect();
+    let select = SELECT_FOTO.replace(" FROM tbl_foto", " FROM tbl_foto f");
+
+    let sql = format!("{select}{where_sql} ORDER BY f.id");
+    let mut q = sqlx::query(&sql);
+    for b in &binds {
+        q = q.bind(b);
+    }
+    let all = q
+        .fetch_all(&state.pool)
+        .await
+        .map_err(media::internal)?
+        .iter()
+        .map(map_row)
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(media::internal)?;
+
+    if by_pekerjaan {
+        let mut data = Vec::with_capacity(all.len());
+        for row in &all {
+            data.push(resource(&state.pool, &state.app_url, row).await?);
+        }
+        return Ok(Json(json!({ "data": data })).into_response());
+    }
+
+    let per_page_raw = query.get("per_page").map(String::as_str).unwrap_or("20");
+    if per_page_raw.trim() == "-1" {
+        let mut data = Vec::with_capacity(all.len());
+        for row in &all {
+            data.push(resource(&state.pool, &state.app_url, row).await?);
+        }
+        return Ok(Json(json!({ "data": data })).into_response());
+    }
+    let per_page = per_page_raw
+        .parse::<u64>()
+        .ok()
+        .filter(|v| *v >= 1)
+        .unwrap_or(20);
+    let page = query
+        .get("page")
+        .and_then(|v| v.parse::<u64>().ok())
+        .filter(|v| *v >= 1)
+        .unwrap_or(1);
+    let total = all.len() as u64;
+    let offset = ((page - 1) * per_page) as usize;
+    let mut data = Vec::new();
+    for row in all.iter().skip(offset).take(per_page as usize) {
+        data.push(resource(&state.pool, &state.app_url, row).await?);
+    }
+    let base = format!("{}/api/foto", state.app_url.trim_end_matches('/'));
+    let body = pagination::paginate_with_query(
+        data,
+        total,
+        pagination::PageParams { page, per_page },
+        &base,
+        &crate::pekerjaan::query_without_page(raw.as_deref()),
+    );
+    Ok(Json(body).into_response())
 }
 
 /// `POST /api/foto`.

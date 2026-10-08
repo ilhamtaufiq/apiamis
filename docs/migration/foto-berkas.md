@@ -24,7 +24,7 @@ Sumber: `app/Http/Controllers/FotoController.php`, `BerkasController.php`, `app/
 
 ## Rencana
 
-1. Foto CRUD di Rust: selesai untuk show, store, update, destroy, dan bulk destroy (`foto.rs`, `media.rs`). Tersisa: daftar `GET /api/foto`, yang butuh `byUserRole` di query daftar.
+1. Foto CRUD di Rust selesai: daftar, show, store, update, destroy, dan bulk destroy (`foto.rs`, `media.rs`). Thumbnail dibuat (T34).
 2. Berkas CRUD (tanpa konversi PDF, ZIP, dan upload-from-URL) di Rust.
 3. Konversi PDF, ZIP streaming, dan upload-from-URL setelah K2 diputuskan.
 

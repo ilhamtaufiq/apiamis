@@ -90,11 +90,27 @@ async fn send(
     )
 }
 
-/// JPEG minimal (magic number) dengan isi `size` byte.
-fn jpeg(size: usize) -> Vec<u8> {
-    let mut v = vec![0xFF, 0xD8, 0xFF, 0xE0];
-    v.resize(size, 0x42);
-    v
+/// JPEG nyata berisi noise (tidak bisa dikompres kecil), kualitas 95.
+fn real_jpeg(width: u32, height: u32) -> Vec<u8> {
+    use image::{codecs::jpeg::JpegEncoder, ImageEncoder, Rgb, RgbImage};
+    let mut img = RgbImage::new(width, height);
+    for px in img.pixels_mut() {
+        *px = Rgb([rand::random(), rand::random(), rand::random()]);
+    }
+    let mut out = Vec::new();
+    JpegEncoder::new_with_quality(&mut out, 95)
+        .write_image(img.as_raw(), width, height, image::ExtendedColorType::Rgb8)
+        .unwrap();
+    out
+}
+
+/// PNG nyata kecil (gradien).
+fn real_png(width: u32, height: u32) -> Vec<u8> {
+    use image::{ImageFormat, Rgb, RgbImage};
+    let img = RgbImage::from_fn(width, height, |x, y| Rgb([x as u8, y as u8, 128]));
+    let mut out = std::io::Cursor::new(Vec::new());
+    img.write_to(&mut out, ImageFormat::Png).unwrap();
+    out.into_inner()
 }
 
 async fn make_admin(pool: &MySqlPool) -> u64 {
@@ -169,8 +185,9 @@ async fn store_show_update_destroy_with_media_and_audit() {
         .unwrap();
     let pid = pekerjaan.to_string();
 
-    // Store: berkas 2 MB melewati batas body global 1 MB.
-    let big = jpeg(2 * 1024 * 1024);
+    // Store: berkas di atas 1 MB (batas body global) harus lolos lewat batas rute foto.
+    let big = real_jpeg(1000, 1000);
+    assert!(big.len() > 1024 * 1024, "berkas uji harus > 1 MB");
     let body = multipart(
         &[
             ("pekerjaan_id", &pid),
@@ -229,6 +246,18 @@ async fn store_show_update_destroy_with_media_and_audit() {
         data["foto_url"],
         format!("http://localhost/storage/{media_id}/{file_name}").as_str()
     );
+    // Thumbnail 120x120 dibuat saat upload (`thumb`), seperti Laravel.
+    let stem = file_name.trim_end_matches(".jpg");
+    let thumb_path = first_dir
+        .join("conversions")
+        .join(format!("{stem}-thumb.jpg"));
+    assert!(thumb_path.exists(), "thumbnail dibuat");
+    let thumb = image::open(&thumb_path).unwrap();
+    assert_eq!((thumb.width(), thumb.height()), (120, 120));
+    assert_eq!(
+        data["foto_thumb_url"],
+        format!("http://localhost/storage/{media_id}/conversions/{stem}-thumb.jpg").as_str()
+    );
 
     let audit: i64 = sqlx::query_scalar(
         "SELECT COUNT(*) FROM tbl_audit_logs WHERE auditable_type = 'App\\\\Models\\\\Foto' AND auditable_id = ? AND event = 'created' AND user_id = ?",
@@ -265,7 +294,7 @@ async fn store_show_update_destroy_with_media_and_audit() {
     assert_eq!(status, StatusCode::METHOD_NOT_ALLOWED);
 
     // Update dengan _method=PUT dan berkas baru: berkas lama diganti, audit updated ditulis.
-    let new_bytes = jpeg(4096);
+    let new_bytes = real_png(300, 200);
     let body = multipart(
         &[
             ("_method", "PUT"),
@@ -299,6 +328,10 @@ async fn store_show_update_destroy_with_media_and_audit() {
     assert_eq!(media_after.len(), 1, "hanya berkas baru yang tersisa");
     assert!(media_after[0].ends_with(".png"));
     assert!(!first_dir.exists(), "direktori berkas lama dihapus");
+    assert!(updated["data"]["foto_thumb_url"]
+        .as_str()
+        .unwrap()
+        .ends_with(".png"));
 
     let updated_audit: String = sqlx::query_scalar(
         "SELECT CAST(new_values AS CHAR) FROM tbl_audit_logs WHERE auditable_type = 'App\\\\Models\\\\Foto' AND auditable_id = ? AND event = 'updated' ORDER BY id DESC LIMIT 1",

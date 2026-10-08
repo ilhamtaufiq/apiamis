@@ -190,10 +190,14 @@ impl PekerjaanFilter {
 pub async fn list(
     pool: &MySqlPool,
     f: &PekerjaanFilter,
+    scope: &crate::access::Restriction,
     page: Option<(u64, u64)>,
     cap: Option<u64>,
 ) -> Result<(Vec<PekerjaanRow>, u64), sqlx::Error> {
-    let (where_sql, binds) = f.where_clause();
+    let (mut where_sql, mut binds) = f.where_clause();
+    // `scopeByUserRole()`: alias tabel di query ini adalah `p`.
+    where_sql.push_str(&scope.sql);
+    binds.extend(scope.binds.iter().map(u64::to_string));
     let count_sql = format!("SELECT COUNT(*) FROM tbl_pekerjaan p{where_sql}");
     let mut cq = sqlx::query_scalar::<_, i64>(&count_sql);
     for b in &binds {
@@ -626,18 +630,8 @@ fn partial_header(mut resp: Response) -> Response {
     resp
 }
 
-fn forbidden() -> Response {
-    (
-        StatusCode::FORBIDDEN,
-        Json(json!({
-            "message": "Daftar pekerjaan untuk role ini belum tersedia di Rust (scope pengawas belum dipindah)."
-        })),
-    )
-        .into_response()
-}
-
 /// Query string tanpa `page`, untuk `appends($request->query())`.
-fn query_without_page(raw: Option<&str>) -> String {
+pub fn query_without_page(raw: Option<&str>) -> String {
     raw.unwrap_or("")
         .split('&')
         .filter(|kv| !kv.is_empty() && !kv.starts_with("page="))
@@ -655,10 +649,7 @@ pub async fn index(
     let roles_full = auth::login::roles_of(&state.pool, user.user_id)
         .await
         .map_err(internal)?;
-    let role_names: Vec<String> = roles_full.iter().map(|(_, n)| n.clone()).collect();
-    if !has_full_access(&role_names) {
-        return Ok(forbidden());
-    }
+    let scope = crate::access::restriction(user.user_id, &roles_full, "p");
     let viewer = crate::pekerjaan_rel::viewer(&state.pool, user.user_id, &roles_full)
         .await
         .map_err(internal)?;
@@ -666,7 +657,7 @@ pub async fn index(
     let filter = PekerjaanFilter::from_query(&query);
 
     if query.get("per_page").map(String::as_str) == Some("-1") {
-        let (rows, _) = list(&state.pool, &filter, None, Some(80))
+        let (rows, _) = list(&state.pool, &filter, &scope, None, Some(80))
             .await
             .map_err(internal)?;
         let rel = load(
@@ -697,7 +688,7 @@ pub async fn index(
         .unwrap_or(1);
     let params = PageParams { page, per_page };
     let offset = (page - 1) * per_page;
-    let (rows, total) = list(&state.pool, &filter, Some((per_page, offset)), None)
+    let (rows, total) = list(&state.pool, &filter, &scope, Some((per_page, offset)), None)
         .await
         .map_err(internal)?;
     let rel = load(
@@ -732,10 +723,6 @@ pub async fn show(
     let roles_full = auth::login::roles_of(&state.pool, user.user_id)
         .await
         .map_err(internal)?;
-    let role_names: Vec<String> = roles_full.iter().map(|(_, n)| n.clone()).collect();
-    if !has_full_access(&role_names) {
-        return Ok(forbidden());
-    }
     let viewer = crate::pekerjaan_rel::viewer(&state.pool, user.user_id, &roles_full)
         .await
         .map_err(internal)?;
@@ -744,6 +731,16 @@ pub async fn show(
         Err(_) => None,
     };
     let row = row.ok_or_else(ApiError::not_found)?;
+    // `Pekerjaan::userCanAccess` di Laravel: pekerjaan di luar scope mendapat 403.
+    if !crate::access::user_can_access(&state.pool, user.user_id, &roles_full, row.id)
+        .await
+        .map_err(internal)?
+    {
+        return Err(ApiError::new(
+            StatusCode::FORBIDDEN,
+            "Anda tidak memiliki akses untuk pekerjaan ini",
+        ));
+    }
     let rel = load(
         &state.pool,
         std::slice::from_ref(&row),

@@ -5,7 +5,9 @@ use tracing_subscriber::EnvFilter;
 
 #[tokio::main]
 async fn main() {
+    // `.env` root repo Laravel: dicari dari direktori kerja (`rust/`), lalu dari lokasi crate.
     let _ = dotenvy::from_path("../.env");
+    let _ = dotenvy::from_path(concat!(env!("CARGO_MANIFEST_DIR"), "/../../../.env"));
     let _ = dotenvy::dotenv();
 
     tracing_subscriber::fmt()

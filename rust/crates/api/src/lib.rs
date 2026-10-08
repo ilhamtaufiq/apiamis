@@ -139,7 +139,9 @@ pub fn app(config: &Config, state: AppState) -> Router {
         )
         .route(
             "/api/foto",
-            post(foto::store).layer(DefaultBodyLimit::max(foto::BODY_LIMIT)),
+            get(foto::index)
+                .post(foto::store)
+                .layer(DefaultBodyLimit::max(foto::BODY_LIMIT)),
         )
         // Sebelum `/api/foto/{id}`: segmen statis menang atas parameter.
         .route("/api/foto/bulk", delete(foto::bulk_destroy))

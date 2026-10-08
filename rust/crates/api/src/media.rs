@@ -2,7 +2,7 @@
 //!
 //! Path: `{storage}/{media_id}/{file_name}`, URL: `{APP_URL}/storage/{media_id}/{file_name}`.
 //! Akar storage dibaca dari env `PUBLIC_STORAGE_PATH`, default `storage/app/public` di repo Laravel.
-//! Thumbnail tidak dibuat (lihat `docs/migration/foto-berkas.md`).
+//! Thumbnail `thumb` dibuat sinkron seperti `->nonQueued()` di Laravel: crop 120x120 ke `conversions/`.
 
 use std::path::{Path, PathBuf};
 
@@ -128,15 +128,75 @@ pub async fn attach(
 
     let dir = media_dir(media_id);
     tokio::fs::create_dir_all(&dir).await.map_err(internal)?;
-    tokio::fs::write(dir.join(&file_name), &upload.bytes)
-        .await
-        .map_err(internal)?;
+    let written = write_original(&dir, &file_name, upload, media_id, mime, tx).await;
+    if let Err(e) = written {
+        let _ = tokio::fs::remove_dir_all(&dir).await;
+        return Err(e);
+    }
 
     Ok(Stored {
         media_id,
         file_name,
         dir,
     })
+}
+
+/// Tulis berkas asli dan, untuk gambar, thumbnail `thumb` (`generated_conversions`).
+async fn write_original(
+    dir: &Path,
+    file_name: &str,
+    upload: &Upload,
+    media_id: u64,
+    mime: &str,
+    tx: &mut Transaction<'_, MySql>,
+) -> Result<(), ApiError> {
+    tokio::fs::write(dir.join(file_name), &upload.bytes)
+        .await
+        .map_err(internal)?;
+    if !mime.starts_with("image/") {
+        return Ok(());
+    }
+    let ext = Path::new(file_name)
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("jpg")
+        .to_string();
+    let source = upload.bytes.clone();
+    let thumb = tokio::task::spawn_blocking(move || make_thumb(&source))
+        .await
+        .map_err(internal)?
+        .map_err(internal)?;
+    let thumb_dir = dir.join("conversions");
+    tokio::fs::create_dir_all(&thumb_dir)
+        .await
+        .map_err(internal)?;
+    let stem = file_name
+        .strip_suffix(&format!(".{ext}"))
+        .unwrap_or(file_name);
+    tokio::fs::write(thumb_dir.join(thumb_file_name(stem, &ext)), thumb)
+        .await
+        .map_err(internal)?;
+    sqlx::query("UPDATE media SET generated_conversions = '{\"thumb\": true}' WHERE id = ?")
+        .bind(media_id)
+        .execute(&mut **tx)
+        .await
+        .map_err(internal)?;
+    Ok(())
+}
+
+/// Nama berkas thumbnail seperti Spatie: `{nama}-thumb.{ext}`.
+pub fn thumb_file_name(stem: &str, ext: &str) -> String {
+    format!("{stem}-thumb.{ext}")
+}
+
+/// Crop 120x120 (`Fit::Crop`), lalu encode dengan format sumber.
+pub fn make_thumb(source: &[u8]) -> Result<Vec<u8>, image::ImageError> {
+    let img = image::load_from_memory(source)?;
+    let thumb = img.resize_to_fill(120, 120, image::imageops::FilterType::Lanczos3);
+    let format = image::guess_format(source)?;
+    let mut out = std::io::Cursor::new(Vec::new());
+    thumb.write_to(&mut out, format)?;
+    Ok(out.into_inner())
 }
 
 /// Hapus semua media satu koleksi: baris `media` dalam transaksi, direktori berkasnya dikembalikan
@@ -178,16 +238,17 @@ pub async fn remove_dirs(dirs: &[PathBuf]) {
     }
 }
 
-/// URL berkas pertama koleksi (`getFirstMediaUrl`). Hanya disk `public` yang URL-nya diketahui.
-pub async fn first_url(
+/// URL berkas pertama koleksi (`getFirstMediaUrl`) dan URL thumbnail-nya (`getFirstMediaUrl(..., 'thumb')`).
+/// Kosong bila tidak ada (string kosong, seperti Laravel). Hanya disk `public` yang URL-nya diketahui.
+pub async fn first_urls(
     pool: &MySqlPool,
     app_url: &str,
     model_type: &str,
     model_id: u64,
     collection: &str,
-) -> Result<Option<String>, sqlx::Error> {
+) -> Result<(String, String), sqlx::Error> {
     let row = sqlx::query(
-        "SELECT CAST(id AS UNSIGNED) AS id, disk, file_name FROM media \
+        "SELECT CAST(id AS UNSIGNED) AS id, disk, file_name, CAST(generated_conversions AS CHAR) AS generated_conversions FROM media \
          WHERE model_type = ? AND model_id = ? AND collection_name = ? ORDER BY order_column, id LIMIT 1",
     )
     .bind(model_type)
@@ -196,18 +257,33 @@ pub async fn first_url(
     .fetch_optional(pool)
     .await?;
     let Some(r) = row else {
-        return Ok(None);
+        return Ok((String::new(), String::new()));
     };
     let disk: String = r.try_get("disk")?;
     if disk != "public" {
-        return Ok(None);
+        return Ok((String::new(), String::new()));
     }
     let media_id: u64 = r.try_get("id")?;
     let file_name: String = r.try_get("file_name")?;
-    Ok(Some(format!(
-        "{}/storage/{media_id}/{file_name}",
-        app_url.trim_end_matches('/')
-    )))
+    let generated: String = r.try_get("generated_conversions")?;
+    let base = app_url.trim_end_matches('/');
+    let original = format!("{base}/storage/{media_id}/{file_name}");
+    let thumb = if generated.contains("\"thumb\"") {
+        let ext = Path::new(&file_name)
+            .extension()
+            .and_then(|e| e.to_str())
+            .unwrap_or("jpg");
+        let stem = file_name
+            .strip_suffix(&format!(".{ext}"))
+            .unwrap_or(&file_name);
+        format!(
+            "{base}/storage/{media_id}/conversions/{}",
+            thumb_file_name(stem, ext)
+        )
+    } else {
+        String::new()
+    };
+    Ok((original, thumb))
 }
 
 #[cfg(test)]
