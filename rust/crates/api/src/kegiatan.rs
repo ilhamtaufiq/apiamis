@@ -4,7 +4,7 @@
 //! semua baris tanpa paginasi (`{"data": [...]}`), seperti di Laravel.
 
 use axum::{
-    extract::{Query, State},
+    extract::{Path, Query, State},
     http::HeaderMap,
     Json,
 };
@@ -122,6 +122,57 @@ pub async fn list(
         .collect::<Result<Vec<_>, _>>()?;
 
     Ok((items, total))
+}
+
+/// Satu kegiatan berdasarkan id.
+pub async fn find(pool: &MySqlPool, id: u64) -> Result<Option<KegiatanRow>, sqlx::Error> {
+    let row = sqlx::query(
+        "SELECT id, nama_program, sub_bidang, nama_kegiatan, nama_sub_kegiatan, tahun_anggaran, \
+         sumber_dana, CAST(pagu AS CHAR) AS pagu, CAST(kode_rekening AS CHAR) AS kode_rekening, \
+         nama_pptk, nip_pptk, sipd_id_sub_bl, kode_sub_giat, created_at, updated_at \
+         FROM tbl_kegiatan WHERE id = ?",
+    )
+    .bind(id)
+    .fetch_optional(pool)
+    .await?;
+    row.map(|r| map_row(&r)).transpose()
+}
+
+fn map_row(r: &sqlx::mysql::MySqlRow) -> Result<KegiatanRow, sqlx::Error> {
+    let raw_kode: Option<String> = r.try_get("kode_rekening")?;
+    let kode_rekening = raw_kode.map(|s| serde_json::from_str::<Value>(&s).unwrap_or(Value::Null));
+    Ok(KegiatanRow {
+        id: r.try_get("id")?,
+        nama_program: r.try_get("nama_program")?,
+        sub_bidang: r.try_get("sub_bidang")?,
+        nama_kegiatan: r.try_get("nama_kegiatan")?,
+        nama_sub_kegiatan: r.try_get("nama_sub_kegiatan")?,
+        tahun_anggaran: r.try_get("tahun_anggaran")?,
+        sumber_dana: r.try_get("sumber_dana")?,
+        pagu: r.try_get("pagu")?,
+        kode_rekening,
+        nama_pptk: r.try_get("nama_pptk")?,
+        nip_pptk: r.try_get("nip_pptk")?,
+        sipd_id_sub_bl: r.try_get("sipd_id_sub_bl")?,
+        kode_sub_giat: r.try_get("kode_sub_giat")?,
+        created_at: r.try_get("created_at")?,
+        updated_at: r.try_get("updated_at")?,
+    })
+}
+
+/// `GET /api/kegiatan/{id}`: `{"data": KegiatanResource}`.
+pub async fn show(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+) -> Result<Json<Value>, ApiError> {
+    require_auth(&state, &headers).await?;
+    let row = match id.parse::<u64>() {
+        Ok(id) => find(&state.pool, id).await.map_err(internal)?,
+        Err(_) => None,
+    };
+    let row = row.ok_or_else(ApiError::not_found)?;
+    Ok(Json(json!({ "data": to_resource(&row) })))
 }
 
 pub async fn index(

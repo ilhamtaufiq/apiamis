@@ -5,13 +5,17 @@
 //! `nama_kecamatan` berasal dari kolom `n_kec`, `jumlah_desa` dari hitungan
 //! `tbl_desa`, dan timestamp memakai ISO 8601 dengan zona UTC (`+00:00`).
 
-use axum::{extract::State, http::HeaderMap, Json};
+use axum::{
+    extract::{Path, State},
+    http::HeaderMap,
+    Json,
+};
 use chrono::{DateTime, Utc};
 use serde_json::{json, Value};
 use shared::ApiError;
 use sqlx::Row;
 
-use crate::{format::iso8601_utc, AppState};
+use crate::{format::iso8601_utc, require_auth, AppState};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct KecamatanRow {
@@ -31,6 +35,58 @@ pub fn to_resource(row: &KecamatanRow) -> Value {
         "created_at": iso8601_utc(row.created_at),
         "updated_at": iso8601_utc(row.updated_at),
     })
+}
+
+/// Bentuk `KecamatanDetailResource`: kecamatan beserta daftar desanya.
+pub fn detail_resource(row: &KecamatanRow, desa: &[crate::desa::DesaRow]) -> Value {
+    json!({
+        "id": row.id,
+        "nama_kecamatan": row.n_kec,
+        "desa": desa.iter().map(crate::desa::base_resource).collect::<Vec<_>>(),
+        "jumlah_desa": desa.len(),
+        "created_at": iso8601_utc(row.created_at),
+        "updated_at": iso8601_utc(row.updated_at),
+    })
+}
+
+/// Satu kecamatan berdasarkan id, dengan jumlah desanya.
+pub async fn find(pool: &sqlx::MySqlPool, id: u64) -> Result<Option<KecamatanRow>, sqlx::Error> {
+    let row = sqlx::query(
+        "SELECT k.id, k.n_kec, k.created_at, k.updated_at, \
+         CAST((SELECT COUNT(*) FROM tbl_desa d WHERE d.kecamatan_id = k.id) AS SIGNED) AS jumlah_desa \
+         FROM tbl_kecamatan k WHERE k.id = ?",
+    )
+    .bind(id)
+    .fetch_optional(pool)
+    .await?;
+    row.map(|r| {
+        Ok(KecamatanRow {
+            id: r.try_get("id")?,
+            n_kec: r.try_get("n_kec")?,
+            created_at: r.try_get("created_at")?,
+            updated_at: r.try_get("updated_at")?,
+            jumlah_desa: r.try_get("jumlah_desa")?,
+        })
+    })
+    .transpose()
+}
+
+/// `GET /api/kecamatan/{id}`: `{"data": KecamatanDetailResource}`.
+pub async fn show(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+) -> Result<Json<Value>, ApiError> {
+    require_auth(&state, &headers).await?;
+    let row = match id.parse::<u64>() {
+        Ok(id) => find(&state.pool, id).await.map_err(crate::desa::internal)?,
+        Err(_) => None,
+    };
+    let row = row.ok_or_else(ApiError::not_found)?;
+    let desa = crate::desa::list_for_kecamatan(&state.pool, row.id)
+        .await
+        .map_err(crate::desa::internal)?;
+    Ok(Json(json!({ "data": detail_resource(&row, &desa) })))
 }
 
 /// Membaca semua kecamatan, urutan `id` seperti `Kecamatan::all()` di Laravel.

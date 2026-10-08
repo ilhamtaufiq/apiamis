@@ -62,3 +62,18 @@ async fn rows_match_production_fixture_except_timestamps_and_personal_fields() {
     }
     assert!(mismatches.is_empty(), "selisih:\n{}", mismatches.join("\n"));
 }
+
+#[tokio::test]
+#[ignore = "butuh DATABASE_URL dan data tbl_kegiatan"]
+async fn show_matches_list_row_and_missing_id_is_none() {
+    use api::kegiatan::{find, to_resource};
+
+    let url = std::env::var("DATABASE_URL").expect("DATABASE_URL belum di-set");
+    let pool = MySqlPool::connect(&url).await.unwrap();
+    let (rows, _) = list(&pool, None, Some((15, 0))).await.unwrap();
+    let first = rows.first().expect("ada data kegiatan");
+
+    let shown = find(&pool, first.id).await.unwrap().expect("id ada");
+    assert_eq!(to_resource(&shown), to_resource(first));
+    assert!(find(&pool, 999_999_999).await.unwrap().is_none());
+}

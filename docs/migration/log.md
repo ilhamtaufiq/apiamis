@@ -35,7 +35,7 @@ Setiap kali ada langkah yang selesai, tambahkan entri di bagian **Riwayat** dan 
 ### Fase 2: Modul bisnis (4–7 bulan)
 
 - [ ] 2.1 Public API v1 (`/api/public/v1/*`)
-- [~] 2.2 Master data: `kecamatan`, `desa`, dan `kegiatan` (GET list) sudah di Rust. Diuji terhadap fixture produksi dan DB. Belum ada show per id, POST, PUT, atau DELETE
+- [~] 2.2 Master data: `kecamatan`, `desa`, dan `kegiatan` sudah di Rust untuk GET list dan show per id. Diuji terhadap fixture produksi dan DB. Belum ada POST, PUT, atau DELETE
 - [ ] 2.3 Lookup dan konfigurasi
 - [ ] 2.4 Tiket dan SpamUnit
 - [ ] 2.5 Checklist proyek
@@ -86,6 +86,7 @@ Setiap kali ada langkah yang selesai, tambahkan entri di bagian **Riwayat** dan 
 | T15 | Timestamp `created_at` di dump lokal 7 jam berbeda dari produksi untuk baris yang sama (id 1 kegiatan) | Tes paritas tidak membandingkan timestamp. Pastikan zona waktu DB produksi sebelum fixture timestamp dipakai |
 | T16 | Email default bypass maintenance (`ilhamtaufiq@gmail.com`) tertulis di kode `MaintenanceModeService` dan di Rust | Pindahkan ke konfigurasi, dan jangan jadikan default di kode |
 | T17 | Format datetime di `UserResource` (login) belum terverifikasi. Kode memakai Carbon mentah (`.000000Z`), sedangkan resource lain memakai `toIso8601String` (`+00:00`). Juga `avatar_url` hanya dibangun untuk disk `public` | Bandingkan dengan respon login produksi sekali akun uji tersedia |
+| T18 | 404 show per id: Rust mengembalikan `{"message":"Not Found."}`. Laravel memakai `ModelNotFoundException` dan bentuk respon bergantung pada `APP_DEBUG`. Karena produksi memakai `APP_DEBUG=true` (T11), respon produksi kemungkinan berbeda | Verifikasi setelah `APP_DEBUG=false`, lalu sesuaikan |
 | T10 | Kualitas data: 14 dari 20 kegiatan punya `pagu = 0`, 7 pekerjaan punya `pagu = 0`, dan 15 kegiatan punya total pekerjaan melebihi pagu kegiatan | Perlu konfirmasi dengan pemilik data sebelum dijadikan fixture acuan |
 
 ## Keputusan terbuka
@@ -125,4 +126,5 @@ Setiap kali ada langkah yang selesai, tambahkan entri di bagian **Riwayat** dan 
 | 2026-10-08 | 1.7 Route permission | Port `CheckRoutePermission`: admin bypass, whitelist, rule `route_permissions` (exact lalu `:param`), admin-only, dan mutasi tanpa rule. Pesan 403 sama dengan Laravel. Catch-all `/api/*` memastikan path yang belum dipindah juga dicek. Batasan: request tanpa token ke route yang belum ada di Rust mendapat 404, bukan 401 |
 | 2026-10-08 | 1.9 Maintenance gate | `crates/api/src/maintenance.rs`: flag dan daftar bypass dari `app_settings`, env `MAINTENANCE_BYPASS_EMAILS`, default email. Dipasang sebagai layer terluar sehingga jalan sebelum permission. Smoke test lokal cocok dengan Laravel. Catatan keamanan: email default bypass tertulis di kode (sama dengan Laravel), perlu dipindah ke konfigurasi |
 | 2026-10-08 | 1.6 Login email dan password | `POST /api/auth/login`: rate limit sebelum validasi, validasi 422 seperti `ValidationException`, bcrypt (hash `$2y$` dari PHP diverifikasi), maintenance dicek setelah kredensial, token `id\|plain`. Tes: login E2E dan smoke test (422, 200, token dipakai 200, 429 setelah 5 percobaan). Belum: Google OAuth |
+| 2026-10-08 | 2.2 show per id | `GET /api/kecamatan/{id}` (dengan `desa` bersarang tanpa key `kecamatan`), `GET /api/desa/{id}`, dan `GET /api/kegiatan/{id}`, semuanya dibungkus `data`. Tes DB dan smoke test: 200 dan 404 (id tidak ada atau tidak valid), 401 tanpa token. Tes DB dipisah per rentang id supaya tidak saling menghapus data |
 | 2026-10-08 | Ruang lingkup diperluas | Repo punya lebih banyak modul dari rencana awal: blog, kanban, live chat, procurement SPSE, SIPD, Puspen, tanda tangan PDF, Google Drive, backup, dan WhatsApp. Perlu dimasukkan ke daftar modul Fase 2 |

@@ -4,7 +4,7 @@
 //! Urutan: `id` (Laravel tidak memberi `orderBy`; di sini dibuat eksplisit).
 
 use axum::{
-    extract::{Query, State},
+    extract::{Path, Query, State},
     http::HeaderMap,
     Json,
 };
@@ -28,12 +28,28 @@ pub struct DesaRow {
     pub jumlah_kk: Option<i64>,
     pub kecamatan_id: Option<i64>,
     pub kecamatan: Option<kecamatan::KecamatanRow>,
+    /// `true` bila relasi kecamatan dimuat (key `kecamatan` ikut muncul di respon).
+    pub kecamatan_loaded: bool,
     pub created_at: Option<DateTime<Utc>>,
     pub updated_at: Option<DateTime<Utc>>,
 }
 
-/// Bentuk `DesaResource`. `kecamatan` `null` bila relasi kosong.
+/// Bentuk `DesaResource`. Key `kecamatan` hanya ada bila relasinya dimuat,
+/// seperti `whenLoaded` di Laravel.
 pub fn to_resource(row: &DesaRow) -> Value {
+    let mut v = base_resource(row);
+    if row.kecamatan_loaded {
+        v["kecamatan"] = row
+            .kecamatan
+            .as_ref()
+            .map(kecamatan::to_resource)
+            .unwrap_or(Value::Null);
+    }
+    v
+}
+
+/// Bagian `DesaResource` tanpa relasi kecamatan (dipakai di detail kecamatan).
+pub fn base_resource(row: &DesaRow) -> Value {
     json!({
         "id": row.id,
         "nama_desa": row.n_desa,
@@ -41,7 +57,6 @@ pub fn to_resource(row: &DesaRow) -> Value {
         "jumlah_penduduk": row.jumlah_penduduk,
         "jumlah_kk": row.jumlah_kk,
         "kecamatan_id": row.kecamatan_id,
-        "kecamatan": row.kecamatan.as_ref().map(kecamatan::to_resource),
         "created_at": iso8601_utc(row.created_at),
         "updated_at": iso8601_utc(row.updated_at),
     })
@@ -50,6 +65,7 @@ pub fn to_resource(row: &DesaRow) -> Value {
 pub struct DesaFilter {
     pub search: Option<String>,
     pub kecamatan_id: Option<i64>,
+    pub id: Option<u64>,
 }
 
 impl DesaFilter {
@@ -57,6 +73,7 @@ impl DesaFilter {
         Self {
             search: q.get("search").filter(|s| !s.is_empty()).cloned(),
             kecamatan_id: q.get("kecamatan_id").and_then(|v| v.parse().ok()),
+            id: None,
         }
     }
 }
@@ -68,6 +85,10 @@ fn where_clause(f: &DesaFilter) -> (String, Vec<String>) {
     if let Some(k) = f.kecamatan_id {
         sql.push_str(" AND d.kecamatan_id = ?");
         binds.push(k.to_string());
+    }
+    if let Some(id) = f.id {
+        sql.push_str(" AND d.id = ?");
+        binds.push(id.to_string());
     }
     if let Some(s) = &f.search {
         sql.push_str(" AND (d.n_desa LIKE ? OR k.n_kec LIKE ?)");
@@ -133,6 +154,7 @@ pub async fn list(
                 jumlah_kk: r.try_get("jumlah_kk")?,
                 kecamatan_id: r.try_get("kecamatan_id")?,
                 kecamatan,
+                kecamatan_loaded: true,
                 created_at: r.try_get("created_at")?,
                 updated_at: r.try_get("updated_at")?,
             })
@@ -140,6 +162,49 @@ pub async fn list(
         .collect::<Result<Vec<_>, _>>()?;
 
     Ok((items, total as u64))
+}
+
+/// Satu desa berdasarkan id, dengan relasi kecamatan.
+pub async fn find(pool: &MySqlPool, id: u64) -> Result<Option<DesaRow>, sqlx::Error> {
+    let filter = DesaFilter {
+        search: None,
+        kecamatan_id: None,
+        id: Some(id),
+    };
+    let (mut rows, _) = list(pool, &filter, 1, 0).await?;
+    Ok(rows.pop())
+}
+
+/// Semua desa milik satu kecamatan, tanpa relasi kecamatan (seperti detail kecamatan di Laravel).
+pub async fn list_for_kecamatan(
+    pool: &MySqlPool,
+    kecamatan_id: u64,
+) -> Result<Vec<DesaRow>, sqlx::Error> {
+    let filter = DesaFilter {
+        search: None,
+        kecamatan_id: Some(kecamatan_id as i64),
+        id: None,
+    };
+    let (mut rows, _) = list(pool, &filter, u32::MAX as u64, 0).await?;
+    for r in &mut rows {
+        r.kecamatan_loaded = false;
+    }
+    Ok(rows)
+}
+
+/// `GET /api/desa/{id}`: `{"data": DesaResource}`.
+pub async fn show(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+) -> Result<Json<Value>, ApiError> {
+    require_auth(&state, &headers).await?;
+    let row = match id.parse::<u64>() {
+        Ok(id) => find(&state.pool, id).await.map_err(internal)?,
+        Err(_) => None,
+    };
+    let row = row.ok_or_else(ApiError::not_found)?;
+    Ok(Json(json!({ "data": to_resource(&row) })))
 }
 
 pub async fn index(
@@ -199,6 +264,7 @@ mod tests {
                     jumlah_penduduk: item["jumlah_penduduk"].as_i64(),
                     jumlah_kk: item["jumlah_kk"].as_i64(),
                     kecamatan_id: item["kecamatan_id"].as_i64(),
+                    kecamatan_loaded: true,
                     kecamatan: k.as_object().map(|_| kecamatan::KecamatanRow {
                         id: k["id"].as_u64().unwrap(),
                         n_kec: k["nama_kecamatan"].as_str().unwrap().to_string(),

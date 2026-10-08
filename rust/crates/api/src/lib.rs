@@ -87,8 +87,11 @@ pub fn app(config: &Config, state: AppState) -> Router {
         .route("/up", get(up))
         .route("/api/health", get(health))
         .route("/api/kecamatan", get(kecamatan::index))
+        .route("/api/kecamatan/{id}", get(kecamatan::show))
         .route("/api/desa", get(desa::index))
+        .route("/api/desa/{id}", get(desa::show))
         .route("/api/kegiatan", get(kegiatan::index))
+        .route("/api/kegiatan/{id}", get(kegiatan::show))
         .route("/api/auth/login", post(auth_routes::login))
         // Catch-all untuk /api: route yang belum ada di Rust tetap lewat pengecekan
         // permission (Laravel menolak lebih dulu, bukan 404).
