@@ -336,17 +336,17 @@ Kolom **Status** diisi saat modul dipindah ke Rust. Awalnya semua `belum`.
 | --- | --- | --- | --- | --- | --- |
 | 1 | GET | `/api/spm-sanitasi/stats` | SpmSanitasiController@stats | auth:sanctum | rust |
 | 2 | GET | `/api/spm-sanitasi/capaian` | SpmSanitasiController@capaian | auth:sanctum | rust |
-| 3 | GET | `/api/spm-sanitasi/integration` | SpmSanitasiController@integration | auth:sanctum | belum |
-| 4 | GET | `/api/spm-sanitasi/integration/desa/{desaId}` | SpmSanitasiController@integrationByDesa | auth:sanctum | belum |
-| 5 | GET | `/api/spm-sanitasi/mck-pekerjaan` | SpmSanitasiController@mckPekerjaan | auth:sanctum | belum |
-| 6 | POST | `/api/spm-sanitasi/{spmSanitasi}/pekerjaan` | SpmSanitasiController@attachPekerjaan | auth:sanctum | belum |
-| 7 | DELETE | `/api/spm-sanitasi/{spmSanitasi}/pekerjaan/{pekerjaanId}` | SpmSanitasiController@detachPekerjaan | auth:sanctum | belum |
-| 8 | GET | `/api/spm-sanitasi/export` | SpmSanitasiController@export | auth:sanctum | belum |
-| 9 | GET | `/api/spm-sanitasi/import/template` | SpmSanitasiController@downloadTemplate | auth:sanctum | belum |
-| 10 | POST | `/api/spm-sanitasi/import` | SpmSanitasiController@import | auth:sanctum | belum |
+| 3 | GET | `/api/spm-sanitasi/integration` | SpmSanitasiController@integration | auth:sanctum | rust |
+| 4 | GET | `/api/spm-sanitasi/integration/desa/{desaId}` | SpmSanitasiController@integrationByDesa | auth:sanctum | rust |
+| 5 | GET | `/api/spm-sanitasi/mck-pekerjaan` | SpmSanitasiController@mckPekerjaan | auth:sanctum | rust |
+| 6 | POST | `/api/spm-sanitasi/{spmSanitasi}/pekerjaan` | SpmSanitasiController@attachPekerjaan | auth:sanctum | rust |
+| 7 | DELETE | `/api/spm-sanitasi/{spmSanitasi}/pekerjaan/{pekerjaanId}` | SpmSanitasiController@detachPekerjaan | auth:sanctum | rust |
+| 8 | GET | `/api/spm-sanitasi/export` | SpmSanitasiController@export | auth:sanctum | rust |
+| 9 | GET | `/api/spm-sanitasi/import/template` | SpmSanitasiController@downloadTemplate | auth:sanctum | rust |
+| 10 | POST | `/api/spm-sanitasi/import` | SpmSanitasiController@import | auth:sanctum | rust |
 | 11 | GET | `/api/spm-sanitasi` | SpmSanitasiController@index | auth:sanctum | rust |
 | 12 | POST | `/api/spm-sanitasi` | SpmSanitasiController@store | auth:sanctum | rust |
-| 13 | GET | `/api/spm-sanitasi/{id}` | SpmSanitasiController@show | auth:sanctum | belum |
+| 13 | GET | `/api/spm-sanitasi/{id}` | SpmSanitasiController@show | auth:sanctum | rust |
 | 14 | PUT/PATCH | `/api/spm-sanitasi/{id}` | SpmSanitasiController@update | auth:sanctum | rust |
 | 15 | DELETE | `/api/spm-sanitasi/{id}` | SpmSanitasiController@destroy | auth:sanctum | rust |
 
