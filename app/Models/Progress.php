@@ -6,12 +6,11 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
 use App\Traits\Auditable;
-use App\Traits\BroadcastsPekerjaanRealtime;
 use App\Traits\NotifiesAdminsOnChanges;
 
 class Progress extends Model
 {
-    use BroadcastsPekerjaanRealtime, HasFactory, NotifiesAdminsOnChanges, Auditable;
+    use HasFactory, NotifiesAdminsOnChanges, Auditable;
 
     protected $table = 'tbl_progress';
 

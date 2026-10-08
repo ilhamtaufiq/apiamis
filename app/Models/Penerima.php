@@ -8,12 +8,11 @@ use Spatie\MediaLibrary\HasMedia;
 use Spatie\MediaLibrary\InteractsWithMedia;
 
 use App\Traits\Auditable;
-use App\Traits\BroadcastsPekerjaanRealtime;
 use App\Traits\NotifiesAdminsOnChanges;
 
 class Penerima extends Model
 {
-    use BroadcastsPekerjaanRealtime, NotifiesAdminsOnChanges, Auditable;
+    use NotifiesAdminsOnChanges, Auditable;
     protected $table = 'tbl_penerima';
 
     protected $fillable = [

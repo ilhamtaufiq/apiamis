@@ -13,12 +13,11 @@ use Illuminate\Support\Facades\Schema;
 use App\Services\SpamPekerjaanIntegrationService;
 use App\Services\SpmSanitasiPekerjaanIntegrationService;
 use App\Traits\Auditable;
-use App\Traits\BroadcastsPekerjaanRealtime;
 use App\Traits\NotifiesAdminsOnChanges;
 
 class Pekerjaan extends Model
 {
-    use BroadcastsPekerjaanRealtime, NotifiesAdminsOnChanges, Auditable;
+    use NotifiesAdminsOnChanges, Auditable;
 
     /**
      * Unit SPAM / SPM Sanitasi yang tertaut, disimpan sebelum cascade delete pivot.
