@@ -16,7 +16,7 @@ Setiap kali ada langkah yang selesai, tambahkan entri di bagian **Riwayat** dan 
 - [x] 0.2 Inventaris model, observer, cast, listener, event, dan service ke `docs/migration/models.md`
 - [x] 0.3 Inventaris data (tabel, kolom terenkripsi, JSON, decimal, soft delete) ke `docs/schema.md`, dari dump struktur MySQL 8.0.30 (111 tabel)
 - [ ] 0.4 Fixture perilaku untuk endpoint prioritas (rekam dari staging atau tulis manual)
-- [ ] 0.5 Dump database staging sebagai data uji tetap
+- [~] 0.5 Dump database staging sebagai data uji tetap. Ada dump data `tbl_kegiatan` (20 baris) dan `tbl_pekerjaan` (558 baris), belum dump lengkap semua tabel bisnis
 - [ ] 0.6 Konfirmasi keputusan terbuka (lihat bagian Keputusan)
 
 ### Fase 1: Fondasi dan autentikasi (3–4 minggu)
@@ -77,6 +77,8 @@ Setiap kali ada langkah yang selesai, tambahkan entri di bagian **Riwayat** dan 
 | T6 | Tabel `users` tidak punya kolom status aktif | Rencana "user nonaktif" di 1.5 tidak bisa diuji. Perlu keputusan kolom atau mekanisme nonaktif |
 | T7 | Semua token `abilities = ["*"]` dan tidak ada yang kedaluwarsa | Scope public API belum dipakai token internal. Perlu dipastikan sebelum API key publik dibuat |
 | T8 | Dump berisi hash password dan token asli | Tidak dimasukkan ke repo. Hanya fixture struktur (`rust/fixtures/auth_schema.sql`) yang di-commit |
+| T9 | `pagu` di `tbl_pekerjaan` 550 dari 558 baris di atas 2^24, dan kolomnya `FLOAT` (single precision). Data sampel saat ini hanya kelipatan 1.000, jadi belum ada angka yang berubah, tetapi input berdigit penuh akan dibulatkan. Contoh: `123456789` menjadi `123456792` | Ubah ke `DECIMAL(15,2)` setelah cutover, atau cukup dicatat sebagai risiko. Cek dengan `docs/migration/checks/pagu_checks.sql` |
+| T10 | Kualitas data: 14 dari 20 kegiatan punya `pagu = 0`, 7 pekerjaan punya `pagu = 0`, dan 15 kegiatan punya total pekerjaan melebihi pagu kegiatan | Perlu konfirmasi dengan pemilik data sebelum dijadikan fixture acuan |
 
 ## Keputusan terbuka
 
@@ -106,4 +108,5 @@ Setiap kali ada langkah yang selesai, tambahkan entri di bagian **Riwayat** dan 
 | 2026-10-08 | 1.1 sampai 1.5 (sebagian) | Format error 401 dan 422, middleware (request id, timeout, body limit, CORS), crate `auth` untuk token Sanctum, workflow CI, dan Dockerfile. Test: 14 lolos. Smoke test server lewat curl OK. Dockerfile belum di-build |
 | 2026-10-08 | 0.3 Inventaris skema (final) | `docs/schema.md` dibuat ulang dari dump struktur (`CREATE TABLE`): 111 tabel, 1068 kolom. Temuan: `tbl_pekerjaan.pagu` `float`, `tbl_penerima.nik` dan `alamat` terenkripsi, `tbl_spse_sessions.encrypted_cookies` terenkripsi. Dump tidak berisi data, jadi 0.5 belum |
 | 2026-10-08 | 1.5 Lookup token di database | `crates/auth` membaca `personal_access_tokens` dan `users`. 7 test integrasi lolos terhadap dump asli (1.914 token, 38 user) di MariaDB lokal. Job integrasi ditambahkan ke CI |
+| 2026-10-08 | 0.5 Data uji dari dump `tbl_kegiatan` dan `tbl_pekerjaan` | Dimuat ke MariaDB lokal. Pengecekan pagu disimpan di `docs/migration/checks/pagu_checks.sql`. Temuan T9 dan T10. Data pribadi (NIP) tidak dicatat dan tidak di-commit |
 | 2026-10-08 | Ruang lingkup diperluas | Repo punya lebih banyak modul dari rencana awal: blog, kanban, live chat, procurement SPSE, SIPD, Puspen, tanda tangan PDF, Google Drive, backup, dan WhatsApp. Perlu dimasukkan ke daftar modul Fase 2 |
