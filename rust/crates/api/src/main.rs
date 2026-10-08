@@ -20,7 +20,7 @@ async fn main() {
         .expect("gagal bind port");
     tracing::info!(%addr, env = %config.app_env, "apiamis rust listening");
 
-    axum::serve(listener, app())
+    axum::serve(listener, app(&config))
         .with_graceful_shutdown(shutdown_signal())
         .await
         .expect("server berhenti dengan error");

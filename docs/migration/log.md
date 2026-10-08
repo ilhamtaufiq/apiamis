@@ -22,11 +22,11 @@ Setiap kali ada langkah yang selesai, tambahkan entri di bagian **Riwayat** dan 
 ### Fase 1: Fondasi dan autentikasi (3–4 minggu)
 
 - [x] 1.0 Workspace Cargo di `rust/` dengan crate `api` dan `shared`, `GET /up`, `GET /api/health`, fallback 404 ala Laravel
-- [ ] 1.1 Konfigurasi dari `.env`, format error 401 dan 422 yang sama dengan Laravel
-- [ ] 1.2 Middleware: request id, timeout, body limit, CORS
-- [ ] 1.3 Dockerfile multi-stage yang hanya membangun binary Rust
-- [ ] 1.4 CI: `fmt`, `clippy`, `test`, dan job integrasi MySQL
-- [ ] 1.5 Validasi token Sanctum di Rust (diuji dengan token dari fixture)
+- [x] 1.1 Konfigurasi dari `.env`, format error 401 dan 422 yang sama dengan Laravel
+- [x] 1.2 Middleware: request id, timeout, body limit, CORS (CORS disalin dari `config/cors.php`, termasuk pola `*.pages.dev`)
+- [~] 1.3 Dockerfile multi-stage yang hanya membangun binary Rust (ditulis, belum di-build: Docker daemon tidak aktif di sandbox)
+- [~] 1.4 CI: `fmt`, `clippy`, `test` (`.github/workflows/rust.yml`, belum dijalankan di GitHub). Job integrasi MySQL belum ada karena belum ada test yang butuh DB
+- [~] 1.5 Validasi token Sanctum: parsing `{id}|{plain}`, hash sha256, dan perbandingan konstan sudah ada di `crates/auth` dengan test. Lookup ke `personal_access_tokens` dan uji dengan token dari fixture belum
 - [ ] 1.6 Login email/password (bcrypt) dan Google OAuth
 - [ ] 1.7 Permission Spatie dan middleware permission route, dengan matriks test
 - [ ] 1.8 Impersonation dengan penanda token dan audit log
@@ -99,4 +99,5 @@ Setiap kali ada langkah yang selesai, tambahkan entri di bagian **Riwayat** dan 
 | 2026-10-08 | 0.1 Inventaris route | `docs/migration/routes.md`: 486 route, 71 grup. Temuan: `/api/debug-data` mengembalikan data mentah tanpa role |
 | 2026-10-08 | 0.2 Inventaris model | `docs/migration/models.md`: 77 model. Temuan: uang sebagian `float`, `Penerima.nik` dan `alamat` terenkripsi, `SpseSession` menyimpan cookie terenkripsi |
 | 2026-10-08 | 0.3 Inventaris skema (parsial) | `docs/schema.md`: hanya 33 tabel terbaca dari migrasi, sedangkan model merujuk ~80. Tabel inti dibuat di luar migrasi. Perlu `mysqldump --no-data` dari staging |
+| 2026-10-08 | 1.1 sampai 1.5 (sebagian) | Format error 401 dan 422, middleware (request id, timeout, body limit, CORS), crate `auth` untuk token Sanctum, workflow CI, dan Dockerfile. Test: 14 lolos. Smoke test server lewat curl OK. Dockerfile belum di-build |
 | 2026-10-08 | Ruang lingkup diperluas | Repo punya lebih banyak modul dari rencana awal: blog, kanban, live chat, procurement SPSE, SIPD, Puspen, tanda tangan PDF, Google Drive, backup, dan WhatsApp. Perlu dimasukkan ke daftar modul Fase 2 |
