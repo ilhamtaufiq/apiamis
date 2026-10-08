@@ -17,10 +17,12 @@ pub mod changes;
 pub mod checklist;
 pub mod crypt;
 pub mod desa;
+pub mod desa_write;
 pub mod draft;
 pub mod format;
 pub mod foto;
 pub mod kecamatan;
+pub mod kecamatan_write;
 pub mod kegiatan;
 pub mod kontrak;
 pub mod kontrak_addendum;
@@ -119,9 +121,24 @@ pub fn app(config: &Config, state: AppState) -> Router {
         .route("/up", get(up))
         .route("/api/health", get(health))
         .route("/api/kecamatan", get(kecamatan::index))
-        .route("/api/kecamatan/{id}", get(kecamatan::show))
+        .route("/api/kecamatan", post(kecamatan_write::store))
+        .route(
+            "/api/kecamatan/{id}",
+            get(kecamatan::show)
+                .put(kecamatan_write::update)
+                .patch(kecamatan_write::update)
+                .delete(kecamatan_write::destroy),
+        )
         .route("/api/desa", get(desa::index))
-        .route("/api/desa/{id}", get(desa::show))
+        .route("/api/desa", post(desa_write::store))
+        .route(
+            "/api/desa/{id}",
+            get(desa::show)
+                .put(desa_write::update)
+                .patch(desa_write::update)
+                .delete(desa_write::destroy),
+        )
+        .route("/api/desa/kecamatan/{id}", get(desa_write::by_kecamatan))
         .route("/api/kegiatan", get(kegiatan::index))
         .route("/api/kegiatan/{id}", get(kegiatan::show))
         .route("/api/auth/login", post(auth_routes::login))

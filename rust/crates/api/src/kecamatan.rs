@@ -50,14 +50,17 @@ pub fn detail_resource(row: &KecamatanRow, desa: &[crate::desa::DesaRow]) -> Val
 }
 
 /// Satu kecamatan berdasarkan id, dengan jumlah desanya.
-pub async fn find(pool: &sqlx::MySqlPool, id: u64) -> Result<Option<KecamatanRow>, sqlx::Error> {
+pub async fn find<'e, E>(exec: E, id: u64) -> Result<Option<KecamatanRow>, sqlx::Error>
+where
+    E: sqlx::Executor<'e, Database = sqlx::MySql>,
+{
     let row = sqlx::query(
         "SELECT k.id, k.n_kec, k.created_at, k.updated_at, \
          CAST((SELECT COUNT(*) FROM tbl_desa d WHERE d.kecamatan_id = k.id) AS SIGNED) AS jumlah_desa \
          FROM tbl_kecamatan k WHERE k.id = ?",
     )
     .bind(id)
-    .fetch_optional(pool)
+    .fetch_optional(exec)
     .await?;
     row.map(|r| {
         Ok(KecamatanRow {

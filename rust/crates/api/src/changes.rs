@@ -39,7 +39,32 @@ pub const BERKAS: Target = Target {
     tab: "berkas",
 };
 
+pub const DESA: Target = Target {
+    model_type: "App\\Models\\Desa",
+    label: "Desa",
+    tab: "",
+};
+
+pub const KECAMATAN: Target = Target {
+    model_type: "App\\Models\\Kecamatan",
+    label: "Kecamatan",
+    tab: "",
+};
+
+pub const PENYEDIA: Target = Target {
+    model_type: "App\\Models\\Penyedia",
+    label: "Penyedia",
+    tab: "",
+};
+
+pub const KEGIATAN: Target = Target {
+    model_type: "App\\Models\\Kegiatan",
+    label: "Kegiatan",
+    tab: "",
+};
+
 /// Tulis baris audit (`event`: created, updated, deleted) dan notifikasi ke admin lain.
+/// Tautan notifikasi ke detail pekerjaan, sesuai `NotifiesAdminsOnChanges` untuk pekerjaan.
 #[allow(clippy::too_many_arguments)]
 pub async fn log(
     tx: &mut sqlx::Transaction<'_, MySql>,
@@ -51,6 +76,24 @@ pub async fn log(
     old: Option<Map<String, Value>>,
     new: Option<Map<String, Value>>,
     pekerjaan_id: Option<i64>,
+    url: &str,
+) -> Result<(), ApiError> {
+    let link = pekerjaan_id.map(|p| format!("/pekerjaan/{p}?tab={}", target.tab));
+    log_linked(tx, headers, actor, target, event, id, old, new, link, url).await
+}
+
+/// Seperti `log`, dengan tautan notifikasi yang ditentukan pemanggil (mis. `/kecamatan/{id}/edit`).
+#[allow(clippy::too_many_arguments)]
+pub async fn log_linked(
+    tx: &mut sqlx::Transaction<'_, MySql>,
+    headers: &HeaderMap,
+    actor: u64,
+    target: &Target,
+    event: &str,
+    id: i64,
+    old: Option<Map<String, Value>>,
+    new: Option<Map<String, Value>>,
+    link: Option<String>,
     url: &str,
 ) -> Result<(), ApiError> {
     audit::write(
@@ -75,7 +118,6 @@ pub async fn log(
         _ => "dihapus",
     };
     let name = notify::actor_name(tx, actor).await.map_err(internal)?;
-    let link = pekerjaan_id.map(|p| format!("/pekerjaan/{p}?tab={}", target.tab));
     let message = notify::change_message(target.label, id as u64, action, &name, link.is_some());
     notify::admins(
         tx,
@@ -83,6 +125,36 @@ pub async fn log(
         &format!("Data {} {action}", target.label),
         &message,
         link.as_deref(),
+    )
+    .await
+    .map_err(internal)
+}
+
+/// Audit saja, tanpa notifikasi admin (model yang hanya memakai `Auditable`).
+#[allow(clippy::too_many_arguments)]
+pub async fn audit_only(
+    tx: &mut sqlx::Transaction<'_, MySql>,
+    headers: &HeaderMap,
+    actor: u64,
+    model_type: &str,
+    event: &str,
+    id: i64,
+    old: Option<Map<String, Value>>,
+    new: Option<Map<String, Value>>,
+    url: &str,
+) -> Result<(), ApiError> {
+    audit::write(
+        tx,
+        audit::Entry {
+            actor,
+            event,
+            auditable_type: model_type,
+            auditable_id: id as u64,
+            old,
+            new,
+            url,
+        },
+        headers,
     )
     .await
     .map_err(internal)
