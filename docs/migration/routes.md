@@ -12,9 +12,9 @@ Sumber: `routes/api.php` (branch `rust`, dari `main` SHA `c19fd06`). Dibuat deng
 
 ### Status paritas (diperbarui)
 
-- Sudah di Rust: **119** (termasuk auth, lookup, kecamatan, desa, kegiatan, penyedia, tiket GET, checklist GET, foto dan penerima seluruh rute, berkas kecuali export-pdf dan upload-from-url, kontrak CRUD, relasi pekerjaan/kegiatan/penyedia, excel export, template, dan impor kontrak, addendum dan register-gaps GET, sk, dan notifikasi)
+- Sudah di Rust: **122** (termasuk auth, lookup, kecamatan, desa, kegiatan, penyedia, tiket GET, checklist GET, foto dan penerima seluruh rute, berkas kecuali export-pdf dan upload-from-url, kontrak CRUD, relasi pekerjaan/kegiatan/penyedia, excel export, template, dan impor kontrak, addendum dan register-gaps GET, sk, dan notifikasi)
 - Parsial di Rust: **1** (`GET /api/pekerjaan`: relasi daftar belum dibandingkan dengan produksi, lihat T21)
-- Belum: **366** (dihitung langsung dari kolom Status; termasuk export dokumen, BAP, dan cover kontrak, addendum, export Excel draft, progress estimasi, destroy pekerjaan, dan modul lain yang belum dipindah)
+- Belum: **363** (dihitung langsung dari kolom Status; termasuk export dokumen, BAP, dan cover kontrak, addendum, export Excel draft, progress estimasi, destroy pekerjaan, dan modul lain yang belum dipindah)
 
 Cara menghitung: cocokkan method dan path (`{param}` dinormalisasi) dengan route yang terdaftar di `rust/crates/api/src/lib.rs`.
 
@@ -196,9 +196,9 @@ Kolom **Status** diisi saat modul dipindah ke Rust. Awalnya semua `belum`.
 
 | No | Method | Path | Controller@action | Middleware | Status |
 | --- | --- | --- | --- | --- | --- |
-| 1 | GET | `/api/kegiatan-role` | KegiatanRoleController@index | auth:sanctum,role:admin | belum |
-| 2 | POST | `/api/kegiatan-role` | KegiatanRoleController@store | auth:sanctum,role:admin | belum |
-| 3 | DELETE | `/api/kegiatan-role/{kegiatanRoleId}` | KegiatanRoleController@destroy | auth:sanctum,role:admin | belum |
+| 1 | GET | `/api/kegiatan-role` | KegiatanRoleController@index | auth:sanctum,role:admin | rust |
+| 2 | POST | `/api/kegiatan-role` | KegiatanRoleController@store | auth:sanctum,role:admin | rust |
+| 3 | DELETE | `/api/kegiatan-role/{kegiatanRoleId}` | KegiatanRoleController@destroy | auth:sanctum,role:admin | rust |
 
 ### user-pekerjaan (8)
 

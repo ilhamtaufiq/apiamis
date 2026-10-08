@@ -24,6 +24,7 @@ pub mod foto;
 pub mod kecamatan;
 pub mod kecamatan_write;
 pub mod kegiatan;
+pub mod kegiatan_role_write;
 pub mod kegiatan_write;
 pub mod kontrak;
 pub mod kontrak_addendum;
@@ -151,6 +152,11 @@ pub fn app(config: &Config, state: AppState) -> Router {
                 .delete(kegiatan_write::destroy),
         )
         .route("/api/kegiatan/tahun/{tahun}", get(kegiatan_write::by_tahun))
+        .route(
+            "/api/kegiatan-role",
+            get(kegiatan_role_write::index).post(kegiatan_role_write::store),
+        )
+        .route("/api/kegiatan-role/{id}", delete(kegiatan_role_write::destroy))
         .route("/api/auth/login", post(auth_routes::login))
         .route("/api/auth/me", get(auth_routes::me))
         .route("/api/auth/logout", post(auth_routes::logout))

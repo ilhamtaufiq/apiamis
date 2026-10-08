@@ -169,7 +169,7 @@ fn validate(body: &Value) -> Result<Input, ApiError> {
 }
 
 /// Atribut untuk audit, dibaca dari DB supaya format `pagu` dan JSON sama dengan Laravel.
-async fn attributes<'e, E>(exec: E, id: u64) -> Result<Option<Map<String, Value>>, ApiError>
+pub(crate) async fn attributes<'e, E>(exec: E, id: u64) -> Result<Option<Map<String, Value>>, ApiError>
 where
     E: sqlx::Executor<'e, Database = MySql>,
 {
