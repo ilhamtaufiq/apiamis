@@ -12,6 +12,7 @@ use shared::{ApiError, Config};
 pub mod audit;
 pub mod auth_routes;
 pub mod checklist;
+pub mod crypt;
 pub mod desa;
 pub mod format;
 pub mod kecamatan;
