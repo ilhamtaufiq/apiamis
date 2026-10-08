@@ -248,5 +248,17 @@ async fn users_create_update_delete_with_roles_and_audit() {
     let events: Vec<String> = sqlx::query_scalar("SELECT event FROM tbl_audit_logs WHERE auditable_type = 'App\\\\Models\\\\User' AND auditable_id = ? ORDER BY id").bind(id).fetch_all(&pool).await.unwrap();
     assert_eq!(events, vec!["created", "updated", "deleted"]);
 
+    // GET /api/user: model mentah tanpa password dan remember_token.
+    let (status, body) = send(&pool, Method::GET, "/api/user", &token, None).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["email"], ADMIN, "{body}");
+    assert!(
+        body.get("password").is_none() && body.get("remember_token").is_none(),
+        "{body}"
+    );
+    assert!(body.get("roles").is_none(), "relasi tidak dimuat: {body}");
+
+    cleanup(&pool).await;
+
     cleanup(&pool).await;
 }

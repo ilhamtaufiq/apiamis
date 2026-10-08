@@ -187,6 +187,7 @@ pub fn app(config: &Config, state: AppState) -> Router {
         )
         .route("/api/auth/login", post(auth_routes::login))
         .route("/api/auth/me", get(auth_routes::me))
+        .route("/api/user", get(users_write::me_raw))
         .route("/api/auth/logout", post(auth_routes::logout))
         .route("/api/auth/sync-token", post(auth_routes::sync_token))
         .route("/api/app-settings", get(lookup::index))

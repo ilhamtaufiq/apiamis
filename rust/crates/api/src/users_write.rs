@@ -696,3 +696,36 @@ pub async fn show(
         .ok_or_else(ApiError::not_found)?;
     Ok(Json(json!({ "data": v })))
 }
+
+/// `GET /api/user`: `$request->user()` di Laravel, model `User` mentah tanpa `password` dan `remember_token`.
+pub async fn me_raw(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> Result<Json<Value>, ApiError> {
+    let actor = require_auth(&state, &headers).await?;
+    let row = sqlx::query(
+        "SELECT CAST(id AS SIGNED), name, email, google_id, avatar, gender, nip, jabatan, email_verified_at, created_at, updated_at \
+         FROM users WHERE id = ?",
+    )
+    .bind(actor.user_id)
+    .fetch_optional(&state.pool)
+    .await
+    .map_err(internal)?
+    .ok_or_else(ApiError::unauthenticated)?;
+    let verified: Option<chrono::DateTime<chrono::Utc>> = row.try_get(8).map_err(internal)?;
+    let created: Option<chrono::DateTime<chrono::Utc>> = row.try_get(9).map_err(internal)?;
+    let updated: Option<chrono::DateTime<chrono::Utc>> = row.try_get(10).map_err(internal)?;
+    Ok(Json(json!({
+        "id": row.try_get::<i64, _>(0).map_err(internal)?,
+        "name": row.try_get::<String, _>(1).map_err(internal)?,
+        "email": row.try_get::<String, _>(2).map_err(internal)?,
+        "google_id": row.try_get::<Option<String>, _>(3).map_err(internal)?,
+        "avatar": row.try_get::<Option<String>, _>(4).map_err(internal)?,
+        "gender": row.try_get::<Option<String>, _>(5).map_err(internal)?,
+        "nip": row.try_get::<Option<String>, _>(6).map_err(internal)?,
+        "jabatan": row.try_get::<Option<String>, _>(7).map_err(internal)?,
+        "email_verified_at": carbon_json(verified),
+        "created_at": carbon_json(created),
+        "updated_at": carbon_json(updated),
+    })))
+}
