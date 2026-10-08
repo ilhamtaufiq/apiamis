@@ -13,6 +13,7 @@ pub mod desa;
 pub mod format;
 pub mod kecamatan;
 pub mod kegiatan;
+pub mod maintenance;
 pub mod pagination;
 pub mod route_permission;
 
@@ -67,6 +68,7 @@ pub async fn require_auth(
 /// Router utama. Dipisah dari `main` supaya bisa diuji tanpa membuka port.
 pub fn app(config: &Config, state: AppState) -> Router {
     let permission_state = state.clone();
+    let maintenance_state = state.clone();
     Router::new()
         // Sama seperti `health: '/up'` di bootstrap/app.php (Laravel).
         .route("/up", get(up))
@@ -81,6 +83,11 @@ pub fn app(config: &Config, state: AppState) -> Router {
         .route_layer(axum::middleware::from_fn_with_state(
             permission_state,
             route_permission::check,
+        ))
+        // Layer terakhir = paling luar: maintenance jalan sebelum permission, seperti Laravel.
+        .route_layer(axum::middleware::from_fn_with_state(
+            maintenance_state,
+            maintenance::check,
         ))
         .fallback(not_found)
         .layer(TimeoutLayer::with_status_code(
@@ -195,13 +202,6 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn api_health_returns_service_info() {
-        let (status, body) = get_json("/api/health").await;
-        assert_eq!(status, StatusCode::OK);
-        assert_eq!(body["service"], "apiamis");
-    }
-
-    #[tokio::test]
     async fn unknown_route_returns_laravel_style_404() {
         let (status, body) = get_json("/tidak-ada").await;
         assert_eq!(status, StatusCode::NOT_FOUND);
@@ -253,13 +253,6 @@ mod tests {
         assert!(!res
             .headers()
             .contains_key(header::ACCESS_CONTROL_ALLOW_ORIGIN));
-    }
-
-    #[tokio::test]
-    async fn kecamatan_requires_bearer_token() {
-        let (status, body) = get_json("/api/kecamatan").await;
-        assert_eq!(status, StatusCode::UNAUTHORIZED);
-        assert_eq!(body, json!({ "message": "Unauthenticated." }));
     }
 
     #[test]

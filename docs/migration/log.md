@@ -28,8 +28,9 @@ Setiap kali ada langkah yang selesai, tambahkan entri di bagian **Riwayat** dan 
 - [~] 1.4 CI: `fmt`, `clippy`, `test`, dan job integrasi MySQL (`.github/workflows/rust.yml`). Workflow belum pernah dijalankan di GitHub
 - [x] 1.5 Validasi token Sanctum di `crates/auth`: lookup ke `personal_access_tokens`, cek tipe user, hash sha256, kedaluwarsa, dan user pemilik. Diuji 7 test integrasi terhadap data dump asli (MariaDB lokal). Belum diuji end-to-end dengan plain token asli, karena dump hanya menyimpan hash
 - [ ] 1.6 Login email/password (bcrypt) dan Google OAuth
-- [x] 1.7 Permission Spatie dan middleware route permission (`crates/auth/src/permission.rs`, `crates/api/src/route_permission.rs`). Matriks keputusan 13 kasus lolos, tes DB terhadap tabel `roles`, `model_has_roles`, dan `route_permissions` lolos, smoke test server cocok dengan 403 Laravel. Belum ada: maintenance gate (`EnsureNotInMaintenance`)
+- [x] 1.7 Permission Spatie dan middleware route permission (`crates/auth/src/permission.rs`, `crates/api/src/route_permission.rs`). Matriks keputusan 13 kasus lolos, tes DB terhadap tabel `roles`, `model_has_roles`, dan `route_permissions` lolos, smoke test server cocok dengan 403 Laravel. Maintenance gate sudah ada (lihat 1.9)
 - [ ] 1.8 Impersonation dengan penanda token dan audit log
+- [x] 1.9 Maintenance gate (`EnsureNotInMaintenance`): flag `app_settings`, bypass email (setting, env, default), path yang dikecualikan. Diuji: user bypass 200, user lain 503 dengan body sama seperti Laravel, tanpa token 503, `/up` 200
 
 ### Fase 2: Modul bisnis (4–7 bulan)
 
@@ -83,6 +84,7 @@ Setiap kali ada langkah yang selesai, tambahkan entri di bagian **Riwayat** dan 
 | T13 | Token API dan password akun pernah ditulis di percakapan. Token sudah dicabut, tapi password belum diganti | Ganti password akun. Untuk rekaman berikutnya, pakai akun uji khusus |
 | T14 | Data lokal (dump) tidak sama dengan produksi: `tbl_kegiatan` id 29, `sumber_dana` `PAD` di dump dan `DAU` di produksi | Dicatat di `KNOWN_DATA_DRIFT` pada tes paritas. Cek ulang setelah dump lengkap |
 | T15 | Timestamp `created_at` di dump lokal 7 jam berbeda dari produksi untuk baris yang sama (id 1 kegiatan) | Tes paritas tidak membandingkan timestamp. Pastikan zona waktu DB produksi sebelum fixture timestamp dipakai |
+| T16 | Email default bypass maintenance (`ilhamtaufiq@gmail.com`) tertulis di kode `MaintenanceModeService` dan di Rust | Pindahkan ke konfigurasi, dan jangan jadikan default di kode |
 | T10 | Kualitas data: 14 dari 20 kegiatan punya `pagu = 0`, 7 pekerjaan punya `pagu = 0`, dan 15 kegiatan punya total pekerjaan melebihi pagu kegiatan | Perlu konfirmasi dengan pemilik data sebelum dijadikan fixture acuan |
 
 ## Keputusan terbuka
@@ -120,4 +122,5 @@ Setiap kali ada langkah yang selesai, tambahkan entri di bagian **Riwayat** dan 
 | 2026-10-08 | 2.2 GET /api/kecamatan di Rust | Endpoint dengan auth token Sanctum, query `tbl_kecamatan` + hitungan `tbl_desa`, dan mapping sama dengan `KecamatanResource`. Uji: mapping cocok 100% dengan fixture live (33 baris), uji DB lolos, smoke test server lokal: 401/401/200. Temuan saat uji: kolom TIMESTAMP harus dibaca sebagai `DateTime<Utc>` |
 | 2026-10-08 | 2.2 desa dan kegiatan di Rust | `GET /api/desa` (search, kecamatan_id, paginasi) dan `GET /api/kegiatan` (tahun, per_page=-1, paginasi). Uji: fixture halaman 1 cocok persis (termasuk meta dan links), paritas DB kegiatan cocok kecuali T14. Pagination untuk halaman selain 1 belum diverifikasi terhadap Laravel |
 | 2026-10-08 | 1.7 Route permission | Port `CheckRoutePermission`: admin bypass, whitelist, rule `route_permissions` (exact lalu `:param`), admin-only, dan mutasi tanpa rule. Pesan 403 sama dengan Laravel. Catch-all `/api/*` memastikan path yang belum dipindah juga dicek. Batasan: request tanpa token ke route yang belum ada di Rust mendapat 404, bukan 401 |
+| 2026-10-08 | 1.9 Maintenance gate | `crates/api/src/maintenance.rs`: flag dan daftar bypass dari `app_settings`, env `MAINTENANCE_BYPASS_EMAILS`, default email. Dipasang sebagai layer terluar sehingga jalan sebelum permission. Smoke test lokal cocok dengan Laravel. Catatan keamanan: email default bypass tertulis di kode (sama dengan Laravel), perlu dipindah ke konfigurasi |
 | 2026-10-08 | Ruang lingkup diperluas | Repo punya lebih banyak modul dari rencana awal: blog, kanban, live chat, procurement SPSE, SIPD, Puspen, tanda tangan PDF, Google Drive, backup, dan WhatsApp. Perlu dimasukkan ke daftar modul Fase 2 |
