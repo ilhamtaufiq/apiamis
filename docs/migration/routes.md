@@ -10,6 +10,14 @@ Sumber: `routes/api.php` (branch `rust`, dari `main` SHA `c19fd06`). Dibuat deng
 - Tanpa `auth:sanctum` (publik / OAuth / webhook): **28**
 - Jumlah grup modul (segmen pertama setelah `/api/`): **71**
 
+### Status paritas (diperbarui)
+
+- Sudah di Rust: **23** (termasuk auth, lookup, kecamatan, desa, kegiatan, penyedia, tiket GET, checklist GET)
+- Parsial di Rust: **2** (`GET /api/pekerjaan` dan `GET /api/pekerjaan/{id}`, lihat T25)
+- Belum: **461** (termasuk seluruh `PUT/PATCH`, semua POST/DELETE selain login, logout, dan sync-token)
+
+Cara menghitung: cocokkan method dan path (`{param}` dinormalisasi) dengan route yang terdaftar di `rust/crates/api/src/lib.rs`.
+
 ## Temuan
 
 1. **`GET /api/debug-data`** (`routes/api.php` baris 471): endpoint debug yang mengembalikan data mentah `tbl_kegiatan` dan `tbl_pekerjaan` serta relasi Eloquent. Hanya `auth:sanctum`, tanpa `role:admin`, dan melewati scope `byUserRole()`. Setiap user yang login bisa membaca semua pekerjaan. **Rekomendasi: hapus, jangan dipindah ke Rust.**
@@ -26,13 +34,13 @@ Kolom **Status** diisi saat modul dipindah ke Rust. Awalnya semua `belum`.
 
 | No | Method | Path | Controller@action | Middleware | Status |
 | --- | --- | --- | --- | --- | --- |
-| 1 | POST | `/api/auth/login` | AuthController@login | throttle:login | belum |
+| 1 | POST | `/api/auth/login` | AuthController@login | throttle:login | rust |
 | 2 | POST | `/api/auth/handoff` | AuthController@createHandoff | auth:sanctum,throttle:10,1 | belum |
 | 3 | POST | `/api/auth/handoff/exchange` | AuthController@exchangeHandoff | throttle:handoff-exchange | belum |
 | 4 | GET | `/api/auth/google` | AuthController@redirectToGoogle | - | belum |
 | 5 | GET | `/api/auth/google/callback` | AuthController@handleGoogleCallback | - | belum |
-| 6 | POST | `/api/auth/logout` | AuthController@logout | auth:sanctum | belum |
-| 7 | GET | `/api/auth/me` | AuthController@me | auth:sanctum | belum |
+| 6 | POST | `/api/auth/logout` | AuthController@logout | auth:sanctum | rust |
+| 7 | GET | `/api/auth/me` | AuthController@me | auth:sanctum | rust |
 | 8 | PUT | `/api/auth/profile` | AuthController@updateProfile | auth:sanctum | belum |
 | 9 | POST | `/api/auth/avatar` | AuthController@uploadAvatar | auth:sanctum | belum |
 | 10 | DELETE | `/api/auth/avatar` | AuthController@deleteAvatar | auth:sanctum | belum |
@@ -43,8 +51,8 @@ Kolom **Status** diisi saat modul dipindah ke Rust. Awalnya semua `belum`.
 | No | Method | Path | Controller@action | Middleware | Status |
 | --- | --- | --- | --- | --- | --- |
 | 1 | GET | `/api/app-settings/backups/google-drive/callback` | GoogleDriveBackupController@callback | throttle:20,1 | belum |
-| 2 | GET | `/api/app-settings` | AppSettingController@index | - | belum |
-| 3 | GET | `/api/app-settings/maintenance` | AppSettingController@maintenanceStatus | - | belum |
+| 2 | GET | `/api/app-settings` | AppSettingController@index | - | rust |
+| 3 | GET | `/api/app-settings/maintenance` | AppSettingController@maintenanceStatus | - | rust |
 | 4 | GET | `/api/app-settings/storage-stats` | AppSettingController@storageStats | auth:sanctum,role:admin | belum |
 | 5 | POST | `/api/app-settings` | AppSettingController@store | auth:sanctum,role:admin | belum |
 | 6 | POST | `/api/app-settings/test-ai-connection` | AppSettingController@testAiConnection | auth:sanctum,role:admin | belum |
@@ -154,9 +162,9 @@ Kolom **Status** diisi saat modul dipindah ke Rust. Awalnya semua `belum`.
 | 7 | GET | `/api/pekerjaan/stats/pagu-kegiatan/{kegiatanId}` | PekerjaanController@totalPaguByKegiatan | auth:sanctum | belum |
 | 8 | POST | `/api/pekerjaan/import` | PekerjaanController@import | auth:sanctum | belum |
 | 9 | GET | `/api/pekerjaan/import/template` | PekerjaanController@downloadTemplate | auth:sanctum | belum |
-| 10 | GET | `/api/pekerjaan` | PekerjaanController@index | auth:sanctum | belum |
+| 10 | GET | `/api/pekerjaan` | PekerjaanController@index | auth:sanctum | parsial |
 | 11 | POST | `/api/pekerjaan` | PekerjaanController@store | auth:sanctum | belum |
-| 12 | GET | `/api/pekerjaan/{id}` | PekerjaanController@show | auth:sanctum | belum |
+| 12 | GET | `/api/pekerjaan/{id}` | PekerjaanController@show | auth:sanctum | parsial |
 | 13 | PUT/PATCH | `/api/pekerjaan/{id}` | PekerjaanController@update | auth:sanctum | belum |
 | 14 | DELETE | `/api/pekerjaan/{id}` | PekerjaanController@destroy | auth:sanctum | belum |
 | 15 | GET | `/api/pekerjaan/{pekerjaan}/media` | PekerjaanController@media | auth:sanctum | belum |
@@ -369,9 +377,9 @@ Kolom **Status** diisi saat modul dipindah ke Rust. Awalnya semua `belum`.
 
 | No | Method | Path | Controller@action | Middleware | Status |
 | --- | --- | --- | --- | --- | --- |
-| 1 | GET | `/api/kecamatan` | KecamatanController@index | auth:sanctum | belum |
+| 1 | GET | `/api/kecamatan` | KecamatanController@index | auth:sanctum | rust |
 | 2 | POST | `/api/kecamatan` | KecamatanController@store | auth:sanctum | belum |
-| 3 | GET | `/api/kecamatan/{id}` | KecamatanController@show | auth:sanctum | belum |
+| 3 | GET | `/api/kecamatan/{id}` | KecamatanController@show | auth:sanctum | rust |
 | 4 | PUT/PATCH | `/api/kecamatan/{id}` | KecamatanController@update | auth:sanctum | belum |
 | 5 | DELETE | `/api/kecamatan/{id}` | KecamatanController@destroy | auth:sanctum | belum |
 
@@ -381,9 +389,9 @@ Kolom **Status** diisi saat modul dipindah ke Rust. Awalnya semua `belum`.
 | --- | --- | --- | --- | --- | --- |
 | 1 | POST | `/api/desa/sync-kk` | DesaController@syncKk | auth:sanctum | belum |
 | 2 | GET | `/api/desa/{desa}/profile` | DesaController@profile | auth:sanctum | belum |
-| 3 | GET | `/api/desa` | DesaController@index | auth:sanctum | belum |
+| 3 | GET | `/api/desa` | DesaController@index | auth:sanctum | rust |
 | 4 | POST | `/api/desa` | DesaController@store | auth:sanctum | belum |
-| 5 | GET | `/api/desa/{id}` | DesaController@show | auth:sanctum | belum |
+| 5 | GET | `/api/desa/{id}` | DesaController@show | auth:sanctum | rust |
 | 6 | PUT/PATCH | `/api/desa/{id}` | DesaController@update | auth:sanctum | belum |
 | 7 | DELETE | `/api/desa/{id}` | DesaController@destroy | auth:sanctum | belum |
 | 8 | GET | `/api/desa/kecamatan/{kecamatanId}` | DesaController@byKecamatan | auth:sanctum | belum |
@@ -392,9 +400,9 @@ Kolom **Status** diisi saat modul dipindah ke Rust. Awalnya semua `belum`.
 
 | No | Method | Path | Controller@action | Middleware | Status |
 | --- | --- | --- | --- | --- | --- |
-| 1 | GET | `/api/penyedia` | PenyediaController@index | auth:sanctum | belum |
+| 1 | GET | `/api/penyedia` | PenyediaController@index | auth:sanctum | rust |
 | 2 | POST | `/api/penyedia` | PenyediaController@store | auth:sanctum | belum |
-| 3 | GET | `/api/penyedia/{id}` | PenyediaController@show | auth:sanctum | belum |
+| 3 | GET | `/api/penyedia/{id}` | PenyediaController@show | auth:sanctum | rust |
 | 4 | PUT/PATCH | `/api/penyedia/{id}` | PenyediaController@update | auth:sanctum | belum |
 | 5 | DELETE | `/api/penyedia/{id}` | PenyediaController@destroy | auth:sanctum | belum |
 
@@ -402,9 +410,9 @@ Kolom **Status** diisi saat modul dipindah ke Rust. Awalnya semua `belum`.
 
 | No | Method | Path | Controller@action | Middleware | Status |
 | --- | --- | --- | --- | --- | --- |
-| 1 | GET | `/api/kegiatan` | KegiatanController@index | auth:sanctum | belum |
+| 1 | GET | `/api/kegiatan` | KegiatanController@index | auth:sanctum | rust |
 | 2 | POST | `/api/kegiatan` | KegiatanController@store | auth:sanctum | belum |
-| 3 | GET | `/api/kegiatan/{id}` | KegiatanController@show | auth:sanctum | belum |
+| 3 | GET | `/api/kegiatan/{id}` | KegiatanController@show | auth:sanctum | rust |
 | 4 | PUT/PATCH | `/api/kegiatan/{id}` | KegiatanController@update | auth:sanctum | belum |
 | 5 | DELETE | `/api/kegiatan/{id}` | KegiatanController@destroy | auth:sanctum | belum |
 | 6 | GET | `/api/kegiatan/tahun/{tahun}` | KegiatanController@byTahun | auth:sanctum | belum |
@@ -591,9 +599,9 @@ Kolom **Status** diisi saat modul dipindah ke Rust. Awalnya semua `belum`.
 
 | No | Method | Path | Controller@action | Middleware | Status |
 | --- | --- | --- | --- | --- | --- |
-| 1 | GET | `/api/tags` | TagController@index | auth:sanctum | belum |
+| 1 | GET | `/api/tags` | TagController@index | auth:sanctum | rust |
 | 2 | POST | `/api/tags` | TagController@store | auth:sanctum | belum |
-| 3 | GET | `/api/tags/{id}` | TagController@show | auth:sanctum | belum |
+| 3 | GET | `/api/tags/{id}` | TagController@show | auth:sanctum | rust |
 | 4 | PUT/PATCH | `/api/tags/{id}` | TagController@update | auth:sanctum | belum |
 | 5 | DELETE | `/api/tags/{id}` | TagController@destroy | auth:sanctum | belum |
 
@@ -623,9 +631,9 @@ Kolom **Status** diisi saat modul dipindah ke Rust. Awalnya semua `belum`.
 
 | No | Method | Path | Controller@action | Middleware | Status |
 | --- | --- | --- | --- | --- | --- |
-| 1 | GET | `/api/checklist-items` | ChecklistItemController@index | auth:sanctum | belum |
+| 1 | GET | `/api/checklist-items` | ChecklistItemController@index | auth:sanctum | rust |
 | 2 | POST | `/api/checklist-items` | ChecklistItemController@store | auth:sanctum | belum |
-| 3 | GET | `/api/checklist-items/{id}` | ChecklistItemController@show | auth:sanctum | belum |
+| 3 | GET | `/api/checklist-items/{id}` | ChecklistItemController@show | auth:sanctum | rust |
 | 4 | PUT/PATCH | `/api/checklist-items/{id}` | ChecklistItemController@update | auth:sanctum | belum |
 | 5 | DELETE | `/api/checklist-items/{id}` | ChecklistItemController@destroy | auth:sanctum | belum |
 | 6 | POST | `/api/checklist-items/reorder` | ChecklistItemController@reorder | auth:sanctum | belum |
@@ -634,9 +642,9 @@ Kolom **Status** diisi saat modul dipindah ke Rust. Awalnya semua `belum`.
 
 | No | Method | Path | Controller@action | Middleware | Status |
 | --- | --- | --- | --- | --- | --- |
-| 1 | GET | `/api/pekerjaan-checklist` | PekerjaanChecklistController@index | auth:sanctum | belum |
+| 1 | GET | `/api/pekerjaan-checklist` | PekerjaanChecklistController@index | auth:sanctum | rust |
 | 2 | POST | `/api/pekerjaan-checklist/toggle` | PekerjaanChecklistController@toggle | auth:sanctum | belum |
-| 3 | GET | `/api/pekerjaan-checklist/history` | PekerjaanChecklistController@history | auth:sanctum | belum |
+| 3 | GET | `/api/pekerjaan-checklist/history` | PekerjaanChecklistController@history | auth:sanctum | rust |
 | 4 | GET | `/api/pekerjaan-checklist/export/excel` | PekerjaanChecklistController@exportExcel | auth:sanctum | belum |
 | 5 | GET | `/api/pekerjaan-checklist/export/pdf` | PekerjaanChecklistController@exportPdf | auth:sanctum | belum |
 
@@ -644,7 +652,7 @@ Kolom **Status** diisi saat modul dipindah ke Rust. Awalnya semua `belum`.
 
 | No | Method | Path | Controller@action | Middleware | Status |
 | --- | --- | --- | --- | --- | --- |
-| 1 | GET | `/api/post-pekerjaan-checklist` | PostPekerjaanChecklistController@index | auth:sanctum | belum |
+| 1 | GET | `/api/post-pekerjaan-checklist` | PostPekerjaanChecklistController@index | auth:sanctum | rust |
 
 ### output (6)
 
@@ -673,9 +681,9 @@ Kolom **Status** diisi saat modul dipindah ke Rust. Awalnya semua `belum`.
 | No | Method | Path | Controller@action | Middleware | Status |
 | --- | --- | --- | --- | --- | --- |
 | 1 | POST | `/api/tiket/bulk-update` | TiketController@bulkUpdate | auth:sanctum | belum |
-| 2 | GET | `/api/tiket` | TiketController@index | auth:sanctum | belum |
+| 2 | GET | `/api/tiket` | TiketController@index | auth:sanctum | rust |
 | 3 | POST | `/api/tiket` | TiketController@store | auth:sanctum | belum |
-| 4 | GET | `/api/tiket/{id}` | TiketController@show | auth:sanctum | belum |
+| 4 | GET | `/api/tiket/{id}` | TiketController@show | auth:sanctum | rust |
 | 5 | PUT/PATCH | `/api/tiket/{id}` | TiketController@update | auth:sanctum | belum |
 | 6 | DELETE | `/api/tiket/{id}` | TiketController@destroy | auth:sanctum | belum |
 | 7 | POST | `/api/tiket/{tiket}/comments` | TiketCommentController@store | auth:sanctum | belum |
@@ -731,7 +739,7 @@ Kolom **Status** diisi saat modul dipindah ke Rust. Awalnya semua `belum`.
 
 | No | Method | Path | Controller@action | Middleware | Status |
 | --- | --- | --- | --- | --- | --- |
-| 1 | GET | `/api/document-types` | DocumentRegisterController@types | auth:sanctum | belum |
+| 1 | GET | `/api/document-types` | DocumentRegisterController@types | auth:sanctum | rust |
 | 2 | POST | `/api/document-types` | DocumentRegisterController@storeType | auth:sanctum | belum |
 | 3 | PUT | `/api/document-types/{id}` | DocumentRegisterController@updateType | auth:sanctum | belum |
 | 4 | DELETE | `/api/document-types/{id}` | DocumentRegisterController@destroyType | auth:sanctum | belum |
