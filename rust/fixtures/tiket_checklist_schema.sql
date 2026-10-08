@@ -54,3 +54,17 @@ CREATE TABLE IF NOT EXISTS `pekerjaan_checklist` (
   KEY `pekerjaan_checklist_checklist_item_id_foreign` (`checklist_item_id`),
   KEY `pekerjaan_checklist_checked_by_foreign` (`checked_by`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `pekerjaan_checklist_histories` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `pekerjaan_id` bigint unsigned NOT NULL,
+  `checklist_item_id` bigint unsigned NOT NULL,
+  `is_checked` tinyint(1) NOT NULL,
+  `notes` text,
+  `user_id` bigint unsigned DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `pekerjaan_checklist_histories_pekerjaan_id_created_at_index` (`pekerjaan_id`,`created_at`),
+  KEY `pekerjaan_checklist_histories_checklist_item_id_created_at_index` (`checklist_item_id`,`created_at`),
+  KEY `pekerjaan_checklist_histories_user_id_created_at_index` (`user_id`,`created_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

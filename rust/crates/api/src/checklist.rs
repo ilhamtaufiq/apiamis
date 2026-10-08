@@ -374,3 +374,293 @@ pub async fn pekerjaan_index(
         },
     })))
 }
+
+/// Gate role untuk endpoint Checklist yang memakai `byUserRole()`. Role lain ditolak (fail-closed).
+async fn require_full_access(state: &AppState, headers: &HeaderMap) -> Result<(), ApiError> {
+    let user = require_auth(state, headers).await?;
+    let roles = auth::login::roles_of(&state.pool, user.user_id)
+        .await
+        .map_err(internal)?;
+    let names: Vec<String> = roles.into_iter().map(|(_, n)| n).collect();
+    if has_full_access(&names) {
+        Ok(())
+    } else {
+        Err(ApiError::new(
+            axum::http::StatusCode::FORBIDDEN,
+            "Akses ditolak.".to_string(),
+        ))
+    }
+}
+
+/// Filter `pekerjaan-checklist/history`.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct HistoryFilter {
+    pub pekerjaan_id: Option<u64>,
+    pub checklist_item_id: Option<u64>,
+    pub user_id: Option<u64>,
+    pub tahun: Option<String>,
+    pub search: Option<String>,
+}
+
+/// `!empty()` di PHP: kosong dan `"0"` dianggap tidak ada.
+fn non_empty(query: &HashMap<String, String>, key: &str) -> Option<String> {
+    query
+        .get(key)
+        .filter(|v| !v.is_empty() && *v != "0")
+        .cloned()
+}
+
+fn push_history_filter(qb: &mut QueryBuilder<MySql>, f: &HistoryFilter) {
+    if let Some(p) = f.pekerjaan_id {
+        qb.push(" AND h.pekerjaan_id = ").push_bind(p);
+    }
+    if let Some(c) = f.checklist_item_id {
+        qb.push(" AND h.checklist_item_id = ").push_bind(c);
+    }
+    if let Some(u) = f.user_id {
+        qb.push(" AND h.user_id = ").push_bind(u);
+    }
+    if let Some(t) = &f.tahun {
+        qb.push(" AND k.tahun_anggaran = ").push_bind(t.clone());
+    }
+    if let Some(s) = &f.search {
+        let like = format!("%{s}%");
+        qb.push(" AND (p.nama_paket LIKE ")
+            .push_bind(like.clone())
+            .push(" OR ci.name LIKE ")
+            .push_bind(like.clone())
+            .push(" OR u.name LIKE ")
+            .push_bind(like)
+            .push(")");
+    }
+}
+
+const HISTORY_FROM: &str = " FROM pekerjaan_checklist_histories h \
+     JOIN tbl_pekerjaan p ON p.id = h.pekerjaan_id \
+     LEFT JOIN tbl_kegiatan k ON k.id = p.kegiatan_id \
+     LEFT JOIN tbl_checklist_items ci ON ci.id = h.checklist_item_id \
+     LEFT JOIN users u ON u.id = h.user_id WHERE 1=1";
+
+/// `GET /api/pekerjaan-checklist/history`: paginasi dengan `meta` tanpa `links`, `per_page` default 20.
+pub async fn history_index(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(query): Query<HashMap<String, String>>,
+) -> Result<Json<Value>, ApiError> {
+    require_full_access(&state, &headers).await?;
+
+    let per_page = query
+        .get("per_page")
+        .and_then(|v| v.parse::<u64>().ok())
+        .unwrap_or(20);
+    if !(1..=100).contains(&per_page) {
+        return Err(ApiError::validation(
+            "The per page field must be between 1 and 100.",
+            Default::default(),
+        ));
+    }
+    let page = pagination::page_params(&query).page;
+
+    let filter = HistoryFilter {
+        pekerjaan_id: non_empty(&query, "pekerjaan_id").and_then(|v| v.parse().ok()),
+        checklist_item_id: non_empty(&query, "checklist_item_id").and_then(|v| v.parse().ok()),
+        user_id: non_empty(&query, "user_id").and_then(|v| v.parse().ok()),
+        tahun: non_empty(&query, "tahun"),
+        search: non_empty(&query, "search"),
+    };
+
+    let mut count = QueryBuilder::<MySql>::new("SELECT COUNT(*)");
+    count.push(HISTORY_FROM);
+    push_history_filter(&mut count, &filter);
+    let total: i64 = count
+        .build_query_scalar()
+        .fetch_one(&state.pool)
+        .await
+        .map_err(internal)?;
+
+    let mut qb = QueryBuilder::<MySql>::new(
+        "SELECT h.id, h.pekerjaan_id, p.nama_paket, k.nama_sub_kegiatan, h.checklist_item_id, \
+         ci.name AS item_name, h.is_checked, h.notes, h.user_id, u.name AS user_name, u.email AS user_email, \
+         DATE_FORMAT(h.created_at, '%Y-%m-%d %H:%i:%s') AS created_at",
+    );
+    qb.push(HISTORY_FROM);
+    push_history_filter(&mut qb, &filter);
+    qb.push(" ORDER BY h.created_at DESC, h.id DESC LIMIT ")
+        .push_bind(per_page)
+        .push(" OFFSET ")
+        .push_bind((page - 1) * per_page);
+    let rows = qb.build().fetch_all(&state.pool).await.map_err(internal)?;
+
+    let mut data = Vec::with_capacity(rows.len());
+    for r in &rows {
+        data.push(json!({
+            "id": r.try_get::<u64, _>("id").map_err(internal)?,
+            "pekerjaan_id": r.try_get::<u64, _>("pekerjaan_id").map_err(internal)?,
+            "pekerjaan_nama": r.try_get::<Option<String>, _>("nama_paket").map_err(internal)?,
+            "kegiatan": r.try_get::<Option<String>, _>("nama_sub_kegiatan").map_err(internal)?,
+            "checklist_item_id": r.try_get::<u64, _>("checklist_item_id").map_err(internal)?,
+            "checklist_item_name": r.try_get::<Option<String>, _>("item_name").map_err(internal)?,
+            "is_checked": r.try_get::<bool, _>("is_checked").map_err(internal)?,
+            "notes": r.try_get::<Option<String>, _>("notes").map_err(internal)?,
+            "user_id": r.try_get::<Option<u64>, _>("user_id").map_err(internal)?,
+            "user_name": r.try_get::<Option<String>, _>("user_name").map_err(internal)?,
+            "user_email": r.try_get::<Option<String>, _>("user_email").map_err(internal)?,
+            "created_at": r.try_get::<Option<String>, _>("created_at").map_err(internal)?,
+        }));
+    }
+
+    let count_items = rows.len() as u64;
+    let from = (count_items > 0).then(|| (page - 1) * per_page + 1);
+    let to = from.map(|f| f + count_items - 1);
+    let total = total as u64;
+    Ok(Json(json!({
+        "data": data,
+        "meta": {
+            "current_page": page,
+            "from": from,
+            "last_page": total.div_ceil(per_page).max(1),
+            "per_page": per_page,
+            "to": to,
+            "total": total,
+        },
+    })))
+}
+
+/// `GET /api/post-pekerjaan-checklist`: hanya pekerjaan yang punya kontrak, konteks `post_pekerjaan`.
+pub async fn post_index(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(query): Query<HashMap<String, String>>,
+) -> Result<Json<Value>, ApiError> {
+    require_full_access(&state, &headers).await?;
+
+    let page = pagination::page_params(&query).page;
+    let per_page = query
+        .get("per_page")
+        .and_then(|v| v.parse::<u64>().ok())
+        .filter(|p| *p >= 1)
+        .unwrap_or(15);
+    let items = items_in_context(&state.pool, "post_pekerjaan")
+        .await
+        .map_err(internal)?;
+
+    let filter_tahun = non_empty(&query, "tahun");
+    let filter_keg = non_empty(&query, "kegiatan_id");
+    let filter_search = query.get("search").filter(|v| !v.is_empty()).cloned();
+
+    let push = |qb: &mut QueryBuilder<MySql>| {
+        qb.push(" FROM tbl_pekerjaan p LEFT JOIN tbl_kegiatan k ON k.id = p.kegiatan_id WHERE EXISTS (SELECT 1 FROM kontrak_pekerjaan kp WHERE kp.pekerjaan_id = p.id)");
+        if let Some(t) = &filter_tahun {
+            qb.push(" AND k.tahun_anggaran = ").push_bind(t.clone());
+        }
+        if let Some(g) = &filter_keg {
+            qb.push(" AND p.kegiatan_id = ").push_bind(g.clone());
+        }
+        if let Some(s) = &filter_search {
+            let like = format!("%{s}%");
+            qb.push(" AND (p.nama_paket LIKE ")
+                .push_bind(like.clone())
+                .push(" OR EXISTS (SELECT 1 FROM kontrak_pekerjaan kp2 JOIN tbl_kontrak kt ON kt.id = kp2.kontrak_id WHERE kp2.pekerjaan_id = p.id AND (kt.nomor_penawaran LIKE ")
+                .push_bind(like.clone())
+                .push(" OR kt.spk LIKE ")
+                .push_bind(like.clone())
+                .push(" OR kt.kode_paket LIKE ")
+                .push_bind(like)
+                .push(")))");
+        }
+    };
+
+    let mut count = QueryBuilder::<MySql>::new("SELECT COUNT(*)");
+    push(&mut count);
+    let total: i64 = count
+        .build_query_scalar()
+        .fetch_one(&state.pool)
+        .await
+        .map_err(internal)?;
+
+    let mut qb = QueryBuilder::<MySql>::new(
+        "SELECT p.id, p.nama_paket, k.id AS keg_id, k.nama_sub_kegiatan",
+    );
+    push(&mut qb);
+    qb.push(" ORDER BY p.id LIMIT ")
+        .push_bind(per_page)
+        .push(" OFFSET ")
+        .push_bind((page - 1) * per_page);
+    let rows = qb.build().fetch_all(&state.pool).await.map_err(internal)?;
+
+    let mut data = Vec::with_capacity(rows.len());
+    for r in &rows {
+        let pid: u64 = r.try_get("id").map_err(internal)?;
+        let keg_id: Option<u64> = r.try_get("keg_id").map_err(internal)?;
+        let kontrak = sqlx::query(
+            "SELECT kt.id, kt.nomor_penawaran, kt.spk, kt.kode_paket, p2.nama AS penyedia_nama \
+             FROM kontrak_pekerjaan kp JOIN tbl_kontrak kt ON kt.id = kp.kontrak_id \
+             LEFT JOIN tbl_penyedia p2 ON p2.id = kt.id_penyedia \
+             WHERE kp.pekerjaan_id = ? ORDER BY kt.id LIMIT 1",
+        )
+        .bind(pid)
+        .fetch_optional(&state.pool)
+        .await
+        .map_err(internal)?;
+        let kontrak_json = match kontrak {
+            Some(k) => json!({
+                "id": k.try_get::<u64, _>("id").map_err(internal)?,
+                "nomor_penawaran": k.try_get::<Option<String>, _>("nomor_penawaran").map_err(internal)?,
+                "spk": k.try_get::<Option<String>, _>("spk").map_err(internal)?,
+                "kode_paket": k.try_get::<Option<String>, _>("kode_paket").map_err(internal)?,
+                "penyedia": k.try_get::<Option<String>, _>("penyedia_nama").map_err(internal)?,
+            }),
+            None => Value::Null,
+        };
+
+        let checks = checks_for(&state.pool, pid).await.map_err(internal)?;
+        let mut checklist = serde_json::Map::new();
+        for item in &items {
+            let data = checks.iter().find(|c| c.item_id == item.id);
+            checklist.insert(
+                item.id.to_string(),
+                json!({
+                    "is_checked": data.is_some_and(|c| c.is_checked),
+                    "checked_at": data.and_then(|c| c.checked_at.clone()),
+                    "checked_by": data.and_then(|c| c.checked_by),
+                    "notes": data.and_then(|c| c.notes.clone()),
+                }),
+            );
+        }
+
+        data.push(json!({
+            "id": pid,
+            "nama_paket": r.try_get::<Option<String>, _>("nama_paket").map_err(internal)?,
+            "kegiatan": keg_id.map(|id| json!({
+                "id": id,
+                "nama_sub_kegiatan": r.try_get::<Option<String>, _>("nama_sub_kegiatan").ok().flatten(),
+            })),
+            "kontrak": kontrak_json,
+            "checklist": if checklist.is_empty() { json!([]) } else { Value::Object(checklist) },
+        }));
+    }
+
+    let columns: Vec<Value> = items
+        .iter()
+        .map(|i| {
+            json!({
+                "id": i.id,
+                "name": i.name,
+                "description": i.description,
+                "sort_order": i.sort_order,
+                "context": i.context,
+            })
+        })
+        .collect();
+    let total = total as u64;
+    Ok(Json(json!({
+        "columns": columns,
+        "data": data,
+        "meta": {
+            "current_page": page,
+            "last_page": total.div_ceil(per_page).max(1),
+            "per_page": per_page,
+            "total": total,
+        },
+    })))
+}

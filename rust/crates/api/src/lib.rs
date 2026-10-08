@@ -119,6 +119,11 @@ pub fn app(config: &Config, state: AppState) -> Router {
         .route("/api/checklist-items", get(checklist::items_index))
         .route("/api/checklist-items/{id}", get(checklist::items_show))
         .route("/api/pekerjaan-checklist", get(checklist::pekerjaan_index))
+        .route(
+            "/api/pekerjaan-checklist/history",
+            get(checklist::history_index),
+        )
+        .route("/api/post-pekerjaan-checklist", get(checklist::post_index))
         // Catch-all untuk /api: route yang belum ada di Rust tetap lewat pengecekan
         // permission (Laravel menolak lebih dulu, bukan 404).
         .route("/api/{*rest}", any(not_found))

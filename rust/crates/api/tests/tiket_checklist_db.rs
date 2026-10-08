@@ -190,3 +190,142 @@ async fn checklist_entry_reports_checks_and_last_update() {
         .await
         .unwrap();
 }
+
+async fn http_get(
+    pool: &MySqlPool,
+    token: &str,
+    path: &str,
+) -> (axum::http::StatusCode, serde_json::Value) {
+    use axum::body::Body;
+    use axum::http::Request;
+    use tower::ServiceExt;
+
+    let config = shared::Config {
+        app_env: "testing".to_string(),
+        app_port: 0,
+        request_timeout_secs: 30,
+        body_limit_bytes: 1024,
+        app_url: "http://localhost".to_string(),
+    };
+    let state = api::AppState::new(pool.clone(), "http://localhost".to_string());
+    let res = api::app(&config, state)
+        .oneshot(
+            Request::builder()
+                .uri(path)
+                .header("authorization", format!("Bearer {token}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let status = res.status();
+    let bytes = axum::body::to_bytes(res.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    (
+        status,
+        serde_json::from_slice(&bytes).unwrap_or(serde_json::Value::Null),
+    )
+}
+
+#[tokio::test]
+#[ignore = "butuh DATABASE_URL dan data tbl_pekerjaan"]
+async fn checklist_history_and_post_over_http() {
+    let pool = pool().await;
+    let admin = insert_user(&pool, "Uji Admin HTTP").await;
+    let plain = insert_user(&pool, "Uji Tanpa Role").await;
+    sqlx::query("INSERT IGNORE INTO roles (name, guard_name, created_at, updated_at) VALUES ('admin', 'web', NOW(), NOW())")
+        .execute(&pool)
+        .await
+        .unwrap();
+    let role: u64 = sqlx::query_scalar(
+        "SELECT id FROM roles WHERE name = 'admin' AND guard_name = 'web' LIMIT 1",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    sqlx::query("INSERT IGNORE INTO model_has_roles (role_id, model_type, model_id) VALUES (?, 'App\\\\Models\\\\User', ?)")
+        .bind(role)
+        .bind(admin)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let admin_token = auth::login::create_token(&pool, admin, "uji")
+        .await
+        .unwrap();
+    let plain_token = auth::login::create_token(&pool, plain, "uji")
+        .await
+        .unwrap();
+
+    sqlx::query("DELETE FROM pekerjaan_checklist_histories WHERE notes = 'uji-history'")
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("DELETE FROM tbl_checklist_items WHERE context = 'uji-http'")
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("INSERT INTO tbl_checklist_items (name, sort_order, context, created_at, updated_at) VALUES ('Uji Foto', 1, 'uji-http', NOW(), NOW())")
+        .execute(&pool)
+        .await
+        .unwrap();
+    let item: u64 =
+        sqlx::query_scalar("SELECT id FROM tbl_checklist_items WHERE context = 'uji-http'")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    let pid: u64 = sqlx::query_scalar("SELECT id FROM tbl_pekerjaan ORDER BY id LIMIT 1")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    sqlx::query("INSERT INTO pekerjaan_checklist_histories (pekerjaan_id, checklist_item_id, is_checked, notes, user_id, created_at) VALUES (?, ?, 1, 'uji-history', ?, '2025-06-02 09:30:00')")
+        .bind(pid)
+        .bind(item)
+        .bind(admin)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    let (status, body) = http_get(
+        &pool,
+        &admin_token,
+        "/api/pekerjaan-checklist/history?search=Uji%20Admin",
+    )
+    .await;
+    assert_eq!(status, axum::http::StatusCode::OK);
+    let data = body["data"].as_array().unwrap();
+    let row = data
+        .iter()
+        .find(|r| r["checklist_item_name"] == "Uji Foto")
+        .unwrap_or_else(|| panic!("riwayat uji tidak ada: {body}"));
+    assert_eq!(row["user_name"], "Uji Admin HTTP");
+    assert_eq!(row["is_checked"], true);
+    assert_eq!(row["created_at"], "2025-06-02 09:30:00");
+    assert_eq!(body["meta"]["per_page"], 20);
+    assert!(body["meta"]["total"].as_u64().unwrap() >= 1);
+    assert!(body.get("links").is_none());
+
+    let (status, body) = http_get(
+        &pool,
+        &admin_token,
+        "/api/post-pekerjaan-checklist?per_page=5",
+    )
+    .await;
+    assert_eq!(status, axum::http::StatusCode::OK);
+    assert!(body["columns"].is_array());
+    assert!(body["data"].is_array());
+    assert_eq!(body["meta"]["per_page"], 5);
+    assert!(body["meta"].get("from").is_none());
+
+    let (status, _) = http_get(&pool, &plain_token, "/api/pekerjaan-checklist/history").await;
+    assert_eq!(status, axum::http::StatusCode::FORBIDDEN);
+
+    sqlx::query("DELETE FROM pekerjaan_checklist_histories WHERE notes = 'uji-history'")
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("DELETE FROM tbl_checklist_items WHERE context = 'uji-http'")
+        .execute(&pool)
+        .await
+        .unwrap();
+}
