@@ -274,19 +274,53 @@ class SpamUnitController extends Controller
 
     public function stats(Request $request): JsonResponse
     {
+        $tahunScope = $request->filled('tahun') ? $request->input('tahun') : null;
+        $kecamatanId = $request->kecamatan_id ? (int) $request->kecamatan_id : null;
+
+        return response()->json([
+            'success' => true,
+            'data' => $this->buildStats($tahunScope, $kecamatanId),
+        ]);
+    }
+
+    /**
+     * GET /spam-units/stats/series?years=2020,2021,...&kecamatan_id=
+     * Statistik per tahun dalam satu respon (menggantikan banyak request /stats?tahun=).
+     */
+    public function statsSeries(Request $request): JsonResponse
+    {
+        $years = collect(explode(',', (string) $request->input('years')))
+            ->map(fn ($y) => trim($y))
+            ->filter(fn ($y) => preg_match('/^\d{4}$/', $y) === 1)
+            ->unique()
+            ->take(20)
+            ->values();
+        $kecamatanId = $request->kecamatan_id ? (int) $request->kecamatan_id : null;
+
+        $data = [];
+        foreach ($years as $year) {
+            $data[$year] = $this->buildStats($year, $kecamatanId);
+        }
+
+        return response()->json(['success' => true, 'data' => $data]);
+    }
+
+    /**
+     * Payload statistik untuk satu tahun (null = semua tahun).
+     */
+    private function buildStats(?string $tahunScope, ?int $kecamatanId): array
+    {
         // Simple aggregate calculations
         $totalUnits = UnitSpam::count();
         $simspamCount = UnitSpam::where('is_simspam', true)->count();
         $nonSimspamCount = $totalUnits - $simspamCount;
 
-        $tahunScope = $request->filled('tahun') ? $request->input('tahun') : null;
         $scopeLabel = $this->integrationService->combinedScopeLabel($tahunScope);
         $targetYear = $scopeLabel;
         $manualScopeLabel = $scopeLabel;
         $manualCapTahun = $this->integrationService->manualCapTahun();
 
         // Filter by kecamatan if present
-        $kecamatanId = $request->kecamatan_id ? (int) $request->kecamatan_id : null;
 
         $integrationSummary = $this->integrationService->integrationSummary(
             $tahunScope,
@@ -357,9 +391,7 @@ class SpamUnitController extends Controller
             ->orderBy('count', 'desc')
             ->get();
 
-        return response()->json([
-            'success' => true,
-            'data' => array_merge([
+        return array_merge([
                 'total_units' => $totalUnits,
                 'simspam_count' => $simspamCount,
                 'non_simspam_count' => $nonSimspamCount,
@@ -458,8 +490,7 @@ class SpamUnitController extends Controller
                         'coverage_percentage' => $coveragePercentage,
                     ],
                 ],
-            ]),
-        ]);
+            ]);
     }
 
     public function integrationOutputOptions(Request $request): JsonResponse

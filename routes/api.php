@@ -245,6 +245,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // API Resources
     Route::get('spam-units/stats', [SpamUnitController::class, 'stats']);
+    Route::get('spam-units/stats/series', [SpamUnitController::class, 'statsSeries']);
     Route::get('spam-units/integration/output-options', [SpamUnitController::class, 'integrationOutputOptions']);
     Route::get('spam-units/integration', [SpamUnitController::class, 'integration']);
     Route::get('spam-units/integration/desa/{desaId}', [SpamUnitController::class, 'integrationByDesa']);
