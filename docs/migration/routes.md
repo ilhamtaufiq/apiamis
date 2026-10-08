@@ -12,9 +12,9 @@ Sumber: `routes/api.php` (branch `rust`, dari `main` SHA `c19fd06`). Dibuat deng
 
 ### Status paritas (diperbarui)
 
-- Sudah di Rust: **67** (termasuk auth, lookup, kecamatan, desa, kegiatan, penyedia, tiket GET, checklist GET, foto dan penerima seluruh rute, berkas kecuali export-pdf dan upload-from-url)
+- Sudah di Rust: **78** (termasuk auth, lookup, kecamatan, desa, kegiatan, penyedia, tiket GET, checklist GET, foto dan penerima seluruh rute, berkas kecuali export-pdf dan upload-from-url)
 - Parsial di Rust: **1** (`GET /api/pekerjaan`: relasi daftar belum dibandingkan dengan produksi, lihat T21)
-- Belum: **418** (dihitung langsung dari kolom Status; termasuk export Excel draft, progress estimasi, destroy pekerjaan, dan modul lain yang belum dipindah)
+- Belum: **407** (dihitung langsung dari kolom Status; termasuk export Excel draft, progress estimasi, destroy pekerjaan, dan modul lain yang belum dipindah)
 
 Cara menghitung: cocokkan method dan path (`{param}` dinormalisasi) dengan route yang terdaftar di `rust/crates/api/src/lib.rs`.
 
@@ -259,11 +259,11 @@ Kolom **Status** diisi saat modul dipindah ke Rust. Awalnya semua `belum`.
 
 | No | Method | Path | Controller@action | Middleware | Status |
 | --- | --- | --- | --- | --- | --- |
-| 1 | GET | `/api/sk` | SkController@index | auth:sanctum,role:admin | belum |
-| 2 | POST | `/api/sk` | SkController@store | auth:sanctum,role:admin | belum |
-| 3 | GET | `/api/sk/{id}` | SkController@show | auth:sanctum,role:admin | belum |
-| 4 | PUT/PATCH | `/api/sk/{id}` | SkController@update | auth:sanctum,role:admin | belum |
-| 5 | DELETE | `/api/sk/{id}` | SkController@destroy | auth:sanctum,role:admin | belum |
+| 1 | GET | `/api/sk` | SkController@index | auth:sanctum,role:admin | rust |
+| 2 | POST | `/api/sk` | SkController@store | auth:sanctum,role:admin | rust |
+| 3 | GET | `/api/sk/{id}` | SkController@show | auth:sanctum,role:admin | rust |
+| 4 | PUT/PATCH | `/api/sk/{id}` | SkController@update | auth:sanctum,role:admin | rust |
+| 5 | DELETE | `/api/sk/{id}` | SkController@destroy | auth:sanctum,role:admin | rust |
 
 ### user (1)
 
@@ -763,12 +763,12 @@ Kolom **Status** diisi saat modul dipindah ke Rust. Awalnya semua `belum`.
 
 | No | Method | Path | Controller@action | Middleware | Status |
 | --- | --- | --- | --- | --- | --- |
-| 1 | GET | `/api/notifications` | NotificationController@index | auth:sanctum | belum |
-| 2 | POST | `/api/notifications/{id}/read` | NotificationController@markAsRead | auth:sanctum | belum |
-| 3 | POST | `/api/notifications/mark-all-read` | NotificationController@markAllAsRead | auth:sanctum | belum |
-| 4 | POST | `/api/notifications/broadcast` | NotificationController@sendBroadcast | auth:sanctum,role:admin | belum |
-| 5 | GET | `/api/notifications/broadcast-history` | NotificationController@getBroadcastHistory | auth:sanctum,role:admin | belum |
-| 6 | DELETE | `/api/notifications/broadcast/{id}` | NotificationController@deleteBroadcast | auth:sanctum,role:admin | belum |
+| 1 | GET | `/api/notifications` | NotificationController@index | auth:sanctum | rust |
+| 2 | POST | `/api/notifications/{id}/read` | NotificationController@markAsRead | auth:sanctum | rust |
+| 3 | POST | `/api/notifications/mark-all-read` | NotificationController@markAllAsRead | auth:sanctum | rust |
+| 4 | POST | `/api/notifications/broadcast` | NotificationController@sendBroadcast | auth:sanctum,role:admin | rust |
+| 5 | GET | `/api/notifications/broadcast-history` | NotificationController@getBroadcastHistory | auth:sanctum,role:admin | rust |
+| 6 | DELETE | `/api/notifications/broadcast/{id}` | NotificationController@deleteBroadcast | auth:sanctum,role:admin | rust |
 
 ### events (6)
 

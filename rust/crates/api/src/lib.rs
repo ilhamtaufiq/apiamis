@@ -41,6 +41,7 @@ pub mod progress_metrics;
 pub mod ratelimit;
 pub mod route_permission;
 pub mod session;
+pub mod sk;
 pub mod tags_write;
 pub mod tiket;
 pub mod tiket_write;
@@ -215,6 +216,21 @@ pub fn app(config: &Config, state: AppState) -> Router {
                 .put(penerima::update)
                 .patch(penerima::update)
                 .delete(penerima::destroy),
+        )
+        .route(
+            "/api/sk",
+            get(sk::index)
+                .post(sk::store)
+                .layer(DefaultBodyLimit::max(sk::BODY_LIMIT)),
+        )
+        .route(
+            "/api/sk/{id}",
+            get(sk::show)
+                .put(sk::update)
+                .patch(sk::update)
+                .post(sk::update_post)
+                .delete(sk::destroy)
+                .layer(DefaultBodyLimit::max(sk::BODY_LIMIT)),
         )
         .route("/api/penyedia/{id}", get(penyedia::show))
         .route("/api/tiket", get(tiket::index).post(tiket_write::store))
