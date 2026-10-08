@@ -12,9 +12,9 @@ Sumber: `routes/api.php` (branch `rust`, dari `main` SHA `c19fd06`). Dibuat deng
 
 ### Status paritas (diperbarui)
 
-- Sudah di Rust: **211** (termasuk dokumen kontrak SPK, cover, ZIP cover, BAP, dan bap-context, serta PDF SPK lewat ONLYOFFICE; termasuk auth, lookup, kecamatan, desa, kegiatan, penyedia, tiket GET, checklist GET, foto dan penerima seluruh rute, berkas kecuali export-pdf dan upload-from-url, kontrak CRUD, relasi pekerjaan/kegiatan/penyedia, excel export, template, dan impor kontrak, addendum dan register-gaps GET, sk, notifikasi, dan master fase pekerjaan)
+- Sudah di Rust: **219** (termasuk dokumen kontrak SPK, cover, ZIP cover, BAP, dan bap-context, serta PDF SPK lewat ONLYOFFICE; termasuk auth, lookup, kecamatan, desa, kegiatan, penyedia, tiket GET, checklist GET, foto dan penerima seluruh rute, berkas kecuali export-pdf dan upload-from-url, kontrak CRUD, relasi pekerjaan/kegiatan/penyedia, excel export, template, dan impor kontrak, addendum dan register-gaps GET, sk, notifikasi, dan master fase pekerjaan)
 - Parsial di Rust: **2** (`GET /api/pekerjaan`: relasi daftar belum dibandingkan dengan produksi, lihat T21)
-- Belum: **197** (dihitung langsung dari kolom Status; termasuk addendum, export Excel draft, progress estimasi, destroy pekerjaan, dan modul lain yang belum dipindah)
+- Belum: **189** (dihitung langsung dari kolom Status; termasuk addendum, export Excel draft, progress estimasi, destroy pekerjaan, dan modul lain yang belum dipindah)
 - Dihapus (tidak dimigrasi): **77** (termasuk desa sync-kk, chat AI dan live-chat, panduan CMS, presence, search ai-summary, dan pengaturan AI di app-settings, sesuai keputusan user)
 
 Cara menghitung: cocokkan method dan path (`{param}` dinormalisasi) dengan route yang terdaftar di `rust/crates/api/src/lib.rs`.
@@ -54,19 +54,19 @@ Kolom **Status** diisi saat modul dipindah ke Rust. Awalnya semua `belum`.
 | 1 | GET | `/api/app-settings/backups/google-drive/callback` | GoogleDriveBackupController@callback | throttle:20,1 | belum |
 | 2 | GET | `/api/app-settings` | AppSettingController@index | - | rust |
 | 3 | GET | `/api/app-settings/maintenance` | AppSettingController@maintenanceStatus | - | rust |
-| 4 | GET | `/api/app-settings/storage-stats` | AppSettingController@storageStats | auth:sanctum,role:admin | belum |
-| 5 | POST | `/api/app-settings` | AppSettingController@store | auth:sanctum,role:admin | belum |
+| 4 | GET | `/api/app-settings/storage-stats` | AppSettingController@storageStats | auth:sanctum,role:admin | rust |
+| 5 | POST | `/api/app-settings` | AppSettingController@store | auth:sanctum,role:admin | rust |
 | 6 | POST | `/api/app-settings/test-ai-connection` | AppSettingController@testAiConnection | auth:sanctum,role:admin | dihapus |
 | 7 | POST | `/api/app-settings/list-ai-models` | AppSettingController@listAiModels | auth:sanctum,role:admin | dihapus |
 | 8 | POST | `/api/app-settings/test-mail-connection` | AppSettingController@testMailConnection | auth:sanctum,role:admin | belum |
 | 9 | GET | `/api/app-settings/mail-templates` | AppSettingController@mailTemplates | auth:sanctum,role:admin | belum |
 | 10 | POST | `/api/app-settings/mail-templates` | AppSettingController@storeMailTemplates | auth:sanctum,role:admin | belum |
 | 11 | POST | `/api/app-settings/mail-templates/{key}/test` | AppSettingController@testMailTemplate | auth:sanctum,role:admin | belum |
-| 12 | GET | `/api/app-settings/kontrak-templates` | AppSettingController@kontrakTemplates | auth:sanctum,role:admin | belum |
-| 13 | GET | `/api/app-settings/kontrak-templates/{key}/download` | AppSettingController@downloadKontrakTemplate | auth:sanctum,role:admin | belum |
-| 14 | GET | `/api/app-settings/backups` | BackupController@index | auth:sanctum,role:admin | belum |
+| 12 | GET | `/api/app-settings/kontrak-templates` | AppSettingController@kontrakTemplates | auth:sanctum,role:admin | rust |
+| 13 | GET | `/api/app-settings/kontrak-templates/{key}/download` | AppSettingController@downloadKontrakTemplate | auth:sanctum,role:admin | rust |
+| 14 | GET | `/api/app-settings/backups` | BackupController@index | auth:sanctum,role:admin | rust |
 | 15 | POST | `/api/app-settings/backups` | BackupController@store | auth:sanctum,role:admin | belum |
-| 16 | GET | `/api/app-settings/backups/jobs/{jobId}` | BackupController@showJob | auth:sanctum,role:admin | belum |
+| 16 | GET | `/api/app-settings/backups/jobs/{jobId}` | BackupController@showJob | auth:sanctum,role:admin | rust |
 | 17 | DELETE | `/api/app-settings/backups/jobs/{jobId}` | BackupController@cancelJob | auth:sanctum,role:admin | belum |
 | 18 | POST | `/api/app-settings/backups/restore` | BackupController@restore | auth:sanctum,role:admin | belum |
 | 19 | GET | `/api/app-settings/backups/google-drive/status` | GoogleDriveBackupController@status | auth:sanctum,role:admin | belum |
@@ -76,8 +76,8 @@ Kolom **Status** diisi saat modul dipindah ke Rust. Awalnya semua `belum`.
 | 23 | DELETE | `/api/app-settings/backups/google-drive/jobs/{jobId}` | GoogleDriveBackupController@cancelUploadJob | auth:sanctum,role:admin | belum |
 | 24 | POST | `/api/app-settings/backups/{filename}/google-drive` | GoogleDriveBackupController@upload | auth:sanctum,role:admin | belum |
 | 25 | POST | `/api/app-settings/backups/s3/test` | BackupController@testS3Connection | auth:sanctum,role:admin | belum |
-| 26 | GET | `/api/app-settings/backups/{filename}` | BackupController@download | auth:sanctum,role:admin | belum |
-| 27 | DELETE | `/api/app-settings/backups/{filename}` | BackupController@destroy | auth:sanctum,role:admin | belum |
+| 26 | GET | `/api/app-settings/backups/{filename}` | BackupController@download | auth:sanctum,role:admin | rust |
+| 27 | DELETE | `/api/app-settings/backups/{filename}` | BackupController@destroy | auth:sanctum,role:admin | rust |
 
 ### panduan (2)
 
