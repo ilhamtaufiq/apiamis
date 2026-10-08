@@ -95,16 +95,6 @@ class Kontrak extends Model implements HasMedia
         return $this->belongsTo(Penyedia::class, 'id_penyedia');
     }
 
-    public function progress_fisik(): \Illuminate\Database\Eloquent\Relations\HasOne
-    {
-        return $this->hasOne(PuspenProgressFisik::class, 'kontrak_id');
-    }
-
-    public function progress_fisik_outputs(): \Illuminate\Database\Eloquent\Relations\HasMany
-    {
-        return $this->hasMany(PuspenProgressFisikOutput::class, 'kontrak_id');
-    }
-
     public function registers(): \Illuminate\Database\Eloquent\Relations\HasMany
     {
         return $this->hasMany(DocumentRegister::class, 'kontrak_id');

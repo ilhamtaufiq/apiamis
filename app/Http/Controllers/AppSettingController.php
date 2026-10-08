@@ -76,7 +76,6 @@ class AppSettingController extends Controller
             'landing_page_active' => 'nullable|string|in:0,1',
             'spm_detail_page_active' => 'nullable|string|in:0,1',
             'capaian_publik_section_active' => 'nullable|string|in:0,1',
-            'puspen_progress_fisik_public' => 'nullable|string|in:0,1',
             'pengawas_berkas_show_rab' => 'nullable|string|in:0,1',
             'pengawas_berkas_show_gambar' => 'nullable|string|in:0,1',
             'pengawas_berkas_show_nego' => 'nullable|string|in:0,1',
@@ -149,11 +148,6 @@ class AppSettingController extends Controller
 
         if ($request->has('capaian_publik_section_active')) {
             $setting = AppSetting::setValue('capaian_publik_section_active', $request->capaian_publik_section_active, 'text');
-            $updatedSettings[] = $setting;
-        }
-
-        if ($request->has('puspen_progress_fisik_public')) {
-            $setting = AppSetting::setValue('puspen_progress_fisik_public', $request->puspen_progress_fisik_public, 'text');
             $updatedSettings[] = $setting;
         }
 

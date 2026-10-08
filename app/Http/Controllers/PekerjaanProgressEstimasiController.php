@@ -6,8 +6,6 @@ use App\Http\Resources\PekerjaanProgressEstimasiResource;
 use App\Models\Kontrak;
 use App\Models\Pekerjaan;
 use App\Models\PekerjaanProgressEstimasiHistory;
-use App\Models\PuspenProgressFisik;
-use App\Services\PekerjaanProgressEstimasiSyncService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -25,14 +23,12 @@ class PekerjaanProgressEstimasiController extends Controller
 
         return response()->json([
             'data' => new PekerjaanProgressEstimasiResource($this->buildPayload($pekerjaan->id, $tahun)),
-            'puspen_progress_fisik' => $this->getPuspenSnapshot($pekerjaan->id, $tahun),
         ]);
     }
 
     public function update(
         Request $request,
         int $pekerjaanId,
-        PekerjaanProgressEstimasiSyncService $syncService,
     ): JsonResponse
     {
         $validated = $request->validate([
@@ -96,12 +92,9 @@ class PekerjaanProgressEstimasiController extends Controller
             }
         });
 
-        $syncService->syncToPuspenFromPekerjaan($pekerjaan->id, $tahun);
-
         return response()->json([
-            'message' => 'Riwayat progress estimasi berhasil disimpan dan disinkronkan ke Puspen progress fisik',
+            'message' => 'Riwayat progress estimasi berhasil disimpan',
             'data' => new PekerjaanProgressEstimasiResource($this->buildPayload($pekerjaan->id, $tahun)),
-            'puspen_progress_fisik' => $this->getPuspenSnapshot($pekerjaan->id, $tahun),
         ]);
     }
 
@@ -170,41 +163,6 @@ class PekerjaanProgressEstimasiController extends Controller
                 ['id', 'desc'],
             ])
             ->first();
-    }
-
-    private function getPuspenSnapshot(int $pekerjaanId, int $tahun): array
-    {
-        $kontrakIds = Kontrak::query()
-            ->where('id_pekerjaan', $pekerjaanId)
-            ->orWhereHas('pekerjaans', fn ($q) => $q->where('pekerjaan_id', $pekerjaanId))
-            ->pluck('id');
-
-        if ($kontrakIds->isEmpty()) {
-            return [];
-        }
-
-        return PuspenProgressFisik::query()
-            ->whereIn('kontrak_id', $kontrakIds)
-            ->where('tahun_anggaran', $tahun)
-            ->with('kontrak:id,kode_paket')
-            ->get()
-            ->map(function (PuspenProgressFisik $item) {
-                $rencana = $item->rencana;
-                $realisasi = $item->realisasi;
-
-                return [
-                    'kontrak_id' => $item->kontrak_id,
-                    'kode_paket' => $item->kontrak?->kode_paket,
-                    'rencana' => $rencana,
-                    'realisasi' => $realisasi,
-                    'deviasi' => $rencana !== null && $realisasi !== null
-                        ? round($realisasi - $rencana, 2)
-                        : null,
-                    'updated_at' => $item->updated_at?->toISOString(),
-                ];
-            })
-            ->values()
-            ->all();
     }
 
     private function validatePercent(string $attribute, mixed $value, \Closure $fail): void

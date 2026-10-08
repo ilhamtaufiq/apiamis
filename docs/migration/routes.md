@@ -14,8 +14,8 @@ Sumber: `routes/api.php` (branch `rust`, dari `main` SHA `c19fd06`). Dibuat deng
 
 - Sudah di Rust: **150** (termasuk dokumen kontrak SPK, cover, ZIP cover, BAP, dan bap-context, serta PDF SPK lewat ONLYOFFICE; termasuk auth, lookup, kecamatan, desa, kegiatan, penyedia, tiket GET, checklist GET, foto dan penerima seluruh rute, berkas kecuali export-pdf dan upload-from-url, kontrak CRUD, relasi pekerjaan/kegiatan/penyedia, excel export, template, dan impor kontrak, addendum dan register-gaps GET, sk, dan notifikasi)
 - Parsial di Rust: **1** (`GET /api/pekerjaan`: relasi daftar belum dibandingkan dengan produksi, lihat T21)
-- Belum: **306** (dihitung langsung dari kolom Status; termasuk addendum, export Excel draft, progress estimasi, destroy pekerjaan, dan modul lain yang belum dipindah)
-- Dihapus (tidak dimigrasi): **30** (termasuk desa sync-kk, chat AI dan live-chat, panduan CMS, presence, search ai-summary, dan pengaturan AI di app-settings, sesuai keputusan user)
+- Belum: **262** (dihitung langsung dari kolom Status; termasuk addendum, export Excel draft, progress estimasi, destroy pekerjaan, dan modul lain yang belum dipindah)
+- Dihapus (tidak dimigrasi): **74** (termasuk desa sync-kk, chat AI dan live-chat, panduan CMS, presence, search ai-summary, dan pengaturan AI di app-settings, sesuai keputusan user)
 
 Cara menghitung: cocokkan method dan path (`{param}` dinormalisasi) dengan route yang terdaftar di `rust/crates/api/src/lib.rs`.
 
@@ -110,7 +110,7 @@ Kolom **Status** diisi saat modul dipindah ke Rust. Awalnya semua `belum`.
 
 | No | Method | Path | Controller@action | Middleware | Status |
 | --- | --- | --- | --- | --- | --- |
-| 1 | GET | `/api/public/puspen/progress-fisik` | PuspenProgressFisikController@publicIndex | - | belum |
+| 1 | GET | `/api/public/puspen/progress-fisik` | PuspenProgressFisikController@publicIndex | - | dihapus |
 | 2 | GET | `/api/public/spam-units/stats` | SpamUnitController@publicStats | - | belum |
 | 3 | GET | `/api/public/spam-units/map-stats` | SpamUnitController@publicMapStats | - | belum |
 | 4 | GET | `/api/public/spam-kelembagaan/form/{token}` | SpamKelembagaanShareController@publicShow | throttle:60,1 | belum |
@@ -118,9 +118,9 @@ Kolom **Status** diisi saat modul dipindah ke Rust. Awalnya semua `belum`.
 | 6 | GET | `/api/public/spm-sanitasi/stats` | SpmSanitasiController@publicStats | - | belum |
 | 7 | GET | `/api/public/spm-sanitasi/map-stats` | SpmSanitasiController@publicMapStats | - | belum |
 | 8 | POST | `/api/public/contact` | ContactController@store | throttle:contact-inquiries | belum |
-| 9 | GET | `/api/public/puspen/media-shares/{shareToken}` | PuspenMediaShareController@publicShow | - | belum |
-| 10 | GET | `/api/public/puspen/media-shares/{shareToken}/preview/{media}` | PuspenMediaShareController@publicPreview | - | belum |
-| 11 | GET | `/api/public/puspen/media-shares/{shareToken}/download` | PuspenMediaShareController@publicDownload | - | belum |
+| 9 | GET | `/api/public/puspen/media-shares/{shareToken}` | PuspenMediaShareController@publicShow | - | dihapus |
+| 10 | GET | `/api/public/puspen/media-shares/{shareToken}/preview/{media}` | PuspenMediaShareController@publicPreview | - | dihapus |
+| 11 | GET | `/api/public/puspen/media-shares/{shareToken}/download` | PuspenMediaShareController@publicDownload | - | dihapus |
 
 ### onlyoffice (5)
 
@@ -171,7 +171,7 @@ Kolom **Status** diisi saat modul dipindah ke Rust. Awalnya semua `belum`.
 | 14 | DELETE | `/api/pekerjaan/{id}` | PekerjaanController@destroy | auth:sanctum | belum |
 | 15 | GET | `/api/pekerjaan/{pekerjaan}/media` | PekerjaanController@media | auth:sanctum | belum |
 | 16 | GET | `/api/pekerjaan/{pekerjaan}/download-all-berkas` | PekerjaanController@downloadAllBerkas | auth:sanctum | belum |
-| 17 | POST | `/api/pekerjaan/{pekerjaan}/berkas/quick-share` | BerkasController@quickShareForPekerjaan | auth:sanctum | belum |
+| 17 | POST | `/api/pekerjaan/{pekerjaan}/berkas/quick-share` | BerkasController@quickShareForPekerjaan | auth:sanctum | dihapus |
 | 18 | GET | `/api/pekerjaan/{pekerjaanId}/progress-estimasi` | PekerjaanProgressEstimasiController@show | auth:sanctum | belum |
 | 19 | PUT | `/api/pekerjaan/{pekerjaanId}/progress-estimasi` | PekerjaanProgressEstimasiController@update | auth:sanctum | belum |
 
@@ -712,20 +712,20 @@ Kolom **Status** diisi saat modul dipindah ke Rust. Awalnya semua `belum`.
 
 | No | Method | Path | Controller@action | Middleware | Status |
 | --- | --- | --- | --- | --- | --- |
-| 1 | GET | `/api/puspen/progress-fisik` | PuspenProgressFisikController@index | auth:sanctum | belum |
-| 2 | POST | `/api/puspen/progress-fisik/bulk-update` | PuspenProgressFisikController@bulkUpdate | auth:sanctum | belum |
-| 3 | GET | `/api/puspen/pengawas-kpi` | PuspenPengawasKpiController@index | auth:sanctum | belum |
-| 4 | GET | `/api/puspen/pengawas-kpi/notes-report` | PuspenPengawasKpiController@notesReport | auth:sanctum | belum |
-| 5 | GET | `/api/puspen/pengawas-kpi/{user}` | PuspenPengawasKpiController@show | auth:sanctum | belum |
-| 6 | GET | `/api/puspen/pekerjaan/{pekerjaan}/review-notes` | PuspenReviewNoteController@index | auth:sanctum | belum |
-| 7 | POST | `/api/puspen/pekerjaan/{pekerjaan}/review-notes` | PuspenReviewNoteController@store | auth:sanctum | belum |
-| 8 | DELETE | `/api/puspen/review-notes/{puspenReviewNote}` | PuspenReviewNoteController@destroy | auth:sanctum | belum |
-| 9 | GET | `/api/puspen/media-library` | PuspenMediaShareController@mediaLibrary | auth:sanctum | belum |
-| 10 | DELETE | `/api/puspen/media` | PuspenMediaShareController@destroyMedia | auth:sanctum | belum |
-| 11 | GET | `/api/puspen/media-shares` | PuspenMediaShareController@index | auth:sanctum | belum |
-| 12 | POST | `/api/puspen/media-shares` | PuspenMediaShareController@store | auth:sanctum | belum |
-| 13 | PUT/PATCH | `/api/puspen/media-shares/{id}` | PuspenMediaShareController@update | auth:sanctum | belum |
-| 14 | DELETE | `/api/puspen/media-shares/{id}` | PuspenMediaShareController@destroy | auth:sanctum | belum |
+| 1 | GET | `/api/puspen/progress-fisik` | PuspenProgressFisikController@index | auth:sanctum | dihapus |
+| 2 | POST | `/api/puspen/progress-fisik/bulk-update` | PuspenProgressFisikController@bulkUpdate | auth:sanctum | dihapus |
+| 3 | GET | `/api/puspen/pengawas-kpi` | PuspenPengawasKpiController@index | auth:sanctum | dihapus |
+| 4 | GET | `/api/puspen/pengawas-kpi/notes-report` | PuspenPengawasKpiController@notesReport | auth:sanctum | dihapus |
+| 5 | GET | `/api/puspen/pengawas-kpi/{user}` | PuspenPengawasKpiController@show | auth:sanctum | dihapus |
+| 6 | GET | `/api/puspen/pekerjaan/{pekerjaan}/review-notes` | PuspenReviewNoteController@index | auth:sanctum | dihapus |
+| 7 | POST | `/api/puspen/pekerjaan/{pekerjaan}/review-notes` | PuspenReviewNoteController@store | auth:sanctum | dihapus |
+| 8 | DELETE | `/api/puspen/review-notes/{puspenReviewNote}` | PuspenReviewNoteController@destroy | auth:sanctum | dihapus |
+| 9 | GET | `/api/puspen/media-library` | PuspenMediaShareController@mediaLibrary | auth:sanctum | dihapus |
+| 10 | DELETE | `/api/puspen/media` | PuspenMediaShareController@destroyMedia | auth:sanctum | dihapus |
+| 11 | GET | `/api/puspen/media-shares` | PuspenMediaShareController@index | auth:sanctum | dihapus |
+| 12 | POST | `/api/puspen/media-shares` | PuspenMediaShareController@store | auth:sanctum | dihapus |
+| 13 | PUT/PATCH | `/api/puspen/media-shares/{id}` | PuspenMediaShareController@update | auth:sanctum | dihapus |
+| 14 | DELETE | `/api/puspen/media-shares/{id}` | PuspenMediaShareController@destroy | auth:sanctum | dihapus |
 
 ### master-fase-pekerjaan (5)
 
@@ -787,29 +787,29 @@ Kolom **Status** diisi saat modul dipindah ke Rust. Awalnya semua `belum`.
 
 | No | Method | Path | Controller@action | Middleware | Status |
 | --- | --- | --- | --- | --- | --- |
-| 1 | GET | `/api/simulation-networks` | SimulationNetworkController@index | auth:sanctum | belum |
-| 2 | POST | `/api/simulation-networks` | SimulationNetworkController@store | auth:sanctum | belum |
-| 3 | GET | `/api/simulation-networks/{id}` | SimulationNetworkController@show | auth:sanctum | belum |
-| 4 | PUT/PATCH | `/api/simulation-networks/{id}` | SimulationNetworkController@update | auth:sanctum | belum |
-| 5 | DELETE | `/api/simulation-networks/{id}` | SimulationNetworkController@destroy | auth:sanctum | belum |
-| 6 | GET | `/api/simulation-networks/{id}/versions` | SimulationNetworkController@versions | auth:sanctum | belum |
-| 7 | GET | `/api/simulation-networks/{id}/versions/{version}` | SimulationNetworkController@showVersion | auth:sanctum | belum |
-| 8 | POST | `/api/simulation-networks/{id}/versions/{version}/restore` | SimulationNetworkController@restoreVersion | auth:sanctum | belum |
-| 9 | POST | `/api/simulation-networks/{id}/results` | SimulationNetworkController@saveResults | auth:sanctum | belum |
-| 10 | POST | `/api/simulation-networks/{id}/duplicate` | SimulationNetworkController@duplicate | auth:sanctum | belum |
-| 11 | GET | `/api/simulation-networks/pekerjaan/{pekerjaanId}` | SimulationNetworkController@byPekerjaan | auth:sanctum | belum |
+| 1 | GET | `/api/simulation-networks` | SimulationNetworkController@index | auth:sanctum | dihapus |
+| 2 | POST | `/api/simulation-networks` | SimulationNetworkController@store | auth:sanctum | dihapus |
+| 3 | GET | `/api/simulation-networks/{id}` | SimulationNetworkController@show | auth:sanctum | dihapus |
+| 4 | PUT/PATCH | `/api/simulation-networks/{id}` | SimulationNetworkController@update | auth:sanctum | dihapus |
+| 5 | DELETE | `/api/simulation-networks/{id}` | SimulationNetworkController@destroy | auth:sanctum | dihapus |
+| 6 | GET | `/api/simulation-networks/{id}/versions` | SimulationNetworkController@versions | auth:sanctum | dihapus |
+| 7 | GET | `/api/simulation-networks/{id}/versions/{version}` | SimulationNetworkController@showVersion | auth:sanctum | dihapus |
+| 8 | POST | `/api/simulation-networks/{id}/versions/{version}/restore` | SimulationNetworkController@restoreVersion | auth:sanctum | dihapus |
+| 9 | POST | `/api/simulation-networks/{id}/results` | SimulationNetworkController@saveResults | auth:sanctum | dihapus |
+| 10 | POST | `/api/simulation-networks/{id}/duplicate` | SimulationNetworkController@duplicate | auth:sanctum | dihapus |
+| 11 | GET | `/api/simulation-networks/pekerjaan/{pekerjaanId}` | SimulationNetworkController@byPekerjaan | auth:sanctum | dihapus |
 
 ### whatsapp (7)
 
 | No | Method | Path | Controller@action | Middleware | Status |
 | --- | --- | --- | --- | --- | --- |
-| 1 | GET | `/api/whatsapp/status` | WhatsAppController@status | auth:sanctum,role:admin | belum |
-| 2 | GET | `/api/whatsapp/chats` | WhatsAppController@chats | auth:sanctum,role:admin | belum |
-| 3 | GET | `/api/whatsapp/chats/{jid}/messages` | WhatsAppController@chatMessages | auth:sanctum,role:admin | belum |
-| 4 | POST | `/api/whatsapp/start` | WhatsAppController@start | auth:sanctum,role:admin | belum |
-| 5 | POST | `/api/whatsapp/stop` | WhatsAppController@stop | auth:sanctum,role:admin | belum |
-| 6 | POST | `/api/whatsapp/send` | WhatsAppController@send | auth:sanctum,role:admin | belum |
-| 7 | POST | `/api/whatsapp/send-bulk` | WhatsAppController@sendBulk | auth:sanctum,role:admin | belum |
+| 1 | GET | `/api/whatsapp/status` | WhatsAppController@status | auth:sanctum,role:admin | dihapus |
+| 2 | GET | `/api/whatsapp/chats` | WhatsAppController@chats | auth:sanctum,role:admin | dihapus |
+| 3 | GET | `/api/whatsapp/chats/{jid}/messages` | WhatsAppController@chatMessages | auth:sanctum,role:admin | dihapus |
+| 4 | POST | `/api/whatsapp/start` | WhatsAppController@start | auth:sanctum,role:admin | dihapus |
+| 5 | POST | `/api/whatsapp/stop` | WhatsAppController@stop | auth:sanctum,role:admin | dihapus |
+| 6 | POST | `/api/whatsapp/send` | WhatsAppController@send | auth:sanctum,role:admin | dihapus |
+| 7 | POST | `/api/whatsapp/send-bulk` | WhatsAppController@sendBulk | auth:sanctum,role:admin | dihapus |
 
 ### tool-pdfs (6)
 
@@ -865,13 +865,13 @@ Kolom **Status** diisi saat modul dipindah ke Rust. Awalnya semua `belum`.
 
 | No | Method | Path | Controller@action | Middleware | Status |
 | --- | --- | --- | --- | --- | --- |
-| 1 | POST | `/api/paperless/sync-all` | PaperlessController@syncAll | auth:sanctum | belum |
-| 2 | POST | `/api/paperless/synced-ids` | PaperlessController@syncedIds | auth:sanctum | belum |
-| 3 | POST | `/api/paperless/media/{media}/sync` | PaperlessController@sync | auth:sanctum | belum |
-| 4 | GET | `/api/paperless/media/{media}` | PaperlessController@show | auth:sanctum | belum |
-| 5 | GET | `/api/paperless/media/{media}/download` | PaperlessController@download | auth:sanctum | belum |
-| 6 | GET | `/api/paperless/documents` | PaperlessController@search | auth:sanctum | belum |
-| 7 | GET | `/api/paperless/reconcile` | PaperlessController@reconcile | auth:sanctum | belum |
+| 1 | POST | `/api/paperless/sync-all` | PaperlessController@syncAll | auth:sanctum | dihapus |
+| 2 | POST | `/api/paperless/synced-ids` | PaperlessController@syncedIds | auth:sanctum | dihapus |
+| 3 | POST | `/api/paperless/media/{media}/sync` | PaperlessController@sync | auth:sanctum | dihapus |
+| 4 | GET | `/api/paperless/media/{media}` | PaperlessController@show | auth:sanctum | dihapus |
+| 5 | GET | `/api/paperless/media/{media}/download` | PaperlessController@download | auth:sanctum | dihapus |
+| 6 | GET | `/api/paperless/documents` | PaperlessController@search | auth:sanctum | dihapus |
+| 7 | GET | `/api/paperless/reconcile` | PaperlessController@reconcile | auth:sanctum | dihapus |
 
 ## Lain-lain
 

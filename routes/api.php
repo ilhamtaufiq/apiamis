@@ -29,7 +29,6 @@ use App\Http\Controllers\KontrakController;
 use App\Http\Controllers\MenuPermissionController;
 use App\Http\Controllers\OnlyOfficeController;
 use App\Http\Controllers\OutputController;
-use App\Http\Controllers\PaperlessController;
 use App\Http\Controllers\PekerjaanChecklistController;
 use App\Http\Controllers\PekerjaanController;
 use App\Http\Controllers\PekerjaanProgressEstimasiController;
@@ -38,16 +37,10 @@ use App\Http\Controllers\PenyediaController;
 use App\Http\Controllers\PermissionController;
 use App\Http\Controllers\PostPekerjaanChecklistController;
 use App\Http\Controllers\ProgressController;
-use App\Http\Controllers\PuspenProgressFisikController;
-use App\Http\Controllers\PuspenMediaShareController;
-use App\Http\Controllers\PuspenPengawasKpiController;
-use App\Http\Controllers\PuspenReviewNoteController;
 use App\Http\Controllers\RoleController;
 use App\Http\Controllers\SkController;
 use App\Http\Controllers\RoutePermissionController;
 use App\Http\Controllers\SignatureLibraryController;
-use App\Http\Controllers\WhatsAppController;
-use App\Http\Controllers\SimulationNetworkController;
 use App\Http\Controllers\ArumanisInsightController;
 use App\Http\Controllers\SpamUnitController;
 use App\Http\Controllers\SpmSanitasiController;
@@ -102,7 +95,6 @@ Route::get('blog/{blog}', [\App\Http\Controllers\BlogController::class, 'show'])
 Route::get('blog/{blog}/comments', [BlogCommentController::class, 'index']);
 Route::get('blog/{blog}/comments/thread/{comment}', [BlogCommentController::class, 'thread']);
 Route::get('blog/{blog}/comments/count', [BlogCommentController::class, 'count']);
-Route::get('public/puspen/progress-fisik', [PuspenProgressFisikController::class, 'publicIndex']);
 Route::get('public/spam-units/stats', [SpamUnitController::class, 'publicStats']);
 Route::get('public/spam-units/map-stats', [SpamUnitController::class, 'publicMapStats']);
 Route::get('public/spam-units/map-stats/series', [SpamUnitController::class, 'publicMapStatsSeries']);
@@ -115,9 +107,6 @@ Route::get('public/spm-sanitasi/map-stats', [SpmSanitasiController::class, 'publ
 Route::get('public/spm-sanitasi/map-stats/series', [SpmSanitasiController::class, 'publicMapStatsSeries']);
 Route::post('public/contact', [ContactController::class, 'store'])->middleware('throttle:contact-inquiries');
 
-Route::get('public/puspen/media-shares/{shareToken}', [PuspenMediaShareController::class, 'publicShow']);
-Route::get('public/puspen/media-shares/{shareToken}/preview/{media}', [PuspenMediaShareController::class, 'publicPreview']);
-Route::get('public/puspen/media-shares/{shareToken}/download', [PuspenMediaShareController::class, 'publicDownload']);
 
 // ONLYOFFICE Document Server (public — signed download & save callback)
 Route::post('onlyoffice/callback', [OnlyOfficeController::class, 'callback'])->name('onlyoffice.callback');
@@ -160,7 +149,6 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::apiResource('pekerjaan', PekerjaanController::class);
     Route::get('pekerjaan/{pekerjaan}/media', [PekerjaanController::class, 'media']);
     Route::get('pekerjaan/{pekerjaan}/download-all-berkas', [PekerjaanController::class, 'downloadAllBerkas']);
-    Route::post('pekerjaan/{pekerjaan}/berkas/quick-share', [BerkasController::class, 'quickShareForPekerjaan']);
 
     // Menu permissions - user menus
     Route::get('menu-permissions/user/menus', [MenuPermissionController::class, 'getUserMenus']);
@@ -422,19 +410,6 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('progress/pekerjaan/{pekerjaanId}', [ProgressController::class, 'store']);
     Route::get('pekerjaan/{pekerjaanId}/progress-estimasi', [PekerjaanProgressEstimasiController::class, 'show']);
     Route::put('pekerjaan/{pekerjaanId}/progress-estimasi', [PekerjaanProgressEstimasiController::class, 'update']);
-    Route::get('puspen/progress-fisik', [PuspenProgressFisikController::class, 'index']);
-    Route::post('puspen/progress-fisik/bulk-update', [PuspenProgressFisikController::class, 'bulkUpdate']);
-    Route::get('puspen/pengawas-kpi', [PuspenPengawasKpiController::class, 'index']);
-    Route::get('puspen/pengawas-kpi/notes-report', [PuspenPengawasKpiController::class, 'notesReport']);
-    Route::get('puspen/pengawas-kpi/{user}', [PuspenPengawasKpiController::class, 'show']);
-    Route::get('puspen/pekerjaan/{pekerjaan}/review-notes', [PuspenReviewNoteController::class, 'index']);
-    Route::post('puspen/pekerjaan/{pekerjaan}/review-notes', [PuspenReviewNoteController::class, 'store']);
-    Route::delete('puspen/review-notes/{puspenReviewNote}', [PuspenReviewNoteController::class, 'destroy']);
-    Route::get('puspen/media-library', [PuspenMediaShareController::class, 'mediaLibrary']);
-    Route::delete('puspen/media', [PuspenMediaShareController::class, 'destroyMedia']);
-    Route::apiResource('puspen/media-shares', PuspenMediaShareController::class)
-        ->parameters(['media-shares' => 'puspenMediaShare'])
-        ->only(['index', 'store', 'update', 'destroy']);
 
     // Master Fase Pekerjaan
     Route::apiResource('master-fase-pekerjaan', \App\Http\Controllers\MasterFasePekerjaanController::class);
@@ -475,14 +450,6 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('events/{event}/upload', [EventController::class, 'upload']);
     Route::apiResource('events', EventController::class);
 
-    // Simulation Networks
-    Route::apiResource('simulation-networks', SimulationNetworkController::class);
-    Route::get('simulation-networks/{id}/versions', [SimulationNetworkController::class, 'versions']);
-    Route::get('simulation-networks/{id}/versions/{version}', [SimulationNetworkController::class, 'showVersion']);
-    Route::post('simulation-networks/{id}/versions/{version}/restore', [SimulationNetworkController::class, 'restoreVersion']);
-    Route::post('simulation-networks/{id}/results', [SimulationNetworkController::class, 'saveResults']);
-    Route::post('simulation-networks/{id}/duplicate', [SimulationNetworkController::class, 'duplicate']);
-    Route::get('simulation-networks/pekerjaan/{pekerjaanId}', [SimulationNetworkController::class, 'byPekerjaan']);
 
     // System backup and restore
     Route::prefix('app-settings/backups')
@@ -510,20 +477,6 @@ Route::middleware('auth:sanctum')->group(function () {
             Route::delete('{filename}', [BackupController::class, 'destroy'])->where('filename', '.*\.zip');
         });
 
-    // WhatsApp bridge (admin)
-    Route::prefix('whatsapp')
-        ->middleware('role:admin')
-        ->group(function () {
-            Route::get('status', [WhatsAppController::class, 'status']);
-            Route::get('chats', [WhatsAppController::class, 'chats']);
-            Route::get('chats/{jid}/messages', [WhatsAppController::class, 'chatMessages'])
-                ->where('jid', '.*');
-            Route::post('start', [WhatsAppController::class, 'start']);
-            Route::post('stop', [WhatsAppController::class, 'stop']);
-            Route::post('send', [WhatsAppController::class, 'send']);
-            Route::post('send-bulk', [WhatsAppController::class, 'sendBulk']);
-        });
-
     // Tools PDFs
     Route::get('tool-pdfs/{toolPdf}/download', [ToolPdfController::class, 'download']);
     Route::post('tool-pdfs/bulk-download', [ToolPdfController::class, 'bulkDownload']);
@@ -540,16 +493,5 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // Arumanis insight
     Route::get('arumanis-insight', [\App\Http\Controllers\ArumanisInsightController::class, 'index']);
-
-    // Paperless-ngx Integration
-    Route::prefix('paperless')->group(function () {
-        Route::post('sync-all', [PaperlessController::class, 'syncAll']);
-        Route::post('synced-ids', [PaperlessController::class, 'syncedIds']);
-        Route::post('media/{media}/sync', [PaperlessController::class, 'sync']);
-        Route::get('media/{media}', [PaperlessController::class, 'show']);
-        Route::get('media/{media}/download', [PaperlessController::class, 'download']);
-        Route::get('documents', [PaperlessController::class, 'search']);
-        Route::get('reconcile', [PaperlessController::class, 'reconcile']);
-    });
 
 });

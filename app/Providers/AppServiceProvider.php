@@ -2,7 +2,6 @@
 
 namespace App\Providers;
 
-use App\Listeners\SendMediaToPaperlessListener;
 use App\Services\MailConfigService;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
@@ -75,9 +74,5 @@ class AppServiceProvider extends ServiceProvider
             // Ignore during install/migrate when DB is unavailable.
         }
 
-        Event::listen(
-            MediaHasBeenAdded::class,
-            SendMediaToPaperlessListener::class
-        );
     }
 }

@@ -6,7 +6,6 @@ use App\Models\Berkas;
 use App\Models\Kontrak;
 use App\Models\KontrakAddendum;
 use App\Models\Pekerjaan;
-use App\Models\PuspenMediaShare;
 use App\Models\User;
 use App\Models\UserDriveItem;
 use Spatie\MediaLibrary\MediaCollections\Models\Media;
@@ -68,10 +67,6 @@ class OnlyOfficeMediaAuthorizer
                 ->exists();
         }
 
-        if ($owner instanceof PuspenMediaShare) {
-            return $owner->user_id === $user->id;
-        }
-
         if ($owner instanceof UserDriveItem) {
             return $owner->canManage($user);
         }
@@ -100,10 +95,6 @@ class OnlyOfficeMediaAuthorizer
 
         if ($owner instanceof UserDriveItem) {
             return $owner->canManage($user);
-        }
-
-        if ($owner instanceof PuspenMediaShare) {
-            return $owner->user_id === $user->id;
         }
 
         // Berkas / kontrak: field roles (pengawas / konsultan_pengawas / tfl) may edit assigned docs.
