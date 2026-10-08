@@ -20,7 +20,6 @@ __pycache__/
 /storage/app/private/**
 /storage/app/public/**
 /storage/app/temp-video/**
-/storage/ai/vector_db/**
 /storage/logs/**
 /storage/framework/cache/**
 /storage/framework/sessions/**

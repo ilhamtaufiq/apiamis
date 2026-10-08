@@ -2,8 +2,6 @@
 # Catatan build cepat:
 # - Ekstensi PHP via prebuilt binary (mlocati), BUKAN docker-php-ext-install
 #   yang mengkompilasi gd/intl dari source (hemat ~4-7 menit di VPS kecil).
-# - requirements.txt hanya berisi dep yang benar-benar dipakai
-#   (scripts/rag_query.py -> chromadb), dipin ke versi ber-wheel prebuilt.
 # - Di Coolify aktifkan Docker Build Cache agar stage yang tidak berubah
 #   tidak dibangun ulang tiap deploy.
 
@@ -35,20 +33,6 @@ RUN a2enmod rewrite headers proxy proxy_http proxy_wstunnel
 # Ekstensi PHP sebagai binary prebuilt (detik, bukan menit).
 COPY --from=mlocati/php-extension-installer /usr/bin/install-php-extensions /usr/local/bin/
 RUN install-php-extensions pdo_mysql mbstring exif pcntl bcmath gd zip intl
-
-# Python hanya untuk venv scripts/rag_query.py (dipanggil ChatRagContextService).
-# python3-venv sudah membawa ensurepip, jadi python3-pip sistem tidak diperlukan.
-RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
-    apt-get update && apt-get install -y --no-install-recommends \
-    python3 python3-venv \
-    && apt-get clean && rm -rf /var/lib/apt/lists/*
-
-# requirements.txt dipin (lihat komentar di file) agar selalu memakai wheel
-# prebuilt dan layer ini ter-cache selama file tidak berubah.
-COPY requirements.txt ./
-RUN --mount=type=cache,target=/root/.cache/pip,sharing=locked \
-    python3 -m venv venv \
-    && ./venv/bin/pip install --prefer-binary -r requirements.txt
 
 # Set PHP configuration for file uploads
 RUN echo "upload_max_filesize = 50M" > /usr/local/etc/php/conf.d/uploads.ini \
