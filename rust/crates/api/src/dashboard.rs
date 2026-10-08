@@ -314,7 +314,6 @@ async fn build_stats(pool: &MySqlPool, s: &Scope) -> Result<Value, sqlx::Error> 
     let active = s.pekerjaan(true);
     let all = s.pekerjaan(false);
     let active_clause = active.clause();
-    let all_clause = all.clause();
 
     // Sub kegiatan: paket aktif yang sudah berkontrak, dijumlahkan per nama sub kegiatan.
     let sub_cond = active.clone().and(&Cond {
@@ -381,7 +380,7 @@ async fn build_stats(pool: &MySqlPool, s: &Scope) -> Result<Value, sqlx::Error> 
     let pekerjaan_sub_rows = rows(
         pool,
         &format!(
-            "SELECT tbl_pekerjaan.id AS id, tbl_kegiatan.nama_sub_kegiatan AS name FROM tbl_pekerjaan \
+            "SELECT CAST(tbl_pekerjaan.id AS SIGNED) AS id, tbl_kegiatan.nama_sub_kegiatan AS name FROM tbl_pekerjaan \
              LEFT JOIN tbl_kegiatan ON tbl_kegiatan.id = tbl_pekerjaan.kegiatan_id WHERE {active_clause}"
         ),
         &active.binds,
@@ -402,7 +401,7 @@ async fn build_stats(pool: &MySqlPool, s: &Scope) -> Result<Value, sqlx::Error> 
         let fisik_rows = rows(
             pool,
             &format!(
-                "SELECT h.pekerjaan_id AS pid, h.tanggal AS tgl, h.id AS hid, CAST(h.persen AS DOUBLE) AS persen \
+                "SELECT CAST(h.pekerjaan_id AS SIGNED) AS pid, h.tanggal AS tgl, CAST(h.id AS SIGNED) AS hid, CAST(h.persen AS DOUBLE) AS persen \
                  FROM pekerjaan_progress_estimasi_history h \
                  WHERE h.tipe = 'realisasi' AND h.jenis = 'fisik' AND h.pekerjaan_id IN \
                  (SELECT tbl_pekerjaan.id FROM tbl_pekerjaan WHERE {active_clause})"
@@ -429,7 +428,7 @@ async fn build_stats(pool: &MySqlPool, s: &Scope) -> Result<Value, sqlx::Error> 
         let sp2d_rows = rows(
             pool,
             &format!(
-                "SELECT h.pekerjaan_id AS pid, CAST(SUM(h.nilai) AS DOUBLE) AS total \
+                "SELECT CAST(h.pekerjaan_id AS SIGNED) AS pid, CAST(SUM(h.nilai) AS DOUBLE) AS total \
                  FROM pekerjaan_progress_estimasi_history h \
                  WHERE h.tipe = 'realisasi' AND h.jenis = 'keuangan' AND h.pekerjaan_id IN \
                  (SELECT tbl_pekerjaan.id FROM tbl_pekerjaan WHERE {active_clause}) GROUP BY h.pekerjaan_id"
@@ -462,7 +461,7 @@ async fn build_stats(pool: &MySqlPool, s: &Scope) -> Result<Value, sqlx::Error> 
         let legacy = rows(
             pool,
             &format!(
-                "SELECT tbl_kontrak.id AS kid, tbl_kegiatan.nama_sub_kegiatan AS name FROM tbl_kontrak \
+                "SELECT CAST(tbl_kontrak.id AS SIGNED) AS kid, tbl_kegiatan.nama_sub_kegiatan AS name FROM tbl_kontrak \
                  INNER JOIN tbl_pekerjaan ON tbl_pekerjaan.id = tbl_kontrak.id_pekerjaan \
                  INNER JOIN tbl_kegiatan ON tbl_kegiatan.id = tbl_pekerjaan.kegiatan_id \
                  WHERE tbl_kontrak.id_pekerjaan IN (SELECT tbl_pekerjaan.id FROM tbl_pekerjaan WHERE {active_clause}) \
@@ -474,7 +473,7 @@ async fn build_stats(pool: &MySqlPool, s: &Scope) -> Result<Value, sqlx::Error> 
         let pivot = rows(
             pool,
             &format!(
-                "SELECT kontrak_pekerjaan.kontrak_id AS kid, tbl_kegiatan.nama_sub_kegiatan AS name \
+                "SELECT CAST(kontrak_pekerjaan.kontrak_id AS SIGNED) AS kid, tbl_kegiatan.nama_sub_kegiatan AS name \
                  FROM kontrak_pekerjaan \
                  INNER JOIN tbl_pekerjaan ON tbl_pekerjaan.id = kontrak_pekerjaan.pekerjaan_id \
                  INNER JOIN tbl_kegiatan ON tbl_kegiatan.id = tbl_pekerjaan.kegiatan_id \
@@ -502,7 +501,7 @@ async fn build_stats(pool: &MySqlPool, s: &Scope) -> Result<Value, sqlx::Error> 
             let nilai_rows = rows(
                 pool,
                 &format!(
-                    "SELECT tbl_kontrak.id AS id, CAST(tbl_kontrak.nilai_kontrak AS CHAR) AS nilai \
+                    "SELECT CAST(tbl_kontrak.id AS SIGNED) AS id, CAST(tbl_kontrak.nilai_kontrak AS CHAR) AS nilai \
                      FROM tbl_kontrak WHERE tbl_kontrak.id IN ({})",
                     placeholders(all_kids.len())
                 ),
@@ -1059,7 +1058,7 @@ async fn build_executive(
     let history = rows(
         pool,
         &format!(
-            "SELECT h.pekerjaan_id AS pid, h.tipe AS tipe, h.jenis AS jenis, h.tanggal AS tgl, \
+            "SELECT CAST(h.pekerjaan_id AS SIGNED) AS pid, h.tipe AS tipe, h.jenis AS jenis, h.tanggal AS tgl, \
              CAST(h.persen AS DOUBLE) AS persen, CAST(h.nilai AS DOUBLE) AS nilai \
              FROM pekerjaan_progress_estimasi_history h \
              WHERE h.pekerjaan_id IN ({}) AND YEAR(h.tanggal) = ? \
