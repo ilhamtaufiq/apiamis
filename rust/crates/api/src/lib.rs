@@ -42,6 +42,7 @@ pub mod pekerjaan;
 pub mod pekerjaan_detail;
 pub mod pekerjaan_rel;
 pub mod pekerjaan_write;
+pub mod pengawas_write;
 pub mod penerima;
 pub mod penyedia;
 pub mod penyedia_write;
@@ -157,6 +158,18 @@ pub fn app(config: &Config, state: AppState) -> Router {
             get(kegiatan_role_write::index).post(kegiatan_role_write::store),
         )
         .route("/api/kegiatan-role/{id}", delete(kegiatan_role_write::destroy))
+        .route(
+            "/api/pengawas",
+            get(pengawas_write::index).post(pengawas_write::store),
+        )
+        .route("/api/pengawas/statistics", get(pengawas_write::statistics))
+        .route(
+            "/api/pengawas/{id}",
+            get(pengawas_write::show)
+                .put(pengawas_write::update)
+                .patch(pengawas_write::update)
+                .delete(pengawas_write::destroy),
+        )
         .route("/api/auth/login", post(auth_routes::login))
         .route("/api/auth/me", get(auth_routes::me))
         .route("/api/auth/logout", post(auth_routes::logout))
