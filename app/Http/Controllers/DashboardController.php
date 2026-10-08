@@ -29,15 +29,20 @@ class DashboardController extends Controller
         $kecamatanIds = $kecamatanIds
             ? array_map('intval', array_filter((array) $kecamatanIds, fn($v) => $v !== ''))
             : null;
+        // Filter tag (tbl_tags.id) membatasi seluruh metrik paket pekerjaan dalam respons.
+        // Klien hanya memakai subKegiatanStats dari permintaan ber-tag; kartu utama tetap
+        // memakai permintaan tanpa tag (cache key berbeda).
+        $tagId = $request->filled('tag_id') ? (int) $request->query('tag_id') : null;
         $user = auth()->user();
 
         // Bump key segment when stats payload / kontrak konsolidasi logic changes
         $version = \Illuminate\Support\Facades\Cache::get('dashboard_stats_version', 1);
         $cacheKey = "dashboard_stats_v{$version}_fk4_" . ($tahun ?? 'all')
             . "_k" . ($kecamatanIds ? implode('-', $kecamatanIds) : 'all')
+            . "_t" . ($tagId ?? 'all')
             . "_" . ($user ? $user->id : 'guest');
 
-        return \Illuminate\Support\Facades\Cache::remember($cacheKey, now()->addMinutes(30), function () use ($request, $tahun, $kecamatanIds) {
+        return \Illuminate\Support\Facades\Cache::remember($cacheKey, now()->addMinutes(30), function () use ($request, $tahun, $kecamatanIds, $tagId) {
             // Base query
             $query = Kegiatan::query();
             if ($tahun) {
@@ -87,6 +92,9 @@ class DashboardController extends Controller
             if ($kecamatanIds) {
                 $pekerjaanQuery->whereIn('kecamatan_id', $kecamatanIds);
             }
+            if ($tagId) {
+                $pekerjaanQuery->whereHas('tags', fn($q) => $q->where('tbl_tags.id', $tagId));
+            }
 
             // All pekerjaan query (include canceled) — dipakai untuk rekap batal & belum kontrak per sub kegiatan
             $pekerjaanAllQuery = Pekerjaan::query();
@@ -95,6 +103,9 @@ class DashboardController extends Controller
             }
             if ($kecamatanIds) {
                 $pekerjaanAllQuery->whereIn('kecamatan_id', $kecamatanIds);
+            }
+            if ($tagId) {
+                $pekerjaanAllQuery->whereHas('tags', fn($q) => $q->where('tbl_tags.id', $tagId));
             }
 
             // Sub Kegiatan stats: pagu dihitung dari pekerjaan aktif sudah berkontrak (bukan pagu kegiatan),
