@@ -149,12 +149,8 @@ pub async fn maintenance_status(
     let bypass_list = maintenance::bypass_list_db(&state.pool)
         .await
         .map_err(internal)?;
-    let user_email = match headers
-        .get(axum::http::header::AUTHORIZATION)
-        .and_then(|v| v.to_str().ok())
-        .and_then(|v| v.strip_prefix("Bearer "))
-    {
-        Some(bearer) => match auth::authenticate(&state.pool, bearer).await {
+    let user_email = match crate::session::token_from_headers(&headers, &state.session.name) {
+        Some(token) => match auth::authenticate(&state.pool, &token).await {
             Ok(u) => sqlx::query("SELECT email FROM users WHERE id = ?")
                 .bind(u.user_id)
                 .fetch_optional(&state.pool)

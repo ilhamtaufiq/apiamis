@@ -7,7 +7,7 @@
 use axum::{
     body::Body,
     extract::{Request, State},
-    http::{header, HeaderMap, StatusCode},
+    http::{HeaderMap, StatusCode},
     middleware::Next,
     response::{IntoResponse, Response},
     Json,
@@ -153,11 +153,8 @@ pub async fn check(State(state): State<AppState>, req: Request<Body>, next: Next
 
 /// User id dari token Bearer yang valid; `None` jika tidak ada atau tidak valid.
 async fn bearer_user(state: &AppState, headers: &HeaderMap) -> Option<u64> {
-    let bearer = headers
-        .get(header::AUTHORIZATION)
-        .and_then(|v| v.to_str().ok())
-        .and_then(|v| v.strip_prefix("Bearer "))?;
-    auth::authenticate(&state.pool, bearer)
+    let token = crate::session::token_from_headers(headers, &state.session.name)?;
+    auth::authenticate(&state.pool, &token)
         .await
         .ok()
         .map(|u| u.user_id)

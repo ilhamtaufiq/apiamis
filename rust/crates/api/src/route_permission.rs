@@ -7,7 +7,7 @@ use auth::permission::{self, Decision};
 use axum::{
     body::Body,
     extract::{Request, State},
-    http::{header, HeaderMap, StatusCode},
+    http::StatusCode,
     middleware::Next,
     response::{IntoResponse, Response},
     Json,
@@ -23,10 +23,10 @@ pub async fn check(State(state): State<AppState>, req: Request<Body>, next: Next
     }
     let method = req.method().as_str().to_string();
 
-    let Some(bearer) = bearer(req.headers()) else {
+    let Some(token) = crate::session::token_from_headers(req.headers(), &state.session.name) else {
         return next.run(req).await;
     };
-    let Ok(user) = auth::authenticate(&state.pool, bearer).await else {
+    let Ok(user) = auth::authenticate(&state.pool, &token).await else {
         return next.run(req).await;
     };
 
@@ -75,13 +75,6 @@ pub async fn check(State(state): State<AppState>, req: Request<Body>, next: Next
         )
             .into_response(),
     }
-}
-
-fn bearer(headers: &HeaderMap) -> Option<&str> {
-    headers
-        .get(header::AUTHORIZATION)
-        .and_then(|v| v.to_str().ok())
-        .and_then(|v| v.strip_prefix("Bearer "))
 }
 
 fn server_error(e: sqlx::Error) -> Response {

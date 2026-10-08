@@ -116,13 +116,10 @@ pub async fn index(
     State(state): State<AppState>,
     headers: HeaderMap,
 ) -> Result<Json<Value>, ApiError> {
-    let bearer = headers
-        .get(axum::http::header::AUTHORIZATION)
-        .and_then(|v| v.to_str().ok())
-        .and_then(|v| v.strip_prefix("Bearer "))
+    let token = crate::session::token_from_headers(&headers, &state.session.name)
         .ok_or_else(ApiError::unauthenticated)?;
 
-    auth::authenticate(&state.pool, bearer)
+    auth::authenticate(&state.pool, &token)
         .await
         .map_err(|_| ApiError::unauthenticated())?;
 

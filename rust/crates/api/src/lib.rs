@@ -25,6 +25,7 @@ pub mod progress_estimasi;
 pub mod progress_metrics;
 pub mod ratelimit;
 pub mod route_permission;
+pub mod session;
 pub mod tiket;
 pub mod users;
 
@@ -60,6 +61,8 @@ pub struct AppState {
     /// `APP_URL`, dipakai untuk URL pagination.
     pub app_url: String,
     pub limiter: std::sync::Arc<ratelimit::Limiter>,
+    /// Cookie sesi (`arumanis_session`) yang dulu dikelola BFF.
+    pub session: session::SessionCookie,
 }
 
 impl AppState {
@@ -68,6 +71,7 @@ impl AppState {
             pool,
             app_url,
             limiter: std::sync::Arc::new(ratelimit::Limiter::default()),
+            session: session::SessionCookie::from_env(),
         }
     }
 }
@@ -77,12 +81,9 @@ pub async fn require_auth(
     state: &AppState,
     headers: &axum::http::HeaderMap,
 ) -> Result<auth::AuthUser, ApiError> {
-    let bearer = headers
-        .get(axum::http::header::AUTHORIZATION)
-        .and_then(|v| v.to_str().ok())
-        .and_then(|v| v.strip_prefix("Bearer "))
+    let token = session::token_from_headers(headers, &state.session.name)
         .ok_or_else(ApiError::unauthenticated)?;
-    auth::authenticate(&state.pool, bearer)
+    auth::authenticate(&state.pool, &token)
         .await
         .map_err(|_| ApiError::unauthenticated())
 }
@@ -102,6 +103,8 @@ pub fn app(config: &Config, state: AppState) -> Router {
         .route("/api/kegiatan", get(kegiatan::index))
         .route("/api/kegiatan/{id}", get(kegiatan::show))
         .route("/api/auth/login", post(auth_routes::login))
+        .route("/api/auth/me", get(auth_routes::me))
+        .route("/api/auth/logout", post(auth_routes::logout))
         .route("/api/app-settings", get(lookup::index))
         .route(
             "/api/app-settings/maintenance",

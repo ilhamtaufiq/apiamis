@@ -12,6 +12,8 @@ use std::collections::BTreeMap;
 use std::time::Duration;
 
 use crate::{desa::internal, maintenance, AppState};
+use axum::http::header;
+use shared::ApiError;
 
 const LOGIN_MAX_PER_MINUTE: usize = 5;
 
@@ -190,11 +192,51 @@ pub async fn login(
         })
     });
 
-    Json(json!({
+    let mut response = Json(json!({
         "user": user_resource(&user, &roles, &permissions, avatar_url),
         "token": token,
     }))
-    .into_response()
+    .into_response();
+    if let Some(cookie) = state.session.set_header(&token) {
+        response.headers_mut().append(header::SET_COOKIE, cookie);
+    }
+    response
+}
+
+/// `GET /api/auth/me`: `UserResource` dalam `data`, seperti `AuthController@me`.
+pub async fn me(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> Result<Json<Value>, ApiError> {
+    let user = crate::require_auth(&state, &headers).await?;
+    let data = crate::users::resource(&state.pool, &state.app_url, user.user_id)
+        .await
+        .map_err(internal)?
+        .ok_or_else(ApiError::unauthenticated)?;
+    Ok(Json(json!({ "data": data })))
+}
+
+/// `POST /api/auth/logout`: cabut token saat ini dan hapus cookie sesi.
+pub async fn logout(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> Result<Response, ApiError> {
+    let user = crate::require_auth(&state, &headers).await?;
+    sqlx::query("DELETE FROM personal_access_tokens WHERE id = ?")
+        .bind(user.token_id)
+        .execute(&state.pool)
+        .await
+        .map_err(internal)?;
+    let mut response = Json(json!({ "message": "Logged out successfully" })).into_response();
+    for name in [
+        state.session.name.as_str(),
+        crate::session::IMPERSONATOR_COOKIE,
+    ] {
+        if let Some(cookie) = state.session.clear_header(name) {
+            response.headers_mut().append(header::SET_COOKIE, cookie);
+        }
+    }
+    Ok(response)
 }
 
 #[cfg(test)]
