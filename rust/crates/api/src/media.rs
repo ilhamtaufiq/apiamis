@@ -83,6 +83,7 @@ pub struct Stored {
 
 /// Simpan berkas ke disk dan tulis satu baris `media` dalam transaksi.
 /// Berkas ditulis sebelum commit: pemanggil menghapus `Stored::dir` bila transaksi gagal.
+/// `thumb`: buat konversi `thumb` untuk gambar (hanya foto, `Foto::registerMediaConversions`).
 pub async fn attach(
     tx: &mut Transaction<'_, MySql>,
     model_type: &str,
@@ -90,6 +91,7 @@ pub async fn attach(
     collection: &str,
     upload: &Upload,
     mime: &str,
+    thumb: bool,
 ) -> Result<Stored, ApiError> {
     let next: i64 = sqlx::query_scalar(
         "SELECT CAST(COALESCE(MAX(order_column), 0) + 1 AS SIGNED) FROM media WHERE model_type = ? AND model_id = ?",
@@ -128,7 +130,7 @@ pub async fn attach(
 
     let dir = media_dir(media_id);
     tokio::fs::create_dir_all(&dir).await.map_err(internal)?;
-    let written = write_original(&dir, &file_name, upload, media_id, mime, tx).await;
+    let written = write_original(&dir, &file_name, upload, media_id, mime, thumb, tx).await;
     if let Err(e) = written {
         let _ = tokio::fs::remove_dir_all(&dir).await;
         return Err(e);
@@ -148,12 +150,13 @@ async fn write_original(
     upload: &Upload,
     media_id: u64,
     mime: &str,
+    thumb: bool,
     tx: &mut Transaction<'_, MySql>,
 ) -> Result<(), ApiError> {
     tokio::fs::write(dir.join(file_name), &upload.bytes)
         .await
         .map_err(internal)?;
-    if !mime.starts_with("image/") {
+    if !thumb || !mime.starts_with("image/") {
         return Ok(());
     }
     let ext = Path::new(file_name)
@@ -235,6 +238,65 @@ pub async fn delete_collection(
 pub async fn remove_dirs(dirs: &[PathBuf]) {
     for dir in dirs {
         let _ = tokio::fs::remove_dir_all(dir).await;
+    }
+}
+
+/// Metadata satu media (untuk `BerkasResource`).
+#[derive(Debug, Clone, PartialEq)]
+pub struct MediaInfo {
+    pub id: u64,
+    pub file_name: String,
+    pub name: String,
+    pub mime_type: String,
+    pub size: u64,
+}
+
+/// Media pertama koleksi (`getFirstMedia`), urut `order_column`.
+pub async fn first_media(
+    pool: &MySqlPool,
+    model_type: &str,
+    model_id: u64,
+    collection: &str,
+) -> Result<Option<MediaInfo>, sqlx::Error> {
+    let row = sqlx::query(
+        "SELECT CAST(id AS UNSIGNED) AS id, file_name, name, COALESCE(mime_type, '') AS mime_type, \
+         CAST(size AS UNSIGNED) AS size FROM media \
+         WHERE model_type = ? AND model_id = ? AND collection_name = ? ORDER BY order_column, id LIMIT 1",
+    )
+    .bind(model_type)
+    .bind(model_id)
+    .bind(collection)
+    .fetch_optional(pool)
+    .await?;
+    row.map(|r| -> Result<MediaInfo, sqlx::Error> {
+        Ok(MediaInfo {
+            id: r.try_get("id")?,
+            file_name: r.try_get("file_name")?,
+            name: r.try_get("name")?,
+            mime_type: r.try_get("mime_type")?,
+            size: r.try_get("size")?,
+        })
+    })
+    .transpose()
+}
+
+/// Tipe MIME dari ekstensi nama berkas (perkiraan `finfo`). Tidak dikenal: `application/octet-stream`.
+pub fn mime_for_name(name: &str) -> &'static str {
+    let ext = Path::new(name)
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("")
+        .to_ascii_lowercase();
+    match ext.as_str() {
+        "pdf" => "application/pdf",
+        "jpg" | "jpeg" => "image/jpeg",
+        "png" => "image/png",
+        "doc" => "application/msword",
+        "docx" => "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "xls" => "application/vnd.ms-excel",
+        "xlsx" => "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "zip" => "application/zip",
+        _ => "application/octet-stream",
     }
 }
 

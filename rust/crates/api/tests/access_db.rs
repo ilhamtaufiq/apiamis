@@ -159,13 +159,12 @@ async fn pengawas_sees_only_assigned_pekerjaan_over_http() {
         .fetch_one(&pool)
         .await
         .unwrap();
-    let other: u64 = sqlx::query_scalar(
-        "SELECT id FROM tbl_pekerjaan WHERE id <> ? ORDER BY id DESC LIMIT 1",
-    )
-    .bind(assigned)
-    .fetch_one(&pool)
-    .await
-    .unwrap();
+    let other: u64 =
+        sqlx::query_scalar("SELECT id FROM tbl_pekerjaan WHERE id <> ? ORDER BY id DESC LIMIT 1")
+            .bind(assigned)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
     sqlx::query("INSERT INTO user_pekerjaan (user_id, pekerjaan_id, created_at, updated_at) VALUES (?, ?, NOW(), NOW())")
         .bind(uid)
         .bind(assigned)
@@ -200,7 +199,10 @@ async fn pengawas_sees_only_assigned_pekerjaan_over_http() {
             let bytes = axum::body::to_bytes(res.into_body(), usize::MAX)
                 .await
                 .unwrap();
-            (status, serde_json::from_slice::<Value>(&bytes).unwrap_or(Value::Null))
+            (
+                status,
+                serde_json::from_slice::<Value>(&bytes).unwrap_or(Value::Null),
+            )
         }
     };
 
@@ -213,7 +215,10 @@ async fn pengawas_sees_only_assigned_pekerjaan_over_http() {
         .map(|p| p["id"].as_u64().unwrap())
         .collect();
     assert!(ids.contains(&assigned));
-    assert!(!ids.contains(&other), "pekerjaan tanpa assign tidak boleh muncul");
+    assert!(
+        !ids.contains(&other),
+        "pekerjaan tanpa assign tidak boleh muncul"
+    );
 
     let (status, _) = get(format!("/api/pekerjaan/{assigned}")).await;
     assert_eq!(status, StatusCode::OK);

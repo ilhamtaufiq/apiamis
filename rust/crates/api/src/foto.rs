@@ -18,8 +18,8 @@ use shared::ApiError;
 use sqlx::{mysql::MySqlRow, MySql, MySqlPool, QueryBuilder, Row};
 
 use crate::{
-    access, audit, crypt, format::iso8601_utc, koordinat, lookup::carbon_json, media, notify,
-    pagination, require_auth, AppState,
+    access, changes, crypt, format::iso8601_utc, koordinat, lookup::carbon_json, media, pagination,
+    require_auth, AppState,
 };
 
 pub const COLLECTION: &str = "foto/pekerjaan";
@@ -120,7 +120,7 @@ fn attributes(row: &FotoRow) -> Map<String, Value> {
 
 /// Nilai satu field: `Absent` tidak dikirim, `Null` dikirim kosong (ConvertEmptyStringsToNull).
 #[derive(Debug, Clone, Copy, PartialEq)]
-enum Presence<'a> {
+pub(crate) enum Presence<'a> {
     Absent,
     Null,
     Value(&'a str),
@@ -130,13 +130,13 @@ enum Presence<'a> {
 type Field<T> = Option<Option<T>>;
 
 #[derive(Debug, Default)]
-struct RawForm {
-    fields: BTreeMap<String, Option<String>>,
-    file: Option<media::Upload>,
+pub(crate) struct RawForm {
+    pub(crate) fields: BTreeMap<String, Option<String>>,
+    pub(crate) file: Option<media::Upload>,
 }
 
 impl RawForm {
-    fn presence(&self, key: &str) -> Presence<'_> {
+    pub(crate) fn presence(&self, key: &str) -> Presence<'_> {
         match self.fields.get(key) {
             None => Presence::Absent,
             Some(None) => Presence::Null,
@@ -166,7 +166,7 @@ fn attribute(key: &str) -> String {
     key.replace('_', " ")
 }
 
-fn add(errs: &mut BTreeMap<String, Vec<String>>, key: &str, message: String) {
+pub(crate) fn add(errs: &mut BTreeMap<String, Vec<String>>, key: &str, message: String) {
     errs.entry(key.to_string()).or_default().push(message);
 }
 
@@ -311,7 +311,7 @@ fn bad_multipart(e: impl std::fmt::Display) -> ApiError {
 }
 
 /// Membaca multipart. Field teks di-trim dan kosong menjadi null. Berkas kosong dianggap tidak ada.
-async fn read_form(mut multipart: Multipart) -> Result<RawForm, ApiError> {
+pub(crate) async fn read_form(mut multipart: Multipart) -> Result<RawForm, ApiError> {
     let mut raw = RawForm::default();
     while let Some(field) = multipart.next_field().await.map_err(bad_multipart)? {
         let name = field.name().unwrap_or_default().to_string();
@@ -334,11 +334,11 @@ async fn read_form(mut multipart: Multipart) -> Result<RawForm, ApiError> {
     Ok(raw)
 }
 
-fn parse_id(raw: &str) -> Result<i64, ApiError> {
+pub(crate) fn parse_id(raw: &str) -> Result<i64, ApiError> {
     raw.parse().map_err(|_| ApiError::not_found())
 }
 
-fn base_url(state: &AppState) -> String {
+pub(crate) fn base_url(state: &AppState) -> String {
     state.app_url.trim_end_matches('/').to_string()
 }
 
@@ -347,7 +347,7 @@ fn base_url(state: &AppState) -> String {
 // ---------------------------------------------------------------------------
 
 /// `Pekerjaan::userCanAccess`. Pekerjaan kosong atau tidak diizinkan menghasilkan 403.
-async fn ensure_access(
+pub(crate) async fn ensure_access(
     state: &AppState,
     actor: u64,
     roles: &[(u64, String)],
@@ -408,41 +408,19 @@ async fn log_change(
     pekerjaan_id: Option<i64>,
     url: &str,
 ) -> Result<(), ApiError> {
-    audit::write(
+    changes::log(
         tx,
-        audit::Entry {
-            actor,
-            event,
-            auditable_type: MODEL,
-            auditable_id: id as u64,
-            old,
-            new,
-            url,
-        },
         headers,
-    )
-    .await
-    .map_err(media::internal)?;
-
-    let action = match event {
-        "created" => "dibuat",
-        "updated" => "diperbarui",
-        _ => "dihapus",
-    };
-    let name = notify::actor_name(tx, actor)
-        .await
-        .map_err(media::internal)?;
-    let link = pekerjaan_id.map(|p| format!("/pekerjaan/{p}?tab=foto"));
-    let message = notify::change_message("Foto", id as u64, action, &name, link.is_some());
-    notify::admins(
-        tx,
         actor,
-        &format!("Data Foto {action}"),
-        &message,
-        link.as_deref(),
+        &changes::FOTO,
+        event,
+        id,
+        old,
+        new,
+        pekerjaan_id,
+        url,
     )
     .await
-    .map_err(media::internal)
 }
 
 /// Nama `penerima.nik` didekripsi dengan `APP_KEY`, seperti cast `encrypted` di Laravel.
@@ -758,7 +736,7 @@ pub async fn store(
     )
     .await?;
 
-    let stored = media::attach(&mut tx, MODEL, id as u64, COLLECTION, &upload, mime).await?;
+    let stored = media::attach(&mut tx, MODEL, id as u64, COLLECTION, &upload, mime, true).await?;
     if let Err(e) = tx.commit().await {
         media::remove_dirs(&[stored.dir]).await;
         return Err(media::internal(e));
@@ -980,7 +958,8 @@ async fn update_in_tx(
         obsolete = media::delete_collection(tx, MODEL, current.id as u64, COLLECTION, None).await?;
         let mime = media::image_mime(&up.bytes)
             .ok_or_else(|| media::internal("tipe berkas tidak valid setelah validasi"))?;
-        let stored = media::attach(tx, MODEL, current.id as u64, COLLECTION, up, mime).await?;
+        let stored =
+            media::attach(tx, MODEL, current.id as u64, COLLECTION, up, mime, true).await?;
         created = Some(stored.dir);
     }
     Ok((created, obsolete))
@@ -1042,7 +1021,7 @@ async fn delete_in_tx(
 }
 
 /// `ids` untuk bulk delete: `required|array|min:1`, `ids.*` integer.
-fn parse_ids(body: &Value) -> Result<Vec<i64>, ApiError> {
+pub(crate) fn parse_ids(body: &Value) -> Result<Vec<i64>, ApiError> {
     let mut errs = BTreeMap::new();
     let items = match body.get("ids") {
         None | Some(Value::Null) => {

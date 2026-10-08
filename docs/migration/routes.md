@@ -12,9 +12,9 @@ Sumber: `routes/api.php` (branch `rust`, dari `main` SHA `c19fd06`). Dibuat deng
 
 ### Status paritas (diperbarui)
 
-- Sudah di Rust: **29** (termasuk auth, lookup, kecamatan, desa, kegiatan, penyedia, tiket GET, checklist GET, foto seluruh rute)
-- Parsial di Rust: **3** (`GET /api/pekerjaan`, `GET /api/pekerjaan/{id}`, dan `PUT/PATCH /api/pekerjaan/{id}`; scope sudah ada, tetapi relasi belum lengkap: lihat T21, T25, dan T31)
-- Belum: **454** (termasuk seluruh `PUT/PATCH` yang belum dipindah, dan POST/DELETE lain selain yang sudah tercantum)
+- Sudah di Rust: **44** (termasuk auth, lookup, kecamatan, desa, kegiatan, penyedia, tiket GET, checklist GET, foto dan penerima seluruh rute, berkas kecuali export-pdf dan upload-from-url)
+- Parsial di Rust: **4** (`GET /api/pekerjaan`, `GET /api/pekerjaan/{id}`, dan `PUT/PATCH /api/pekerjaan/{id}`; scope sudah ada, tetapi relasi belum lengkap: lihat T21, T25, dan T31; `GET /api/berkas` menolak pengawas karena T38)
+- Belum: **438** (dihitung ulang setelah penerima dan berkas; termasuk export-pdf dan upload-from-url berkas, serta modul lain yang belum dipindah)
 
 Cara menghitung: cocokkan method dan path (`{param}` dinormalisasi) dengan route yang terdaftar di `rust/crates/api/src/lib.rs`.
 
@@ -484,29 +484,29 @@ Kolom **Status** diisi saat modul dipindah ke Rust. Awalnya semua `belum`.
 
 | No | Method | Path | Controller@action | Middleware | Status |
 | --- | --- | --- | --- | --- | --- |
-| 1 | GET | `/api/penerima/summary` | PenerimaController@summary | auth:sanctum | belum |
-| 2 | GET | `/api/penerima/rekap` | PenerimaController@rekap | auth:sanctum | belum |
-| 3 | GET | `/api/penerima` | PenerimaController@index | auth:sanctum | belum |
-| 4 | POST | `/api/penerima` | PenerimaController@store | auth:sanctum | belum |
-| 5 | GET | `/api/penerima/{id}` | PenerimaController@show | auth:sanctum | belum |
-| 6 | PUT/PATCH | `/api/penerima/{id}` | PenerimaController@update | auth:sanctum | belum |
-| 7 | DELETE | `/api/penerima/{id}` | PenerimaController@destroy | auth:sanctum | belum |
-| 8 | GET | `/api/penerima/pekerjaan/{pekerjaanId}` | PenerimaController@byPekerjaan | auth:sanctum | belum |
-| 9 | GET | `/api/penerima/pekerjaan/{pekerjaanId}/stats/komunal` | PenerimaController@komunalCount | auth:sanctum | belum |
+| 1 | GET | `/api/penerima/summary` | PenerimaController@summary | auth:sanctum | rust |
+| 2 | GET | `/api/penerima/rekap` | PenerimaController@rekap | auth:sanctum | rust |
+| 3 | GET | `/api/penerima` | PenerimaController@index | auth:sanctum | rust |
+| 4 | POST | `/api/penerima` | PenerimaController@store | auth:sanctum | rust |
+| 5 | GET | `/api/penerima/{id}` | PenerimaController@show | auth:sanctum | rust |
+| 6 | PUT/PATCH | `/api/penerima/{id}` | PenerimaController@update | auth:sanctum | rust |
+| 7 | DELETE | `/api/penerima/{id}` | PenerimaController@destroy | auth:sanctum | rust |
+| 8 | GET | `/api/penerima/pekerjaan/{pekerjaanId}` | PenerimaController@byPekerjaan | auth:sanctum | rust |
+| 9 | GET | `/api/penerima/pekerjaan/{pekerjaanId}/stats/komunal` | PenerimaController@komunalCount | auth:sanctum | rust |
 
 ### berkas (9)
 
 | No | Method | Path | Controller@action | Middleware | Status |
 | --- | --- | --- | --- | --- | --- |
-| 1 | GET | `/api/berkas/jenis-dokumen` | BerkasController@jenisDokumen | auth:sanctum | belum |
+| 1 | GET | `/api/berkas/jenis-dokumen` | BerkasController@jenisDokumen | auth:sanctum | rust |
 | 2 | POST | `/api/berkas/upload-from-url` | BerkasController@uploadFromUrl | auth:sanctum | belum |
 | 3 | GET | `/api/berkas/{berkas}/export-pdf` | BerkasController@convertToPdf | auth:sanctum | belum |
-| 4 | DELETE | `/api/berkas/bulk` | BerkasController@bulkDestroy | auth:sanctum | belum |
-| 5 | GET | `/api/berkas` | BerkasController@index | auth:sanctum | belum |
-| 6 | POST | `/api/berkas` | BerkasController@store | auth:sanctum | belum |
-| 7 | GET | `/api/berkas/{id}` | BerkasController@show | auth:sanctum | belum |
-| 8 | PUT/PATCH | `/api/berkas/{id}` | BerkasController@update | auth:sanctum | belum |
-| 9 | DELETE | `/api/berkas/{id}` | BerkasController@destroy | auth:sanctum | belum |
+| 4 | DELETE | `/api/berkas/bulk` | BerkasController@bulkDestroy | auth:sanctum | rust |
+| 5 | GET | `/api/berkas` | BerkasController@index | auth:sanctum | parsial |
+| 6 | POST | `/api/berkas` | BerkasController@store | auth:sanctum | rust |
+| 7 | GET | `/api/berkas/{id}` | BerkasController@show | auth:sanctum | rust |
+| 8 | PUT/PATCH | `/api/berkas/{id}` | BerkasController@update | auth:sanctum | rust |
+| 9 | DELETE | `/api/berkas/{id}` | BerkasController@destroy | auth:sanctum | rust |
 
 ### peripaan (3)
 

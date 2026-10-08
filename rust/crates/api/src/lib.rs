@@ -12,6 +12,8 @@ use shared::{ApiError, Config};
 pub mod access;
 pub mod audit;
 pub mod auth_routes;
+pub mod berkas;
+pub mod changes;
 pub mod checklist;
 pub mod crypt;
 pub mod desa;
@@ -28,6 +30,7 @@ pub mod pagination;
 pub mod pekerjaan;
 pub mod pekerjaan_rel;
 pub mod pekerjaan_write;
+pub mod penerima;
 pub mod penyedia;
 pub mod progress_estimasi;
 pub mod progress_metrics;
@@ -153,6 +156,43 @@ pub fn app(config: &Config, state: AppState) -> Router {
                 .post(foto::update_post)
                 .delete(foto::destroy)
                 .layer(DefaultBodyLimit::max(foto::BODY_LIMIT)),
+        )
+        // Rute statis (summary, rekap, pekerjaan/...) didaftarkan sebelum `/api/penerima/{id}`.
+        // Berkas: `export-pdf`, `upload-from-url`, dan `quick-share` masih di Laravel.
+        .route("/api/berkas/jenis-dokumen", get(berkas::jenis_dokumen))
+        .route("/api/berkas/bulk", delete(berkas::bulk_destroy))
+        .route(
+            "/api/berkas",
+            get(berkas::index)
+                .post(berkas::store)
+                .layer(DefaultBodyLimit::max(foto::BODY_LIMIT)),
+        )
+        .route(
+            "/api/berkas/{id}",
+            get(berkas::show)
+                .put(berkas::update)
+                .patch(berkas::update)
+                .post(berkas::update_post)
+                .delete(berkas::destroy)
+                .layer(DefaultBodyLimit::max(foto::BODY_LIMIT)),
+        )
+        .route("/api/penerima", get(penerima::index).post(penerima::store))
+        .route("/api/penerima/summary", get(penerima::summary))
+        .route("/api/penerima/rekap", get(penerima::rekap))
+        .route(
+            "/api/penerima/pekerjaan/{pekerjaan_id}",
+            get(penerima::by_pekerjaan),
+        )
+        .route(
+            "/api/penerima/pekerjaan/{pekerjaan_id}/stats/komunal",
+            get(penerima::komunal_count),
+        )
+        .route(
+            "/api/penerima/{id}",
+            get(penerima::show)
+                .put(penerima::update)
+                .patch(penerima::update)
+                .delete(penerima::destroy),
         )
         .route("/api/penyedia/{id}", get(penyedia::show))
         .route("/api/tiket", get(tiket::index))
