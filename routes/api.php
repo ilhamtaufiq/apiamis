@@ -294,7 +294,6 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::patch('survey-tugas/{survey_tugas}', [SurveyTugasController::class, 'update'])->middleware('role:admin');
     Route::delete('survey-tugas/{survey_tugas}', [SurveyTugasController::class, 'destroy'])->middleware('role:admin');
     Route::apiResource('kecamatan', KecamatanController::class);
-    Route::post('desa/sync-kk', [DesaController::class, 'syncKk']);
     Route::get('desa/{desa}/profile', [DesaController::class, 'profile']);
     Route::apiResource('desa', DesaController::class);
     Route::apiResource('penyedia', PenyediaController::class)->parameters(['penyedia' => 'penyedia']);
