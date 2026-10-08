@@ -13,6 +13,8 @@ use Illuminate\Support\Carbon;
 
 class EventController extends Controller
 {
+    private const TIMEZONE = 'Asia/Jakarta';
+
     /**
      * @OA\Get(
      *     path="/api/events",
@@ -147,8 +149,9 @@ class EventController extends Controller
         ?string $location = null,
         ?string $description = null,
     ): array {
-        $start = Carbon::parse($date)->startOfDay();
-        $end = Carbon::parse($date)->endOfDay();
+        $day = Carbon::parse($date)->setTimezone(self::TIMEZONE);
+        $start = $day->copy()->startOfDay();
+        $end = $day->copy()->endOfDay();
 
         return [
             'id' => $id,
@@ -221,7 +224,7 @@ class EventController extends Controller
             'attachments' => 'nullable|array',
         ]);
 
-        $event = Event::create(array_merge($validated, ['user_id' => Auth::id()]));
+        $event = Event::create(array_merge($this->toWibStorage($validated), ['user_id' => Auth::id()]));
 
         return new EventResource($event);
     }
@@ -274,9 +277,26 @@ class EventController extends Controller
             'attachments' => 'nullable|array',
         ]);
 
-        $event->update($validated);
+        $event->update($this->toWibStorage($validated));
 
         return new EventResource($event);
+    }
+
+    /**
+     * Start/end dikirim tanpa offset dalam jam WIB (dari datetime-local frontend).
+     * Disimpan sebagai jam dinding WIB; string ber-offset tetap dikonversi ke WIB.
+     */
+    private function toWibStorage(array $validated): array
+    {
+        foreach (['start', 'end'] as $key) {
+            if (isset($validated[$key])) {
+                $validated[$key] = Carbon::parse($validated[$key], self::TIMEZONE)
+                    ->setTimezone(self::TIMEZONE)
+                    ->format('Y-m-d H:i:s');
+            }
+        }
+
+        return $validated;
     }
 
     /**
