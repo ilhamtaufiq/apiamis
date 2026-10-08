@@ -115,8 +115,8 @@ Kolom **Status** diisi saat modul dipindah ke Rust. Awalnya semua `belum`.
 | 3 | GET | `/api/public/spam-units/map-stats` | SpamUnitController@publicMapStats | - | rust |
 | 4 | GET | `/api/public/spam-kelembagaan/form/{token}` | SpamKelembagaanShareController@publicShow | throttle:60,1 | belum |
 | 5 | POST | `/api/public/spam-kelembagaan/form/{token}` | SpamKelembagaanShareController@publicSubmit | throttle:10,1 | belum |
-| 6 | GET | `/api/public/spm-sanitasi/stats` | SpmSanitasiController@publicStats | - | belum |
-| 7 | GET | `/api/public/spm-sanitasi/map-stats` | SpmSanitasiController@publicMapStats | - | belum |
+| 6 | GET | `/api/public/spm-sanitasi/stats` | SpmSanitasiController@publicStats | - | rust |
+| 7 | GET | `/api/public/spm-sanitasi/map-stats` | SpmSanitasiController@publicMapStats | - | rust |
 | 8 | POST | `/api/public/contact` | ContactController@store | throttle:contact-inquiries | belum |
 | 9 | GET | `/api/public/puspen/media-shares/{shareToken}` | PuspenMediaShareController@publicShow | - | dihapus |
 | 10 | GET | `/api/public/puspen/media-shares/{shareToken}/preview/{media}` | PuspenMediaShareController@publicPreview | - | dihapus |
@@ -334,8 +334,8 @@ Kolom **Status** diisi saat modul dipindah ke Rust. Awalnya semua `belum`.
 
 | No | Method | Path | Controller@action | Middleware | Status |
 | --- | --- | --- | --- | --- | --- |
-| 1 | GET | `/api/spm-sanitasi/stats` | SpmSanitasiController@stats | auth:sanctum | belum |
-| 2 | GET | `/api/spm-sanitasi/capaian` | SpmSanitasiController@capaian | auth:sanctum | belum |
+| 1 | GET | `/api/spm-sanitasi/stats` | SpmSanitasiController@stats | auth:sanctum | rust |
+| 2 | GET | `/api/spm-sanitasi/capaian` | SpmSanitasiController@capaian | auth:sanctum | rust |
 | 3 | GET | `/api/spm-sanitasi/integration` | SpmSanitasiController@integration | auth:sanctum | belum |
 | 4 | GET | `/api/spm-sanitasi/integration/desa/{desaId}` | SpmSanitasiController@integrationByDesa | auth:sanctum | belum |
 | 5 | GET | `/api/spm-sanitasi/mck-pekerjaan` | SpmSanitasiController@mckPekerjaan | auth:sanctum | belum |
@@ -344,11 +344,11 @@ Kolom **Status** diisi saat modul dipindah ke Rust. Awalnya semua `belum`.
 | 8 | GET | `/api/spm-sanitasi/export` | SpmSanitasiController@export | auth:sanctum | belum |
 | 9 | GET | `/api/spm-sanitasi/import/template` | SpmSanitasiController@downloadTemplate | auth:sanctum | belum |
 | 10 | POST | `/api/spm-sanitasi/import` | SpmSanitasiController@import | auth:sanctum | belum |
-| 11 | GET | `/api/spm-sanitasi` | SpmSanitasiController@index | auth:sanctum | belum |
-| 12 | POST | `/api/spm-sanitasi` | SpmSanitasiController@store | auth:sanctum | belum |
+| 11 | GET | `/api/spm-sanitasi` | SpmSanitasiController@index | auth:sanctum | rust |
+| 12 | POST | `/api/spm-sanitasi` | SpmSanitasiController@store | auth:sanctum | rust |
 | 13 | GET | `/api/spm-sanitasi/{id}` | SpmSanitasiController@show | auth:sanctum | belum |
-| 14 | PUT/PATCH | `/api/spm-sanitasi/{id}` | SpmSanitasiController@update | auth:sanctum | belum |
-| 15 | DELETE | `/api/spm-sanitasi/{id}` | SpmSanitasiController@destroy | auth:sanctum | belum |
+| 14 | PUT/PATCH | `/api/spm-sanitasi/{id}` | SpmSanitasiController@update | auth:sanctum | rust |
+| 15 | DELETE | `/api/spm-sanitasi/{id}` | SpmSanitasiController@destroy | auth:sanctum | rust |
 
 ### survey-lokasi (9)
 
