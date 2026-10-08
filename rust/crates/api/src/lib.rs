@@ -61,6 +61,7 @@ pub mod pekerjaan;
 pub mod pekerjaan_by;
 pub mod pekerjaan_checklist_write;
 pub mod pekerjaan_estimasi;
+pub mod pekerjaan_import;
 pub mod peripaan;
 pub mod pekerjaan_detail;
 pub mod pekerjaan_rel;
@@ -345,6 +346,9 @@ pub fn app(config: &Config, state: AppState) -> Router {
             "/api/pekerjaan/{id}/progress-estimasi",
             get(pekerjaan_estimasi::show).put(pekerjaan_estimasi::update),
         )
+        // Sebelum `/api/pekerjaan/{id}`: segmen statis `import` dan `template`.
+        .route("/api/pekerjaan/import", post(pekerjaan_import::import))
+        .route("/api/pekerjaan/import/template", get(pekerjaan_import::download_template))
         .route(
             "/api/foto",
             get(foto::index)

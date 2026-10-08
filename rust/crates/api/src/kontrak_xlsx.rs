@@ -93,7 +93,7 @@ fn parse_text_date(raw: &str) -> Option<NaiveDate> {
 }
 
 /// Nilai sel sebagai teks, seperti PHP mengubah angka ke string (`12345.0` menjadi `12345`).
-fn cell_text(cell: &Cell) -> Option<String> {
+pub(crate) fn cell_text(cell: &Cell) -> Option<String> {
     match cell {
         Cell::Empty => None,
         Cell::Text(s) if s.is_empty() => None,
@@ -296,7 +296,7 @@ fn number_cell(
     Ok(())
 }
 
-fn xlsx_response(bytes: Vec<u8>, filename: &str) -> Response {
+pub(crate) fn xlsx_response(bytes: Vec<u8>, filename: &str) -> Response {
     (
         [
             (header::CONTENT_TYPE, XLSX_MIME.to_string()),
@@ -569,17 +569,17 @@ pub async fn download_template(
 // ---------------------------------------------------------------------------
 
 /// Satu baris data: heading (slug) ke nilai sel, dalam urutan kolom.
-struct ImportRow {
-    row_number: u64,
-    values: BTreeMap<String, Cell>,
+pub(crate) struct ImportRow {
+    pub(crate) row_number: u64,
+    pub(crate) values: BTreeMap<String, Cell>,
 }
 
 impl ImportRow {
-    fn get(&self, key: &str) -> Option<&Cell> {
+    pub(crate) fn get(&self, key: &str) -> Option<&Cell> {
         self.values.get(key).filter(|c| !matches!(c, Cell::Empty))
     }
 
-    fn text(&self, key: &str) -> Option<String> {
+    pub(crate) fn text(&self, key: &str) -> Option<String> {
         self.get(key).and_then(cell_text)
     }
 
@@ -594,7 +594,7 @@ impl ImportRow {
 }
 
 /// Membaca sheet pertama. Baris pertama adalah heading; baris kosong dilewati.
-fn read_rows(bytes: &[u8], ext: &str) -> Result<(Vec<String>, Vec<ImportRow>), String> {
+pub(crate) fn read_rows(bytes: &[u8], ext: &str) -> Result<(Vec<String>, Vec<ImportRow>), String> {
     let (headings, rows): (Vec<String>, Vec<(u64, Vec<Cell>)>) = if ext == "csv" {
         let mut reader = csv::ReaderBuilder::new()
             .has_headers(false)
@@ -712,7 +712,7 @@ fn parse_number(cell: Option<&Cell>) -> f64 {
 }
 
 /// `(float)` PHP: angka dari awal teks, berhenti pada karakter yang tidak cocok.
-fn php_float_prefix(s: &str) -> f64 {
+pub(crate) fn php_float_prefix(s: &str) -> f64 {
     let mut end = 0;
     let mut seen_dot = false;
     let bytes = s.as_bytes();
