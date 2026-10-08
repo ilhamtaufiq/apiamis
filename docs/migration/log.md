@@ -15,7 +15,7 @@ Setiap kali ada langkah yang selesai, tambahkan entri di bagian **Riwayat** dan 
 - [x] 0.1 Inventaris route dari `routes/api.php` dan `routes/web.php` ke `docs/migration/routes.md`
 - [x] 0.2 Inventaris model, observer, cast, listener, event, dan service ke `docs/migration/models.md`
 - [x] 0.3 Inventaris data (tabel, kolom terenkripsi, JSON, decimal, soft delete) ke `docs/schema.md`, dari dump struktur MySQL 8.0.30 (111 tabel)
-- [ ] 0.4 Fixture perilaku untuk endpoint prioritas (rekam dari staging atau tulis manual)
+- [~] 0.4 Fixture perilaku untuk endpoint prioritas. Skrip rekaman GET-only dan redaksi ada di `rust/fixtures/record.sh` (sudah diuji dengan server palsu). Rekaman dari `apiamis.cianjur.space` menunggu dijalankan dari komputer yang bisa menjangkau host itu, karena sandbox diblokir kebijakan jaringan (403)
 - [~] 0.5 Dump database staging sebagai data uji tetap. Ada dump data `tbl_kegiatan` (20 baris) dan `tbl_pekerjaan` (558 baris), belum dump lengkap semua tabel bisnis
 - [ ] 0.6 Konfirmasi keputusan terbuka (lihat bagian Keputusan)
 
@@ -109,4 +109,5 @@ Setiap kali ada langkah yang selesai, tambahkan entri di bagian **Riwayat** dan 
 | 2026-10-08 | 0.3 Inventaris skema (final) | `docs/schema.md` dibuat ulang dari dump struktur (`CREATE TABLE`): 111 tabel, 1068 kolom. Temuan: `tbl_pekerjaan.pagu` `float`, `tbl_penerima.nik` dan `alamat` terenkripsi, `tbl_spse_sessions.encrypted_cookies` terenkripsi. Dump tidak berisi data, jadi 0.5 belum |
 | 2026-10-08 | 1.5 Lookup token di database | `crates/auth` membaca `personal_access_tokens` dan `users`. 7 test integrasi lolos terhadap dump asli (1.914 token, 38 user) di MariaDB lokal. Job integrasi ditambahkan ke CI |
 | 2026-10-08 | 0.5 Data uji dari dump `tbl_kegiatan` dan `tbl_pekerjaan` | Dimuat ke MariaDB lokal. Pengecekan pagu disimpan di `docs/migration/checks/pagu_checks.sql`. Temuan T9 dan T10. Data pribadi (NIP) tidak dicatat dan tidak di-commit |
+| 2026-10-08 | 0.4 Skrip rekaman fixture | `rust/fixtures/record.sh`: GET saja, redaksi field sensitif, diuji dengan server lokal palsu. Sandbox tidak bisa menjangkau `apiamis.cianjur.space` (403 dari kebijakan jaringan) |
 | 2026-10-08 | Ruang lingkup diperluas | Repo punya lebih banyak modul dari rencana awal: blog, kanban, live chat, procurement SPSE, SIPD, Puspen, tanda tangan PDF, Google Drive, backup, dan WhatsApp. Perlu dimasukkan ke daftar modul Fase 2 |
