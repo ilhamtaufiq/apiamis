@@ -3,8 +3,8 @@
 //! Belum dipindah (tetap di Laravel): `export-pdf` (menunggu K2, tooling dokumen), `upload-from-url`
 //! (menunggu daftar host yang diizinkan), dan `quick-share`.
 //!
-//! Daftar untuk pengawas dan konsultan pengawas ditolak (403): filter judul berbagi
-//! (`AppSetting::applyPengawasSharedBerkasJudulFilter`) belum diport, dan melewatinya bisa membocorkan berkas.
+//! Pengawas dan konsultan pengawas melihat berkas miliknya plus berkas berjudul yang diaktifkan
+//! di pengaturan (`AppSetting::applyPengawasSharedBerkasJudulFilter`, lihat `shared_clause`).
 
 use std::{
     collections::{BTreeMap, HashMap},
@@ -186,6 +186,108 @@ fn php_intval(s: &str) -> i64 {
     t[..end].parse().unwrap_or(0)
 }
 
+/// Judul berkas yang bisa dibuka ke role lapangan, dengan kunci setting (urut seperti Laravel).
+const JUDUL_KEYS: &[(&str, &str)] = &[
+    ("RAB", "pengawas_berkas_show_rab"),
+    ("GAMBAR", "pengawas_berkas_show_gambar"),
+    ("NEGO", "pengawas_berkas_show_nego"),
+];
+
+/// `AppSetting::PENGAWAS_BERKAS_JUDUL_ALIASES`.
+const JUDUL_ALIASES: &[(&str, &[&str])] = &[
+    ("RAB", &["rab", "r.a.b", "r a b"]),
+    ("GAMBAR", &["gambar", "gbr", "g.b.r", "g b r", "drawing"]),
+    (
+        "NEGO",
+        &[
+            "nego",
+            "negosiasi",
+            "negos",
+            "hasil nego",
+            "hasil negosiasi",
+        ],
+    ),
+];
+
+/// `AppSetting::pengawasVisibleBerkasJuduls()`: judul yang settingnya bernilai `1`.
+/// Setting yang tidak ada (default `0`) atau bernilai NULL tidak terlihat.
+async fn visible_titles(pool: &MySqlPool) -> Result<Vec<&'static str>, ApiError> {
+    let mut out = Vec::new();
+    for (judul, key) in JUDUL_KEYS {
+        let value: Option<Option<String>> = sqlx::query_scalar(
+            "SELECT CAST(`value` AS CHAR) FROM app_settings WHERE `key` = ? ORDER BY id LIMIT 1",
+        )
+        .bind(key)
+        .fetch_optional(pool)
+        .await
+        .map_err(internal)?;
+        if matches!(value, Some(Some(ref v)) if v == "1") {
+            out.push(*judul);
+        }
+    }
+    Ok(out)
+}
+
+/// `AppSetting::pengawasBerkasJudulAliases`.
+fn judul_aliases(judul: &str) -> Vec<String> {
+    let key = judul.trim().to_uppercase();
+    match JUDUL_ALIASES.iter().find(|(k, _)| *k == key) {
+        Some((_, list)) => list.iter().map(|a| a.to_string()).collect(),
+        None => vec![judul.trim().to_lowercase()],
+    }
+}
+
+/// `AppSetting::compactBerkasJudul`: huruf kecil dan hanya alfanumerik ASCII.
+fn compact_judul(value: &str) -> String {
+    value
+        .trim()
+        .to_lowercase()
+        .chars()
+        .filter(|c| c.is_ascii_alphanumeric())
+        .collect()
+}
+
+/// Port `applyPengawasSharedBerkasJudulFilter`: jenis dokumen cocok dengan salah satu alias
+/// (tepat, awalan dengan spasi, `-`, `_`, `.`), atau dengan bentuk kompak tanpa pemisah.
+/// Tanpa judul aktif, klausa `1 = 0` (tidak ada berkas bersama).
+fn shared_clause(titles: &[&str]) -> (String, Vec<String>) {
+    const TRIMMED: &str = "LOWER(TRIM(jenis_dokumen))";
+    const COMPACT: &str = "LOWER(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(TRIM(jenis_dokumen), ' ', ''), '.', ''), '-', ''), '_', ''), '/', ''))";
+    let mut parts: Vec<String> = Vec::new();
+    let mut binds: Vec<String> = Vec::new();
+    for title in titles {
+        for alias in judul_aliases(title) {
+            let alias = alias.trim().to_lowercase();
+            if alias.is_empty() {
+                continue;
+            }
+            let compact = compact_judul(&alias);
+            let mut part = format!(
+                "({TRIMMED} = ? OR {TRIMMED} LIKE ? OR {TRIMMED} LIKE ? OR {TRIMMED} LIKE ? OR {TRIMMED} LIKE ?"
+            );
+            binds.extend([
+                alias.clone(),
+                format!("{alias} %"),
+                format!("{alias}-%"),
+                format!("{alias}_%"),
+                format!("{alias}.%"),
+            ]);
+            if !compact.is_empty() {
+                part.push_str(&format!(" OR {COMPACT} = ? OR {COMPACT} LIKE ?"));
+                binds.push(compact.clone());
+                binds.push(format!("{compact}%"));
+            }
+            part.push(')');
+            parts.push(part);
+        }
+    }
+    if parts.is_empty() {
+        ("1 = 0".into(), Vec::new())
+    } else {
+        (format!("({})", parts.join(" OR ")), binds)
+    }
+}
+
 /// Otorisasi tulis: `Pekerjaan::userCanAccess` (sama dengan T31 untuk pekerjaan).
 async fn ensure_scope(state: &AppState, actor: u64, pekerjaan_id: i64) -> Result<(), ApiError> {
     let roles = auth::login::roles_of(&state.pool, actor)
@@ -229,12 +331,6 @@ pub async fn index(
     let names: Vec<&str> = roles.iter().map(|(_, n)| n.as_str()).collect();
     let privileged = names.iter().any(|n| ROLE_PRIVILEGED.contains(n));
     let field = names.iter().any(|n| ROLE_FIELD.contains(n));
-    if field && !privileged {
-        return Err(ApiError::new(
-            StatusCode::FORBIDDEN,
-            "Daftar berkas untuk pengawas belum dipindah ke Rust (filter judul berbagi).",
-        ));
-    }
 
     let mut clauses: Vec<String> = Vec::new();
     let mut binds: Vec<String> = Vec::new();
@@ -257,9 +353,24 @@ pub async fn index(
         .get("mine")
         .is_some_and(|v| penerima::request_boolean(v))
         || query.get("uploaded_by").is_some_and(|v| v == "me");
-    if wants_own {
-        clauses.push("uploaded_by = ?".into());
-        binds.push(user.user_id.to_string());
+    // Role lapangan murni selalu dibatasi ke milik sendiri + berkas bersama.
+    let force_field = field && !privileged;
+    if wants_own || force_field {
+        // Laravel: where(uploaded_by = me) OR (judul bersama); bersama hanya untuk role lapangan.
+        let shared = if field {
+            visible_titles(&state.pool).await?
+        } else {
+            Vec::new()
+        };
+        if shared.is_empty() {
+            clauses.push("uploaded_by = ?".into());
+            binds.push(user.user_id.to_string());
+        } else {
+            let (sql, sbinds) = shared_clause(&shared);
+            clauses.push(format!("(uploaded_by = ? OR {sql})"));
+            binds.push(user.user_id.to_string());
+            binds.extend(sbinds);
+        }
     } else if let Some(u) = query.get("uploaded_by").filter(|v| !v.is_empty()) {
         clauses.push("uploaded_by = ?".into());
         binds.push(php_intval(u).to_string());
@@ -761,6 +872,29 @@ pub async fn bulk_destroy(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn shared_clause_binds_match_placeholders() {
+        let (sql, binds) = shared_clause(&["RAB", "GAMBAR"]);
+        assert_eq!(sql.matches('?').count(), binds.len());
+        assert!(binds.contains(&"r.a.b".to_string()));
+        assert!(binds.contains(&"gbr".to_string()));
+        assert!(
+            binds.contains(&"gbr%".to_string()),
+            "bentuk kompak untuk alias gbr"
+        );
+        let (empty, none) = shared_clause(&[]);
+        assert_eq!(empty, "1 = 0");
+        assert!(none.is_empty());
+    }
+
+    #[test]
+    fn compact_and_aliases_follow_laravel() {
+        assert_eq!(compact_judul("G.B.R"), "gbr");
+        assert_eq!(compact_judul(" g b r "), "gbr");
+        assert_eq!(judul_aliases("rab"), vec!["rab", "r.a.b", "r a b"]);
+        assert_eq!(judul_aliases("Lain"), vec!["lain"]);
+    }
 
     #[test]
     fn php_intval_reads_leading_digits() {

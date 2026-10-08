@@ -12,8 +12,8 @@ Sumber: `routes/api.php` (branch `rust`, dari `main` SHA `c19fd06`). Dibuat deng
 
 ### Status paritas (diperbarui)
 
-- Sudah di Rust: **44** (termasuk auth, lookup, kecamatan, desa, kegiatan, penyedia, tiket GET, checklist GET, foto dan penerima seluruh rute, berkas kecuali export-pdf dan upload-from-url)
-- Parsial di Rust: **4** (`GET /api/pekerjaan`, `GET /api/pekerjaan/{id}`, dan `PUT/PATCH /api/pekerjaan/{id}`; scope sudah ada, tetapi relasi belum lengkap: lihat T21, T25, dan T31; `GET /api/berkas` menolak pengawas karena T38)
+- Sudah di Rust: **45** (termasuk auth, lookup, kecamatan, desa, kegiatan, penyedia, tiket GET, checklist GET, foto dan penerima seluruh rute, berkas kecuali export-pdf dan upload-from-url)
+- Parsial di Rust: **3** (`GET /api/pekerjaan`, `GET /api/pekerjaan/{id}`, dan `PUT/PATCH /api/pekerjaan/{id}`; scope sudah ada, tetapi relasi belum lengkap: lihat T21, T25, dan T31)
 - Belum: **438** (dihitung ulang setelah penerima dan berkas; termasuk export-pdf dan upload-from-url berkas, serta modul lain yang belum dipindah)
 
 Cara menghitung: cocokkan method dan path (`{param}` dinormalisasi) dengan route yang terdaftar di `rust/crates/api/src/lib.rs`.
@@ -502,7 +502,7 @@ Kolom **Status** diisi saat modul dipindah ke Rust. Awalnya semua `belum`.
 | 2 | POST | `/api/berkas/upload-from-url` | BerkasController@uploadFromUrl | auth:sanctum | belum |
 | 3 | GET | `/api/berkas/{berkas}/export-pdf` | BerkasController@convertToPdf | auth:sanctum | belum |
 | 4 | DELETE | `/api/berkas/bulk` | BerkasController@bulkDestroy | auth:sanctum | rust |
-| 5 | GET | `/api/berkas` | BerkasController@index | auth:sanctum | parsial |
+| 5 | GET | `/api/berkas` | BerkasController@index | auth:sanctum | rust |
 | 6 | POST | `/api/berkas` | BerkasController@store | auth:sanctum | rust |
 | 7 | GET | `/api/berkas/{id}` | BerkasController@show | auth:sanctum | rust |
 | 8 | PUT/PATCH | `/api/berkas/{id}` | BerkasController@update | auth:sanctum | rust |

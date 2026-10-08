@@ -302,3 +302,152 @@ async fn berkas_store_update_destroy_with_media_and_audit() {
     assert_eq!(status, StatusCode::NOT_FOUND);
     let _ = std::fs::remove_dir_all(&storage);
 }
+
+/// Pengawas melihat berkas miliknya dan berkas berjudul bersama (RAB), tidak berkas orang lain yang tidak bersama.
+#[tokio::test]
+#[ignore = "butuh DATABASE_URL dan data tbl_pekerjaan"]
+async fn pengawas_sees_own_and_shared_titles_only() {
+    let url = std::env::var("DATABASE_URL").expect("DATABASE_URL belum di-set");
+    let pool = MySqlPool::connect(&url).await.unwrap();
+    let tag = format!("UJI-SHARE-{}", std::process::id());
+    let mail = "uji-berkas-pengawas@example.test";
+
+    sqlx::query("DELETE FROM users WHERE email = ?")
+        .bind(mail)
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("INSERT INTO users (name, email, password, created_at, updated_at) VALUES ('Uji Pengawas', ?, 'x', NOW(), NOW())")
+        .bind(mail)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let pengawas: u64 = sqlx::query_scalar("SELECT id FROM users WHERE email = ?")
+        .bind(mail)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    sqlx::query("INSERT IGNORE INTO roles (name, guard_name, created_at, updated_at) VALUES ('pengawas', 'web', NOW(), NOW())")
+        .execute(&pool)
+        .await
+        .unwrap();
+    let role: u64 = sqlx::query_scalar(
+        "SELECT id FROM roles WHERE name = 'pengawas' AND guard_name = 'web' LIMIT 1",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    sqlx::query("INSERT IGNORE INTO model_has_roles (role_id, model_type, model_id) VALUES (?, 'App\\\\Models\\\\User', ?)")
+        .bind(role)
+        .bind(pengawas)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let token = auth::login::create_token(&pool, pengawas, "uji-berkas-pengawas")
+        .await
+        .unwrap();
+
+    // Setting judul RAB aktif untuk pengawas (dikembalikan di akhir).
+    let prev: Option<String> = sqlx::query_scalar("SELECT CAST(`value` AS CHAR) FROM app_settings WHERE `key` = 'pengawas_berkas_show_rab' LIMIT 1")
+        .fetch_optional(&pool)
+        .await
+        .unwrap()
+        .flatten();
+    sqlx::query("DELETE FROM app_settings WHERE `key` = 'pengawas_berkas_show_rab'")
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("INSERT INTO app_settings (`key`, `value`, `type`, created_at, updated_at) VALUES ('pengawas_berkas_show_rab', '1', 'text', NOW(), NOW())")
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    let pekerjaan: u64 = sqlx::query_scalar("SELECT id FROM tbl_pekerjaan ORDER BY id LIMIT 1")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    // Pemilik berkas lain cukup user biasa dengan email sendiri (tidak menyentuh user ACTOR di test lain).
+    let other_mail = "uji-berkas-lain@example.test";
+    sqlx::query("DELETE FROM users WHERE email = ?")
+        .bind(other_mail)
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("INSERT INTO users (name, email, password, created_at, updated_at) VALUES ('Uji Lain', ?, 'x', NOW(), NOW())")
+        .bind(other_mail)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let admin_id: u64 = sqlx::query_scalar("SELECT id FROM users WHERE email = ?")
+        .bind(other_mail)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    let insert = |jenis: String, by: u64| {
+        let pool = pool.clone();
+        async move {
+            sqlx::query("INSERT INTO tbl_berkas (pekerjaan_id, jenis_dokumen, uploaded_by, created_at, updated_at) VALUES (?, ?, ?, NOW(), NOW())")
+                .bind(pekerjaan)
+                .bind(jenis)
+                .bind(by)
+                .execute(&pool)
+                .await
+                .unwrap()
+                .last_insert_id() as i64
+        }
+    };
+    let shared_other = insert(format!("RAB {tag}"), admin_id).await;
+    let private_other = insert(format!("Lainnya {tag}"), admin_id).await;
+    let own = insert(format!("Lainnya {tag}"), pengawas).await;
+
+    let (status, list) = send(
+        &pool,
+        Method::GET,
+        &format!("/api/berkas?search={tag}"),
+        &token,
+        None,
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{list}");
+    let ids: Vec<i64> = list["data"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|b| b["id"].as_i64().unwrap())
+        .collect();
+    assert!(ids.contains(&shared_other), "judul RAB bersama terlihat");
+    assert!(ids.contains(&own), "berkas sendiri terlihat");
+    assert!(
+        !ids.contains(&private_other),
+        "berkas orang lain yang tidak bersama tidak terlihat"
+    );
+
+    // Bersihkan.
+    sqlx::query("DELETE FROM tbl_berkas WHERE jenis_dokumen LIKE ?")
+        .bind(format!("%{tag}"))
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("DELETE FROM app_settings WHERE `key` = 'pengawas_berkas_show_rab'")
+        .execute(&pool)
+        .await
+        .unwrap();
+    if let Some(v) = prev {
+        sqlx::query("INSERT INTO app_settings (`key`, `value`, `type`, created_at, updated_at) VALUES ('pengawas_berkas_show_rab', ?, 'text', NOW(), NOW())")
+            .bind(v)
+            .execute(&pool)
+            .await
+            .unwrap();
+    }
+    sqlx::query("DELETE FROM model_has_roles WHERE model_id = ?")
+        .bind(pengawas)
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("DELETE FROM users WHERE id = ?")
+        .bind(pengawas)
+        .execute(&pool)
+        .await
+        .unwrap();
+}
