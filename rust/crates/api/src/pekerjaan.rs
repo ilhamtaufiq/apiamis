@@ -235,9 +235,15 @@ pub struct Loaded {
     pub tags: HashMap<u64, Vec<Value>>,
     /// Metrik progres dari `tbl_progress.content`. Tidak ada entri = progres belum dicatat (0).
     pub progress: HashMap<u64, crate::progress_metrics::Metrics>,
+    /// Estimasi per pekerjaan. Terisi hanya bila `summary` aktif (`None` = tidak dimuat, key null).
+    pub estimasi: Option<HashMap<u64, crate::progress_estimasi::Summary>>,
 }
 
-async fn load(pool: &MySqlPool, rows: &[PekerjaanRow]) -> Result<Loaded, sqlx::Error> {
+async fn load(
+    pool: &MySqlPool,
+    rows: &[PekerjaanRow],
+    with_estimasi: bool,
+) -> Result<Loaded, sqlx::Error> {
     let mut kec_ids: Vec<i64> = rows.iter().filter_map(|r| r.kecamatan_id).collect();
     let mut desa_ids: Vec<i64> = rows.iter().filter_map(|r| r.desa_id).collect();
     let mut keg_ids: Vec<i64> = rows.iter().filter_map(|r| r.kegiatan_id).collect();
@@ -261,6 +267,11 @@ async fn load(pool: &MySqlPool, rows: &[PekerjaanRow]) -> Result<Loaded, sqlx::E
         pengawas: HashMap::new(),
         tags: HashMap::new(),
         progress: progress_for(pool, &pekerjaan_ids).await?,
+        estimasi: if with_estimasi {
+            Some(estimasi_for(pool, rows).await?)
+        } else {
+            None
+        },
     };
 
     for id in &kec_ids {
@@ -305,6 +316,51 @@ async fn load(pool: &MySqlPool, rows: &[PekerjaanRow]) -> Result<Loaded, sqlx::E
             tags.push(crate::lookup::tag_resource(&tag));
         }
         out.tags.insert(*pid, tags);
+    }
+    Ok(out)
+}
+
+/// Estimasi per pekerjaan untuk tahun anggaran kegiatannya (atau tahun sekarang bila kosong).
+pub async fn estimasi_for(
+    pool: &MySqlPool,
+    rows: &[PekerjaanRow],
+) -> Result<HashMap<u64, crate::progress_estimasi::Summary>, sqlx::Error> {
+    use crate::progress_estimasi::{summarize, HistoryRow};
+    let mut out = HashMap::new();
+    for p in rows {
+        let tahun_raw: Option<String> = match p.kegiatan_id {
+            Some(kid) => sqlx::query_scalar("SELECT tahun_anggaran FROM tbl_kegiatan WHERE id = ?")
+                .bind(kid as u64)
+                .fetch_optional(pool)
+                .await?
+                .flatten(),
+            None => None,
+        };
+        // (int) di PHP: angka awal, selain itu 0. Tanpa kegiatan: tahun sekarang.
+        let tahun = match tahun_raw {
+            Some(t) => t.trim().parse::<i64>().unwrap_or(0),
+            None => chrono::Datelike::year(&chrono::Utc::now()) as i64,
+        };
+        let hist = sqlx::query(
+            "SELECT id, CAST(tahun_anggaran AS SIGNED) AS tahun_anggaran, jenis, tipe, tanggal, CAST(persen AS DOUBLE) AS persen, \
+             CAST(nilai AS DOUBLE) AS nilai FROM pekerjaan_progress_estimasi_history WHERE pekerjaan_id = ?",
+        )
+        .bind(p.id)
+        .fetch_all(pool)
+        .await?;
+        let mut items = Vec::with_capacity(hist.len());
+        for r in &hist {
+            items.push(HistoryRow {
+                id: r.try_get("id")?,
+                tahun_anggaran: r.try_get::<i64, _>("tahun_anggaran")?,
+                jenis: r.try_get("jenis")?,
+                tipe: r.try_get("tipe")?,
+                tanggal: r.try_get("tanggal")?,
+                persen: r.try_get("persen")?,
+                nilai: r.try_get("nilai")?,
+            });
+        }
+        out.insert(p.id, summarize(&items, tahun));
     }
     Ok(out)
 }
@@ -367,6 +423,12 @@ pub fn to_resource(p: &PekerjaanRow, rel: &Loaded) -> Value {
     let desa_key = p.desa_id.and_then(|id| rel.desa.get(&id).cloned());
     let keg_key = p.kegiatan_id.and_then(|id| rel.kegiatan.get(&id).cloned());
     let progress = rel.progress.get(&p.id);
+    let estimasi = match &rel.estimasi {
+        Some(map) => map
+            .get(&p.id)
+            .map_or_else(empty_estimasi, |s| s.resource_fields()),
+        None => empty_estimasi(),
+    };
     let peng = p.pengawas_id.and_then(|id| rel.pengawas.get(&id).cloned());
     let pend = p
         .pendamping_id
@@ -384,11 +446,11 @@ pub fn to_resource(p: &PekerjaanRow, rel: &Loaded) -> Value {
         "kontrak_count": Value::Null,
         "progress_total": number_like_php(progress.map_or(0.0, |m| m.progress_total)),
         "deviasi": number_like_php(progress.map_or(0.0, |m| m.deviasi)),
-        "progress_estimasi_fisik": Value::Null,
-        "progress_estimasi_keuangan": Value::Null,
-        "progress_estimasi_keuangan_nilai": Value::Null,
-        "deviasi_estimasi_fisik": Value::Null,
-        "deviasi_estimasi_keuangan": Value::Null,
+        "progress_estimasi_fisik": estimasi["progress_estimasi_fisik"],
+        "progress_estimasi_keuangan": estimasi["progress_estimasi_keuangan"],
+        "progress_estimasi_keuangan_nilai": estimasi["progress_estimasi_keuangan_nilai"],
+        "deviasi_estimasi_fisik": estimasi["deviasi_estimasi_fisik"],
+        "deviasi_estimasi_keuangan": estimasi["deviasi_estimasi_keuangan"],
         "foto_count": Value::Null,
         "foto_required_count": Value::Null,
         "foto_status": Value::Null,
@@ -408,6 +470,25 @@ pub fn to_resource(p: &PekerjaanRow, rel: &Loaded) -> Value {
         "created_at": iso8601_utc(p.created_at),
         "updated_at": iso8601_utc(p.updated_at),
     })
+}
+
+/// Estimasi belum dimuat (summary tidak aktif): semua key null.
+fn empty_estimasi() -> Value {
+    json!({
+        "progress_estimasi_fisik": null,
+        "progress_estimasi_keuangan": null,
+        "progress_estimasi_keuangan_nilai": null,
+        "deviasi_estimasi_fisik": null,
+        "deviasi_estimasi_keuangan": null,
+    })
+}
+
+/// `summary` di Laravel: `$request->boolean('summary')`.
+pub fn summary_requested(query: &HashMap<String, String>) -> bool {
+    matches!(
+        query.get("summary").map(String::as_str),
+        Some("1" | "true" | "on" | "yes")
+    )
 }
 
 fn partial_header(mut resp: Response) -> Response {
@@ -457,7 +538,9 @@ pub async fn index(
         let (rows, _) = list(&state.pool, &filter, None, Some(80))
             .await
             .map_err(internal)?;
-        let rel = load(&state.pool, &rows).await.map_err(internal)?;
+        let rel = load(&state.pool, &rows, summary_requested(&query))
+            .await
+            .map_err(internal)?;
         let data: Vec<Value> = rows.iter().map(|p| to_resource(p, &rel)).collect();
         return Ok(partial_header(
             Json(json!({ "data": data })).into_response(),
@@ -480,7 +563,9 @@ pub async fn index(
     let (rows, total) = list(&state.pool, &filter, Some((per_page, offset)), None)
         .await
         .map_err(internal)?;
-    let rel = load(&state.pool, &rows).await.map_err(internal)?;
+    let rel = load(&state.pool, &rows, summary_requested(&query))
+        .await
+        .map_err(internal)?;
     let data: Vec<Value> = rows.iter().map(|p| to_resource(p, &rel)).collect();
     let base = format!("{}/api/pekerjaan", state.app_url.trim_end_matches('/'));
     let body = pagination::paginate_with_query(
@@ -510,7 +595,7 @@ pub async fn show(
         Err(_) => None,
     };
     let row = row.ok_or_else(ApiError::not_found)?;
-    let rel = load(&state.pool, std::slice::from_ref(&row))
+    let rel = load(&state.pool, std::slice::from_ref(&row), false)
         .await
         .map_err(internal)?;
     Ok(partial_header(
@@ -582,6 +667,7 @@ mod tests {
             pengawas: HashMap::new(),
             tags: HashMap::new(),
             progress: HashMap::new(),
+            estimasi: None,
         };
         let v = to_resource(&p, &rel);
         assert_eq!(v["progress_total"], 0);
