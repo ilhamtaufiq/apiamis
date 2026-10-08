@@ -11,7 +11,7 @@ use std::collections::BTreeMap;
 
 use axum::{
     extract::{Path, State},
-    http::{header, HeaderMap},
+    http::HeaderMap,
     response::{IntoResponse, Response},
     Json,
 };
@@ -424,22 +424,7 @@ async fn sync_tags(
     Ok(())
 }
 
-/// Header `X-Forwarded-For` (Laravel `trustProxies('*')`) dan `User-Agent`.
-fn client_info(headers: &HeaderMap) -> (Option<String>, Option<String>) {
-    let ip = headers
-        .get("x-forwarded-for")
-        .and_then(|v| v.to_str().ok())
-        .and_then(|v| v.split(',').next())
-        .map(|s| s.trim().chars().take(45).collect::<String>())
-        .filter(|s| !s.is_empty());
-    let ua = headers
-        .get(header::USER_AGENT)
-        .and_then(|v| v.to_str().ok())
-        .map(|s| s.chars().take(255).collect::<String>());
-    (ip, ua)
-}
-
-/// Audit log untuk event `updated`, format seperti `Auditable::logAudit`.
+/// Audit log untuk event `updated` (`Auditable::logAudit`).
 async fn write_audit(
     tx: &mut sqlx::Transaction<'_, MySql>,
     actor: u64,
@@ -454,21 +439,20 @@ async fn write_audit(
         old.insert(c.col.to_string(), c.old.to_json());
         new.insert(c.col.to_string(), c.new.to_json());
     }
-    let (ip, ua) = client_info(headers);
-    sqlx::query(
-        "INSERT INTO tbl_audit_logs (user_id, event, auditable_type, auditable_id, old_values, new_values, url, ip_address, user_agent, created_at, updated_at) \
-         VALUES (?, 'updated', 'App\\\\Models\\\\Pekerjaan', ?, ?, ?, ?, ?, ?, NOW(), NOW())",
+    crate::audit::write(
+        tx,
+        crate::audit::Entry {
+            actor,
+            event: "updated",
+            auditable_type: "App\\Models\\Pekerjaan",
+            auditable_id: id,
+            old: Some(old),
+            new: Some(new),
+            url,
+        },
+        headers,
     )
-    .bind(actor)
-    .bind(id)
-    .bind(Value::Object(old).to_string())
-    .bind(Value::Object(new).to_string())
-    .bind(url)
-    .bind(ip)
-    .bind(ua)
-    .execute(&mut **tx)
-    .await?;
-    Ok(())
+    .await
 }
 
 /// UUID v4 untuk kolom `notifications.id`.

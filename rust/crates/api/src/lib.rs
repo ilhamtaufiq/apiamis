@@ -9,6 +9,7 @@ use axum::{
 };
 use serde_json::{json, Value};
 use shared::{ApiError, Config};
+pub mod audit;
 pub mod auth_routes;
 pub mod checklist;
 pub mod desa;
@@ -27,6 +28,7 @@ pub mod progress_metrics;
 pub mod ratelimit;
 pub mod route_permission;
 pub mod session;
+pub mod tags_write;
 pub mod tiket;
 pub mod users;
 
@@ -112,8 +114,14 @@ pub fn app(config: &Config, state: AppState) -> Router {
             "/api/app-settings/maintenance",
             get(lookup::maintenance_status),
         )
-        .route("/api/tags", get(lookup::tags_index))
-        .route("/api/tags/{id}", get(lookup::tags_show))
+        .route("/api/tags", get(lookup::tags_index).post(tags_write::store))
+        .route(
+            "/api/tags/{id}",
+            get(lookup::tags_show)
+                .put(tags_write::update)
+                .patch(tags_write::update)
+                .delete(tags_write::destroy),
+        )
         .route("/api/document-types", get(lookup::document_types_index))
         .route("/api/penyedia", get(penyedia::index))
         .route("/api/pekerjaan", get(pekerjaan::index))

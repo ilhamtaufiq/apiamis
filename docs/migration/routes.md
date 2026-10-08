@@ -600,10 +600,10 @@ Kolom **Status** diisi saat modul dipindah ke Rust. Awalnya semua `belum`.
 | No | Method | Path | Controller@action | Middleware | Status |
 | --- | --- | --- | --- | --- | --- |
 | 1 | GET | `/api/tags` | TagController@index | auth:sanctum | rust |
-| 2 | POST | `/api/tags` | TagController@store | auth:sanctum | belum |
+| 2 | POST | `/api/tags` | TagController@store | auth:sanctum | rust |
 | 3 | GET | `/api/tags/{id}` | TagController@show | auth:sanctum | rust |
-| 4 | PUT/PATCH | `/api/tags/{id}` | TagController@update | auth:sanctum | belum |
-| 5 | DELETE | `/api/tags/{id}` | TagController@destroy | auth:sanctum | belum |
+| 4 | PUT/PATCH | `/api/tags/{id}` | TagController@update | auth:sanctum | rust |
+| 5 | DELETE | `/api/tags/{id}` | TagController@destroy | auth:sanctum | rust |
 
 ### pengawas (6)
 
