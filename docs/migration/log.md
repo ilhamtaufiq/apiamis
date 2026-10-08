@@ -25,8 +25,8 @@ Setiap kali ada langkah yang selesai, tambahkan entri di bagian **Riwayat** dan 
 - [x] 1.1 Konfigurasi dari `.env`, format error 401 dan 422 yang sama dengan Laravel
 - [x] 1.2 Middleware: request id, timeout, body limit, CORS (CORS disalin dari `config/cors.php`, termasuk pola `*.pages.dev`)
 - [~] 1.3 Dockerfile multi-stage yang hanya membangun binary Rust (ditulis, belum di-build: Docker daemon tidak aktif di sandbox)
-- [~] 1.4 CI: `fmt`, `clippy`, `test` (`.github/workflows/rust.yml`, belum dijalankan di GitHub). Job integrasi MySQL belum ada karena belum ada test yang butuh DB
-- [~] 1.5 Validasi token Sanctum: parsing `{id}|{plain}`, hash sha256, dan perbandingan konstan sudah ada di `crates/auth` dengan test. Lookup ke `personal_access_tokens` dan uji dengan token dari fixture belum
+- [~] 1.4 CI: `fmt`, `clippy`, `test`, dan job integrasi MySQL (`.github/workflows/rust.yml`). Workflow belum pernah dijalankan di GitHub
+- [x] 1.5 Validasi token Sanctum di `crates/auth`: lookup ke `personal_access_tokens`, cek tipe user, hash sha256, kedaluwarsa, dan user pemilik. Diuji 7 test integrasi terhadap data dump asli (MariaDB lokal). Belum diuji end-to-end dengan plain token asli, karena dump hanya menyimpan hash
 - [ ] 1.6 Login email/password (bcrypt) dan Google OAuth
 - [ ] 1.7 Permission Spatie dan middleware permission route, dengan matriks test
 - [ ] 1.8 Impersonation dengan penanda token dan audit log
@@ -73,6 +73,10 @@ Setiap kali ada langkah yang selesai, tambahkan entri di bagian **Riwayat** dan 
 | T2 | Uang disimpan sebagai `float` di `Pekerjaan` dan `Kontrak` | Pakai `rust_decimal`, catat perilaku di fixture |
 | T3 | Modul di repo lebih banyak dari rencana | Tambah ke Fase 2, dan tentukan urutan dan prioritasnya |
 | T4 | Skema dari migrasi tidak lengkap | Selesai: pakai dump struktur MySQL 8.0.30 (111 tabel) |
+| T5 | 29 token di dump mengarah ke user yang sudah tidak ada | Ditolak 401 oleh `authenticate`. Dibersihkan di sumber sebelum cutover |
+| T6 | Tabel `users` tidak punya kolom status aktif | Rencana "user nonaktif" di 1.5 tidak bisa diuji. Perlu keputusan kolom atau mekanisme nonaktif |
+| T7 | Semua token `abilities = ["*"]` dan tidak ada yang kedaluwarsa | Scope public API belum dipakai token internal. Perlu dipastikan sebelum API key publik dibuat |
+| T8 | Dump berisi hash password dan token asli | Tidak dimasukkan ke repo. Hanya fixture struktur (`rust/fixtures/auth_schema.sql`) yang di-commit |
 
 ## Keputusan terbuka
 
@@ -101,4 +105,5 @@ Setiap kali ada langkah yang selesai, tambahkan entri di bagian **Riwayat** dan 
 | 2026-10-08 | 0.3 Inventaris skema (versi awal, parsial) | `docs/schema.md`: hanya 33 tabel terbaca dari migrasi, sedangkan model merujuk ~80. Tabel inti dibuat di luar migrasi. Perlu `mysqldump --no-data` dari staging |
 | 2026-10-08 | 1.1 sampai 1.5 (sebagian) | Format error 401 dan 422, middleware (request id, timeout, body limit, CORS), crate `auth` untuk token Sanctum, workflow CI, dan Dockerfile. Test: 14 lolos. Smoke test server lewat curl OK. Dockerfile belum di-build |
 | 2026-10-08 | 0.3 Inventaris skema (final) | `docs/schema.md` dibuat ulang dari dump struktur (`CREATE TABLE`): 111 tabel, 1068 kolom. Temuan: `tbl_pekerjaan.pagu` `float`, `tbl_penerima.nik` dan `alamat` terenkripsi, `tbl_spse_sessions.encrypted_cookies` terenkripsi. Dump tidak berisi data, jadi 0.5 belum |
+| 2026-10-08 | 1.5 Lookup token di database | `crates/auth` membaca `personal_access_tokens` dan `users`. 7 test integrasi lolos terhadap dump asli (1.914 token, 38 user) di MariaDB lokal. Job integrasi ditambahkan ke CI |
 | 2026-10-08 | Ruang lingkup diperluas | Repo punya lebih banyak modul dari rencana awal: blog, kanban, live chat, procurement SPSE, SIPD, Puspen, tanda tangan PDF, Google Drive, backup, dan WhatsApp. Perlu dimasukkan ke daftar modul Fase 2 |

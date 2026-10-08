@@ -34,3 +34,35 @@ jobs:
         run: cargo clippy --workspace --all-targets -- -D warnings
       - name: test
         run: cargo test --workspace
+
+  integration:
+    runs-on: ubuntu-latest
+    needs: check
+    defaults:
+      run:
+        working-directory: rust
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: test
+          MYSQL_DATABASE: apiamis
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -ptest"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+    env:
+      DATABASE_URL: mysql://root:test@127.0.0.1:3306/apiamis
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: rust
+      - name: load skema auth (struktur saja)
+        run: mysql -h127.0.0.1 -uroot -ptest apiamis < fixtures/auth_schema.sql
+      - name: test integrasi auth
+        run: cargo test -p auth --test db_lookup -- --ignored
