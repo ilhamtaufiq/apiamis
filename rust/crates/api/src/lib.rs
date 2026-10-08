@@ -4,7 +4,7 @@ use axum::{
     extract::DefaultBodyLimit,
     http::{header, HeaderValue, Method, StatusCode},
     response::{IntoResponse, Response},
-    routing::{any, delete, get, post},
+    routing::{any, delete, get, post, put},
     Json, Router,
 };
 use serde_json::{json, Value};
@@ -23,6 +23,7 @@ pub mod foto;
 pub mod kecamatan;
 pub mod kegiatan;
 pub mod kontrak;
+pub mod kontrak_addendum;
 pub mod kontrak_xlsx;
 pub mod koordinat;
 pub mod lookup;
@@ -263,6 +264,35 @@ pub fn app(config: &Config, state: AppState) -> Router {
                 .put(kontrak::update)
                 .patch(kontrak::update)
                 .delete(kontrak::destroy),
+        )
+        .route("/api/kontrak-addendums", get(kontrak_addendum::all))
+        .route(
+            "/api/kontrak-addendums/{id}",
+            get(kontrak_addendum::show)
+                .put(kontrak_addendum::update)
+                .patch(kontrak_addendum::update)
+                .delete(kontrak_addendum::destroy),
+        )
+        .route("/api/kontrak-addendums/{id}/submit", post(kontrak_addendum::submit))
+        .route("/api/kontrak-addendums/{id}/process", post(kontrak_addendum::process))
+        .route("/api/kontrak-addendums/{id}/approve", post(kontrak_addendum::approve))
+        .route(
+            "/api/kontrak-addendums/{id}/override-kelengkapan",
+            post(kontrak_addendum::override_kelengkapan),
+        )
+        .route("/api/kontrak-addendums/{id}/reject", post(kontrak_addendum::reject))
+        .route("/api/kontrak-addendums/{id}/upload", post(kontrak_addendum::upload))
+        .route(
+            "/api/kontrak-addendums/{id}/attachment-numbers",
+            put(kontrak_addendum::update_attachment_numbers),
+        )
+        .route(
+            "/api/kontrak/{id}/addendums",
+            get(kontrak_addendum::index).post(kontrak_addendum::store),
+        )
+        .route(
+            "/api/kontrak/{id}/addendum-numbers",
+            post(kontrak_addendum::generate_numbers),
         )
         .route("/api/kontrak/export/excel", get(kontrak_xlsx::export_excel))
         .route(

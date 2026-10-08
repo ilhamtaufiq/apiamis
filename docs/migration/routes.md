@@ -12,9 +12,9 @@ Sumber: `routes/api.php` (branch `rust`, dari `main` SHA `c19fd06`). Dibuat deng
 
 ### Status paritas (diperbarui)
 
-- Sudah di Rust: **89** (termasuk auth, lookup, kecamatan, desa, kegiatan, penyedia, tiket GET, checklist GET, foto dan penerima seluruh rute, berkas kecuali export-pdf dan upload-from-url, kontrak CRUD, relasi pekerjaan/kegiatan/penyedia, excel export, template, dan impor kontrak, sk, dan notifikasi)
+- Sudah di Rust: **103** (termasuk auth, lookup, kecamatan, desa, kegiatan, penyedia, tiket GET, checklist GET, foto dan penerima seluruh rute, berkas kecuali export-pdf dan upload-from-url, kontrak CRUD, relasi pekerjaan/kegiatan/penyedia, excel export, template, dan impor kontrak, addendum kecuali register-gaps, sk, dan notifikasi)
 - Parsial di Rust: **1** (`GET /api/pekerjaan`: relasi daftar belum dibandingkan dengan produksi, lihat T21)
-- Belum: **396** (dihitung langsung dari kolom Status; termasuk export dokumen, BAP, dan cover kontrak, addendum, export Excel draft, progress estimasi, destroy pekerjaan, dan modul lain yang belum dipindah)
+- Belum: **382** (dihitung langsung dari kolom Status; termasuk export dokumen, BAP, dan cover kontrak, addendum, export Excel draft, progress estimasi, destroy pekerjaan, dan modul lain yang belum dipindah)
 
 Cara menghitung: cocokkan method dan path (`{param}` dinormalisasi) dengan route yang terdaftar di `rust/crates/api/src/lib.rs`.
 
@@ -427,10 +427,10 @@ Kolom **Status** diisi saat modul dipindah ke Rust. Awalnya semua `belum`.
 | 4 | GET | `/api/kontrak/kegiatan/{kegiatanId}` | KontrakController@byKegiatan | auth:sanctum | rust |
 | 5 | GET | `/api/kontrak/penyedia/{penyediaId}` | KontrakController@byPenyedia | auth:sanctum | rust |
 | 6 | GET | `/api/kontrak/{id}/export` | KontrakController@export | auth:sanctum | belum |
-| 7 | GET | `/api/kontrak/{kontrak}/addendums` | KontrakAddendumController@index | auth:sanctum | belum |
+| 7 | GET | `/api/kontrak/{kontrak}/addendums` | KontrakAddendumController@index | auth:sanctum | rust |
 | 8 | GET | `/api/kontrak/{kontrak}/addendum-register-gaps` | KontrakAddendumController@registerGapsForKontrak | auth:sanctum | belum |
-| 9 | POST | `/api/kontrak/{kontrak}/addendums` | KontrakAddendumController@store | auth:sanctum | belum |
-| 10 | POST | `/api/kontrak/{kontrak}/addendum-numbers` | KontrakAddendumController@generateNumbers | auth:sanctum | belum |
+| 9 | POST | `/api/kontrak/{kontrak}/addendums` | KontrakAddendumController@store | auth:sanctum | rust |
+| 10 | POST | `/api/kontrak/{kontrak}/addendum-numbers` | KontrakAddendumController@generateNumbers | auth:sanctum | rust |
 | 11 | POST | `/api/kontrak/import` | KontrakController@import | auth:sanctum | rust |
 | 12 | GET | `/api/kontrak/import/template` | KontrakController@downloadTemplate | auth:sanctum | rust |
 | 13 | GET | `/api/kontrak` | KontrakController@index | auth:sanctum | rust |
@@ -449,17 +449,17 @@ Kolom **Status** diisi saat modul dipindah ke Rust. Awalnya semua `belum`.
 | --- | --- | --- | --- | --- | --- |
 | 1 | GET | `/api/kontrak-addendums/register-gaps` | KontrakAddendumController@registerGaps | auth:sanctum | belum |
 | 2 | POST | `/api/kontrak-addendums/register-gaps/{registerId}/notify-pengawas` | KontrakAddendumController@notifyRegisterGapPengawas | auth:sanctum | belum |
-| 3 | GET | `/api/kontrak-addendums` | KontrakAddendumController@all | auth:sanctum | belum |
-| 4 | GET | `/api/kontrak-addendums/{kontrakAddendum}` | KontrakAddendumController@show | auth:sanctum | belum |
-| 5 | PUT | `/api/kontrak-addendums/{kontrakAddendum}` | KontrakAddendumController@update | auth:sanctum | belum |
-| 6 | DELETE | `/api/kontrak-addendums/{kontrakAddendum}` | KontrakAddendumController@destroy | auth:sanctum | belum |
-| 7 | POST | `/api/kontrak-addendums/{kontrakAddendum}/submit` | KontrakAddendumController@submit | auth:sanctum | belum |
-| 8 | POST | `/api/kontrak-addendums/{kontrakAddendum}/process` | KontrakAddendumController@process | auth:sanctum | belum |
-| 9 | POST | `/api/kontrak-addendums/{kontrakAddendum}/approve` | KontrakAddendumController@approve | auth:sanctum | belum |
-| 10 | POST | `/api/kontrak-addendums/{kontrakAddendum}/override-kelengkapan` | KontrakAddendumController@overrideKelengkapan | auth:sanctum | belum |
-| 11 | POST | `/api/kontrak-addendums/{kontrakAddendum}/reject` | KontrakAddendumController@reject | auth:sanctum | belum |
-| 12 | POST | `/api/kontrak-addendums/{kontrakAddendum}/upload` | KontrakAddendumController@upload | auth:sanctum | belum |
-| 13 | PUT | `/api/kontrak-addendums/{kontrakAddendum}/attachment-numbers` | KontrakAddendumController@updateAttachmentNumbers | auth:sanctum | belum |
+| 3 | GET | `/api/kontrak-addendums` | KontrakAddendumController@all | auth:sanctum | rust |
+| 4 | GET | `/api/kontrak-addendums/{kontrakAddendum}` | KontrakAddendumController@show | auth:sanctum | rust |
+| 5 | PUT | `/api/kontrak-addendums/{kontrakAddendum}` | KontrakAddendumController@update | auth:sanctum | rust |
+| 6 | DELETE | `/api/kontrak-addendums/{kontrakAddendum}` | KontrakAddendumController@destroy | auth:sanctum | rust |
+| 7 | POST | `/api/kontrak-addendums/{kontrakAddendum}/submit` | KontrakAddendumController@submit | auth:sanctum | rust |
+| 8 | POST | `/api/kontrak-addendums/{kontrakAddendum}/process` | KontrakAddendumController@process | auth:sanctum | rust |
+| 9 | POST | `/api/kontrak-addendums/{kontrakAddendum}/approve` | KontrakAddendumController@approve | auth:sanctum | rust |
+| 10 | POST | `/api/kontrak-addendums/{kontrakAddendum}/override-kelengkapan` | KontrakAddendumController@overrideKelengkapan | auth:sanctum | rust |
+| 11 | POST | `/api/kontrak-addendums/{kontrakAddendum}/reject` | KontrakAddendumController@reject | auth:sanctum | rust |
+| 12 | POST | `/api/kontrak-addendums/{kontrakAddendum}/upload` | KontrakAddendumController@upload | auth:sanctum | rust |
+| 13 | PUT | `/api/kontrak-addendums/{kontrakAddendum}/attachment-numbers` | KontrakAddendumController@updateAttachmentNumbers | auth:sanctum | rust |
 
 ### procurement (14)
 

@@ -382,14 +382,14 @@ pub struct AddendumRow {
     pub updated_at: Option<DateTime<Utc>>,
 }
 
-const SELECT_ADDENDUM: &str = "SELECT CAST(id AS SIGNED) AS id, CAST(kontrak_id AS SIGNED) AS kontrak_id, \
+pub(crate) const SELECT_ADDENDUM: &str = "SELECT CAST(id AS SIGNED) AS id, CAST(kontrak_id AS SIGNED) AS kontrak_id, \
      CAST(addendum_ke AS SIGNED) AS addendum_ke, nomor_addendum, CAST(attachment_nomors AS CHAR) AS attachment_nomors, \
      tanggal_addendum, jenis_addendum, alasan, deskripsi_perubahan, CAST(nilai_kontrak_sebelum AS DOUBLE) AS nilai_kontrak_sebelum, \
      CAST(nilai_kontrak_sesudah AS DOUBLE) AS nilai_kontrak_sesudah, tgl_selesai_sebelum, tgl_selesai_sesudah, status, \
      kelengkapan_override, CAST(created_by AS SIGNED) AS created_by, CAST(approved_by AS SIGNED) AS approved_by, \
      approved_at, created_at, updated_at FROM tbl_kontrak_addendums";
 
-fn map_addendum(r: &sqlx::mysql::MySqlRow) -> Result<AddendumRow, sqlx::Error> {
+pub(crate) fn map_addendum(r: &sqlx::mysql::MySqlRow) -> Result<AddendumRow, sqlx::Error> {
     Ok(AddendumRow {
         id: r.try_get("id")?,
         kontrak_id: r.try_get("kontrak_id")?,
@@ -416,7 +416,7 @@ fn map_addendum(r: &sqlx::mysql::MySqlRow) -> Result<AddendumRow, sqlx::Error> {
 
 /// `KontrakAddendumResource` tanpa `creator`, `approver`, dan `kontrak` (tidak dimuat di detail).
 /// `items` hanya ada bila `with_items` (relasi `addendums.items` dimuat).
-async fn addendum_json(
+pub(crate) async fn addendum_json(
     state: &AppState,
     row: &AddendumRow,
     with_items: bool,
@@ -510,7 +510,7 @@ async fn addendum_json(
 }
 
 /// Lampiran addendum (`getMedia('kontrak/addendum')`) dengan custom property `type`, `label`, `nomor`, `tanggal`.
-async fn attachments(state: &AppState, addendum_id: i64) -> Result<Vec<Value>, ApiError> {
+pub(crate) async fn attachments(state: &AppState, addendum_id: i64) -> Result<Vec<Value>, ApiError> {
     let rows = sqlx::query(
         "SELECT CAST(id AS UNSIGNED) AS id, file_name, mime_type, CAST(size AS UNSIGNED) AS size, \
          CAST(custom_properties AS CHAR) AS custom_properties FROM media \

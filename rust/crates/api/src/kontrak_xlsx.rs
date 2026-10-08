@@ -216,7 +216,7 @@ async fn export_rows(
              OR k.id_pekerjaan IN (SELECT id FROM tbl_pekerjaan WHERE nama_paket LIKE ?) \
              OR k.id_penyedia IN (SELECT id FROM tbl_penyedia WHERE nama LIKE ?))",
         );
-        binds.extend(std::iter::repeat(like).take(5));
+        binds.extend(std::iter::repeat_n(like, 5));
     }
     sql.push_str(" ORDER BY k.created_at DESC, k.id DESC");
     let mut q = sqlx::query(&sql);
