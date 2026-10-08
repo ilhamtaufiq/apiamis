@@ -21,8 +21,9 @@ use shared::ApiError;
 use sqlx::{MySql, MySqlPool, QueryBuilder, Row};
 
 use crate::{
-    changes, format::iso8601_utc, format::number_like_php, foto, kegiatan, lookup::carbon_json, media,
-    pagination, pekerjaan, pekerjaan_detail, pekerjaan_rel, penyedia, require_auth, AppState,
+    changes, format::iso8601_utc, format::number_like_php, foto, kegiatan, lookup::carbon_json,
+    media, pagination, pekerjaan, pekerjaan_detail, pekerjaan_rel, penyedia, require_auth,
+    AppState,
 };
 
 const MODEL_ADDENDUM: &str = "App\\Models\\KontrakAddendum";
@@ -114,7 +115,7 @@ fn map_row(r: &sqlx::mysql::MySqlRow) -> Result<KontrakRow, sqlx::Error> {
     })
 }
 
-async fn find_row<'e, E>(exec: E, id: i64) -> Result<Option<KontrakRow>, sqlx::Error>
+pub(crate) async fn find_row<'e, E>(exec: E, id: i64) -> Result<Option<KontrakRow>, sqlx::Error>
 where
     E: sqlx::Executor<'e, Database = MySql>,
 {
@@ -149,7 +150,7 @@ fn col_json(row: &KontrakRow, col: &str) -> Value {
 }
 
 /// `getAttributes()` untuk audit `created` dan `deleted`.
-fn attributes(row: &KontrakRow) -> Map<String, Value> {
+pub(crate) fn attributes(row: &KontrakRow) -> Map<String, Value> {
     let mut m = Map::new();
     m.insert("id".into(), json!(row.id));
     for col in COLUMNS {
@@ -174,15 +175,26 @@ async fn pekerjaan_ids(pool: &MySqlPool, kontrak_id: i64) -> Result<Vec<i64>, Ap
 }
 
 /// `PekerjaanResource` untuk daftar pekerjaan kontrak (relasi dasar dimuat).
-async fn pekerjaan_resources(state: &AppState, actor: u64, ids: &[i64]) -> Result<Vec<Value>, ApiError> {
+async fn pekerjaan_resources(
+    state: &AppState,
+    actor: u64,
+    ids: &[i64],
+) -> Result<Vec<Value>, ApiError> {
     let mut rows = Vec::new();
     for id in ids {
-        if let Some(p) = pekerjaan::find(&state.pool, *id as u64).await.map_err(internal)? {
+        if let Some(p) = pekerjaan::find(&state.pool, *id as u64)
+            .await
+            .map_err(internal)?
+        {
             rows.push(p);
         }
     }
-    let roles = auth::login::roles_of(&state.pool, actor).await.map_err(internal)?;
-    let viewer = pekerjaan_rel::viewer(&state.pool, actor, &roles).await.map_err(internal)?;
+    let roles = auth::login::roles_of(&state.pool, actor)
+        .await
+        .map_err(internal)?;
+    let viewer = pekerjaan_rel::viewer(&state.pool, actor, &roles)
+        .await
+        .map_err(internal)?;
     let rel = pekerjaan::load(
         &state.pool,
         &rows,
@@ -194,7 +206,10 @@ async fn pekerjaan_resources(state: &AppState, actor: u64, ids: &[i64]) -> Resul
     )
     .await
     .map_err(internal)?;
-    Ok(rows.iter().map(|p| pekerjaan::to_resource(p, &rel)).collect())
+    Ok(rows
+        .iter()
+        .map(|p| pekerjaan::to_resource(p, &rel))
+        .collect())
 }
 
 /// `KegiatanResource`, atau null bila kegiatan tidak ada.
@@ -202,10 +217,12 @@ async fn kegiatan_json(pool: &MySqlPool, id: Option<i64>) -> Result<Value, ApiEr
     let Some(id) = id else {
         return Ok(Value::Null);
     };
-    Ok(match kegiatan::find(pool, id as u64).await.map_err(internal)? {
-        Some(k) => kegiatan::to_resource(&k),
-        None => Value::Null,
-    })
+    Ok(
+        match kegiatan::find(pool, id as u64).await.map_err(internal)? {
+            Some(k) => kegiatan::to_resource(&k),
+            None => Value::Null,
+        },
+    )
 }
 
 /// `PenyediaResource` (dengan dokumen), atau null.
@@ -213,7 +230,10 @@ async fn penyedia_json(state: &AppState, id: Option<i64>) -> Result<Value, ApiEr
     let Some(id) = id else {
         return Ok(Value::Null);
     };
-    match penyedia::find(&state.pool, id as u64).await.map_err(internal)? {
+    match penyedia::find(&state.pool, id as u64)
+        .await
+        .map_err(internal)?
+    {
         Some(p) => penyedia::with_dokumen(state, &p).await.map_err(internal),
         None => Ok(Value::Null),
     }
@@ -233,7 +253,10 @@ fn sanitize_spse(value: &str) -> String {
             _ => {}
         }
     }
-    without_tags.split_whitespace().collect::<Vec<_>>().join(" ")
+    without_tags
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
 }
 
 fn decode_entities(value: &str) -> String {
@@ -255,7 +278,9 @@ fn decode_entities(value: &str) -> String {
             "quot" => Some('"'),
             "apos" | "#39" => Some('\''),
             "nbsp" => Some(' '),
-            e if e.starts_with("#x") || e.starts_with("#X") => u32::from_str_radix(&e[2..], 16).ok().and_then(char::from_u32),
+            e if e.starts_with("#x") || e.starts_with("#X") => u32::from_str_radix(&e[2..], 16)
+                .ok()
+                .and_then(char::from_u32),
             e if e.starts_with('#') => e[1..].parse::<u32>().ok().and_then(char::from_u32),
             _ => None,
         };
@@ -283,7 +308,11 @@ fn normalize_name(value: &str) -> String {
 }
 
 /// `Kontrak::spseNamaPaketIfDifferent`: nama paket dari staging SPSE bila berbeda dari semua paket kontrak.
-async fn spse_nama_paket(pool: &MySqlPool, row: &KontrakRow, pekerjaan_names: &[String]) -> Result<Option<String>, ApiError> {
+async fn spse_nama_paket(
+    pool: &MySqlPool,
+    row: &KontrakRow,
+    pekerjaan_names: &[String],
+) -> Result<Option<String>, ApiError> {
     let kode = row.kode_paket.as_deref().unwrap_or("").trim().to_string();
     if kode.is_empty() {
         return Ok(None);
@@ -300,14 +329,20 @@ async fn spse_nama_paket(pool: &MySqlPool, row: &KontrakRow, pekerjaan_names: &[
         return Ok(None);
     }
     let normalized = normalize_name(&spse);
-    if pekerjaan_names.iter().any(|n| normalize_name(n) == normalized) {
+    if pekerjaan_names
+        .iter()
+        .any(|n| normalize_name(n) == normalized)
+    {
         return Ok(None);
     }
     Ok(Some(spse))
 }
 
 /// Ringkasan addendum yang disetujui terbaru (`latestApprovedAddendum`).
-async fn latest_approved_row(pool: &MySqlPool, kontrak_id: i64) -> Result<Option<AddendumRow>, ApiError> {
+async fn latest_approved_row(
+    pool: &MySqlPool,
+    kontrak_id: i64,
+) -> Result<Option<AddendumRow>, ApiError> {
     let sql = format!(
         "{SELECT_ADDENDUM} WHERE kontrak_id = ? AND status = 'disetujui' ORDER BY addendum_ke DESC, id DESC LIMIT 1"
     );
@@ -381,7 +416,11 @@ fn map_addendum(r: &sqlx::mysql::MySqlRow) -> Result<AddendumRow, sqlx::Error> {
 
 /// `KontrakAddendumResource` tanpa `creator`, `approver`, dan `kontrak` (tidak dimuat di detail).
 /// `items` hanya ada bila `with_items` (relasi `addendums.items` dimuat).
-async fn addendum_json(state: &AppState, row: &AddendumRow, with_items: bool) -> Result<Value, ApiError> {
+async fn addendum_json(
+    state: &AppState,
+    row: &AddendumRow,
+    with_items: bool,
+) -> Result<Value, ApiError> {
     let pool = &state.pool;
     let attachment_nomors: Value = row
         .attachment_nomors
@@ -394,20 +433,43 @@ async fn addendum_json(state: &AppState, row: &AddendumRow, with_items: bool) ->
     out.insert("addendum_ke".into(), json!(row.addendum_ke));
     out.insert("nomor_addendum".into(), json!(row.nomor_addendum));
     out.insert("attachment_nomors".into(), attachment_nomors);
-    out.insert("tanggal_addendum".into(), json!(fmt_date(row.tanggal_addendum)));
+    out.insert(
+        "tanggal_addendum".into(),
+        json!(fmt_date(row.tanggal_addendum)),
+    );
     out.insert("jenis_addendum".into(), json!(row.jenis_addendum));
     out.insert("alasan".into(), json!(row.alasan));
     out.insert("deskripsi_perubahan".into(), json!(row.deskripsi_perubahan));
-    out.insert("nilai_kontrak_sebelum".into(), row.nilai_kontrak_sebelum.map_or(Value::Null, number_like_php));
-    out.insert("nilai_kontrak_sesudah".into(), row.nilai_kontrak_sesudah.map_or(Value::Null, number_like_php));
-    out.insert("tgl_selesai_sebelum".into(), json!(fmt_date(row.tgl_selesai_sebelum)));
-    out.insert("tgl_selesai_sesudah".into(), json!(fmt_date(row.tgl_selesai_sesudah)));
+    out.insert(
+        "nilai_kontrak_sebelum".into(),
+        row.nilai_kontrak_sebelum
+            .map_or(Value::Null, number_like_php),
+    );
+    out.insert(
+        "nilai_kontrak_sesudah".into(),
+        row.nilai_kontrak_sesudah
+            .map_or(Value::Null, number_like_php),
+    );
+    out.insert(
+        "tgl_selesai_sebelum".into(),
+        json!(fmt_date(row.tgl_selesai_sebelum)),
+    );
+    out.insert(
+        "tgl_selesai_sesudah".into(),
+        json!(fmt_date(row.tgl_selesai_sesudah)),
+    );
     out.insert("status".into(), json!(row.status));
-    out.insert("kelengkapan_override".into(), json!(row.kelengkapan_override));
+    out.insert(
+        "kelengkapan_override".into(),
+        json!(row.kelengkapan_override),
+    );
     out.insert("created_by".into(), json!(row.created_by));
     out.insert("approved_by".into(), json!(row.approved_by));
     out.insert("approved_at".into(), iso8601_utc(row.approved_at));
-    out.insert("can_submit".into(), json!(row.status == "draft" || row.status == "ditolak"));
+    out.insert(
+        "can_submit".into(),
+        json!(row.status == "draft" || row.status == "ditolak"),
+    );
     out.insert("can_edit".into(), json!(row.status != "disetujui"));
     if with_items {
         let items = sqlx::query(
@@ -438,7 +500,10 @@ async fn addendum_json(state: &AppState, row: &AddendumRow, with_items: bool) ->
         }
         out.insert("items".into(), Value::Array(list));
     }
-    out.insert("attachments".into(), Value::Array(attachments(state, row.id).await?));
+    out.insert(
+        "attachments".into(),
+        Value::Array(attachments(state, row.id).await?),
+    );
     out.insert("created_at".into(), iso8601_utc(row.created_at));
     out.insert("updated_at".into(), iso8601_utc(row.updated_at));
     Ok(Value::Object(out))
@@ -524,8 +589,14 @@ async fn resource(
         );
     }
     out.insert("nomor_penawaran".into(), json!(row.nomor_penawaran));
-    out.insert("tanggal_penawaran".into(), json!(fmt_date(row.tanggal_penawaran)));
-    out.insert("nilai_kontrak".into(), row.nilai_kontrak.map_or(Value::Null, number_like_php));
+    out.insert(
+        "tanggal_penawaran".into(),
+        json!(fmt_date(row.tanggal_penawaran)),
+    );
+    out.insert(
+        "nilai_kontrak".into(),
+        row.nilai_kontrak.map_or(Value::Null, number_like_php),
+    );
     out.insert("tgl_sppbj".into(), json!(fmt_date(row.tgl_sppbj)));
     out.insert("tgl_spk".into(), json!(fmt_date(row.tgl_spk)));
     out.insert("tgl_spmk".into(), json!(fmt_date(row.tgl_spmk)));
@@ -544,8 +615,14 @@ async fn resource(
     let latest = latest_approved_row(pool, row.id).await?;
     if detail {
         // `nilaiKontrakBerjalan` dan `tglSelesaiBerjalan`: addendum disetujui terbaru, lalu nilai utama.
-        let berjalan = latest.as_ref().and_then(|a| a.nilai_kontrak_sesudah).or(row.nilai_kontrak);
-        out.insert("nilai_kontrak_berjalan".into(), berjalan.map_or(Value::Null, number_like_php));
+        let berjalan = latest
+            .as_ref()
+            .and_then(|a| a.nilai_kontrak_sesudah)
+            .or(row.nilai_kontrak);
+        out.insert(
+            "nilai_kontrak_berjalan".into(),
+            berjalan.map_or(Value::Null, number_like_php),
+        );
         let selesai = latest
             .as_ref()
             .and_then(|a| a.tgl_selesai_sesudah)
@@ -554,9 +631,15 @@ async fn resource(
     }
 
     // Relasi yang dimuat pada daftar, store, dan update: kegiatan, pekerjaans, penyedia.
-    out.insert("kegiatan".into(), kegiatan_json(pool, row.id_kegiatan).await?);
+    out.insert(
+        "kegiatan".into(),
+        kegiatan_json(pool, row.id_kegiatan).await?,
+    );
     out.insert("pekerjaans".into(), Value::Array(pekerjaans));
-    out.insert("penyedia".into(), penyedia_json(state, row.id_penyedia).await?);
+    out.insert(
+        "penyedia".into(),
+        penyedia_json(state, row.id_penyedia).await?,
+    );
     out.insert("is_checklist_complete".into(), json!(complete));
 
     if detail && show_addendums {
@@ -568,7 +651,12 @@ async fn resource(
 
         let mut addendums = Vec::new();
         let sql = format!("{SELECT_ADDENDUM} WHERE kontrak_id = ? ORDER BY addendum_ke, id");
-        for r in sqlx::query(&sql).bind(row.id).fetch_all(pool).await.map_err(internal)? {
+        for r in sqlx::query(&sql)
+            .bind(row.id)
+            .fetch_all(pool)
+            .await
+            .map_err(internal)?
+        {
             let a = map_addendum(&r).map_err(internal)?;
             addendums.push(addendum_json(state, &a, true).await?);
         }
@@ -585,7 +673,12 @@ async fn resource(
             "status": "utama",
         })];
         let sql = format!("{SELECT_ADDENDUM} WHERE kontrak_id = ? ORDER BY addendum_ke, id");
-        for r in sqlx::query(&sql).bind(row.id).fetch_all(pool).await.map_err(internal)? {
+        for r in sqlx::query(&sql)
+            .bind(row.id)
+            .fetch_all(pool)
+            .await
+            .map_err(internal)?
+        {
             let a = map_addendum(&r).map_err(internal)?;
             versions.push(json!({
                 "type": "addendum",
@@ -644,7 +737,8 @@ fn int_of(v: &Value) -> Option<i64> {
 
 /// Aturan `date` untuk `Y-m-d` (format lain di luar ini ditolak).
 fn date_of(v: &Value) -> Option<NaiveDate> {
-    v.as_str().and_then(|s| NaiveDate::parse_from_str(s.trim(), "%Y-%m-%d").ok())
+    v.as_str()
+        .and_then(|s| NaiveDate::parse_from_str(s.trim(), "%Y-%m-%d").ok())
 }
 
 fn parse_input(body: &Value, store: bool) -> Result<Input, ApiError> {
@@ -659,27 +753,43 @@ fn parse_input(body: &Value, store: bool) -> Result<Input, ApiError> {
             Some(v) => match int_of(v) {
                 Some(n) => Some(Some(n)),
                 None => {
-                    foto::add(errs, key, format!("The {} field must be an integer.", key.replace('_', " ")));
+                    foto::add(
+                        errs,
+                        key,
+                        format!("The {} field must be an integer.", key.replace('_', " ")),
+                    );
                     None
                 }
             },
         }
     };
-    let str_field = |key: &str, max: usize, errs: &mut BTreeMap<String, Vec<String>>| -> Field<String> {
-        match obj.get(key) {
-            None => None,
-            Some(Value::Null) => Some(None),
-            Some(Value::String(s)) if s.chars().count() <= max => Some(Some(s.clone())),
-            Some(Value::String(_)) => {
-                foto::add(errs, key, format!("The {} field must not be greater than {max} characters.", key.replace('_', " ")));
-                None
+    let str_field =
+        |key: &str, max: usize, errs: &mut BTreeMap<String, Vec<String>>| -> Field<String> {
+            match obj.get(key) {
+                None => None,
+                Some(Value::Null) => Some(None),
+                Some(Value::String(s)) if s.chars().count() <= max => Some(Some(s.clone())),
+                Some(Value::String(_)) => {
+                    foto::add(
+                        errs,
+                        key,
+                        format!(
+                            "The {} field must not be greater than {max} characters.",
+                            key.replace('_', " ")
+                        ),
+                    );
+                    None
+                }
+                Some(_) => {
+                    foto::add(
+                        errs,
+                        key,
+                        format!("The {} field must be a string.", key.replace('_', " ")),
+                    );
+                    None
+                }
             }
-            Some(_) => {
-                foto::add(errs, key, format!("The {} field must be a string.", key.replace('_', " ")));
-                None
-            }
-        }
-    };
+        };
     let date_field = |key: &str, errs: &mut BTreeMap<String, Vec<String>>| -> Field<NaiveDate> {
         match obj.get(key) {
             None => None,
@@ -687,7 +797,11 @@ fn parse_input(body: &Value, store: bool) -> Result<Input, ApiError> {
             Some(v) => match date_of(v) {
                 Some(d) => Some(Some(d)),
                 None => {
-                    foto::add(errs, key, format!("The {} field must be a valid date.", key.replace('_', " ")));
+                    foto::add(
+                        errs,
+                        key,
+                        format!("The {} field must be a valid date.", key.replace('_', " ")),
+                    );
                     None
                 }
             },
@@ -697,7 +811,11 @@ fn parse_input(body: &Value, store: bool) -> Result<Input, ApiError> {
     if store {
         match obj.get("id_penyedia") {
             None | Some(Value::Null) => {
-                foto::add(&mut errs, "id_penyedia", "The id penyedia field is required.".into());
+                foto::add(
+                    &mut errs,
+                    "id_penyedia",
+                    "The id penyedia field is required.".into(),
+                );
             }
             Some(_) => input.id_penyedia = int_field("id_penyedia", &mut errs),
         }
@@ -714,12 +832,20 @@ fn parse_input(body: &Value, store: bool) -> Result<Input, ApiError> {
             for (i, v) in items.iter().enumerate() {
                 match int_of(v) {
                     Some(n) => ids.push(n),
-                    None => foto::add(&mut errs, &format!("pekerjaan_ids.{i}"), format!("The pekerjaan_ids.{i} field must be an integer.")),
+                    None => foto::add(
+                        &mut errs,
+                        &format!("pekerjaan_ids.{i}"),
+                        format!("The pekerjaan_ids.{i} field must be an integer."),
+                    ),
                 }
             }
             input.pekerjaan_ids = Some(ids);
         }
-        Some(_) => foto::add(&mut errs, "pekerjaan_ids", "The pekerjaan ids field must be an array.".into()),
+        Some(_) => foto::add(
+            &mut errs,
+            "pekerjaan_ids",
+            "The pekerjaan ids field must be an array.".into(),
+        ),
     }
     input.kode_rup = str_field("kode_rup", 50, &mut errs);
     input.kode_paket = str_field("kode_paket", 50, &mut errs);
@@ -728,14 +854,25 @@ fn parse_input(body: &Value, store: bool) -> Result<Input, ApiError> {
     input.nilai_kontrak = match obj.get("nilai_kontrak") {
         None => None,
         Some(Value::Null) => Some(None),
-        Some(v) => match v.as_f64().or_else(|| v.as_str().and_then(|s| s.trim().parse().ok())) {
+        Some(v) => match v
+            .as_f64()
+            .or_else(|| v.as_str().and_then(|s| s.trim().parse().ok()))
+        {
             Some(n) if n >= 0.0 && n.is_finite() => Some(Some(n)),
             Some(_) => {
-                foto::add(&mut errs, "nilai_kontrak", "The nilai kontrak field must be at least 0.".into());
+                foto::add(
+                    &mut errs,
+                    "nilai_kontrak",
+                    "The nilai kontrak field must be at least 0.".into(),
+                );
                 None
             }
             None => {
-                foto::add(&mut errs, "nilai_kontrak", "The nilai kontrak field must be a number.".into());
+                foto::add(
+                    &mut errs,
+                    "nilai_kontrak",
+                    "The nilai kontrak field must be a number.".into(),
+                );
                 None
             }
         },
@@ -766,7 +903,11 @@ async fn check_exists(pool: &MySqlPool, table: &str, id: i64, key: &str) -> Resu
         return Ok(());
     }
     let mut errs = BTreeMap::new();
-    foto::add(&mut errs, key, format!("The selected {} is invalid.", key.replace('_', " ")));
+    foto::add(
+        &mut errs,
+        key,
+        format!("The selected {} is invalid.", key.replace('_', " ")),
+    );
     Err(ApiError::validation("The given data was invalid.", errs))
 }
 
@@ -788,12 +929,18 @@ async fn validate_exists(state: &AppState, input: &Input) -> Result<(), ApiError
 }
 
 /// `sync()` pada pivot `kontrak_pekerjaan`: hapus yang tidak ada, tambahkan yang baru.
-async fn sync_pekerjaan(tx: &mut sqlx::Transaction<'_, MySql>, kontrak_id: i64, ids: &[i64]) -> Result<(), ApiError> {
-    let current: Vec<i64> = sqlx::query_scalar("SELECT CAST(pekerjaan_id AS SIGNED) FROM kontrak_pekerjaan WHERE kontrak_id = ?")
-        .bind(kontrak_id)
-        .fetch_all(&mut **tx)
-        .await
-        .map_err(internal)?;
+pub(crate) async fn sync_pekerjaan(
+    tx: &mut sqlx::Transaction<'_, MySql>,
+    kontrak_id: i64,
+    ids: &[i64],
+) -> Result<(), ApiError> {
+    let current: Vec<i64> = sqlx::query_scalar(
+        "SELECT CAST(pekerjaan_id AS SIGNED) FROM kontrak_pekerjaan WHERE kontrak_id = ?",
+    )
+    .bind(kontrak_id)
+    .fetch_all(&mut **tx)
+    .await
+    .map_err(internal)?;
     for id in current.iter().filter(|c| !ids.contains(c)) {
         sqlx::query("DELETE FROM kontrak_pekerjaan WHERE kontrak_id = ? AND pekerjaan_id = ?")
             .bind(kontrak_id)
@@ -825,8 +972,14 @@ async fn sync_pekerjaan(tx: &mut sqlx::Transaction<'_, MySql>, kontrak_id: i64, 
 fn list_clauses(query: &HashMap<String, String>) -> (String, Vec<String>) {
     let mut clauses: Vec<String> = Vec::new();
     let mut binds: Vec<String> = Vec::new();
-    if query.get("tahun").is_some_and(|v| !v.is_empty() && v != "0") {
-        clauses.push("k.id_kegiatan IN (SELECT kg.id FROM tbl_kegiatan kg WHERE kg.tahun_anggaran = ?)".into());
+    if query
+        .get("tahun")
+        .is_some_and(|v| !v.is_empty() && v != "0")
+    {
+        clauses.push(
+            "k.id_kegiatan IN (SELECT kg.id FROM tbl_kegiatan kg WHERE kg.tahun_anggaran = ?)"
+                .into(),
+        );
         binds.push(query["tahun"].clone());
     }
     if let Some(term) = query.get("search").filter(|v| !v.is_empty()) {
@@ -865,7 +1018,9 @@ async fn paged_list(
         }
         q.fetch_one(&state.pool).await.map_err(internal)?
     };
-    let sql = format!("SELECT CAST(k.id AS SIGNED) AS id FROM tbl_kontrak k{where_sql} {order} LIMIT ? OFFSET ?");
+    let sql = format!(
+        "SELECT CAST(k.id AS SIGNED) AS id FROM tbl_kontrak k{where_sql} {order} LIMIT ? OFFSET ?"
+    );
     let mut q = sqlx::query_scalar::<_, i64>(&sql);
     for b in binds {
         q = q.bind(b);
@@ -939,7 +1094,16 @@ async fn by_relation(
         where_all = format!("{where_all} AND{}", &extra_sql[" WHERE".len()..]);
         binds.extend(extra_binds);
     }
-    paged_list(state, user.user_id, &format!(" WHERE {where_all}"), &binds, "ORDER BY k.id", &base, page_of(query)).await
+    paged_list(
+        state,
+        user.user_id,
+        &format!(" WHERE {where_all}"),
+        &binds,
+        "ORDER BY k.id",
+        &base,
+        page_of(query),
+    )
+    .await
 }
 
 /// `GET /api/kontrak/pekerjaan/{pekerjaan_id}`.
@@ -949,7 +1113,10 @@ pub async fn by_pekerjaan(
     Path(id): Path<String>,
     Query(query): Query<HashMap<String, String>>,
 ) -> Result<Response, ApiError> {
-    let base = format!("{}/api/kontrak/pekerjaan/{id}", state.app_url.trim_end_matches('/'));
+    let base = format!(
+        "{}/api/kontrak/pekerjaan/{id}",
+        state.app_url.trim_end_matches('/')
+    );
     by_relation(
         &state,
         &headers,
@@ -968,8 +1135,19 @@ pub async fn by_kegiatan(
     Path(id): Path<String>,
     Query(query): Query<HashMap<String, String>>,
 ) -> Result<Response, ApiError> {
-    let base = format!("{}/api/kontrak/kegiatan/{id}", state.app_url.trim_end_matches('/'));
-    by_relation(&state, &headers, &query, "k.id_kegiatan = ?".into(), id, base).await
+    let base = format!(
+        "{}/api/kontrak/kegiatan/{id}",
+        state.app_url.trim_end_matches('/')
+    );
+    by_relation(
+        &state,
+        &headers,
+        &query,
+        "k.id_kegiatan = ?".into(),
+        id,
+        base,
+    )
+    .await
 }
 
 /// `GET /api/kontrak/penyedia/{penyedia_id}`.
@@ -979,8 +1157,19 @@ pub async fn by_penyedia(
     Path(id): Path<String>,
     Query(query): Query<HashMap<String, String>>,
 ) -> Result<Response, ApiError> {
-    let base = format!("{}/api/kontrak/penyedia/{id}", state.app_url.trim_end_matches('/'));
-    by_relation(&state, &headers, &query, "k.id_penyedia = ?".into(), id, base).await
+    let base = format!(
+        "{}/api/kontrak/penyedia/{id}",
+        state.app_url.trim_end_matches('/')
+    );
+    by_relation(
+        &state,
+        &headers,
+        &query,
+        "k.id_penyedia = ?".into(),
+        id,
+        base,
+    )
+    .await
 }
 
 /// `POST /api/kontrak`.
@@ -1011,7 +1200,9 @@ pub async fn store(
         None => ids.first().copied(),
     };
     // Pemilik paket diperiksa seperti pekerjaan lain: kontrak baru hanya untuk paket yang bisa diakses.
-    let roles = auth::login::roles_of(&state.pool, user.user_id).await.map_err(internal)?;
+    let roles = auth::login::roles_of(&state.pool, user.user_id)
+        .await
+        .map_err(internal)?;
     for p in &ids {
         foto::ensure_access(&state, user.user_id, &roles, Some(*p)).await?;
     }
@@ -1043,7 +1234,10 @@ pub async fn store(
     .map_err(internal)?;
     let id = res.last_insert_id() as i64;
     sync_pekerjaan(&mut tx, id, &ids).await?;
-    let row = find_row(&mut *tx, id).await.map_err(internal)?.ok_or_else(|| internal("kontrak baru tidak terbaca"))?;
+    let row = find_row(&mut *tx, id)
+        .await
+        .map_err(internal)?
+        .ok_or_else(|| internal("kontrak baru tidak terbaca"))?;
     changes::log(
         &mut tx,
         &headers,
@@ -1059,8 +1253,14 @@ pub async fn store(
     .await?;
     tx.commit().await.map_err(internal)?;
 
-    let row = find_row(&state.pool, id).await.map_err(internal)?.ok_or_else(ApiError::not_found)?;
-    Ok(Json(json!({ "data": resource(&state, user.user_id, &row, true, false).await? })).into_response())
+    let row = find_row(&state.pool, id)
+        .await
+        .map_err(internal)?
+        .ok_or_else(ApiError::not_found)?;
+    Ok(
+        Json(json!({ "data": resource(&state, user.user_id, &row, true, false).await? }))
+            .into_response(),
+    )
 }
 
 /// `GET /api/kontrak/{id}`: detail lengkap dengan addendum.
@@ -1071,8 +1271,14 @@ pub async fn show(
 ) -> Result<Response, ApiError> {
     let user = require_auth(&state, &headers).await?;
     let id: i64 = id.parse().map_err(|_| ApiError::not_found())?;
-    let row = find_row(&state.pool, id).await.map_err(internal)?.ok_or_else(ApiError::not_found)?;
-    Ok(Json(json!({ "data": resource(&state, user.user_id, &row, true, true).await? })).into_response())
+    let row = find_row(&state.pool, id)
+        .await
+        .map_err(internal)?
+        .ok_or_else(ApiError::not_found)?;
+    Ok(
+        Json(json!({ "data": resource(&state, user.user_id, &row, true, true).await? }))
+            .into_response(),
+    )
 }
 
 /// `PUT` dan `PATCH /api/kontrak/{id}`. Field yang tidak dikirim tidak diubah.
@@ -1084,7 +1290,10 @@ pub async fn update(
 ) -> Result<Response, ApiError> {
     let user = require_auth(&state, &headers).await?;
     let id: i64 = id.parse().map_err(|_| ApiError::not_found())?;
-    let current = find_row(&state.pool, id).await.map_err(internal)?.ok_or_else(ApiError::not_found)?;
+    let current = find_row(&state.pool, id)
+        .await
+        .map_err(internal)?
+        .ok_or_else(ApiError::not_found)?;
     let input = parse_input(&body, false)?;
     validate_exists(&state, &input).await?;
 
@@ -1136,7 +1345,9 @@ pub async fn update(
     }
 
     // Akses ke paket yang dikirim (sama dengan T31): paket baru harus bisa diakses user.
-    let roles = auth::login::roles_of(&state.pool, user.user_id).await.map_err(internal)?;
+    let roles = auth::login::roles_of(&state.pool, user.user_id)
+        .await
+        .map_err(internal)?;
     let new_ids = input.pekerjaan_ids.clone();
     for p in new_ids.iter().flatten() {
         foto::ensure_access(&state, user.user_id, &roles, Some(*p)).await?;
@@ -1182,7 +1393,10 @@ pub async fn update(
             sync_pekerjaan(&mut tx, id, ids).await?;
         }
     }
-    let after = find_row(&mut *tx, id).await.map_err(internal)?.ok_or_else(|| internal("kontrak hilang"))?;
+    let after = find_row(&mut *tx, id)
+        .await
+        .map_err(internal)?
+        .ok_or_else(|| internal("kontrak hilang"))?;
     if !changed.is_empty() {
         let mut old = Map::new();
         let mut new = Map::new();
@@ -1208,7 +1422,10 @@ pub async fn update(
     }
     tx.commit().await.map_err(internal)?;
 
-    Ok(Json(json!({ "data": resource(&state, user.user_id, &after, true, false).await? })).into_response())
+    Ok(
+        Json(json!({ "data": resource(&state, user.user_id, &after, true, false).await? }))
+            .into_response(),
+    )
 }
 
 /// `DELETE /api/kontrak/{id}`.
@@ -1219,7 +1436,10 @@ pub async fn destroy(
 ) -> Result<Response, ApiError> {
     let user = require_auth(&state, &headers).await?;
     let id: i64 = id.parse().map_err(|_| ApiError::not_found())?;
-    let row = find_row(&state.pool, id).await.map_err(internal)?.ok_or_else(ApiError::not_found)?;
+    let row = find_row(&state.pool, id)
+        .await
+        .map_err(internal)?
+        .ok_or_else(ApiError::not_found)?;
     let url = format!("{}/api/kontrak/{id}", state.app_url.trim_end_matches('/'));
     let mut tx = state.pool.begin().await.map_err(internal)?;
     sqlx::query("DELETE FROM tbl_kontrak WHERE id = ?")
@@ -1241,7 +1461,11 @@ pub async fn destroy(
     )
     .await?;
     tx.commit().await.map_err(internal)?;
-    Ok((StatusCode::OK, Json(json!({ "message": "Kontrak deleted successfully" }))).into_response())
+    Ok((
+        StatusCode::OK,
+        Json(json!({ "message": "Kontrak deleted successfully" })),
+    )
+        .into_response())
 }
 
 #[cfg(test)]
@@ -1250,22 +1474,38 @@ mod tests {
 
     #[test]
     fn sanitize_strips_tags_entities_and_spaces() {
-        assert_eq!(sanitize_spse("  <b>Rehab&nbsp;Jalan</b>   &amp; Drainase "), "Rehab Jalan & Drainase");
+        assert_eq!(
+            sanitize_spse("  <b>Rehab&nbsp;Jalan</b>   &amp; Drainase "),
+            "Rehab Jalan & Drainase"
+        );
         assert_eq!(sanitize_spse("A&#39;B &#x41;"), "A'B A");
     }
 
     #[test]
     fn normalized_names_ignore_punctuation_and_case() {
-        assert_eq!(normalize_name("Rehab Jalan, Desa-1"), normalize_name("rehab jalan desa 1"));
-        assert_ne!(normalize_name("Rehab Jalan"), normalize_name("Bangun Jalan"));
+        assert_eq!(
+            normalize_name("Rehab Jalan, Desa-1"),
+            normalize_name("rehab jalan desa 1")
+        );
+        assert_ne!(
+            normalize_name("Rehab Jalan"),
+            normalize_name("Bangun Jalan")
+        );
     }
 
     #[test]
     fn create_requires_penyedia_and_accepts_date_strings() {
         assert!(parse_input(&json!({}), true).is_err());
-        let ok = parse_input(&json!({"id_penyedia": 3, "tgl_spk": "2025-03-04", "nilai_kontrak": "1000.50"}), true).unwrap();
+        let ok = parse_input(
+            &json!({"id_penyedia": 3, "tgl_spk": "2025-03-04", "nilai_kontrak": "1000.50"}),
+            true,
+        )
+        .unwrap();
         assert_eq!(ok.id_penyedia, Some(Some(3)));
-        assert_eq!(ok.tgl_spk, Some(Some(NaiveDate::from_ymd_opt(2025, 3, 4).unwrap())));
+        assert_eq!(
+            ok.tgl_spk,
+            Some(Some(NaiveDate::from_ymd_opt(2025, 3, 4).unwrap()))
+        );
         assert_eq!(ok.nilai_kontrak, Some(Some(1000.5)));
         assert!(parse_input(&json!({"id_penyedia": 3, "tgl_spk": "04-03-2025"}), true).is_err());
     }

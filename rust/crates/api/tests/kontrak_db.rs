@@ -227,17 +227,26 @@ async fn kontrak_crud_relations_addendum_and_audit() {
     let id = body["data"]["id"].as_u64().expect("id kontrak");
     assert_eq!(body["data"]["kode_paket"], kode, "{body}");
 
-    let linked: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM kontrak_pekerjaan WHERE kontrak_id = ? AND pekerjaan_id = ?")
-        .bind(id)
-        .bind(pekerjaan)
-        .fetch_one(&pool)
-        .await
-        .unwrap();
+    let linked: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM kontrak_pekerjaan WHERE kontrak_id = ? AND pekerjaan_id = ?",
+    )
+    .bind(id)
+    .bind(pekerjaan)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
     assert_eq!(linked, 1, "pivot kontrak_pekerjaan harus terisi");
     assert_eq!(audit_events(&pool, id).await, vec!["created"]);
 
     // Show: detail dengan addendum kosong.
-    let (status, body) = send(&pool, Method::GET, &format!("/api/kontrak/{id}"), Some(&token), None).await;
+    let (status, body) = send(
+        &pool,
+        Method::GET,
+        &format!("/api/kontrak/{id}"),
+        Some(&token),
+        None,
+    )
+    .await;
     assert_eq!(status, StatusCode::OK, "{body}");
     assert_eq!(body["data"]["id"], id, "{body}");
     assert_eq!(body["data"]["addendums"], json!([]), "{body}");
@@ -254,25 +263,69 @@ async fn kontrak_crud_relations_addendum_and_audit() {
     .execute(&pool)
     .await
     .unwrap();
-    let (status, body) = send(&pool, Method::GET, &format!("/api/kontrak/{id}"), Some(&token), None).await;
+    let (status, body) = send(
+        &pool,
+        Method::GET,
+        &format!("/api/kontrak/{id}"),
+        Some(&token),
+        None,
+    )
+    .await;
     assert_eq!(status, StatusCode::OK, "{body}");
-    let addendums = body["data"]["addendums"].as_array().expect("addendums array");
+    let addendums = body["data"]["addendums"]
+        .as_array()
+        .expect("addendums array");
     assert_eq!(addendums.len(), 1, "{body}");
     assert_eq!(addendums[0]["nomor_addendum"], "UJI-ADD-1", "{body}");
 
     // Daftar dan relasi pekerjaan/kegiatan/penyedia memuat kontrak ini.
     let (status, body) = send(&pool, Method::GET, "/api/kontrak", Some(&token), None).await;
     assert_eq!(status, StatusCode::OK, "{body}");
-    assert!(body["data"].as_array().unwrap().iter().any(|k| k["id"] == id), "{body}");
+    assert!(
+        body["data"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|k| k["id"] == id),
+        "{body}"
+    );
     assert_eq!(body["meta"]["per_page"], 20, "{body}");
 
-    let (status, body) = send(&pool, Method::GET, &format!("/api/kontrak/pekerjaan/{pekerjaan}"), Some(&token), None).await;
+    let (status, body) = send(
+        &pool,
+        Method::GET,
+        &format!("/api/kontrak/pekerjaan/{pekerjaan}"),
+        Some(&token),
+        None,
+    )
+    .await;
     assert_eq!(status, StatusCode::OK, "{body}");
-    assert!(body["data"].as_array().unwrap().iter().any(|k| k["id"] == id), "{body}");
+    assert!(
+        body["data"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|k| k["id"] == id),
+        "{body}"
+    );
 
-    let (status, body) = send(&pool, Method::GET, &format!("/api/kontrak/penyedia/{penyedia}"), Some(&token), None).await;
+    let (status, body) = send(
+        &pool,
+        Method::GET,
+        &format!("/api/kontrak/penyedia/{penyedia}"),
+        Some(&token),
+        None,
+    )
+    .await;
     assert_eq!(status, StatusCode::OK, "{body}");
-    assert!(body["data"].as_array().unwrap().iter().any(|k| k["id"] == id), "{body}");
+    assert!(
+        body["data"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|k| k["id"] == id),
+        "{body}"
+    );
 
     // Update: nilai berubah dan tercatat di audit; PATCH juga diterima.
     let (status, body) = send(
@@ -284,16 +337,27 @@ async fn kontrak_crud_relations_addendum_and_audit() {
     )
     .await;
     assert_eq!(status, StatusCode::OK, "{body}");
-    let nilai: f64 = sqlx::query_scalar("SELECT CAST(nilai_kontrak AS DOUBLE) FROM tbl_kontrak WHERE id = ?")
-        .bind(id)
-        .fetch_one(&pool)
-        .await
-        .unwrap();
-    assert!((nilai - 2_000_000.0).abs() < 0.01, "nilai_kontrak = {nilai}");
+    let nilai: f64 =
+        sqlx::query_scalar("SELECT CAST(nilai_kontrak AS DOUBLE) FROM tbl_kontrak WHERE id = ?")
+            .bind(id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert!(
+        (nilai - 2_000_000.0).abs() < 0.01,
+        "nilai_kontrak = {nilai}"
+    );
     assert_eq!(audit_events(&pool, id).await, vec!["created", "updated"]);
 
     // Delete: baris dan pivot hilang.
-    let (status, body) = send(&pool, Method::DELETE, &format!("/api/kontrak/{id}"), Some(&token), None).await;
+    let (status, body) = send(
+        &pool,
+        Method::DELETE,
+        &format!("/api/kontrak/{id}"),
+        Some(&token),
+        None,
+    )
+    .await;
     assert_eq!(status, StatusCode::OK, "{body}");
     assert_eq!(body["message"], "Kontrak deleted successfully");
     let remain: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM tbl_kontrak WHERE id = ?")
@@ -302,7 +366,14 @@ async fn kontrak_crud_relations_addendum_and_audit() {
         .await
         .unwrap();
     assert_eq!(remain, 0);
-    let (status, _) = send(&pool, Method::GET, &format!("/api/kontrak/{id}"), Some(&token), None).await;
+    let (status, _) = send(
+        &pool,
+        Method::GET,
+        &format!("/api/kontrak/{id}"),
+        Some(&token),
+        None,
+    )
+    .await;
     assert_eq!(status, StatusCode::NOT_FOUND);
 
     cleanup(&pool).await;

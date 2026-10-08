@@ -21,8 +21,9 @@ pub mod draft;
 pub mod format;
 pub mod foto;
 pub mod kecamatan;
-pub mod kontrak;
 pub mod kegiatan;
+pub mod kontrak;
+pub mod kontrak_xlsx;
 pub mod koordinat;
 pub mod lookup;
 pub mod maintenance;
@@ -255,10 +256,7 @@ pub fn app(config: &Config, state: AppState) -> Router {
         .route("/api/post-pekerjaan-checklist", get(checklist::post_index))
         // Catch-all untuk /api: route yang belum ada di Rust tetap lewat pengecekan
         // permission (Laravel menolak lebih dulu, bukan 404).
-        .route(
-            "/api/kontrak",
-            get(kontrak::index).post(kontrak::store),
-        )
+        .route("/api/kontrak", get(kontrak::index).post(kontrak::store))
         .route(
             "/api/kontrak/{id}",
             get(kontrak::show)
@@ -266,6 +264,12 @@ pub fn app(config: &Config, state: AppState) -> Router {
                 .patch(kontrak::update)
                 .delete(kontrak::destroy),
         )
+        .route("/api/kontrak/export/excel", get(kontrak_xlsx::export_excel))
+        .route(
+            "/api/kontrak/import/template",
+            get(kontrak_xlsx::download_template),
+        )
+        .route("/api/kontrak/import", post(kontrak_xlsx::import))
         .route("/api/kontrak/pekerjaan/{id}", get(kontrak::by_pekerjaan))
         .route("/api/kontrak/kegiatan/{id}", get(kontrak::by_kegiatan))
         .route("/api/kontrak/penyedia/{id}", get(kontrak::by_penyedia))
