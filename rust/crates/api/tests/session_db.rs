@@ -18,6 +18,7 @@ use tower::ServiceExt;
 const EMAIL: &str = "uji-session@example.test";
 /// Sama dengan `login_db`: hash bcrypt dari PHP untuk `uji-login-42`.
 const PHP_HASH: &str = "$2y$10$5OHUia7uk7phxn6AR/Iyx.m61eqHC8ZFAfr5IkRJ5WPHAli5tv7vm";
+const EMAIL_SYNC: &str = "uji-sync@example.test";
 const PASSWORD: &str = "uji-login-42";
 
 fn config() -> Config {
@@ -73,19 +74,19 @@ async fn send(
     )
 }
 
-async fn setup_user(pool: &MySqlPool) {
+async fn setup_user(pool: &MySqlPool, email: &str) {
     sqlx::query("DELETE FROM personal_access_tokens WHERE tokenable_id IN (SELECT id FROM users WHERE email = ?)")
-        .bind(EMAIL)
+        .bind(email)
         .execute(pool)
         .await
         .unwrap();
     sqlx::query("DELETE FROM users WHERE email = ?")
-        .bind(EMAIL)
+        .bind(email)
         .execute(pool)
         .await
         .unwrap();
     sqlx::query("INSERT INTO users (name, email, password, created_at, updated_at) VALUES ('Uji Session', ?, ?, NOW(), NOW())")
-        .bind(EMAIL)
+        .bind(email)
         .bind(PHP_HASH)
         .execute(pool)
         .await
@@ -106,7 +107,7 @@ fn session_pair(set_cookies: &[String]) -> Option<String> {
 async fn login_sets_cookie_me_reads_it_and_logout_revokes_it() {
     let url = std::env::var("DATABASE_URL").expect("DATABASE_URL belum di-set");
     let pool = MySqlPool::connect(&url).await.unwrap();
-    setup_user(&pool).await;
+    setup_user(&pool, EMAIL).await;
 
     let (status, set_cookies, body) = send(
         &pool,
@@ -152,7 +153,7 @@ async fn login_sets_cookie_me_reads_it_and_logout_revokes_it() {
     let (status, _, _) = send(&pool, "GET", "/api/auth/me", Some(&cookie), None).await;
     assert_eq!(status, StatusCode::UNAUTHORIZED);
 
-    setup_user(&pool).await;
+    setup_user(&pool, EMAIL).await;
 }
 
 #[tokio::test]
@@ -162,4 +163,48 @@ async fn me_without_session_is_unauthorized() {
     let pool = MySqlPool::connect(&url).await.unwrap();
     let (status, _, _) = send(&pool, "GET", "/api/auth/me", None, None).await;
     assert_eq!(status, StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+#[ignore = "butuh DATABASE_URL"]
+async fn sync_token_turns_bearer_into_session_cookie() {
+    let url = std::env::var("DATABASE_URL").expect("DATABASE_URL belum di-set");
+    let pool = MySqlPool::connect(&url).await.unwrap();
+    setup_user(&pool, EMAIL_SYNC).await;
+    let uid: u64 = sqlx::query_scalar("SELECT id FROM users WHERE email = ?")
+        .bind(EMAIL_SYNC)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    let token = auth::login::create_token(&pool, uid, "uji-sync")
+        .await
+        .unwrap();
+
+    let (status, set_cookies, body) = send(
+        &pool,
+        "POST",
+        "/api/auth/sync-token",
+        None,
+        Some(json!({ "token": token })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["user"]["email"], EMAIL_SYNC);
+    let cookie = session_pair(&set_cookies).expect("Set-Cookie sesi ada");
+
+    let (status, _, me) = send(&pool, "GET", "/api/auth/me", Some(&cookie), None).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(me["data"]["email"], EMAIL_SYNC);
+
+    let (status, _, _) = send(
+        &pool,
+        "POST",
+        "/api/auth/sync-token",
+        None,
+        Some(json!({ "token": "999999|salah" })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::UNAUTHORIZED);
+
+    setup_user(&pool, EMAIL_SYNC).await;
 }

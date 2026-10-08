@@ -216,6 +216,42 @@ pub async fn me(
     Ok(Json(json!({ "data": data })))
 }
 
+/// `POST /api/auth/sync-token`: pengganti `/bff/auth/sync-token`. Token dari alur OAuth
+/// divalidasi lalu disimpan sebagai cookie sesi.
+pub async fn sync_token(
+    State(state): State<AppState>,
+    Json(body): Json<Value>,
+) -> Result<Response, ApiError> {
+    let token = body
+        .get("token")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|t| !t.is_empty())
+        .ok_or_else(|| {
+            ApiError::new(
+                axum::http::StatusCode::BAD_REQUEST,
+                "Token tidak valid".to_string(),
+            )
+        })?
+        .to_string();
+    let who = auth::authenticate(&state.pool, &token).await.map_err(|_| {
+        ApiError::new(
+            axum::http::StatusCode::UNAUTHORIZED,
+            "Token tidak valid atau kedaluwarsa".to_string(),
+        )
+    })?;
+    let user = crate::users::resource(&state.pool, &state.app_url, who.user_id)
+        .await
+        .map_err(internal)?
+        .ok_or_else(ApiError::unauthenticated)?;
+    let mut response =
+        Json(json!({ "message": "Sesi disinkronkan", "user": user })).into_response();
+    if let Some(cookie) = state.session.set_header(&token) {
+        response.headers_mut().append(header::SET_COOKIE, cookie);
+    }
+    Ok(response)
+}
+
 /// `POST /api/auth/logout`: cabut token saat ini dan hapus cookie sesi.
 pub async fn logout(
     State(state): State<AppState>,
