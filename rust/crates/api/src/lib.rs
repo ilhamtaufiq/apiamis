@@ -93,6 +93,8 @@ pub mod spam_integration;
 pub mod spam_units;
 pub mod spm_sanitasi;
 pub mod spm_sanitasi_capaian;
+pub mod spm_sanitasi_integration;
+pub mod spm_sanitasi_pekerjaan;
 pub mod spm_sanitasi_write;
 pub mod tags_write;
 pub mod tiket;
@@ -750,13 +752,26 @@ pub fn app(config: &Config, state: AppState) -> Router {
         .route("/api/public/spm-sanitasi/map-stats", get(spm_sanitasi::public_map_stats))
         .route("/api/spm-sanitasi/stats", get(spm_sanitasi::stats))
         .route("/api/spm-sanitasi/capaian", get(spm_sanitasi_capaian::capaian))
+        // Integrasi SPM dengan paket pekerjaan (`SpmSanitasiPekerjaanIntegrationService`).
+        .route("/api/spm-sanitasi/integration", get(spm_sanitasi_integration::integration))
+        .route(
+            "/api/spm-sanitasi/integration/desa/{desaId}",
+            get(spm_sanitasi_integration::integration_by_desa),
+        )
+        .route("/api/spm-sanitasi/mck-pekerjaan", get(spm_sanitasi_pekerjaan::mck_pekerjaan))
+        .route("/api/spm-sanitasi/{id}/pekerjaan", post(spm_sanitasi_pekerjaan::attach_pekerjaan))
+        .route(
+            "/api/spm-sanitasi/{id}/pekerjaan/{pekerjaanId}",
+            delete(spm_sanitasi_pekerjaan::detach_pekerjaan),
+        )
         .route(
             "/api/spm-sanitasi",
             get(spm_sanitasi::index).post(spm_sanitasi_write::store),
         )
         .route(
             "/api/spm-sanitasi/{id}",
-            put(spm_sanitasi_write::update)
+            get(spm_sanitasi_pekerjaan::show)
+                .put(spm_sanitasi_write::update)
                 .patch(spm_sanitasi_write::update)
                 .delete(spm_sanitasi_write::destroy),
         )
