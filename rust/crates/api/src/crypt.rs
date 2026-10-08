@@ -41,7 +41,7 @@ fn hex(bytes: &[u8]) -> String {
 }
 
 fn unhex(s: &str) -> Option<Vec<u8>> {
-    if s.len() % 2 != 0 {
+    if !s.len().is_multiple_of(2) {
         return None;
     }
     (0..s.len())
@@ -117,10 +117,7 @@ mod tests {
 
     #[test]
     fn rejects_wrong_key_before_decrypting() {
-        assert_eq!(
-            decrypt_string(&vec![b'x'; 32], VECTOR),
-            Err(CryptError::Mac)
-        );
+        assert_eq!(decrypt_string(&[b'x'; 32], VECTOR), Err(CryptError::Mac));
     }
 
     #[test]
