@@ -12,9 +12,9 @@ Sumber: `routes/api.php` (branch `rust`, dari `main` SHA `c19fd06`). Dibuat deng
 
 ### Status paritas (diperbarui)
 
-- Sudah di Rust: **198** (termasuk dokumen kontrak SPK, cover, ZIP cover, BAP, dan bap-context, serta PDF SPK lewat ONLYOFFICE; termasuk auth, lookup, kecamatan, desa, kegiatan, penyedia, tiket GET, checklist GET, foto dan penerima seluruh rute, berkas kecuali export-pdf dan upload-from-url, kontrak CRUD, relasi pekerjaan/kegiatan/penyedia, excel export, template, dan impor kontrak, addendum dan register-gaps GET, sk, notifikasi, dan master fase pekerjaan)
+- Sudah di Rust: **211** (termasuk dokumen kontrak SPK, cover, ZIP cover, BAP, dan bap-context, serta PDF SPK lewat ONLYOFFICE; termasuk auth, lookup, kecamatan, desa, kegiatan, penyedia, tiket GET, checklist GET, foto dan penerima seluruh rute, berkas kecuali export-pdf dan upload-from-url, kontrak CRUD, relasi pekerjaan/kegiatan/penyedia, excel export, template, dan impor kontrak, addendum dan register-gaps GET, sk, notifikasi, dan master fase pekerjaan)
 - Parsial di Rust: **2** (`GET /api/pekerjaan`: relasi daftar belum dibandingkan dengan produksi, lihat T21)
-- Belum: **210** (dihitung langsung dari kolom Status; termasuk addendum, export Excel draft, progress estimasi, destroy pekerjaan, dan modul lain yang belum dipindah)
+- Belum: **197** (dihitung langsung dari kolom Status; termasuk addendum, export Excel draft, progress estimasi, destroy pekerjaan, dan modul lain yang belum dipindah)
 - Dihapus (tidak dimigrasi): **77** (termasuk desa sync-kk, chat AI dan live-chat, panduan CMS, presence, search ai-summary, dan pengaturan AI di app-settings, sesuai keputusan user)
 
 Cara menghitung: cocokkan method dan path (`{param}` dinormalisasi) dengan route yang terdaftar di `rust/crates/api/src/lib.rs`.
@@ -467,19 +467,19 @@ Kolom **Status** diisi saat modul dipindah ke Rust. Awalnya semua `belum`.
 
 | No | Method | Path | Controller@action | Middleware | Status |
 | --- | --- | --- | --- | --- | --- |
-| 1 | GET | `/api/procurement/spse/status` | SpseProcurementController@sessionStatus | auth:sanctum | belum |
-| 2 | POST | `/api/procurement/spse/session` | SpseProcurementController@saveSession | auth:sanctum | belum |
-| 3 | DELETE | `/api/procurement/spse/session` | SpseProcurementController@revokeSession | auth:sanctum | belum |
-| 4 | POST | `/api/procurement/spse/sync` | SpseProcurementController@sync | auth:sanctum | belum |
-| 5 | GET | `/api/procurement/spse/sync/runs` | SpseProcurementController@syncRuns | auth:sanctum | belum |
-| 6 | GET | `/api/procurement/spse/staging` | SpseProcurementController@staging | auth:sanctum | belum |
-| 7 | GET | `/api/procurement/spse/staging/{id}` | SpseProcurementController@stagingDetail | auth:sanctum | belum |
-| 8 | POST | `/api/procurement/spse/staging/apply` | SpseProcurementController@applyStaging | auth:sanctum | belum |
-| 9 | POST | `/api/procurement/spse/staging/map` | SpseProcurementController@mapStaging | auth:sanctum | belum |
-| 10 | POST | `/api/procurement/spse/staging/promote-draft` | SpseProcurementController@promoteStaging | auth:sanctum | belum |
-| 11 | GET | `/api/procurement/spse/packages/{kode_paket}/documents` | SpseProcurementController@packageDocuments | auth:sanctum | belum |
-| 12 | POST | `/api/procurement/spse/packages/import-documents` | SpseProcurementController@importPackageDocuments | auth:sanctum | belum |
-| 13 | POST | `/api/procurement/spse/packages/download-zip` | SpseProcurementController@downloadPackageZip | auth:sanctum | belum |
+| 1 | GET | `/api/procurement/spse/status` | SpseProcurementController@sessionStatus | auth:sanctum | rust |
+| 2 | POST | `/api/procurement/spse/session` | SpseProcurementController@saveSession | auth:sanctum | rust |
+| 3 | DELETE | `/api/procurement/spse/session` | SpseProcurementController@revokeSession | auth:sanctum | rust |
+| 4 | POST | `/api/procurement/spse/sync` | SpseProcurementController@sync | auth:sanctum | rust |
+| 5 | GET | `/api/procurement/spse/sync/runs` | SpseProcurementController@syncRuns | auth:sanctum | rust |
+| 6 | GET | `/api/procurement/spse/staging` | SpseProcurementController@staging | auth:sanctum | rust |
+| 7 | GET | `/api/procurement/spse/staging/{id}` | SpseProcurementController@stagingDetail | auth:sanctum | rust |
+| 8 | POST | `/api/procurement/spse/staging/apply` | SpseProcurementController@applyStaging | auth:sanctum | rust |
+| 9 | POST | `/api/procurement/spse/staging/map` | SpseProcurementController@mapStaging | auth:sanctum | rust |
+| 10 | POST | `/api/procurement/spse/staging/promote-draft` | SpseProcurementController@promoteStaging | auth:sanctum | rust |
+| 11 | GET | `/api/procurement/spse/packages/{kode_paket}/documents` | SpseProcurementController@packageDocuments | auth:sanctum | rust |
+| 12 | POST | `/api/procurement/spse/packages/import-documents` | SpseProcurementController@importPackageDocuments | auth:sanctum | rust |
+| 13 | POST | `/api/procurement/spse/packages/download-zip` | SpseProcurementController@downloadPackageZip | auth:sanctum | rust |
 | 14 | POST | `/api/procurement/spse/kontrak/push` | SpseProcurementController@pushKontrak | auth:sanctum | belum |
 
 ### penerima (9)
