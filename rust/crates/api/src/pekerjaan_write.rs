@@ -1,11 +1,19 @@
-//! `PUT/PATCH /api/pekerjaan/{id}`, setara `PekerjaanController@update`.
+//! Penulisan Pekerjaan: `POST /api/pekerjaan` (store), `PUT/PATCH /api/pekerjaan/{id}` (update), dan
+//! `DELETE /api/pekerjaan/{id}` (destroy), setara `PekerjaanController`.
 //!
 //! Efek samping yang ikut dipindah, seperti trait Laravel:
-//! - audit log `tbl_audit_logs` (`Auditable`), hanya jika ada perubahan;
-//! - notifikasi database untuk setiap admin kecuali pelaku (`NotifiesAdminsOnChanges`).
+//! - audit log `tbl_audit_logs` (`Auditable`): `created`, `updated` (hanya jika ada perubahan), dan `deleted`;
+//! - notifikasi database untuk setiap admin kecuali pelaku (`NotifiesAdminsOnChanges`), dengan judul
+//!   "Data Pekerjaan dibuat | diperbarui | dihapus".
 //!
-//! Belum dipindah: broadcast realtime `PekerjaanUpdated` (`BroadcastsPekerjaanRealtime`),
-//! menunggu keputusan K3. Respon memakai bentuk daftar, bukan `PekerjaanDetailResource` (T25).
+//! Berbeda dari Laravel:
+//! - destroy menolak 403 di luar scope `byUserRole()` dan 409 bila pekerjaan masih tertaut ke SPAM atau SPM
+//!   sanitasi, karena sinkronisasi capaian belum dipindah;
+//! - audit `created` tidak memuat `created_at` dan `updated_at`, serta `deleted` tidak memuat timestamp;
+//! - transaksi store dan destroy diulang sampai beberapa kali bila kalah deadlock (update belum).
+//!
+//! Belum dipindah: broadcast realtime `PekerjaanUpdated` (`BroadcastsPekerjaanRealtime`), menunggu keputusan K3.
+//! Respon store dan update memakai `PekerjaanDetailResource` (`pekerjaan_detail::build`).
 
 use std::collections::BTreeMap;
 
