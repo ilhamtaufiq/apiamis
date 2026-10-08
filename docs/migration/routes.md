@@ -12,9 +12,9 @@ Sumber: `routes/api.php` (branch `rust`, dari `main` SHA `c19fd06`). Dibuat deng
 
 ### Status paritas (diperbarui)
 
-- Sudah di Rust: **47** (termasuk auth, lookup, kecamatan, desa, kegiatan, penyedia, tiket GET, checklist GET, foto dan penerima seluruh rute, berkas kecuali export-pdf dan upload-from-url)
+- Sudah di Rust: **62** (termasuk auth, lookup, kecamatan, desa, kegiatan, penyedia, tiket GET, checklist GET, foto dan penerima seluruh rute, berkas kecuali export-pdf dan upload-from-url)
 - Parsial di Rust: **1** (`GET /api/pekerjaan`: relasi daftar belum dibandingkan dengan produksi, lihat T21)
-- Belum: **438** (dihitung ulang setelah penerima dan berkas; termasuk export-pdf dan upload-from-url berkas, serta modul lain yang belum dipindah)
+- Belum: **423** (dihitung langsung dari kolom Status; termasuk export Excel draft, progress estimasi, destroy pekerjaan, dan modul lain yang belum dipindah)
 
 Cara menghitung: cocokkan method dan path (`{param}` dinormalisasi) dengan route yang terdaftar di `rust/crates/api/src/lib.rs`.
 
@@ -621,11 +621,11 @@ Kolom **Status** diisi saat modul dipindah ke Rust. Awalnya semua `belum`.
 | No | Method | Path | Controller@action | Middleware | Status |
 | --- | --- | --- | --- | --- | --- |
 | 1 | GET | `/api/draft-pekerjaan/export/excel` | DraftPekerjaanController@exportExcel | auth:sanctum | belum |
-| 2 | GET | `/api/draft-pekerjaan` | DraftPekerjaanController@index | auth:sanctum | belum |
-| 3 | POST | `/api/draft-pekerjaan` | DraftPekerjaanController@store | auth:sanctum | belum |
-| 4 | GET | `/api/draft-pekerjaan/{id}` | DraftPekerjaanController@show | auth:sanctum | belum |
-| 5 | PUT/PATCH | `/api/draft-pekerjaan/{id}` | DraftPekerjaanController@update | auth:sanctum | belum |
-| 6 | DELETE | `/api/draft-pekerjaan/{id}` | DraftPekerjaanController@destroy | auth:sanctum | belum |
+| 2 | GET | `/api/draft-pekerjaan` | DraftPekerjaanController@index | auth:sanctum | rust |
+| 3 | POST | `/api/draft-pekerjaan` | DraftPekerjaanController@store | auth:sanctum | rust |
+| 4 | GET | `/api/draft-pekerjaan/{id}` | DraftPekerjaanController@show | auth:sanctum | rust |
+| 5 | PUT/PATCH | `/api/draft-pekerjaan/{id}` | DraftPekerjaanController@update | auth:sanctum | rust |
+| 6 | DELETE | `/api/draft-pekerjaan/{id}` | DraftPekerjaanController@destroy | auth:sanctum | rust |
 
 ### checklist-items (6)
 
@@ -658,12 +658,12 @@ Kolom **Status** diisi saat modul dipindah ke Rust. Awalnya semua `belum`.
 
 | No | Method | Path | Controller@action | Middleware | Status |
 | --- | --- | --- | --- | --- | --- |
-| 1 | GET | `/api/output/summary` | OutputController@summary | auth:sanctum | belum |
-| 2 | GET | `/api/output` | OutputController@index | auth:sanctum | belum |
-| 3 | POST | `/api/output` | OutputController@store | auth:sanctum | belum |
-| 4 | GET | `/api/output/{id}` | OutputController@show | auth:sanctum | belum |
-| 5 | PUT/PATCH | `/api/output/{id}` | OutputController@update | auth:sanctum | belum |
-| 6 | DELETE | `/api/output/{id}` | OutputController@destroy | auth:sanctum | belum |
+| 1 | GET | `/api/output/summary` | OutputController@summary | auth:sanctum | rust |
+| 2 | GET | `/api/output` | OutputController@index | auth:sanctum | rust |
+| 3 | POST | `/api/output` | OutputController@store | auth:sanctum | rust |
+| 4 | GET | `/api/output/{id}` | OutputController@show | auth:sanctum | rust |
+| 5 | PUT/PATCH | `/api/output/{id}` | OutputController@update | auth:sanctum | rust |
+| 6 | DELETE | `/api/output/{id}` | OutputController@destroy | auth:sanctum | rust |
 
 ### kanban (6)
 

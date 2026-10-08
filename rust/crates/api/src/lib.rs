@@ -17,6 +17,7 @@ pub mod changes;
 pub mod checklist;
 pub mod crypt;
 pub mod desa;
+pub mod draft;
 pub mod format;
 pub mod foto;
 pub mod kecamatan;
@@ -26,6 +27,7 @@ pub mod lookup;
 pub mod maintenance;
 pub mod media;
 pub mod notify;
+pub mod output;
 pub mod pagination;
 pub mod pekerjaan;
 pub mod pekerjaan_detail;
@@ -176,6 +178,23 @@ pub fn app(config: &Config, state: AppState) -> Router {
                 .post(berkas::update_post)
                 .delete(berkas::destroy)
                 .layer(DefaultBodyLimit::max(foto::BODY_LIMIT)),
+        )
+        .route("/api/draft-pekerjaan", get(draft::index).post(draft::store))
+        .route(
+            "/api/draft-pekerjaan/{id}",
+            get(draft::show)
+                .put(draft::update)
+                .patch(draft::update)
+                .delete(draft::destroy),
+        )
+        .route("/api/output", get(output::index).post(output::store))
+        .route("/api/output/summary", get(output::summary))
+        .route(
+            "/api/output/{id}",
+            get(output::show)
+                .put(output::update)
+                .patch(output::update)
+                .delete(output::destroy),
         )
         .route("/api/penerima", get(penerima::index).post(penerima::store))
         .route("/api/penerima/summary", get(penerima::summary))

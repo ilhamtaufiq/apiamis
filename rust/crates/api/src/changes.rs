@@ -21,6 +21,12 @@ pub const FOTO: Target = Target {
     tab: "foto",
 };
 
+pub const OUTPUT: Target = Target {
+    model_type: "App\\Models\\Output",
+    label: "Output",
+    tab: "output",
+};
+
 pub const BERKAS: Target = Target {
     model_type: "App\\Models\\Berkas",
     label: "Berkas",

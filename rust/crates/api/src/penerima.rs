@@ -229,7 +229,7 @@ fn add(errs: &mut BTreeMap<String, Vec<String>>, key: &str, msg: String) {
 }
 
 /// Nilai JSON sebagai integer (angka bulat, atau string angka bulat), seperti aturan `integer`.
-fn as_int(v: &Value) -> Option<i64> {
+pub(crate) fn as_int(v: &Value) -> Option<i64> {
     match v {
         Value::Number(n) => n.as_i64(),
         Value::String(s) => s.trim().parse().ok(),
@@ -238,7 +238,7 @@ fn as_int(v: &Value) -> Option<i64> {
 }
 
 /// Aturan `boolean`: true/false, 1/0, "1"/"0", "true"/"false".
-fn as_bool(v: &Value) -> Option<bool> {
+pub(crate) fn as_bool(v: &Value) -> Option<bool> {
     match v {
         Value::Bool(b) => Some(*b),
         Value::Number(n) => match n.as_i64()? {
@@ -546,8 +546,15 @@ pub async fn index(
     headers: HeaderMap,
     Query(query): Query<HashMap<String, String>>,
 ) -> Result<Response, ApiError> {
-    require_auth(&state, &headers).await?;
-    let (where_sql, binds) = list_filter(&query);
+    let user = require_auth(&state, &headers).await?;
+    let (mut where_sql, mut binds) = list_filter(&query);
+    let (scope, scope_binds) = read_scope(&state, user.user_id, "p").await?;
+    where_sql = if where_sql.is_empty() {
+        format!(" WHERE {scope}")
+    } else {
+        format!("{where_sql} AND {scope}")
+    };
+    binds.extend(scope_binds);
     let unmasked = pin_matches(
         &state.pool,
         pin_from(&headers, pin_query(&query)).as_deref(),
@@ -568,6 +575,23 @@ pub async fn index(
 
 fn default_per_page() -> u64 {
     20
+}
+
+/// Pembatasan baca per pekerjaan (`byUserRole()`), T36. Alias `penerima_alias` adalah tabel penerima di query.
+async fn read_scope(
+    state: &AppState,
+    actor: u64,
+    penerima_alias: &str,
+) -> Result<(String, Vec<String>), ApiError> {
+    let roles = auth::login::roles_of(&state.pool, actor)
+        .await
+        .map_err(internal)?;
+    let r = access::restriction(actor, &roles, "sp");
+    let clause = format!(
+        "{penerima_alias}.pekerjaan_id IN (SELECT sp.id FROM tbl_pekerjaan sp WHERE 1=1{})",
+        r.sql
+    );
+    Ok((clause, r.binds.iter().map(u64::to_string).collect()))
 }
 
 /// Daftar dengan `WHERE` tambahan, paginasi atau semua baris (`per_page=-1`).
@@ -642,12 +666,13 @@ pub async fn show(
     Path(id): Path<String>,
     Query(query): Query<HashMap<String, String>>,
 ) -> Result<Response, ApiError> {
-    require_auth(&state, &headers).await?;
+    let user = require_auth(&state, &headers).await?;
     let id = parse_id(&id)?;
     let row = find_row(&state.pool, id)
         .await
         .map_err(internal)?
         .ok_or_else(ApiError::not_found)?;
+    ensure_access(&state, user.user_id, row.pekerjaan_id).await?;
     let unmasked = pin_matches(
         &state.pool,
         pin_from(&headers, pin_query(&query)).as_deref(),
@@ -824,7 +849,9 @@ pub async fn by_pekerjaan(
     Path(pekerjaan_id): Path<String>,
     Query(query): Query<HashMap<String, String>>,
 ) -> Result<Response, ApiError> {
-    require_auth(&state, &headers).await?;
+    let user = require_auth(&state, &headers).await?;
+    let pid_check: i64 = pekerjaan_id.parse().unwrap_or(-1);
+    ensure_access(&state, user.user_id, pid_check).await?;
     let base = format!(
         "{}/api/penerima/pekerjaan/{pekerjaan_id}",
         state.app_url.trim_end_matches('/')
@@ -853,8 +880,9 @@ pub async fn komunal_count(
     headers: HeaderMap,
     Path(pekerjaan_id): Path<String>,
 ) -> Result<Response, ApiError> {
-    require_auth(&state, &headers).await?;
+    let user = require_auth(&state, &headers).await?;
     let pid: i64 = pekerjaan_id.parse().unwrap_or(-1);
+    ensure_access(&state, user.user_id, pid).await?;
     let total: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM tbl_penerima WHERE pekerjaan_id = ?")
         .bind(pid)
         .fetch_one(&state.pool)
@@ -882,9 +910,12 @@ pub async fn summary(
     headers: HeaderMap,
     Query(query): Query<HashMap<String, String>>,
 ) -> Result<Response, ApiError> {
-    require_auth(&state, &headers).await?;
+    let user = require_auth(&state, &headers).await?;
     let mut clauses = vec!["p.pekerjaan_id IN (SELECT id FROM tbl_pekerjaan WHERE is_konsultan = 0 OR is_konsultan IS NULL)".to_string()];
     let mut binds: Vec<String> = Vec::new();
+    let (scope, scope_binds) = read_scope(&state, user.user_id, "p").await?;
+    clauses.push(scope);
+    binds.extend(scope_binds);
     if query
         .get("tahun")
         .is_some_and(|v| !v.is_empty() && v != "0")
@@ -945,9 +976,12 @@ pub async fn rekap(
     headers: HeaderMap,
     Query(query): Query<HashMap<String, String>>,
 ) -> Result<Response, ApiError> {
-    require_auth(&state, &headers).await?;
+    let user = require_auth(&state, &headers).await?;
     let mut clauses = vec!["(pk.is_konsultan = 0 OR pk.is_konsultan IS NULL)".to_string()];
     let mut binds: Vec<String> = Vec::new();
+    let (scope, scope_binds) = read_scope(&state, user.user_id, "p").await?;
+    clauses.push(scope);
+    binds.extend(scope_binds);
     if query.get("tahun").is_some_and(|v| !v.is_empty()) {
         clauses.push("k.tahun_anggaran = ?".into());
         binds.push(query["tahun"].clone());

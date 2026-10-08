@@ -23,7 +23,7 @@ use shared::ApiError;
 use sqlx::{MySql, MySqlPool, QueryBuilder, Row};
 
 use crate::{
-    changes,
+    access, changes,
     format::iso8601_utc,
     foto,
     lookup::carbon_json,
@@ -348,6 +348,24 @@ pub(crate) async fn nested_resource(
     Ok(v)
 }
 
+/// Berkas terlihat untuk pengawas: milik sendiri, atau berjudul bersama yang aktif (sama dengan daftar).
+async fn visible_to_field(pool: &MySqlPool, actor: u64, row: &BerkasRow) -> Result<bool, ApiError> {
+    if row.uploaded_by == Some(actor as i64) {
+        return Ok(true);
+    }
+    let titles = visible_titles(pool).await?;
+    if titles.is_empty() {
+        return Ok(false);
+    }
+    let (shared, shared_binds) = shared_clause(&titles);
+    let sql = format!("SELECT COUNT(*) FROM tbl_berkas WHERE id = ? AND ({shared})");
+    let mut q = sqlx::query_scalar::<_, i64>(&sql).bind(row.id);
+    for b in &shared_binds {
+        q = q.bind(b);
+    }
+    Ok(q.fetch_one(pool).await.map_err(internal)? > 0)
+}
+
 /// `GET /api/berkas`.
 pub async fn index(
     State(state): State<AppState>,
@@ -364,6 +382,16 @@ pub async fn index(
 
     let mut clauses: Vec<String> = Vec::new();
     let mut binds: Vec<String> = Vec::new();
+    // T36: role selain pengawas dibatasi ke pekerjaan yang bisa diakses (`byUserRole()`).
+    // Pengawas tetap memakai aturan milik sendiri + judul bersama (lintas pekerjaan, sesuai Laravel).
+    if !field {
+        let scope = access::restriction(user.user_id, &roles, "sp");
+        clauses.push(format!(
+            "pekerjaan_id IN (SELECT sp.id FROM tbl_pekerjaan sp WHERE 1=1{})",
+            scope.sql
+        ));
+        binds.extend(scope.binds.iter().map(u64::to_string));
+    }
     if query
         .get("tahun")
         .is_some_and(|v| !v.is_empty() && v != "0")
@@ -492,11 +520,27 @@ pub async fn show(
     headers: HeaderMap,
     Path(id): Path<String>,
 ) -> Result<Response, ApiError> {
-    require_auth(&state, &headers).await?;
+    let user = require_auth(&state, &headers).await?;
     let row = find_row(&state.pool, parse_id(&id)?)
         .await
         .map_err(internal)?
         .ok_or_else(ApiError::not_found)?;
+    let roles = auth::login::roles_of(&state.pool, user.user_id)
+        .await
+        .map_err(internal)?;
+    let names: Vec<&str> = roles.iter().map(|(_, n)| n.as_str()).collect();
+    let privileged = names.iter().any(|n| ROLE_PRIVILEGED.contains(n));
+    let field = names.iter().any(|n| ROLE_FIELD.contains(n));
+    if field && !privileged {
+        if !visible_to_field(&state.pool, user.user_id, &row).await? {
+            return Err(ApiError::new(
+                StatusCode::FORBIDDEN,
+                "Anda tidak memiliki akses untuk berkas ini",
+            ));
+        }
+    } else {
+        ensure_scope(&state, user.user_id, row.pekerjaan_id).await?;
+    }
     let data = resource(&state.pool, &state.app_url, &row, false).await?;
     Ok(Json(json!({ "data": data })).into_response())
 }

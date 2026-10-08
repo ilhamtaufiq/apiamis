@@ -311,3 +311,137 @@ async fn penerima_crud_encrypts_and_masks() {
         .unwrap();
     assert_eq!(left, 0);
 }
+
+/// T36: pengawas hanya membaca penerima dari pekerjaan yang di-assign.
+#[tokio::test]
+#[ignore = "butuh DATABASE_URL dan data tbl_pekerjaan"]
+async fn pengawas_reads_penerima_only_for_assigned_pekerjaan() {
+    let url = std::env::var("DATABASE_URL").expect("DATABASE_URL belum di-set");
+    let pool = MySqlPool::connect(&url).await.unwrap();
+    let mail = "uji-penerima-pengawas@example.test";
+    sqlx::query("DELETE FROM users WHERE email = ?")
+        .bind(mail)
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("INSERT INTO users (name, email, password, created_at, updated_at) VALUES ('Uji Pengawas', ?, 'x', NOW(), NOW())")
+        .bind(mail)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let uid: u64 = sqlx::query_scalar("SELECT id FROM users WHERE email = ?")
+        .bind(mail)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    sqlx::query("INSERT IGNORE INTO roles (name, guard_name, created_at, updated_at) VALUES ('pengawas', 'web', NOW(), NOW())")
+        .execute(&pool)
+        .await
+        .unwrap();
+    let role: u64 = sqlx::query_scalar(
+        "SELECT id FROM roles WHERE name = 'pengawas' AND guard_name = 'web' LIMIT 1",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    sqlx::query("INSERT IGNORE INTO model_has_roles (role_id, model_type, model_id) VALUES (?, 'App\\\\Models\\\\User', ?)")
+        .bind(role)
+        .bind(uid)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let token = auth::login::create_token(&pool, uid, "uji-penerima-pengawas")
+        .await
+        .unwrap();
+
+    let assigned: u64 = sqlx::query_scalar("SELECT id FROM tbl_pekerjaan ORDER BY id LIMIT 1")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    let other: u64 =
+        sqlx::query_scalar("SELECT id FROM tbl_pekerjaan WHERE id <> ? ORDER BY id DESC LIMIT 1")
+            .bind(assigned)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    sqlx::query("INSERT INTO user_pekerjaan (user_id, pekerjaan_id, created_at, updated_at) VALUES (?, ?, NOW(), NOW())")
+        .bind(uid)
+        .bind(assigned)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let mut ids = Vec::new();
+    for p in [assigned, other] {
+        let id = sqlx::query("INSERT INTO tbl_penerima (pekerjaan_id, nama, is_komunal, created_at, updated_at) VALUES (?, 'Uji Scope', 0, NOW(), NOW())")
+            .bind(p)
+            .execute(&pool)
+            .await
+            .unwrap()
+            .last_insert_id() as i64;
+        ids.push(id);
+    }
+
+    let (status_ok, _) = send(
+        &pool,
+        Method::GET,
+        &format!("/api/penerima/{}", ids[0]),
+        &token,
+        &[],
+        None,
+    )
+    .await;
+    assert_eq!(status_ok, StatusCode::OK);
+    let (status_other, _) = send(
+        &pool,
+        Method::GET,
+        &format!("/api/penerima/{}", ids[1]),
+        &token,
+        &[],
+        None,
+    )
+    .await;
+    assert_eq!(status_other, StatusCode::FORBIDDEN);
+    let (status_list, list) = send(
+        &pool,
+        Method::GET,
+        "/api/penerima?per_page=-1",
+        &token,
+        &[],
+        None,
+    )
+    .await;
+    assert_eq!(status_list, StatusCode::OK);
+    let listed: Vec<i64> = list["data"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|p| p["id"].as_i64().unwrap())
+        .collect();
+    assert!(listed.contains(&ids[0]));
+    assert!(
+        !listed.contains(&ids[1]),
+        "penerima pekerjaan lain tidak boleh muncul"
+    );
+
+    sqlx::query("DELETE FROM tbl_penerima WHERE id IN (?, ?)")
+        .bind(ids[0])
+        .bind(ids[1])
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("DELETE FROM user_pekerjaan WHERE user_id = ?")
+        .bind(uid)
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("DELETE FROM model_has_roles WHERE model_id = ?")
+        .bind(uid)
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("DELETE FROM users WHERE id = ?")
+        .bind(uid)
+        .execute(&pool)
+        .await
+        .unwrap();
+}
