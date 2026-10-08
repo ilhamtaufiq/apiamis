@@ -572,16 +572,16 @@ Kolom **Status** diisi saat modul dipindah ke Rust. Awalnya semua `belum`.
 
 | No | Method | Path | Controller@action | Middleware | Status |
 | --- | --- | --- | --- | --- | --- |
-| 1 | GET | `/api/permissions` | PermissionController@index | auth:sanctum | belum |
-| 2 | POST | `/api/permissions` | PermissionController@store | auth:sanctum | belum |
-| 3 | GET | `/api/permissions/{id}` | PermissionController@show | auth:sanctum | belum |
-| 4 | PUT/PATCH | `/api/permissions/{id}` | PermissionController@update | auth:sanctum | belum |
-| 5 | DELETE | `/api/permissions/{id}` | PermissionController@destroy | auth:sanctum | belum |
-| 6 | GET | `/api/permissions` | PermissionController@index | auth:sanctum | belum |
-| 7 | POST | `/api/permissions` | PermissionController@store | auth:sanctum | belum |
-| 8 | GET | `/api/permissions/{id}` | PermissionController@show | auth:sanctum | belum |
-| 9 | PUT/PATCH | `/api/permissions/{id}` | PermissionController@update | auth:sanctum | belum |
-| 10 | DELETE | `/api/permissions/{id}` | PermissionController@destroy | auth:sanctum | belum |
+| 1 | GET | `/api/permissions` | PermissionController@index | auth:sanctum | rust |
+| 2 | POST | `/api/permissions` | PermissionController@store | auth:sanctum | rust |
+| 3 | GET | `/api/permissions/{id}` | PermissionController@show | auth:sanctum | rust |
+| 4 | PUT/PATCH | `/api/permissions/{id}` | PermissionController@update | auth:sanctum | rust |
+| 5 | DELETE | `/api/permissions/{id}` | PermissionController@destroy | auth:sanctum | rust |
+| 6 | GET | `/api/permissions` | PermissionController@index | auth:sanctum | rust |
+| 7 | POST | `/api/permissions` | PermissionController@store | auth:sanctum | rust |
+| 8 | GET | `/api/permissions/{id}` | PermissionController@show | auth:sanctum | rust |
+| 9 | PUT/PATCH | `/api/permissions/{id}` | PermissionController@update | auth:sanctum | rust |
+| 10 | DELETE | `/api/permissions/{id}` | PermissionController@destroy | auth:sanctum | rust |
 
 ### route-permissions (9)
 
