@@ -9,7 +9,7 @@
 
 use axum::{
     extract::{Path, Query, RawQuery, State},
-    http::{HeaderMap, HeaderValue, StatusCode},
+    http::{HeaderMap, StatusCode},
     response::{IntoResponse, Response},
     Json,
 };
@@ -29,8 +29,6 @@ use crate::{
 };
 
 pub const FULL_ACCESS_ROLES: &[&str] = &["admin", "manager", "super-admin", "operator"];
-
-pub const PARTIAL_HEADER: &str = "pekerjaan: show belum memakai PekerjaanDetailResource (foto, berkas, penerima, progress, kontrak lengkap belum dipindah)";
 
 const SORTABLE: &[&str] = &[
     "id",
@@ -622,14 +620,6 @@ pub fn summary_requested(query: &HashMap<String, String>) -> bool {
     )
 }
 
-fn partial_header(mut resp: Response) -> Response {
-    resp.headers_mut().insert(
-        "x-partial-response",
-        HeaderValue::from_static(PARTIAL_HEADER),
-    );
-    resp
-}
-
 /// Query string tanpa `page`, untuk `appends($request->query())`.
 pub fn query_without_page(raw: Option<&str>) -> String {
     raw.unwrap_or("")
@@ -718,12 +708,10 @@ pub async fn show(
     State(state): State<AppState>,
     headers: HeaderMap,
     Path(id): Path<String>,
+    Query(query): Query<HashMap<String, String>>,
 ) -> Result<Response, ApiError> {
     let user = require_auth(&state, &headers).await?;
     let roles_full = auth::login::roles_of(&state.pool, user.user_id)
-        .await
-        .map_err(internal)?;
-    let viewer = crate::pekerjaan_rel::viewer(&state.pool, user.user_id, &roles_full)
         .await
         .map_err(internal)?;
     let row = match id.parse::<u64>() {
@@ -741,20 +729,10 @@ pub async fn show(
             "Anda tidak memiliki akses untuk pekerjaan ini",
         ));
     }
-    let rel = load(
-        &state.pool,
-        std::slice::from_ref(&row),
-        Mode {
-            summary: false,
-            unbounded: false,
-        },
-        &viewer,
-    )
-    .await
-    .map_err(internal)?;
-    Ok(partial_header(
-        Json(json!({ "data": to_resource(&row, &rel) })).into_response(),
-    ))
+    let data =
+        crate::pekerjaan_detail::build(&state, &headers, &row, &roles_full, user.user_id, &query)
+            .await?;
+    Ok(Json(json!({ "data": data })).into_response())
 }
 
 #[cfg(test)]

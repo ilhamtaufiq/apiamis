@@ -179,7 +179,7 @@ pub async fn dokumen(
         .collect()
 }
 
-async fn with_dokumen(state: &AppState, p: &PenyediaRow) -> Result<Value, sqlx::Error> {
+pub(crate) async fn with_dokumen(state: &AppState, p: &PenyediaRow) -> Result<Value, sqlx::Error> {
     let docs = dokumen(&state.pool, &state.app_url, p.id).await?;
     Ok(to_resource(p, docs))
 }

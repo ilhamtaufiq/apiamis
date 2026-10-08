@@ -547,6 +547,49 @@ fn truthy(value: Option<&String>) -> bool {
     value.is_some_and(|v| !v.is_empty() && v != "0")
 }
 
+/// Foto satu pekerjaan (urut id), untuk relasi `foto` pada detail pekerjaan.
+pub(crate) async fn rows_for_pekerjaan(
+    pool: &MySqlPool,
+    pekerjaan_id: i64,
+) -> Result<Vec<FotoRow>, ApiError> {
+    let sql = format!("{SELECT_FOTO} WHERE pekerjaan_id = ? ORDER BY id");
+    sqlx::query(&sql)
+        .bind(pekerjaan_id)
+        .fetch_all(pool)
+        .await
+        .map_err(media::internal)?
+        .iter()
+        .map(map_row)
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(media::internal)
+}
+
+/// `FotoResource` tanpa relasi `pekerjaan`, `penerima`, dan `komponen` (tidak dimuat pada detail pekerjaan).
+pub(crate) async fn nested_resource(
+    pool: &MySqlPool,
+    app_url: &str,
+    row: &FotoRow,
+) -> Result<Value, ApiError> {
+    let (foto_url, thumb_url) = media::first_urls(pool, app_url, MODEL, row.id as u64, COLLECTION)
+        .await
+        .map_err(media::internal)?;
+    Ok(json!({
+        "id": row.id,
+        "pekerjaan_id": row.pekerjaan_id,
+        "komponen_id": row.komponen_id,
+        "penerima_id": row.penerima_id,
+        "keterangan": row.keterangan,
+        "koordinat": row.koordinat,
+        "validasi_koordinat": row.validasi_koordinat,
+        "validasi_koordinat_message": row.validasi_koordinat_message,
+        "unit_index": row.unit_index,
+        "foto_url": foto_url,
+        "foto_thumb_url": if thumb_url.is_empty() { foto_url.clone() } else { thumb_url },
+        "created_at": iso8601_utc(row.created_at),
+        "updated_at": iso8601_utc(row.updated_at),
+    }))
+}
+
 /// `GET /api/foto`. Foto difilter lewat pekerjaan induknya dengan scope `byUserRole()`.
 /// `pekerjaan_id` (jika ada) mengembalikan semua foto tanpa paginasi, seperti Laravel.
 pub async fn index(

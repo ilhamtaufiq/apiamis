@@ -318,6 +318,36 @@ async fn ensure_pekerjaan_exists(pool: &MySqlPool, id: i64) -> Result<(), ApiErr
 // Daftar dan jenis dokumen
 // ---------------------------------------------------------------------------
 
+/// Berkas satu pekerjaan (urut id), untuk relasi `berkas` pada detail pekerjaan.
+pub(crate) async fn rows_for_pekerjaan(
+    pool: &MySqlPool,
+    pekerjaan_id: i64,
+) -> Result<Vec<BerkasRow>, ApiError> {
+    let sql = format!("{SELECT_BERKAS} WHERE pekerjaan_id = ? ORDER BY id");
+    sqlx::query(&sql)
+        .bind(pekerjaan_id)
+        .fetch_all(pool)
+        .await
+        .map_err(internal)?
+        .iter()
+        .map(map_row)
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(internal)
+}
+
+/// `BerkasResource` dengan `uploader`, tanpa `pekerjaan` (sama dengan relasi yang dimuat pada detail).
+pub(crate) async fn nested_resource(
+    pool: &MySqlPool,
+    app_url: &str,
+    row: &BerkasRow,
+) -> Result<Value, ApiError> {
+    let mut v = resource(pool, app_url, row, true).await?;
+    if let Some(o) = v.as_object_mut() {
+        o.remove("pekerjaan");
+    }
+    Ok(v)
+}
+
 /// `GET /api/berkas`.
 pub async fn index(
     State(state): State<AppState>,

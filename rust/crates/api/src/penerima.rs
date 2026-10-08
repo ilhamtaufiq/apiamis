@@ -495,6 +495,51 @@ fn list_filter(query: &HashMap<String, String>) -> (String, Vec<String>) {
     (sql, binds)
 }
 
+/// Penerima satu pekerjaan (urut id), untuk relasi `penerima` pada detail pekerjaan.
+pub(crate) async fn rows_for_pekerjaan(
+    pool: &MySqlPool,
+    pekerjaan_id: i64,
+) -> Result<Vec<PenerimaRow>, ApiError> {
+    let sql = format!("{SELECT_PENERIMA} WHERE pekerjaan_id = ? ORDER BY id");
+    sqlx::query(&sql)
+        .bind(pekerjaan_id)
+        .fetch_all(pool)
+        .await
+        .map_err(internal)?
+        .iter()
+        .map(map_row)
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(internal)
+}
+
+/// `PenerimaResource` tanpa relasi `pekerjaan` (tidak dimuat pada detail pekerjaan).
+pub(crate) async fn nested(rows: &[PenerimaRow], unmasked: bool) -> Result<Vec<Value>, ApiError> {
+    let key = if rows.iter().any(|r| r.nik.is_some() || r.alamat.is_some()) {
+        app_key()?
+    } else {
+        Vec::new()
+    };
+    let empty = HashMap::new();
+    rows.iter()
+        .map(|r| {
+            let mut v = resource(r, unmasked, &key, &empty)?;
+            if let Some(o) = v.as_object_mut() {
+                o.remove("pekerjaan");
+            }
+            Ok(v)
+        })
+        .collect()
+}
+
+/// PIN pada request cocok dengan `app_settings.penerima_pin` (sama dengan daftar penerima).
+pub(crate) async fn unmasked_for(
+    pool: &MySqlPool,
+    headers: &HeaderMap,
+    query: &HashMap<String, String>,
+) -> Result<bool, ApiError> {
+    pin_matches(pool, pin_from(headers, pin_query(query)).as_deref()).await
+}
+
 /// `GET /api/penerima`.
 pub async fn index(
     State(state): State<AppState>,

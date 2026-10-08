@@ -28,6 +28,7 @@ pub mod media;
 pub mod notify;
 pub mod pagination;
 pub mod pekerjaan;
+pub mod pekerjaan_detail;
 pub mod pekerjaan_rel;
 pub mod pekerjaan_write;
 pub mod penerima;

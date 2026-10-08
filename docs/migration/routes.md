@@ -12,8 +12,8 @@ Sumber: `routes/api.php` (branch `rust`, dari `main` SHA `c19fd06`). Dibuat deng
 
 ### Status paritas (diperbarui)
 
-- Sudah di Rust: **45** (termasuk auth, lookup, kecamatan, desa, kegiatan, penyedia, tiket GET, checklist GET, foto dan penerima seluruh rute, berkas kecuali export-pdf dan upload-from-url)
-- Parsial di Rust: **3** (`GET /api/pekerjaan`, `GET /api/pekerjaan/{id}`, dan `PUT/PATCH /api/pekerjaan/{id}`; scope sudah ada, tetapi relasi belum lengkap: lihat T21, T25, dan T31)
+- Sudah di Rust: **47** (termasuk auth, lookup, kecamatan, desa, kegiatan, penyedia, tiket GET, checklist GET, foto dan penerima seluruh rute, berkas kecuali export-pdf dan upload-from-url)
+- Parsial di Rust: **1** (`GET /api/pekerjaan`: relasi daftar belum dibandingkan dengan produksi, lihat T21)
 - Belum: **438** (dihitung ulang setelah penerima dan berkas; termasuk export-pdf dan upload-from-url berkas, serta modul lain yang belum dipindah)
 
 Cara menghitung: cocokkan method dan path (`{param}` dinormalisasi) dengan route yang terdaftar di `rust/crates/api/src/lib.rs`.
@@ -155,7 +155,7 @@ Kolom **Status** diisi saat modul dipindah ke Rust. Awalnya semua `belum`.
 | --- | --- | --- | --- | --- | --- |
 | 1 | GET | `/api/pekerjaan/document-register` | PekerjaanController@documentRegister | auth:sanctum | belum |
 | 2 | GET | `/api/pekerjaan/kecamatan/{kecamatanId}` | PekerjaanController@byKecamatan | auth:sanctum | belum |
-| 3 | GET | `/api/pekerjaan/desa/{desaId}` | PekerjaanController@byDesa | auth:sanctum | belum |
+| 3 | GET | `/api/pekerjaan/desa/{desaId}` | PekerjaanController@byDesa | auth:sanctum | rust |
 | 4 | GET | `/api/pekerjaan/kegiatan/{kegiatanId}` | PekerjaanController@byKegiatan | auth:sanctum | belum |
 | 5 | GET | `/api/pekerjaan/kecamatan/{kecamatanId}/desa/{desaId}` | PekerjaanController@byKecamatanDesa | auth:sanctum | belum |
 | 6 | GET | `/api/pekerjaan/stats/pagu-kecamatan/{kecamatanId}` | PekerjaanController@totalPaguByKecamatan | auth:sanctum | belum |
@@ -164,8 +164,8 @@ Kolom **Status** diisi saat modul dipindah ke Rust. Awalnya semua `belum`.
 | 9 | GET | `/api/pekerjaan/import/template` | PekerjaanController@downloadTemplate | auth:sanctum | belum |
 | 10 | GET | `/api/pekerjaan` | PekerjaanController@index | auth:sanctum | parsial |
 | 11 | POST | `/api/pekerjaan` | PekerjaanController@store | auth:sanctum | belum |
-| 12 | GET | `/api/pekerjaan/{id}` | PekerjaanController@show | auth:sanctum | parsial |
-| 13 | PUT/PATCH | `/api/pekerjaan/{id}` | PekerjaanController@update | auth:sanctum | parsial |
+| 12 | GET | `/api/pekerjaan/{id}` | PekerjaanController@show | auth:sanctum | rust |
+| 13 | PUT/PATCH | `/api/pekerjaan/{id}` | PekerjaanController@update | auth:sanctum | rust |
 | 14 | DELETE | `/api/pekerjaan/{id}` | PekerjaanController@destroy | auth:sanctum | belum |
 | 15 | GET | `/api/pekerjaan/{pekerjaan}/media` | PekerjaanController@media | auth:sanctum | belum |
 | 16 | GET | `/api/pekerjaan/{pekerjaan}/download-all-berkas` | PekerjaanController@downloadAllBerkas | auth:sanctum | belum |

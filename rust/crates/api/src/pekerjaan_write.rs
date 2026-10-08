@@ -19,7 +19,7 @@ use serde_json::{json, Map, Value};
 use shared::ApiError;
 use sqlx::{MySql, MySqlPool, QueryBuilder};
 
-use crate::{desa::internal, pekerjaan, pekerjaan_rel, require_auth, AppState};
+use crate::{desa::internal, pekerjaan, require_auth, AppState};
 
 type Errors = BTreeMap<String, Vec<String>>;
 
@@ -521,29 +521,20 @@ pub async fn update(
         .await
         .map_err(internal)?
         .ok_or_else(ApiError::not_found)?;
+    // Laravel mengembalikan PekerjaanDetailResource setelah update.
     let roles = auth::login::roles_of(&state.pool, user.user_id)
         .await
         .map_err(internal)?;
-    let viewer = pekerjaan_rel::viewer(&state.pool, user.user_id, &roles)
-        .await
-        .map_err(internal)?;
-    let rel = pekerjaan::load(
-        &state.pool,
-        std::slice::from_ref(&row),
-        pekerjaan::Mode {
-            summary: false,
-            unbounded: false,
-        },
-        &viewer,
+    let data = crate::pekerjaan_detail::build(
+        &state,
+        &headers,
+        &row,
+        &roles,
+        user.user_id,
+        &std::collections::HashMap::new(),
     )
-    .await
-    .map_err(internal)?;
-    let mut response = Json(json!({ "data": pekerjaan::to_resource(&row, &rel) })).into_response();
-    response.headers_mut().insert(
-        "x-partial-response",
-        axum::http::HeaderValue::from_static(pekerjaan::PARTIAL_HEADER),
-    );
-    Ok(response)
+    .await?;
+    Ok(Json(json!({ "data": data })).into_response())
 }
 
 #[cfg(test)]
