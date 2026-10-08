@@ -89,6 +89,7 @@ pub mod search;
 pub mod signature_library;
 pub mod sipd_pekerjaan_links;
 pub mod route_permission;
+pub mod route_permissions;
 pub mod session;
 pub mod sk;
 pub mod spam_integration;
@@ -364,6 +365,29 @@ pub fn app(config: &Config, state: AppState) -> Router {
                 .put(roles::update)
                 .patch(roles::update)
                 .delete(roles::destroy),
+        )
+        .route(
+            "/api/route-permissions/check-access",
+            post(route_permissions::check),
+        )
+        .route(
+            "/api/route-permissions/rules",
+            get(route_permissions::rules),
+        )
+        .route(
+            "/api/route-permissions/user/accessible",
+            get(route_permissions::accessible),
+        )
+        .route(
+            "/api/route-permissions",
+            get(route_permissions::index).post(route_permissions::store),
+        )
+        .route(
+            "/api/route-permissions/{id}",
+            get(route_permissions::show)
+                .put(route_permissions::update)
+                .patch(route_permissions::update)
+                .delete(route_permissions::destroy),
         )
         .route(
             "/api/master-fase-pekerjaan",
