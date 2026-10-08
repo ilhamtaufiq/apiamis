@@ -5,6 +5,8 @@
 //! Alur sama dengan Sanctum: cari baris berdasarkan `id`, cocokkan hash,
 //! cek kedaluwarsa, lalu pastikan user pemilik token ada.
 
+pub mod permission;
+
 use sha2::{Digest, Sha256};
 use sqlx::{MySqlPool, Row};
 use subtle::ConstantTimeEq;

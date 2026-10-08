@@ -28,7 +28,7 @@ Setiap kali ada langkah yang selesai, tambahkan entri di bagian **Riwayat** dan 
 - [~] 1.4 CI: `fmt`, `clippy`, `test`, dan job integrasi MySQL (`.github/workflows/rust.yml`). Workflow belum pernah dijalankan di GitHub
 - [x] 1.5 Validasi token Sanctum di `crates/auth`: lookup ke `personal_access_tokens`, cek tipe user, hash sha256, kedaluwarsa, dan user pemilik. Diuji 7 test integrasi terhadap data dump asli (MariaDB lokal). Belum diuji end-to-end dengan plain token asli, karena dump hanya menyimpan hash
 - [ ] 1.6 Login email/password (bcrypt) dan Google OAuth
-- [ ] 1.7 Permission Spatie dan middleware permission route, dengan matriks test
+- [x] 1.7 Permission Spatie dan middleware route permission (`crates/auth/src/permission.rs`, `crates/api/src/route_permission.rs`). Matriks keputusan 13 kasus lolos, tes DB terhadap tabel `roles`, `model_has_roles`, dan `route_permissions` lolos, smoke test server cocok dengan 403 Laravel. Belum ada: maintenance gate (`EnsureNotInMaintenance`)
 - [ ] 1.8 Impersonation dengan penanda token dan audit log
 
 ### Fase 2: Modul bisnis (4–7 bulan)
@@ -119,4 +119,5 @@ Setiap kali ada langkah yang selesai, tambahkan entri di bagian **Riwayat** dan 
 | 2026-10-08 | 0.4 Rekaman dengan token | Daftar `kecamatan` (33), `desa` (15 per halaman), `kegiatan` (15), dan `pekerjaan` (20) direkam. Field pribadi dihapus: NIP, telepon, email, nama PPTK, nama pengawas dan pendamping. Token uji dicabut dan sekarang 401. Dua respon 404 tidak disimpan karena berisi stack trace (T11) |
 | 2026-10-08 | 2.2 GET /api/kecamatan di Rust | Endpoint dengan auth token Sanctum, query `tbl_kecamatan` + hitungan `tbl_desa`, dan mapping sama dengan `KecamatanResource`. Uji: mapping cocok 100% dengan fixture live (33 baris), uji DB lolos, smoke test server lokal: 401/401/200. Temuan saat uji: kolom TIMESTAMP harus dibaca sebagai `DateTime<Utc>` |
 | 2026-10-08 | 2.2 desa dan kegiatan di Rust | `GET /api/desa` (search, kecamatan_id, paginasi) dan `GET /api/kegiatan` (tahun, per_page=-1, paginasi). Uji: fixture halaman 1 cocok persis (termasuk meta dan links), paritas DB kegiatan cocok kecuali T14. Pagination untuk halaman selain 1 belum diverifikasi terhadap Laravel |
+| 2026-10-08 | 1.7 Route permission | Port `CheckRoutePermission`: admin bypass, whitelist, rule `route_permissions` (exact lalu `:param`), admin-only, dan mutasi tanpa rule. Pesan 403 sama dengan Laravel. Catch-all `/api/*` memastikan path yang belum dipindah juga dicek. Batasan: request tanpa token ke route yang belum ada di Rust mendapat 404, bukan 401 |
 | 2026-10-08 | Ruang lingkup diperluas | Repo punya lebih banyak modul dari rencana awal: blog, kanban, live chat, procurement SPSE, SIPD, Puspen, tanda tangan PDF, Google Drive, backup, dan WhatsApp. Perlu dimasukkan ke daftar modul Fase 2 |

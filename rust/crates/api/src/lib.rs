@@ -4,7 +4,7 @@ use axum::{
     extract::DefaultBodyLimit,
     http::{header, HeaderValue, Method, StatusCode},
     response::{IntoResponse, Response},
-    routing::get,
+    routing::{any, get},
     Json, Router,
 };
 use serde_json::{json, Value};
@@ -14,6 +14,7 @@ pub mod format;
 pub mod kecamatan;
 pub mod kegiatan;
 pub mod pagination;
+pub mod route_permission;
 
 use tower_http::{
     cors::{AllowHeaders, AllowMethods, AllowOrigin, CorsLayer},
@@ -65,6 +66,7 @@ pub async fn require_auth(
 
 /// Router utama. Dipisah dari `main` supaya bisa diuji tanpa membuka port.
 pub fn app(config: &Config, state: AppState) -> Router {
+    let permission_state = state.clone();
     Router::new()
         // Sama seperti `health: '/up'` di bootstrap/app.php (Laravel).
         .route("/up", get(up))
@@ -72,7 +74,14 @@ pub fn app(config: &Config, state: AppState) -> Router {
         .route("/api/kecamatan", get(kecamatan::index))
         .route("/api/desa", get(desa::index))
         .route("/api/kegiatan", get(kegiatan::index))
+        // Catch-all untuk /api: route yang belum ada di Rust tetap lewat pengecekan
+        // permission (Laravel menolak lebih dulu, bukan 404).
+        .route("/api/{*rest}", any(not_found))
         .with_state(state)
+        .route_layer(axum::middleware::from_fn_with_state(
+            permission_state,
+            route_permission::check,
+        ))
         .fallback(not_found)
         .layer(TimeoutLayer::with_status_code(
             StatusCode::REQUEST_TIMEOUT,
