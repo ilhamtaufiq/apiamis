@@ -206,13 +206,13 @@ Kolom **Status** diisi saat modul dipindah ke Rust. Awalnya semua `belum`.
 
 | No | Method | Path | Controller@action | Middleware | Status |
 | --- | --- | --- | --- | --- | --- |
-| 1 | GET | `/api/user-pekerjaan` | UserPekerjaanController@index | auth:sanctum,role:admin | belum |
-| 2 | POST | `/api/user-pekerjaan` | UserPekerjaanController@store | auth:sanctum,role:admin | belum |
-| 3 | DELETE | `/api/user-pekerjaan/{id}` | UserPekerjaanController@destroy | auth:sanctum,role:admin | belum |
-| 4 | GET | `/api/user-pekerjaan/user/{userId}` | UserPekerjaanController@byUser | auth:sanctum,role:admin | belum |
-| 5 | GET | `/api/user-pekerjaan/pekerjaan/{pekerjaanId}` | UserPekerjaanController@byPekerjaan | auth:sanctum,role:admin | belum |
-| 6 | GET | `/api/user-pekerjaan/available-users` | UserPekerjaanController@availableUsers | auth:sanctum,role:admin | belum |
-| 7 | GET | `/api/user-pekerjaan/completeness-gaps` | UserPekerjaanController@completenessGaps | auth:sanctum,role:admin | belum |
+| 1 | GET | `/api/user-pekerjaan` | UserPekerjaanController@index | auth:sanctum,role:admin | rust |
+| 2 | POST | `/api/user-pekerjaan` | UserPekerjaanController@store | auth:sanctum,role:admin | rust |
+| 3 | DELETE | `/api/user-pekerjaan/{id}` | UserPekerjaanController@destroy | auth:sanctum,role:admin | rust |
+| 4 | GET | `/api/user-pekerjaan/user/{userId}` | UserPekerjaanController@byUser | auth:sanctum,role:admin | rust |
+| 5 | GET | `/api/user-pekerjaan/pekerjaan/{pekerjaanId}` | UserPekerjaanController@byPekerjaan | auth:sanctum,role:admin | rust |
+| 6 | GET | `/api/user-pekerjaan/available-users` | UserPekerjaanController@availableUsers | auth:sanctum,role:admin | rust |
+| 7 | GET | `/api/user-pekerjaan/completeness-gaps` | UserPekerjaanController@completenessGaps | auth:sanctum,role:admin | rust |
 | 8 | POST | `/api/user-pekerjaan/broadcast-reminders` | UserPekerjaanController@broadcastReminders | auth:sanctum,role:admin | belum |
 
 ### data-quality (3)
