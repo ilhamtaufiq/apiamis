@@ -354,15 +354,15 @@ Kolom **Status** diisi saat modul dipindah ke Rust. Awalnya semua `belum`.
 
 | No | Method | Path | Controller@action | Middleware | Status |
 | --- | --- | --- | --- | --- | --- |
-| 1 | GET | `/api/survey-lokasi/stats` | SurveyLokasiController@stats | auth:sanctum | belum |
-| 2 | GET | `/api/survey-lokasi` | SurveyLokasiController@index | auth:sanctum | belum |
-| 3 | POST | `/api/survey-lokasi` | SurveyLokasiController@store | auth:sanctum | belum |
-| 4 | GET | `/api/survey-lokasi/{id}` | SurveyLokasiController@show | auth:sanctum | belum |
-| 5 | PUT/PATCH | `/api/survey-lokasi/{id}` | SurveyLokasiController@update | auth:sanctum | belum |
-| 6 | DELETE | `/api/survey-lokasi/{id}` | SurveyLokasiController@destroy | auth:sanctum | belum |
-| 7 | POST | `/api/survey-lokasi/{survey_lokasi}/verifikasi` | SurveyLokasiController@verifikasi | auth:sanctum,role:admin | belum |
-| 8 | POST | `/api/survey-lokasi/{survey_lokasi}/foto` | SurveyLokasiController@uploadFoto | auth:sanctum | belum |
-| 9 | DELETE | `/api/survey-lokasi/{survey_lokasi}/foto/{mediaId}` | SurveyLokasiController@deleteFoto | auth:sanctum | belum |
+| 1 | GET | `/api/survey-lokasi/stats` | SurveyLokasiController@stats | auth:sanctum | rust |
+| 2 | GET | `/api/survey-lokasi` | SurveyLokasiController@index | auth:sanctum | rust |
+| 3 | POST | `/api/survey-lokasi` | SurveyLokasiController@store | auth:sanctum | rust |
+| 4 | GET | `/api/survey-lokasi/{id}` | SurveyLokasiController@show | auth:sanctum | rust |
+| 5 | PUT/PATCH | `/api/survey-lokasi/{id}` | SurveyLokasiController@update | auth:sanctum | rust |
+| 6 | DELETE | `/api/survey-lokasi/{id}` | SurveyLokasiController@destroy | auth:sanctum | rust |
+| 7 | POST | `/api/survey-lokasi/{survey_lokasi}/verifikasi` | SurveyLokasiController@verifikasi | auth:sanctum,role:admin | rust |
+| 8 | POST | `/api/survey-lokasi/{survey_lokasi}/foto` | SurveyLokasiController@uploadFoto | auth:sanctum | rust |
+| 9 | DELETE | `/api/survey-lokasi/{survey_lokasi}/foto/{mediaId}` | SurveyLokasiController@deleteFoto | auth:sanctum | rust |
 
 ### survey-tugas (6)
 
