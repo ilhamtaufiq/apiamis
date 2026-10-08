@@ -12,6 +12,7 @@ use shared::{ApiError, Config};
 pub mod access;
 pub mod audit;
 pub mod audit_logs;
+pub mod auth_oauth;
 pub mod auth_routes;
 pub mod berita_acara;
 pub mod berkas;
@@ -197,6 +198,13 @@ pub fn app(config: &Config, state: AppState) -> Router {
                 .delete(pengawas_write::destroy),
         )
         .route("/api/auth/login", post(auth_routes::login))
+        .route("/api/auth/handoff", post(auth_oauth::create_handoff))
+        .route("/api/auth/handoff/exchange", post(auth_oauth::exchange_handoff))
+        .route("/api/auth/google", get(auth_oauth::redirect_to_google))
+        .route(
+            "/api/auth/google/callback",
+            get(auth_oauth::handle_google_callback),
+        )
         .route("/api/auth/me", get(auth_routes::me))
         .route("/api/user", get(users_write::me_raw))
         .route("/api/berkas/{id}/export-pdf", get(onlyoffice::berkas_export_pdf))
