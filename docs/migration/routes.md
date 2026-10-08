@@ -12,9 +12,9 @@ Sumber: `routes/api.php` (branch `rust`, dari `main` SHA `c19fd06`). Dibuat deng
 
 ### Status paritas (diperbarui)
 
-- Sudah di Rust: **221** (termasuk dokumen kontrak SPK, cover, ZIP cover, BAP, dan bap-context, serta PDF SPK lewat ONLYOFFICE; termasuk auth, lookup, kecamatan, desa, kegiatan, penyedia, tiket GET, checklist GET, foto dan penerima seluruh rute, berkas kecuali export-pdf dan upload-from-url, kontrak CRUD, relasi pekerjaan/kegiatan/penyedia, excel export, template, dan impor kontrak, addendum dan register-gaps GET, sk, notifikasi, dan master fase pekerjaan)
+- Sudah di Rust: **273** (termasuk dokumen kontrak SPK, cover, ZIP cover, BAP, dan bap-context, serta PDF SPK lewat ONLYOFFICE; termasuk auth, lookup, kecamatan, desa, kegiatan, penyedia, tiket GET, checklist GET, foto dan penerima seluruh rute, berkas kecuali export-pdf dan upload-from-url, kontrak CRUD, relasi pekerjaan/kegiatan/penyedia, excel export, template, dan impor kontrak, addendum dan register-gaps GET, sk, notifikasi, dan master fase pekerjaan)
 - Parsial di Rust: **2** (`GET /api/pekerjaan`: relasi daftar belum dibandingkan dengan produksi, lihat T21)
-- Belum: **187** (dihitung langsung dari kolom Status; termasuk addendum, export Excel draft, progress estimasi, destroy pekerjaan, dan modul lain yang belum dipindah)
+- Belum: **135** (dihitung langsung dari kolom Status; termasuk addendum, export Excel draft, progress estimasi, destroy pekerjaan, dan modul lain yang belum dipindah)
 - Dihapus (tidak dimigrasi): **77** (termasuk desa sync-kk, chat AI dan live-chat, panduan CMS, presence, search ai-summary, dan pengaturan AI di app-settings, sesuai keputusan user)
 
 Cara menghitung: cocokkan method dan path (`{param}` dinormalisasi) dengan route yang terdaftar di `rust/crates/api/src/lib.rs`.
@@ -156,24 +156,24 @@ Kolom **Status** diisi saat modul dipindah ke Rust. Awalnya semua `belum`.
 | No | Method | Path | Controller@action | Middleware | Status |
 | --- | --- | --- | --- | --- | --- |
 | 1 | GET | `/api/pekerjaan/document-register` | PekerjaanController@documentRegister | auth:sanctum | belum |
-| 2 | GET | `/api/pekerjaan/kecamatan/{kecamatanId}` | PekerjaanController@byKecamatan | auth:sanctum | belum |
+| 2 | GET | `/api/pekerjaan/kecamatan/{kecamatanId}` | PekerjaanController@byKecamatan | auth:sanctum | rust |
 | 3 | GET | `/api/pekerjaan/desa/{desaId}` | PekerjaanController@byDesa | auth:sanctum | rust |
-| 4 | GET | `/api/pekerjaan/kegiatan/{kegiatanId}` | PekerjaanController@byKegiatan | auth:sanctum | belum |
-| 5 | GET | `/api/pekerjaan/kecamatan/{kecamatanId}/desa/{desaId}` | PekerjaanController@byKecamatanDesa | auth:sanctum | belum |
-| 6 | GET | `/api/pekerjaan/stats/pagu-kecamatan/{kecamatanId}` | PekerjaanController@totalPaguByKecamatan | auth:sanctum | belum |
-| 7 | GET | `/api/pekerjaan/stats/pagu-kegiatan/{kegiatanId}` | PekerjaanController@totalPaguByKegiatan | auth:sanctum | belum |
-| 8 | POST | `/api/pekerjaan/import` | PekerjaanController@import | auth:sanctum | belum |
-| 9 | GET | `/api/pekerjaan/import/template` | PekerjaanController@downloadTemplate | auth:sanctum | belum |
+| 4 | GET | `/api/pekerjaan/kegiatan/{kegiatanId}` | PekerjaanController@byKegiatan | auth:sanctum | rust |
+| 5 | GET | `/api/pekerjaan/kecamatan/{kecamatanId}/desa/{desaId}` | PekerjaanController@byKecamatanDesa | auth:sanctum | rust |
+| 6 | GET | `/api/pekerjaan/stats/pagu-kecamatan/{kecamatanId}` | PekerjaanController@totalPaguByKecamatan | auth:sanctum | rust |
+| 7 | GET | `/api/pekerjaan/stats/pagu-kegiatan/{kegiatanId}` | PekerjaanController@totalPaguByKegiatan | auth:sanctum | rust |
+| 8 | POST | `/api/pekerjaan/import` | PekerjaanController@import | auth:sanctum | rust |
+| 9 | GET | `/api/pekerjaan/import/template` | PekerjaanController@downloadTemplate | auth:sanctum | rust |
 | 10 | GET | `/api/pekerjaan` | PekerjaanController@index | auth:sanctum | parsial |
-| 11 | POST | `/api/pekerjaan` | PekerjaanController@store | auth:sanctum | belum |
+| 11 | POST | `/api/pekerjaan` | PekerjaanController@store | auth:sanctum | rust |
 | 12 | GET | `/api/pekerjaan/{id}` | PekerjaanController@show | auth:sanctum | rust |
 | 13 | PUT/PATCH | `/api/pekerjaan/{id}` | PekerjaanController@update | auth:sanctum | rust |
-| 14 | DELETE | `/api/pekerjaan/{id}` | PekerjaanController@destroy | auth:sanctum | belum |
-| 15 | GET | `/api/pekerjaan/{pekerjaan}/media` | PekerjaanController@media | auth:sanctum | belum |
-| 16 | GET | `/api/pekerjaan/{pekerjaan}/download-all-berkas` | PekerjaanController@downloadAllBerkas | auth:sanctum | belum |
+| 14 | DELETE | `/api/pekerjaan/{id}` | PekerjaanController@destroy | auth:sanctum | rust |
+| 15 | GET | `/api/pekerjaan/{pekerjaan}/media` | PekerjaanController@media | auth:sanctum | rust |
+| 16 | GET | `/api/pekerjaan/{pekerjaan}/download-all-berkas` | PekerjaanController@downloadAllBerkas | auth:sanctum | rust |
 | 17 | POST | `/api/pekerjaan/{pekerjaan}/berkas/quick-share` | BerkasController@quickShareForPekerjaan | auth:sanctum | dihapus |
-| 18 | GET | `/api/pekerjaan/{pekerjaanId}/progress-estimasi` | PekerjaanProgressEstimasiController@show | auth:sanctum | belum |
-| 19 | PUT | `/api/pekerjaan/{pekerjaanId}/progress-estimasi` | PekerjaanProgressEstimasiController@update | auth:sanctum | belum |
+| 18 | GET | `/api/pekerjaan/{pekerjaanId}/progress-estimasi` | PekerjaanProgressEstimasiController@show | auth:sanctum | rust |
+| 19 | PUT | `/api/pekerjaan/{pekerjaanId}/progress-estimasi` | PekerjaanProgressEstimasiController@update | auth:sanctum | rust |
 
 ### menu-permissions (6)
 
