@@ -311,12 +311,16 @@ pub fn app(config: &Config, state: AppState) -> Router {
                 .delete(document_types_write::destroy_type),
         )
         .route("/api/penyedia", get(penyedia::index).post(penyedia_write::store))
-        .route("/api/pekerjaan", get(pekerjaan::index))
+        .route(
+            "/api/pekerjaan",
+            get(pekerjaan::index).post(pekerjaan_write::store),
+        )
         .route(
             "/api/pekerjaan/{id}",
             get(pekerjaan::show)
                 .put(pekerjaan_write::update)
-                .patch(pekerjaan_write::update),
+                .patch(pekerjaan_write::update)
+                .delete(pekerjaan_write::destroy),
         )
         .route(
             "/api/foto",
