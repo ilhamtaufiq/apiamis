@@ -41,7 +41,6 @@ use App\Http\Controllers\RoleController;
 use App\Http\Controllers\SkController;
 use App\Http\Controllers\RoutePermissionController;
 use App\Http\Controllers\SignatureLibraryController;
-use App\Http\Controllers\ArumanisInsightController;
 use App\Http\Controllers\SpamUnitController;
 use App\Http\Controllers\SpmSanitasiController;
 use App\Http\Controllers\SurveyLokasiController;
@@ -273,7 +272,6 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('kontrak/penyedia/{penyediaId}', [KontrakController::class, 'byPenyedia']);
     Route::get('kontrak/{id}/export', [KontrakController::class, 'export']);
     Route::get('kontrak-addendums/register-gaps', [KontrakAddendumController::class, 'registerGaps']);
-    Route::post('kontrak-addendums/register-gaps/{registerId}/notify-pengawas', [KontrakAddendumController::class, 'notifyRegisterGapPengawas']);
     Route::get('kontrak-addendums', [KontrakAddendumController::class, 'all']);
     Route::get('kontrak/{kontrak}/addendums', [KontrakAddendumController::class, 'index']);
     Route::get('kontrak/{kontrak}/addendum-register-gaps', [KontrakAddendumController::class, 'registerGapsForKontrak']);
@@ -476,8 +474,5 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // ONLYOFFICE editor config (authenticated)
     Route::get('onlyoffice/media/{media}/config', [OnlyOfficeController::class, 'config']);
-
-    // Arumanis insight
-    Route::get('arumanis-insight', [\App\Http\Controllers\ArumanisInsightController::class, 'index']);
 
 });

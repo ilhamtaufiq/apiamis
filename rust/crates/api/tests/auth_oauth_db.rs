@@ -220,6 +220,8 @@ async fn stub_google(token_ok: bool, userinfo: Value) -> auth_oauth::GoogleEndpo
         auth: format!("http://{addr}/auth"),
         token: format!("http://{addr}/token"),
         userinfo: format!("http://{addr}/userinfo"),
+        // Tidak ada route /people di stub: People API gagal dan gender tetap NULL.
+        people: format!("http://{addr}/people"),
     }
 }
 

@@ -62,6 +62,8 @@ const GOOGLE_SCOPES: &[&str] = &[
 const GOOGLE_AUTH_URL: &str = "https://accounts.google.com/o/oauth2/auth";
 const GOOGLE_TOKEN_URL: &str = "https://www.googleapis.com/oauth2/v4/token";
 const GOOGLE_USERINFO_URL: &str = "https://www.googleapis.com/oauth2/v3/userinfo";
+/// People API: `genders` tidak ada di userinfo, jadi diambil dari sini (scope `user.gender.read`).
+const GOOGLE_PEOPLE_URL: &str = "https://people.googleapis.com/v1/people/me?personFields=genders";
 
 const GOOGLE_FAILED_MESSAGE: &str = "Google authentication failed. Please try again.";
 const MAINTENANCE_MESSAGE: &str = "Aplikasi sedang maintenance. Login ditutup sementara.";
@@ -449,6 +451,7 @@ pub struct GoogleEndpoints {
     pub auth: String,
     pub token: String,
     pub userinfo: String,
+    pub people: String,
 }
 
 impl Default for GoogleEndpoints {
@@ -457,6 +460,7 @@ impl Default for GoogleEndpoints {
             auth: GOOGLE_AUTH_URL.to_string(),
             token: GOOGLE_TOKEN_URL.to_string(),
             userinfo: GOOGLE_USERINFO_URL.to_string(),
+            people: GOOGLE_PEOPLE_URL.to_string(),
         }
     }
 }
@@ -582,11 +586,36 @@ impl GoogleClient {
         if !res.status().is_success() {
             return Err(format!("userinfo endpoint returned {}", res.status()));
         }
-        let raw: Value = res
+        let mut raw: Value = res
             .json()
             .await
             .map_err(|e| format!("userinfo response not json: {e}"))?;
+
+        // Gender dari People API. Gagal dibaca tidak menggagalkan login: gender dibiarkan NULL.
+        if let Some(genders) = self.people_genders(&access_token).await {
+            if let Some(obj) = raw.as_object_mut() {
+                obj.insert("genders".to_string(), genders);
+            }
+        }
         parse_profile(&raw)
+    }
+
+    /// `genders` dari People API (`people/me`). `None` bila permintaan gagal atau tidak ada data.
+    async fn people_genders(&self, access_token: &str) -> Option<Value> {
+        let res = self
+            .http
+            .get(&self.endpoints.people)
+            .header(header::ACCEPT, "application/json")
+            .header(header::AUTHORIZATION, format!("Bearer {access_token}"))
+            .send()
+            .await
+            .ok()?;
+        if !res.status().is_success() {
+            tracing::warn!(status = %res.status(), "people api gagal, gender dibiarkan NULL");
+            return None;
+        }
+        let body: Value = res.json().await.ok()?;
+        body.get("genders").filter(|g| g.is_array()).cloned()
     }
 }
 
@@ -1072,6 +1101,20 @@ mod tests {
                 }),
             )
             .route(
+                "/people",
+                axum::routing::get(move |headers: HeaderMap| async move {
+                    if headers
+                        .get(header::AUTHORIZATION)
+                        .and_then(|v| v.to_str().ok())
+                        == Some("Bearer ya29.stub")
+                    {
+                        (StatusCode::OK, Json(json!({ "genders": [{ "value": "female" }] })))
+                    } else {
+                        (StatusCode::UNAUTHORIZED, Json(json!({ "error": "bad token" })))
+                    }
+                }),
+            )
+            .route(
                 "/userinfo",
                 axum::routing::get(move |headers: HeaderMap| {
                     let userinfo = userinfo.clone();
@@ -1100,6 +1143,7 @@ mod tests {
             auth: format!("http://{addr}/auth"),
             token: format!("http://{addr}/token"),
             userinfo: format!("http://{addr}/userinfo"),
+            people: format!("http://{addr}/people"),
         }
     }
 
@@ -1115,6 +1159,8 @@ mod tests {
         assert_eq!(p.email, "stub@example.test");
         assert_eq!(p.google_id.as_deref(), Some("9"));
         assert_eq!(p.avatar, None);
+        // Gender dari People API stub.
+        assert_eq!(p.gender.as_deref(), Some("female"));
     }
 
     #[tokio::test]

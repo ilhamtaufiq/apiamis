@@ -63,15 +63,6 @@ class KontrakAddendumController extends Controller
         return response()->json($gapService->findGaps());
     }
 
-    public function notifyRegisterGapPengawas(
-        int $registerId,
-        \App\Services\KontrakAddendumPengawasInstructionService $instructionService,
-    ) {
-        $this->authorizeAdmin();
-
-        return response()->json($instructionService->notifyByRegisterId($registerId));
-    }
-
     public function registerGapsForKontrak(
         Kontrak $kontrak,
         \App\Services\KontrakAddendumRegisterGapService $gapService,

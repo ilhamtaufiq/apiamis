@@ -14,8 +14,8 @@ Sumber: `routes/api.php` (branch `rust`, dari `main` SHA `c19fd06`). Dibuat deng
 
 - Sudah di Rust: **198** (termasuk dokumen kontrak SPK, cover, ZIP cover, BAP, dan bap-context, serta PDF SPK lewat ONLYOFFICE; termasuk auth, lookup, kecamatan, desa, kegiatan, penyedia, tiket GET, checklist GET, foto dan penerima seluruh rute, berkas kecuali export-pdf dan upload-from-url, kontrak CRUD, relasi pekerjaan/kegiatan/penyedia, excel export, template, dan impor kontrak, addendum dan register-gaps GET, sk, notifikasi, dan master fase pekerjaan)
 - Parsial di Rust: **2** (`GET /api/pekerjaan`: relasi daftar belum dibandingkan dengan produksi, lihat T21)
-- Belum: **212** (dihitung langsung dari kolom Status; termasuk addendum, export Excel draft, progress estimasi, destroy pekerjaan, dan modul lain yang belum dipindah)
-- Dihapus (tidak dimigrasi): **75** (termasuk desa sync-kk, chat AI dan live-chat, panduan CMS, presence, search ai-summary, dan pengaturan AI di app-settings, sesuai keputusan user)
+- Belum: **210** (dihitung langsung dari kolom Status; termasuk addendum, export Excel draft, progress estimasi, destroy pekerjaan, dan modul lain yang belum dipindah)
+- Dihapus (tidak dimigrasi): **77** (termasuk desa sync-kk, chat AI dan live-chat, panduan CMS, presence, search ai-summary, dan pengaturan AI di app-settings, sesuai keputusan user)
 
 Cara menghitung: cocokkan method dan path (`{param}` dinormalisasi) dengan route yang terdaftar di `rust/crates/api/src/lib.rs`.
 
@@ -450,7 +450,7 @@ Kolom **Status** diisi saat modul dipindah ke Rust. Awalnya semua `belum`.
 | No | Method | Path | Controller@action | Middleware | Status |
 | --- | --- | --- | --- | --- | --- |
 | 1 | GET | `/api/kontrak-addendums/register-gaps` | KontrakAddendumController@registerGaps | auth:sanctum | rust |
-| 2 | POST | `/api/kontrak-addendums/register-gaps/{registerId}/notify-pengawas` | KontrakAddendumController@notifyRegisterGapPengawas | auth:sanctum | belum |
+| 2 | POST | `/api/kontrak-addendums/register-gaps/{registerId}/notify-pengawas` | KontrakAddendumController@notifyRegisterGapPengawas | auth:sanctum | dihapus |
 | 3 | GET | `/api/kontrak-addendums` | KontrakAddendumController@all | auth:sanctum | rust |
 | 4 | GET | `/api/kontrak-addendums/{kontrakAddendum}` | KontrakAddendumController@show | auth:sanctum | rust |
 | 5 | PUT | `/api/kontrak-addendums/{kontrakAddendum}` | KontrakAddendumController@update | auth:sanctum | rust |
@@ -844,7 +844,7 @@ Kolom **Status** diisi saat modul dipindah ke Rust. Awalnya semua `belum`.
 
 | No | Method | Path | Controller@action | Middleware | Status |
 | --- | --- | --- | --- | --- | --- |
-| 1 | GET | `/api/arumanis-insight` | ArumanisInsightController@index | auth:sanctum | belum |
+| 1 | GET | `/api/arumanis-insight` | ArumanisInsightController@index | auth:sanctum | dihapus |
 
 ### chat (10)
 
