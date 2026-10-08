@@ -79,6 +79,9 @@ pub mod sipd_pekerjaan_links;
 pub mod route_permission;
 pub mod session;
 pub mod sk;
+pub mod spm_sanitasi;
+pub mod spm_sanitasi_capaian;
+pub mod spm_sanitasi_write;
 pub mod tags_write;
 pub mod tiket;
 pub mod tiket_write;
@@ -556,6 +559,20 @@ pub fn app(config: &Config, state: AppState) -> Router {
             get(dashboard::executive_progress),
         )
         .route("/api/search", get(search::index))
+        .route("/api/public/spm-sanitasi/stats", get(spm_sanitasi::public_stats))
+        .route("/api/public/spm-sanitasi/map-stats", get(spm_sanitasi::public_map_stats))
+        .route("/api/spm-sanitasi/stats", get(spm_sanitasi::stats))
+        .route("/api/spm-sanitasi/capaian", get(spm_sanitasi_capaian::capaian))
+        .route(
+            "/api/spm-sanitasi",
+            get(spm_sanitasi::index).post(spm_sanitasi_write::store),
+        )
+        .route(
+            "/api/spm-sanitasi/{id}",
+            put(spm_sanitasi_write::update)
+                .patch(spm_sanitasi_write::update)
+                .delete(spm_sanitasi_write::destroy),
+        )
         .route("/api/{*rest}", any(not_found))
         .with_state(state)
         .route_layer(axum::middleware::from_fn_with_state(
