@@ -16,10 +16,10 @@ use tower::ServiceExt;
 
 fn state() -> AppState {
     let url = std::env::var("DATABASE_URL").expect("DATABASE_URL belum di-set");
-    AppState {
-        pool: sqlx::MySqlPool::connect_lazy(&url).unwrap(),
-        app_url: "http://localhost".to_string(),
-    }
+    AppState::new(
+        sqlx::MySqlPool::connect_lazy(&url).unwrap(),
+        "http://localhost".to_string(),
+    )
 }
 
 fn config() -> Config {

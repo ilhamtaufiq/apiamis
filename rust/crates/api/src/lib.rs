@@ -4,17 +4,19 @@ use axum::{
     extract::DefaultBodyLimit,
     http::{header, HeaderValue, Method, StatusCode},
     response::{IntoResponse, Response},
-    routing::{any, get},
+    routing::{any, get, post},
     Json, Router,
 };
 use serde_json::{json, Value};
 use shared::{ApiError, Config};
+pub mod auth_routes;
 pub mod desa;
 pub mod format;
 pub mod kecamatan;
 pub mod kegiatan;
 pub mod maintenance;
 pub mod pagination;
+pub mod ratelimit;
 pub mod route_permission;
 
 use tower_http::{
@@ -48,6 +50,17 @@ pub struct AppState {
     pub pool: sqlx::MySqlPool,
     /// `APP_URL`, dipakai untuk URL pagination.
     pub app_url: String,
+    pub limiter: std::sync::Arc<ratelimit::Limiter>,
+}
+
+impl AppState {
+    pub fn new(pool: sqlx::MySqlPool, app_url: String) -> Self {
+        Self {
+            pool,
+            app_url,
+            limiter: std::sync::Arc::new(ratelimit::Limiter::default()),
+        }
+    }
 }
 
 /// Memastikan header `Authorization: Bearer <token>` valid. Dipakai handler yang butuh login.
@@ -76,6 +89,7 @@ pub fn app(config: &Config, state: AppState) -> Router {
         .route("/api/kecamatan", get(kecamatan::index))
         .route("/api/desa", get(desa::index))
         .route("/api/kegiatan", get(kegiatan::index))
+        .route("/api/auth/login", post(auth_routes::login))
         // Catch-all untuk /api: route yang belum ada di Rust tetap lewat pengecekan
         // permission (Laravel menolak lebih dulu, bukan 404).
         .route("/api/{*rest}", any(not_found))
@@ -168,10 +182,10 @@ mod tests {
 
     /// Pool yang tidak pernah terkoneksi kecuali dipakai; cukup untuk route tanpa DB.
     fn test_state() -> AppState {
-        AppState {
-            pool: sqlx::MySqlPool::connect_lazy("mysql://test:test@127.0.0.1:1/none").unwrap(),
-            app_url: "http://localhost".to_string(),
-        }
+        AppState::new(
+            sqlx::MySqlPool::connect_lazy("mysql://test:test@127.0.0.1:1/none").unwrap(),
+            "http://localhost".to_string(),
+        )
     }
 
     async fn send(req: Request<Body>) -> Response {

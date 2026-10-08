@@ -62,12 +62,13 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: rust
-      - name: load skema auth, kecamatan, permission, dan maintenance (struktur saja)
+      - name: load skema auth, kecamatan, permission, maintenance, dan login (struktur saja)
         run: |
           mysql -h127.0.0.1 -uroot -ptest apiamis < fixtures/auth_schema.sql
           mysql -h127.0.0.1 -uroot -ptest apiamis < fixtures/kecamatan_schema.sql
           mysql -h127.0.0.1 -uroot -ptest apiamis < fixtures/permission_schema.sql
           mysql -h127.0.0.1 -uroot -ptest apiamis < fixtures/maintenance_schema.sql
+          mysql -h127.0.0.1 -uroot -ptest apiamis < fixtures/login_schema.sql
       - name: test integrasi auth
         run: cargo test -p auth --test db_lookup -- --ignored
       - name: test integrasi kecamatan
@@ -76,3 +77,5 @@ jobs:
         run: cargo test -p auth --test permission_db -- --ignored
       - name: test integrasi route dan maintenance
         run: cargo test -p api --test routes_db -- --ignored
+      - name: test integrasi login
+        run: cargo test -p api --test login_db -- --ignored

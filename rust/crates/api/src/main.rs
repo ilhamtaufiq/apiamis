@@ -25,13 +25,7 @@ async fn main() {
 
     axum::serve(
         listener,
-        app(
-            &config,
-            AppState {
-                pool,
-                app_url: config.app_url.clone(),
-            },
-        ),
+        app(&config, AppState::new(pool, config.app_url.clone())),
     )
     .with_graceful_shutdown(shutdown_signal())
     .await
