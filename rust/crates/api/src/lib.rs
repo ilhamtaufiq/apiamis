@@ -58,6 +58,7 @@ pub mod penyedia_write;
 pub mod progress_estimasi;
 pub mod progress_metrics;
 pub mod progress_write;
+pub mod quality_insight;
 pub mod ratelimit;
 pub mod roles;
 pub mod route_permission;
@@ -354,6 +355,10 @@ pub fn app(config: &Config, state: AppState) -> Router {
                 .patch(penyedia_write::update)
                 .delete(penyedia_write::destroy),
         )
+        .route("/api/data-quality/stats", get(quality_insight::stats))
+        .route("/api/data-quality/items", get(quality_insight::items))
+        .route("/api/data-quality/action-inbox", get(quality_insight::action_inbox))
+        .route("/api/client-error-reports", post(quality_insight::store))
         .route("/api/tiket", get(tiket::index).post(tiket_write::store))
         // Rute statis `bulk-update` didaftarkan sebelum `/{id}`.
         .route("/api/tiket/bulk-update", post(tiket_write::bulk_update))
