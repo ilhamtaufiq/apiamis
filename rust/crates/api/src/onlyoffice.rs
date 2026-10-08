@@ -23,7 +23,7 @@ use hmac::{Hmac, Mac};
 use serde_json::{json, Value};
 use sha2::Sha256;
 use shared::ApiError;
-use sqlx::Row;
+use sqlx::{MySqlPool, Row};
 
 use crate::{media, require_auth, AppState};
 
@@ -364,6 +364,43 @@ pub async fn berkas_export_pdf(
             CONVERT_MESSAGE,
         )),
     }
+}
+
+/// PDF untuk satu media, setara `DocumentPdfConverter::convertMediaToPdf`. PDF dibaca apa adanya.
+/// Format lain dikonversi lewat ONLYOFFICE. `None` berarti tidak bisa dikonversi (pemanggil memakai berkas asli).
+pub(crate) async fn media_pdf(
+    pool: &MySqlPool,
+    app_url: &str,
+    media_id: u64,
+    file_name: &str,
+    path: &std::path::Path,
+) -> Option<Vec<u8>> {
+    let settings = Settings::from_env();
+    if !settings.enabled() {
+        return None;
+    }
+    let extension = file_name
+        .rsplit_once('.')
+        .map(|(_, e)| e.to_lowercase())
+        .unwrap_or_default();
+    if extension == "pdf" {
+        return tokio::fs::read(path).await.ok();
+    }
+    if !CONVERTIBLE.contains(&extension.as_str()) {
+        return None;
+    }
+    let updated_ts: Option<i64> = sqlx::query_scalar(
+        "SELECT CAST(UNIX_TIMESTAMP(updated_at) AS SIGNED) FROM media WHERE id = ?",
+    )
+    .bind(media_id)
+    .fetch_optional(pool)
+    .await
+    .ok()
+    .flatten()
+    .flatten();
+    let key = format!("media_{media_id}_{}", updated_ts.unwrap_or_else(now_secs));
+    let source_url = download_url(app_url, media_id, &settings);
+    convert_to_pdf(&settings, &source_url, &extension, &key, file_name).await
 }
 
 fn pdf_response(bytes: Vec<u8>, download_name: &str) -> Response {
