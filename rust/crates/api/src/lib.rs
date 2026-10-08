@@ -38,6 +38,7 @@ pub mod kontrak_xlsx;
 pub mod koordinat;
 pub mod lookup;
 pub mod mailer;
+pub mod master_fase;
 pub mod maintenance;
 pub mod media;
 pub mod notifications;
@@ -205,6 +206,17 @@ pub fn app(config: &Config, state: AppState) -> Router {
         )
         .route("/api/audit-logs", get(audit_logs::index))
         .route("/api/audit-logs/{id}", get(audit_logs::show))
+        .route(
+            "/api/master-fase-pekerjaan",
+            get(master_fase::index).post(master_fase::store),
+        )
+        .route(
+            "/api/master-fase-pekerjaan/{id}",
+            get(master_fase::show)
+                .put(master_fase::update)
+                .patch(master_fase::update)
+                .delete(master_fase::destroy),
+        )
         .route("/api/auth/logout", post(auth_routes::logout))
         .route("/api/auth/sync-token", post(auth_routes::sync_token))
         .route("/api/app-settings", get(lookup::index))
