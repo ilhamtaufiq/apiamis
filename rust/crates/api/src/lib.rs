@@ -24,6 +24,7 @@ pub mod foto;
 pub mod kecamatan;
 pub mod kecamatan_write;
 pub mod kegiatan;
+pub mod kegiatan_write;
 pub mod kontrak;
 pub mod kontrak_addendum;
 pub mod kontrak_register_gap;
@@ -141,7 +142,15 @@ pub fn app(config: &Config, state: AppState) -> Router {
         )
         .route("/api/desa/kecamatan/{id}", get(desa_write::by_kecamatan))
         .route("/api/kegiatan", get(kegiatan::index))
-        .route("/api/kegiatan/{id}", get(kegiatan::show))
+        .route("/api/kegiatan", post(kegiatan_write::store))
+        .route(
+            "/api/kegiatan/{id}",
+            get(kegiatan::show)
+                .put(kegiatan_write::update)
+                .patch(kegiatan_write::update)
+                .delete(kegiatan_write::destroy),
+        )
+        .route("/api/kegiatan/tahun/{tahun}", get(kegiatan_write::by_tahun))
         .route("/api/auth/login", post(auth_routes::login))
         .route("/api/auth/me", get(auth_routes::me))
         .route("/api/auth/logout", post(auth_routes::logout))
