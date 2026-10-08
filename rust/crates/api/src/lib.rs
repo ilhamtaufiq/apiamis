@@ -42,6 +42,7 @@ pub mod pekerjaan_rel;
 pub mod pekerjaan_write;
 pub mod penerima;
 pub mod penyedia;
+pub mod penyedia_write;
 pub mod progress_estimasi;
 pub mod progress_metrics;
 pub mod ratelimit;
@@ -159,7 +160,7 @@ pub fn app(config: &Config, state: AppState) -> Router {
                 .delete(tags_write::destroy),
         )
         .route("/api/document-types", get(lookup::document_types_index))
-        .route("/api/penyedia", get(penyedia::index))
+        .route("/api/penyedia", get(penyedia::index).post(penyedia_write::store))
         .route("/api/pekerjaan", get(pekerjaan::index))
         .route(
             "/api/pekerjaan/{id}",
@@ -253,7 +254,14 @@ pub fn app(config: &Config, state: AppState) -> Router {
                 .delete(sk::destroy)
                 .layer(DefaultBodyLimit::max(sk::BODY_LIMIT)),
         )
-        .route("/api/penyedia/{id}", get(penyedia::show))
+        .route(
+            "/api/penyedia/{id}",
+            get(penyedia::show)
+                .post(penyedia_write::update_post)
+                .put(penyedia_write::update)
+                .patch(penyedia_write::update)
+                .delete(penyedia_write::destroy),
+        )
         .route("/api/tiket", get(tiket::index).post(tiket_write::store))
         // Rute statis `bulk-update` didaftarkan sebelum `/{id}`.
         .route("/api/tiket/bulk-update", post(tiket_write::bulk_update))
