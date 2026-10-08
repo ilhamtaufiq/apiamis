@@ -12,9 +12,9 @@ Sumber: `routes/api.php` (branch `rust`, dari `main` SHA `c19fd06`). Dibuat deng
 
 ### Status paritas (diperbarui)
 
-- Sudah di Rust: **181** (termasuk dokumen kontrak SPK, cover, ZIP cover, BAP, dan bap-context, serta PDF SPK lewat ONLYOFFICE; termasuk auth, lookup, kecamatan, desa, kegiatan, penyedia, tiket GET, checklist GET, foto dan penerima seluruh rute, berkas kecuali export-pdf dan upload-from-url, kontrak CRUD, relasi pekerjaan/kegiatan/penyedia, excel export, template, dan impor kontrak, addendum dan register-gaps GET, sk, notifikasi, dan master fase pekerjaan)
+- Sudah di Rust: **194** (termasuk dokumen kontrak SPK, cover, ZIP cover, BAP, dan bap-context, serta PDF SPK lewat ONLYOFFICE; termasuk auth, lookup, kecamatan, desa, kegiatan, penyedia, tiket GET, checklist GET, foto dan penerima seluruh rute, berkas kecuali export-pdf dan upload-from-url, kontrak CRUD, relasi pekerjaan/kegiatan/penyedia, excel export, template, dan impor kontrak, addendum dan register-gaps GET, sk, notifikasi, dan master fase pekerjaan)
 - Parsial di Rust: **2** (`GET /api/pekerjaan`: relasi daftar belum dibandingkan dengan produksi, lihat T21)
-- Belum: **229** (dihitung langsung dari kolom Status; termasuk addendum, export Excel draft, progress estimasi, destroy pekerjaan, dan modul lain yang belum dipindah)
+- Belum: **216** (dihitung langsung dari kolom Status; termasuk addendum, export Excel draft, progress estimasi, destroy pekerjaan, dan modul lain yang belum dipindah)
 - Dihapus (tidak dimigrasi): **75** (termasuk desa sync-kk, chat AI dan live-chat, panduan CMS, presence, search ai-summary, dan pengaturan AI di app-settings, sesuai keputusan user)
 
 Cara menghitung: cocokkan method dan path (`{param}` dinormalisasi) dengan route yang terdaftar di `rust/crates/api/src/lib.rs`.
@@ -36,10 +36,10 @@ Kolom **Status** diisi saat modul dipindah ke Rust. Awalnya semua `belum`.
 | No | Method | Path | Controller@action | Middleware | Status |
 | --- | --- | --- | --- | --- | --- |
 | 1 | POST | `/api/auth/login` | AuthController@login | throttle:login | rust |
-| 2 | POST | `/api/auth/handoff` | AuthController@createHandoff | auth:sanctum,throttle:10,1 | belum |
-| 3 | POST | `/api/auth/handoff/exchange` | AuthController@exchangeHandoff | throttle:handoff-exchange | belum |
-| 4 | GET | `/api/auth/google` | AuthController@redirectToGoogle | - | belum |
-| 5 | GET | `/api/auth/google/callback` | AuthController@handleGoogleCallback | - | belum |
+| 2 | POST | `/api/auth/handoff` | AuthController@createHandoff | auth:sanctum,throttle:10,1 | rust |
+| 3 | POST | `/api/auth/handoff/exchange` | AuthController@exchangeHandoff | throttle:handoff-exchange | rust |
+| 4 | GET | `/api/auth/google` | AuthController@redirectToGoogle | - | rust |
+| 5 | GET | `/api/auth/google/callback` | AuthController@handleGoogleCallback | - | rust |
 | 6 | POST | `/api/auth/logout` | AuthController@logout | auth:sanctum | rust |
 | 7 | GET | `/api/auth/me` | AuthController@me | auth:sanctum | rust |
 | 8 | PUT | `/api/auth/profile` | AuthController@updateProfile | auth:sanctum | belum |
@@ -126,10 +126,10 @@ Kolom **Status** diisi saat modul dipindah ke Rust. Awalnya semua `belum`.
 
 | No | Method | Path | Controller@action | Middleware | Status |
 | --- | --- | --- | --- | --- | --- |
-| 1 | POST | `/api/onlyoffice/callback` | OnlyOfficeController@callback | - | belum |
-| 2 | GET | `/api/onlyoffice/health` | OnlyOfficeController@health | - | belum |
+| 1 | POST | `/api/onlyoffice/callback` | OnlyOfficeController@callback | - | rust |
+| 2 | GET | `/api/onlyoffice/health` | OnlyOfficeController@health | - | rust |
 | 3 | GET | `/api/onlyoffice/media/{media}/download` | OnlyOfficeController@download | - | rust |
-| 4 | GET | `/api/onlyoffice/media/{media}/config` | OnlyOfficeController@config | auth:sanctum | belum |
+| 4 | GET | `/api/onlyoffice/media/{media}/config` | OnlyOfficeController@config | auth:sanctum | rust |
 | 5 | GET | `/api/onlyoffice/temp/{file}` | OnlyOfficeController@tempDownload (`onlyoffice.temp.download`, bertanda tangan) | signed | rust (token HMAC Rust, dipakai untuk SPK PDF) |
 
 ###  (1)
@@ -142,7 +142,7 @@ Kolom **Status** diisi saat modul dipindah ke Rust. Awalnya semua `belum`.
 
 | No | Method | Path | Controller@action | Middleware | Status |
 | --- | --- | --- | --- | --- | --- |
-| 1 | POST | `/api/client-error-reports` | ClientErrorReportController@store | auth:sanctum | belum |
+| 1 | POST | `/api/client-error-reports` | ClientErrorReportController@store | auth:sanctum | rust |
 
 ### berita-acara (2)
 
@@ -219,9 +219,9 @@ Kolom **Status** diisi saat modul dipindah ke Rust. Awalnya semua `belum`.
 
 | No | Method | Path | Controller@action | Middleware | Status |
 | --- | --- | --- | --- | --- | --- |
-| 1 | GET | `/api/data-quality/stats` | DataQualityController@getStats | auth:sanctum,role:admin | belum |
-| 2 | GET | `/api/data-quality/items` | DataQualityController@getItems | auth:sanctum,role:admin | belum |
-| 3 | GET | `/api/data-quality/action-inbox` | DataQualityController@getActionInbox | auth:sanctum,role:admin | belum |
+| 1 | GET | `/api/data-quality/stats` | DataQualityController@getStats | auth:sanctum,role:admin | rust |
+| 2 | GET | `/api/data-quality/items` | DataQualityController@getItems | auth:sanctum,role:admin | rust |
+| 3 | GET | `/api/data-quality/action-inbox` | DataQualityController@getActionInbox | auth:sanctum,role:admin | rust |
 
 ### audit-logs (2)
 
@@ -501,7 +501,7 @@ Kolom **Status** diisi saat modul dipindah ke Rust. Awalnya semua `belum`.
 | No | Method | Path | Controller@action | Middleware | Status |
 | --- | --- | --- | --- | --- | --- |
 | 1 | GET | `/api/berkas/jenis-dokumen` | BerkasController@jenisDokumen | auth:sanctum | rust |
-| 2 | POST | `/api/berkas/upload-from-url` | BerkasController@uploadFromUrl | auth:sanctum | belum |
+| 2 | POST | `/api/berkas/upload-from-url` | BerkasController@uploadFromUrl | auth:sanctum | rust |
 | 3 | GET | `/api/berkas/{berkas}/export-pdf` | BerkasController@convertToPdf | auth:sanctum | rust |
 | 4 | DELETE | `/api/berkas/bulk` | BerkasController@bulkDestroy | auth:sanctum | rust |
 | 5 | GET | `/api/berkas` | BerkasController@index | auth:sanctum | rust |
@@ -622,7 +622,7 @@ Kolom **Status** diisi saat modul dipindah ke Rust. Awalnya semua `belum`.
 
 | No | Method | Path | Controller@action | Middleware | Status |
 | --- | --- | --- | --- | --- | --- |
-| 1 | GET | `/api/draft-pekerjaan/export/excel` | DraftPekerjaanController@exportExcel | auth:sanctum | belum |
+| 1 | GET | `/api/draft-pekerjaan/export/excel` | DraftPekerjaanController@exportExcel | auth:sanctum | rust |
 | 2 | GET | `/api/draft-pekerjaan` | DraftPekerjaanController@index | auth:sanctum | rust |
 | 3 | POST | `/api/draft-pekerjaan` | DraftPekerjaanController@store | auth:sanctum | rust |
 | 4 | GET | `/api/draft-pekerjaan/{id}` | DraftPekerjaanController@show | auth:sanctum | rust |
