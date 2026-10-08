@@ -1,11 +1,19 @@
-//! `PUT/PATCH /api/pekerjaan/{id}`, setara `PekerjaanController@update`.
+//! Penulisan Pekerjaan: `POST /api/pekerjaan` (store), `PUT/PATCH /api/pekerjaan/{id}` (update), dan
+//! `DELETE /api/pekerjaan/{id}` (destroy), setara `PekerjaanController`.
 //!
 //! Efek samping yang ikut dipindah, seperti trait Laravel:
-//! - audit log `tbl_audit_logs` (`Auditable`), hanya jika ada perubahan;
-//! - notifikasi database untuk setiap admin kecuali pelaku (`NotifiesAdminsOnChanges`).
+//! - audit log `tbl_audit_logs` (`Auditable`): `created`, `updated` (hanya jika ada perubahan), dan `deleted`;
+//! - notifikasi database untuk setiap admin kecuali pelaku (`NotifiesAdminsOnChanges`), dengan judul
+//!   "Data Pekerjaan dibuat | diperbarui | dihapus".
 //!
-//! Belum dipindah: broadcast realtime `PekerjaanUpdated` (`BroadcastsPekerjaanRealtime`),
-//! menunggu keputusan K3. Respon memakai bentuk daftar, bukan `PekerjaanDetailResource` (T25).
+//! Berbeda dari Laravel:
+//! - destroy menolak 403 di luar scope `byUserRole()` dan 409 bila pekerjaan masih tertaut ke SPAM atau SPM
+//!   sanitasi, karena sinkronisasi capaian belum dipindah;
+//! - audit `created` tidak memuat `created_at` dan `updated_at`, serta `deleted` tidak memuat timestamp;
+//! - transaksi store dan destroy diulang sampai beberapa kali bila kalah deadlock (update belum).
+//!
+//! Belum dipindah: broadcast realtime `PekerjaanUpdated` (`BroadcastsPekerjaanRealtime`), menunggu keputusan K3.
+//! Respon store dan update memakai `PekerjaanDetailResource` (`pekerjaan_detail::build`).
 
 use std::collections::BTreeMap;
 
@@ -19,7 +27,7 @@ use serde_json::{json, Map, Value};
 use shared::ApiError;
 use sqlx::{MySql, MySqlPool, QueryBuilder};
 
-use crate::{desa::internal, pekerjaan, require_auth, AppState};
+use crate::{desa::internal, lookup::carbon_json, pekerjaan, require_auth, AppState};
 
 type Errors = BTreeMap<String, Vec<String>>;
 
@@ -236,10 +244,10 @@ async fn check_exists(pool: &MySqlPool, p: &Parsed) -> Result<(), ApiError> {
             .await
             .map_err(internal)?;
         if found == 0 {
-            errors
-                .entry(key.to_string())
-                .or_default()
-                .push(format!("The selected {key} is invalid."));
+            errors.entry(key.to_string()).or_default().push(format!(
+                "The selected {} is invalid.",
+                key.replace('_', " ")
+            ));
         }
     }
     if let Some(tags) = &p.tag_ids {
@@ -462,9 +470,27 @@ async fn notify_admins(
     id: u64,
 ) -> Result<(), sqlx::Error> {
     let name = crate::notify::actor_name(tx, actor).await?;
-    let message = crate::notify::change_message("Pekerjaan", id, "updated", &name, true);
+    notify_admins_action(tx, actor, id, "diperbarui", &name).await
+}
+
+/// `notifyAdmins` untuk `dibuat`, `diperbarui`, atau `dihapus`: judul dan pesan sama dengan trait Laravel.
+async fn notify_admins_action(
+    tx: &mut sqlx::Transaction<'_, MySql>,
+    actor: u64,
+    id: u64,
+    action: &str,
+    actor_name: &str,
+) -> Result<(), sqlx::Error> {
+    let message = crate::notify::change_message("Pekerjaan", id, action, actor_name, true);
     let url = format!("/pekerjaan/{id}");
-    crate::notify::admins(tx, actor, "Data Pekerjaan updated", &message, Some(&url)).await
+    crate::notify::admins(
+        tx,
+        actor,
+        &format!("Data Pekerjaan {action}"),
+        &message,
+        Some(&url),
+    )
+    .await
 }
 
 /// `PUT/PATCH /api/pekerjaan/{id}`.
@@ -535,6 +561,501 @@ pub async fn update(
     )
     .await?;
     Ok(Json(json!({ "data": data })).into_response())
+}
+
+/// Input `store` yang sudah lolos validasi sintaksis. `p` dipakai untuk cek `exists:` dan tag.
+struct NewPekerjaan {
+    p: Parsed,
+    kode_rekening: Option<Option<String>>,
+    nama_paket: String,
+    catatan: Option<String>,
+    is_konsultan: bool,
+    status: String,
+    pagu: f64,
+}
+
+/// `string` yang dipangkas (`TrimStrings`); kosong dianggap null (`ConvertEmptyStringsToNull`).
+/// Nilai `required` yang kosong atau tidak ada menghasilkan error `required`.
+fn store_text(
+    obj: &Map<String, Value>,
+    errors: &mut Errors,
+    key: &str,
+    max: usize,
+    required: bool,
+) -> Option<String> {
+    let attr = key.replace('_', " ");
+    match obj.get(key) {
+        None | Some(Value::Null) => {
+            if required {
+                errors
+                    .entry(key.to_string())
+                    .or_default()
+                    .push(format!("The {attr} field is required."));
+            }
+            None
+        }
+        Some(Value::String(s)) => {
+            let t = s.trim();
+            if t.is_empty() {
+                if required {
+                    errors
+                        .entry(key.to_string())
+                        .or_default()
+                        .push(format!("The {attr} field is required."));
+                }
+                None
+            } else if t.chars().count() > max {
+                errors.entry(key.to_string()).or_default().push(format!(
+                    "The {attr} field must not be greater than {max} characters."
+                ));
+                None
+            } else {
+                Some(t.to_string())
+            }
+        }
+        Some(_) => {
+            errors
+                .entry(key.to_string())
+                .or_default()
+                .push(format!("The {attr} field must be a string."));
+            None
+        }
+    }
+}
+
+/// Validasi `PekerjaanController@store`, termasuk `required_unless:is_konsultan,true,1` untuk kecamatan dan desa.
+fn parse_store(body: &Value) -> Result<NewPekerjaan, Errors> {
+    let obj = body.as_object().cloned().unwrap_or_default();
+    let mut errors = Errors::new();
+    let mut p = Parsed::default();
+
+    let kode_rekening = match obj.get("kode_rekening") {
+        None => None,
+        Some(_) => Some(store_text(&obj, &mut errors, "kode_rekening", 225, false)),
+    };
+    let nama_paket = store_text(&obj, &mut errors, "nama_paket", 225, true).unwrap_or_default();
+    let catatan = store_text(&obj, &mut errors, "catatan", 5000, false);
+
+    let is_konsultan = match obj.get("is_konsultan") {
+        None => false,
+        Some(v) => match bool_input(v) {
+            Some(b) => b,
+            None => {
+                errors
+                    .entry("is_konsultan".into())
+                    .or_default()
+                    .push("The is konsultan field must be true or false.".into());
+                false
+            }
+        },
+    };
+    p.is_konsultan = Some(is_konsultan);
+
+    let status = match obj.get("status") {
+        None => "active".to_string(),
+        Some(Value::String(s)) if s == "active" || s == "canceled" => s.clone(),
+        Some(_) => {
+            errors
+                .entry("status".into())
+                .or_default()
+                .push("The selected status is invalid.".into());
+            "active".to_string()
+        }
+    };
+
+    // kecamatan_id dan desa_id: wajib (kecuali konsultan). `null` eksplisit lolos, seperti `nullable`.
+    for key in ["kecamatan_id", "desa_id"] {
+        let attr = key.replace('_', " ");
+        match obj.get(key) {
+            None if !is_konsultan => {
+                errors
+                    .entry(key.into())
+                    .or_default()
+                    .push(format!("The {attr} field is required."));
+            }
+            None | Some(Value::Null) => {
+                p.fk.insert(key_static_fk(key), None);
+            }
+            Some(v) => match int_input(v) {
+                Some(i) => {
+                    p.fk.insert(key_static_fk(key), Some(i));
+                }
+                None => {
+                    errors
+                        .entry(key.into())
+                        .or_default()
+                        .push(format!("The {attr} field must be an integer."));
+                }
+            },
+        }
+    }
+
+    for key in ["kegiatan_id", "pengawas_id", "pendamping_id"] {
+        let attr = key.replace('_', " ");
+        match obj.get(key) {
+            None | Some(Value::Null) => {
+                p.fk.insert(key_static_fk(key), None);
+            }
+            Some(v) => match int_input(v) {
+                Some(i) => {
+                    p.fk.insert(key_static_fk(key), Some(i));
+                }
+                None => {
+                    errors
+                        .entry(key.into())
+                        .or_default()
+                        .push(format!("The {attr} field must be an integer."));
+                }
+            },
+        }
+    }
+
+    let pagu = match obj.get("pagu") {
+        None | Some(Value::Null) => {
+            errors
+                .entry("pagu".into())
+                .or_default()
+                .push("The pagu field is required.".into());
+            0.0
+        }
+        Some(v) => match num_input(v) {
+            Some(f) if f >= 0.0 => f,
+            Some(_) => {
+                errors
+                    .entry("pagu".into())
+                    .or_default()
+                    .push("The pagu field must be at least 0.".into());
+                0.0
+            }
+            None => {
+                errors
+                    .entry("pagu".into())
+                    .or_default()
+                    .push("The pagu field must be a number.".into());
+                0.0
+            }
+        },
+    };
+
+    match obj.get("tag_ids") {
+        None => {}
+        Some(Value::Null) => p.tag_ids = Some(Vec::new()),
+        Some(Value::Array(items)) => {
+            let mut ids = Vec::with_capacity(items.len());
+            for item in items {
+                match int_input(item).and_then(|i| u64::try_from(i).ok()) {
+                    Some(i) => ids.push(i),
+                    None => errors
+                        .entry("tag_ids.*".into())
+                        .or_default()
+                        .push("The tag ids.* field must be an integer.".into()),
+                }
+            }
+            p.tag_ids = Some(ids);
+        }
+        Some(_) => errors
+            .entry("tag_ids".into())
+            .or_default()
+            .push("The tag ids field must be an array.".into()),
+    }
+
+    if !errors.is_empty() {
+        return Err(errors);
+    }
+    Ok(NewPekerjaan {
+        p,
+        kode_rekening,
+        nama_paket,
+        catatan,
+        is_konsultan,
+        status,
+        pagu,
+    })
+}
+
+/// Nama kolom FK yang `'static` untuk `Parsed::fk`.
+fn key_static_fk(key: &str) -> &'static str {
+    FK_TABLES
+        .iter()
+        .map(|(k, _)| *k)
+        .find(|k| *k == key)
+        .unwrap_or("kecamatan_id")
+}
+
+/// Atribut pekerjaan seperti `getAttributes()` untuk audit `created` dan `deleted`.
+fn row_attributes(p: &pekerjaan::PekerjaanRow) -> Map<String, Value> {
+    let mut m = Map::new();
+    m.insert("id".into(), json!(p.id));
+    m.insert("kode_rekening".into(), json!(p.kode_rekening));
+    m.insert("nama_paket".into(), json!(p.nama_paket));
+    m.insert("kecamatan_id".into(), json!(p.kecamatan_id));
+    m.insert("desa_id".into(), json!(p.desa_id));
+    m.insert("kegiatan_id".into(), json!(p.kegiatan_id));
+    m.insert("pagu".into(), json!(p.pagu));
+    m.insert("is_konsultan".into(), json!(p.is_konsultan));
+    m.insert("status".into(), json!(p.status));
+    m.insert("catatan".into(), json!(p.catatan));
+    m.insert("pengawas_id".into(), json!(p.pengawas_id));
+    m.insert("pendamping_id".into(), json!(p.pendamping_id));
+    m.insert("created_at".into(), carbon_json(p.created_at));
+    m.insert("updated_at".into(), carbon_json(p.updated_at));
+    m
+}
+
+/// Sisipkan pekerjaan baru. Kolom `kode_rekening` tidak dikirim bila tidak ada, sehingga default DB berlaku.
+async fn insert_pekerjaan(
+    tx: &mut sqlx::Transaction<'_, MySql>,
+    n: &NewPekerjaan,
+) -> Result<(u64, Map<String, Value>), sqlx::Error> {
+    let fk = |key: &str| {
+        if n.is_konsultan && (key == "kecamatan_id" || key == "desa_id") {
+            None
+        } else {
+            n.p.fk.get(key).copied().flatten()
+        }
+    };
+    let mut cols: Vec<(&'static str, Val)> = Vec::new();
+    if let Some(k) = &n.kode_rekening {
+        cols.push(("kode_rekening", opt_text(k.clone())));
+    }
+    cols.push(("nama_paket", Val::Text(n.nama_paket.clone())));
+    cols.push(("pagu", Val::Flt(n.pagu)));
+    cols.push(("is_konsultan", Val::Bool(n.is_konsultan)));
+    cols.push(("status", Val::Text(n.status.clone())));
+    cols.push(("kecamatan_id", opt_int(fk("kecamatan_id"))));
+    cols.push(("desa_id", opt_int(fk("desa_id"))));
+    cols.push(("kegiatan_id", opt_int(fk("kegiatan_id"))));
+    cols.push(("pengawas_id", opt_int(fk("pengawas_id"))));
+    cols.push(("pendamping_id", opt_int(fk("pendamping_id"))));
+    cols.push(("catatan", opt_text(n.catatan.clone())));
+
+    let names: Vec<&str> = cols.iter().map(|(c, _)| *c).collect();
+    let marks = vec!["?"; names.len()].join(", ");
+    let sql = format!(
+        "INSERT INTO tbl_pekerjaan ({}, created_at, updated_at) VALUES ({marks}, NOW(), NOW())",
+        names.join(", ")
+    );
+    let mut q = sqlx::query(&sql);
+    for (_, v) in &cols {
+        q = match v {
+            Val::Null => q.bind(None::<String>),
+            Val::Text(s) => q.bind(s.clone()),
+            Val::Int(i) => q.bind(*i),
+            Val::Flt(f) => q.bind(*f),
+            Val::Bool(b) => q.bind(*b),
+        };
+    }
+    let id = q.execute(&mut **tx).await?.last_insert_id();
+
+    let mut attrs = Map::new();
+    attrs.insert("id".into(), json!(id));
+    for (c, v) in &cols {
+        attrs.insert((*c).to_string(), v.to_json());
+    }
+    Ok((id, attrs))
+}
+
+/// Pekerjaan yang masih ditautkan ke unit SPAM atau SPM sanitasi. Sinkronisasi capaian belum dipindah.
+async fn has_spam_or_sanitasi_links(
+    tx: &mut sqlx::Transaction<'_, MySql>,
+    id: u64,
+) -> Result<bool, sqlx::Error> {
+    let mut linked = false;
+    for table in ["tbl_unit_spam_pekerjaan", "tbl_spm_sanitasi_pekerjaan"] {
+        let exists: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM information_schema.tables \
+             WHERE table_schema = DATABASE() AND table_name = ?",
+        )
+        .bind(table)
+        .fetch_one(&mut **tx)
+        .await?;
+        if exists == 0 {
+            continue;
+        }
+        let n: i64 = sqlx::query_scalar(&format!(
+            "SELECT COUNT(*) FROM {table} WHERE pekerjaan_id = ?"
+        ))
+        .bind(id)
+        .fetch_one(&mut **tx)
+        .await?;
+        linked |= n > 0;
+    }
+    Ok(linked)
+}
+
+/// Deadlock InnoDB (SQLSTATE 40001). Transaksi yang kalah dijalankan ulang dari awal.
+fn is_deadlock(e: &sqlx::Error) -> bool {
+    matches!(e, sqlx::Error::Database(d) if d.code().as_deref() == Some("40001"))
+}
+
+/// Jumlah percobaan transaksi `store` dan `destroy` bila terjadi deadlock.
+const TX_ATTEMPTS: usize = 5;
+
+/// Jeda sebelum mengulang transaksi yang kalah deadlock.
+async fn deadlock_backoff(attempt: usize) {
+    tokio::time::sleep(std::time::Duration::from_millis(10 * attempt as u64)).await;
+}
+
+/// Satu transaksi `store`: insert, tag, audit, dan notifikasi. Mengembalikan id dan atribut untuk audit.
+async fn store_tx(
+    pool: &MySqlPool,
+    headers: &HeaderMap,
+    actor: u64,
+    n: &NewPekerjaan,
+    url: &str,
+) -> Result<u64, sqlx::Error> {
+    let mut tx = pool.begin().await?;
+    let name = crate::notify::actor_name(&mut tx, actor).await?;
+    let (id, attrs) = insert_pekerjaan(&mut tx, n).await?;
+    if let Some(tags) = &n.p.tag_ids {
+        sync_tags(&mut tx, id, tags).await?;
+    }
+    crate::audit::write(
+        &mut tx,
+        crate::audit::Entry {
+            actor,
+            event: "created",
+            auditable_type: "App\\Models\\Pekerjaan",
+            auditable_id: id,
+            old: None,
+            new: Some(attrs),
+            url,
+        },
+        headers,
+    )
+    .await?;
+    notify_admins_action(&mut tx, actor, id, "dibuat", &name).await?;
+    tx.commit().await?;
+    Ok(id)
+}
+
+/// `POST /api/pekerjaan`, setara `PekerjaanController@store`. Respon 200 dengan `PekerjaanDetailResource`.
+pub async fn store(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(body): Json<Value>,
+) -> Result<Response, ApiError> {
+    let user = require_auth(&state, &headers).await?;
+    let n =
+        parse_store(&body).map_err(|e| ApiError::validation("The given data was invalid.", e))?;
+    check_exists(&state.pool, &n.p).await?;
+    let url = format!("{}/api/pekerjaan", state.app_url.trim_end_matches('/'));
+
+    let mut attempt = 0;
+    let id = loop {
+        attempt += 1;
+        match store_tx(&state.pool, &headers, user.user_id, &n, &url).await {
+            Ok(id) => break id,
+            Err(e) if is_deadlock(&e) && attempt < TX_ATTEMPTS => deadlock_backoff(attempt).await,
+            Err(e) => return Err(internal(e)),
+        }
+    };
+
+    let row = pekerjaan::find(&state.pool, id)
+        .await
+        .map_err(internal)?
+        .ok_or_else(ApiError::not_found)?;
+    let roles = auth::login::roles_of(&state.pool, user.user_id)
+        .await
+        .map_err(internal)?;
+    let data = crate::pekerjaan_detail::build(
+        &state,
+        &headers,
+        &row,
+        &roles,
+        user.user_id,
+        &std::collections::HashMap::new(),
+    )
+    .await?;
+    Ok(Json(json!({ "data": data })).into_response())
+}
+
+/// Satu transaksi `destroy`. `Ok(false)` bila masih tertaut ke SPAM atau SPM sanitasi (tidak ada perubahan).
+async fn destroy_tx(
+    pool: &MySqlPool,
+    headers: &HeaderMap,
+    actor: u64,
+    id: u64,
+    current: &pekerjaan::PekerjaanRow,
+    url: &str,
+) -> Result<bool, sqlx::Error> {
+    let mut tx = pool.begin().await?;
+    if has_spam_or_sanitasi_links(&mut tx, id).await? {
+        return Ok(false);
+    }
+    let name = crate::notify::actor_name(&mut tx, actor).await?;
+    // Baris pekerjaan dikunci lebih dulu, lalu audit dan notifikasi, sama dengan `store` dan `update`.
+    sqlx::query("DELETE FROM tbl_pekerjaan WHERE id = ?")
+        .bind(id)
+        .execute(&mut *tx)
+        .await?;
+    crate::audit::write(
+        &mut tx,
+        crate::audit::Entry {
+            actor,
+            event: "deleted",
+            auditable_type: "App\\Models\\Pekerjaan",
+            auditable_id: id,
+            old: Some(row_attributes(current)),
+            new: None,
+            url,
+        },
+        headers,
+    )
+    .await?;
+    notify_admins_action(&mut tx, actor, id, "dihapus", &name).await?;
+    tx.commit().await?;
+    Ok(true)
+}
+
+/// `DELETE /api/pekerjaan/{id}`, setara `PekerjaanController@destroy`.
+///
+/// Berbeda dari Laravel: pekerjaan di luar scope `byUserRole()` mendapat 403 (seperti update), dan
+/// pekerjaan yang masih ditautkan ke SPAM atau SPM sanitasi ditolak 409 karena sinkronisasi capaian belum dipindah.
+pub async fn destroy(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+) -> Result<Response, ApiError> {
+    let user = require_auth(&state, &headers).await?;
+    let id: u64 = id.parse().map_err(|_| ApiError::not_found())?;
+    let current = pekerjaan::find(&state.pool, id)
+        .await
+        .map_err(internal)?
+        .ok_or_else(ApiError::not_found)?;
+    let roles = auth::login::roles_of(&state.pool, user.user_id)
+        .await
+        .map_err(internal)?;
+    if !crate::access::user_can_access(&state.pool, user.user_id, &roles, id)
+        .await
+        .map_err(internal)?
+    {
+        return Err(ApiError::new(
+            axum::http::StatusCode::FORBIDDEN,
+            "Anda tidak memiliki akses untuk pekerjaan ini",
+        ));
+    }
+
+    let url = format!("{}/api/pekerjaan/{id}", state.app_url.trim_end_matches('/'));
+    let mut attempt = 0;
+    loop {
+        attempt += 1;
+        match destroy_tx(&state.pool, &headers, user.user_id, id, &current, &url).await {
+            Ok(true) => break,
+            Ok(false) => {
+                return Err(ApiError::new(
+                    axum::http::StatusCode::CONFLICT,
+                    "Pekerjaan masih terhubung ke unit SPAM atau SPM sanitasi. Lepas tautan tersebut terlebih dahulu.",
+                ))
+            }
+            Err(e) if is_deadlock(&e) && attempt < TX_ATTEMPTS => {
+                deadlock_backoff(attempt).await
+            }
+            Err(e) => return Err(internal(e)),
+        }
+    }
+
+    Ok(Json(json!({ "message": "Pekerjaan deleted successfully" })).into_response())
 }
 
 #[cfg(test)]

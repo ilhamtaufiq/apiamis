@@ -62,7 +62,11 @@ pub mod output;
 pub mod pagination;
 pub mod php;
 pub mod pekerjaan;
+pub mod pekerjaan_by;
 pub mod pekerjaan_checklist_write;
+pub mod pekerjaan_estimasi;
+pub mod pekerjaan_download;
+pub mod pekerjaan_import;
 pub mod peripaan;
 pub mod pekerjaan_detail;
 pub mod pekerjaan_rel;
@@ -399,12 +403,44 @@ pub fn app(config: &Config, state: AppState) -> Router {
                 .delete(document_types_write::destroy_type),
         )
         .route("/api/penyedia", get(penyedia::index).post(penyedia_write::store))
-        .route("/api/pekerjaan", get(pekerjaan::index))
+        .route(
+            "/api/pekerjaan",
+            get(pekerjaan::index).post(pekerjaan_write::store),
+        )
         .route(
             "/api/pekerjaan/{id}",
             get(pekerjaan::show)
                 .put(pekerjaan_write::update)
-                .patch(pekerjaan_write::update),
+                .patch(pekerjaan_write::update)
+                .delete(pekerjaan_write::destroy),
+        )
+        // Segmen statis (kecamatan, desa, kegiatan, stats, media) mengalahkan `{id}`.
+        .route("/api/pekerjaan/kecamatan/{kecamatanId}", get(pekerjaan_by::by_kecamatan))
+        .route(
+            "/api/pekerjaan/kecamatan/{kecamatanId}/desa/{desaId}",
+            get(pekerjaan_by::by_kecamatan_desa),
+        )
+        .route("/api/pekerjaan/desa/{desaId}", get(pekerjaan_by::by_desa))
+        .route("/api/pekerjaan/kegiatan/{kegiatanId}", get(pekerjaan_by::by_kegiatan))
+        .route(
+            "/api/pekerjaan/stats/pagu-kecamatan/{kecamatanId}",
+            get(pekerjaan_by::pagu_by_kecamatan),
+        )
+        .route(
+            "/api/pekerjaan/stats/pagu-kegiatan/{kegiatanId}",
+            get(pekerjaan_by::pagu_by_kegiatan),
+        )
+        .route("/api/pekerjaan/{id}/media", get(pekerjaan_by::media))
+        .route(
+            "/api/pekerjaan/{id}/progress-estimasi",
+            get(pekerjaan_estimasi::show).put(pekerjaan_estimasi::update),
+        )
+        // Sebelum `/api/pekerjaan/{id}`: segmen statis `import` dan `template`.
+        .route("/api/pekerjaan/import", post(pekerjaan_import::import))
+        .route("/api/pekerjaan/import/template", get(pekerjaan_import::download_template))
+        .route(
+            "/api/pekerjaan/{id}/download-all-berkas",
+            get(pekerjaan_download::download_all_berkas),
         )
         .route(
             "/api/foto",
