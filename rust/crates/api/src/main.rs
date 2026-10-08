@@ -1,4 +1,4 @@
-use api::app;
+use api::{app, AppState};
 use shared::Config;
 use std::net::SocketAddr;
 use tracing_subscriber::EnvFilter;
@@ -20,7 +20,10 @@ async fn main() {
         .expect("gagal bind port");
     tracing::info!(%addr, env = %config.app_env, "apiamis rust listening");
 
-    axum::serve(listener, app(&config))
+    let database_url = std::env::var("DATABASE_URL").expect("DATABASE_URL belum di-set");
+    let pool = sqlx::MySqlPool::connect_lazy(&database_url).expect("DATABASE_URL tidak valid");
+
+    axum::serve(listener, app(&config, AppState { pool }))
         .with_graceful_shutdown(shutdown_signal())
         .await
         .expect("server berhenti dengan error");

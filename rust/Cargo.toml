@@ -13,7 +13,8 @@ auth = { path = "crates/auth" }
 dotenvy = "0.15"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio", "mysql"] }
+chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
+sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio", "mysql", "chrono"] }
 sha2 = "0.10"
 thiserror = "2"
 hex = "0.4"

@@ -9,6 +9,8 @@ use axum::{
 };
 use serde_json::{json, Value};
 use shared::{ApiError, Config};
+pub mod kecamatan;
+
 use tower_http::{
     cors::{AllowHeaders, AllowMethods, AllowOrigin, CorsLayer},
     request_id::{MakeRequestUuid, PropagateRequestIdLayer, SetRequestIdLayer},
@@ -34,12 +36,20 @@ const ALLOWED_ORIGINS: &[&str] = &[
     "https://ami.cianjur.space",
 ];
 
+/// State bersama untuk handler yang butuh database.
+#[derive(Clone)]
+pub struct AppState {
+    pub pool: sqlx::MySqlPool,
+}
+
 /// Router utama. Dipisah dari `main` supaya bisa diuji tanpa membuka port.
-pub fn app(config: &Config) -> Router {
+pub fn app(config: &Config, state: AppState) -> Router {
     Router::new()
         // Sama seperti `health: '/up'` di bootstrap/app.php (Laravel).
         .route("/up", get(up))
         .route("/api/health", get(health))
+        .route("/api/kecamatan", get(kecamatan::index))
+        .with_state(state)
         .fallback(not_found)
         .layer(TimeoutLayer::with_status_code(
             StatusCode::REQUEST_TIMEOUT,
@@ -116,8 +126,18 @@ mod tests {
         }
     }
 
+    /// Pool yang tidak pernah terkoneksi kecuali dipakai; cukup untuk route tanpa DB.
+    fn test_state() -> AppState {
+        AppState {
+            pool: sqlx::MySqlPool::connect_lazy("mysql://test:test@127.0.0.1:1/none").unwrap(),
+        }
+    }
+
     async fn send(req: Request<Body>) -> Response {
-        app(&test_config()).oneshot(req).await.unwrap()
+        app(&test_config(), test_state())
+            .oneshot(req)
+            .await
+            .unwrap()
     }
 
     async fn body_json(res: Response) -> Value {
@@ -199,6 +219,13 @@ mod tests {
         assert!(!res
             .headers()
             .contains_key(header::ACCESS_CONTROL_ALLOW_ORIGIN));
+    }
+
+    #[tokio::test]
+    async fn kecamatan_requires_bearer_token() {
+        let (status, body) = get_json("/api/kecamatan").await;
+        assert_eq!(status, StatusCode::UNAUTHORIZED);
+        assert_eq!(body, json!({ "message": "Unauthenticated." }));
     }
 
     #[test]
