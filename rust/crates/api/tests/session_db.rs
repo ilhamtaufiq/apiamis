@@ -117,7 +117,7 @@ async fn login_sets_cookie_me_reads_it_and_logout_revokes_it() {
     )
     .await;
     assert_eq!(status, StatusCode::OK);
-    let token = body["token"].as_str().expect("token di body").to_string();
+    assert!(body.get("token").is_none(), "token tidak boleh ada di body");
 
     let setc = set_cookies
         .iter()
@@ -127,7 +127,6 @@ async fn login_sets_cookie_me_reads_it_and_logout_revokes_it() {
     assert!(setc.contains("SameSite=Strict"));
     assert!(setc.contains("Path=/"));
     assert!(setc.contains("Max-Age=43200"));
-    assert!(!setc.contains(&token), "token mentah tidak boleh di cookie");
     let cookie = session_pair(&set_cookies).unwrap();
 
     // Cookie saja (tanpa Authorization) cukup untuk me.

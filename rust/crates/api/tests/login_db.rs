@@ -69,7 +69,7 @@ async fn cleanup(pool: &MySqlPool) {
 
 #[tokio::test]
 #[ignore = "butuh DATABASE_URL"]
-async fn login_with_laravel_hash_returns_user_and_working_token() {
+async fn login_with_laravel_hash_returns_user_without_token() {
     let url = std::env::var("DATABASE_URL").expect("DATABASE_URL belum di-set");
     let pool = MySqlPool::connect(&url).await.unwrap();
     cleanup(&pool).await;
@@ -97,11 +97,8 @@ async fn login_with_laravel_hash_returns_user_and_working_token() {
     );
     assert_eq!(body["user"]["is_protected_from_deletion"], false);
 
-    let token = body["token"].as_str().unwrap().to_string();
-    let (id, _) = token.split_once('|').unwrap();
-    let who = auth::authenticate(&pool, &token).await.unwrap();
-    assert_eq!(who.token_id.to_string(), id);
-    assert_eq!(who.abilities, vec!["*".to_string()]);
+    // Token hanya di cookie httpOnly (lihat session_db untuk validitasnya).
+    assert!(body.get("token").is_none(), "token tidak boleh di body");
 
     cleanup(&pool).await;
 }

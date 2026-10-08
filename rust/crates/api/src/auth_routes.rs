@@ -192,9 +192,9 @@ pub async fn login(
         })
     });
 
+    // Token hanya di cookie httpOnly; body tidak lagi memuatnya (lihat K9).
     let mut response = Json(json!({
         "user": user_resource(&user, &roles, &permissions, avatar_url),
-        "token": token,
     }))
     .into_response();
     if let Some(cookie) = state.session.set_header(&token) {
