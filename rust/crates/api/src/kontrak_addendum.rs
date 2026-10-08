@@ -89,12 +89,12 @@ fn attr_name(key: &str) -> String {
 // Otorisasi
 // ---------------------------------------------------------------------------
 
-struct Actor {
-    user_id: u64,
-    roles: Vec<(u64, String)>,
+pub(crate) struct Actor {
+    pub(crate) user_id: u64,
+    pub(crate) roles: Vec<(u64, String)>,
 }
 
-async fn actor(state: &AppState, headers: &HeaderMap) -> Result<Actor, ApiError> {
+pub(crate) async fn actor(state: &AppState, headers: &HeaderMap) -> Result<Actor, ApiError> {
     let user = require_auth(state, headers).await?;
     let roles = auth::login::roles_of(&state.pool, user.user_id)
         .await
@@ -106,7 +106,7 @@ async fn actor(state: &AppState, headers: &HeaderMap) -> Result<Actor, ApiError>
 }
 
 impl Actor {
-    fn is_admin(&self) -> bool {
+    pub(crate) fn is_admin(&self) -> bool {
         self.roles.iter().any(|(_, n)| n == "admin")
     }
 
@@ -117,7 +117,7 @@ impl Actor {
     }
 }
 
-fn authorize_admin(a: &Actor) -> Result<(), ApiError> {
+pub(crate) fn authorize_admin(a: &Actor) -> Result<(), ApiError> {
     if a.is_admin() {
         Ok(())
     } else {
@@ -139,7 +139,7 @@ async fn can_access_pekerjaan(
     }
 }
 
-async fn authorize_view_kontrak(
+pub(crate) async fn authorize_view_kontrak(
     state: &AppState,
     a: &Actor,
     kontrak: &kontrak::KontrakRow,
@@ -226,7 +226,10 @@ async fn find_addendum(pool: &MySqlPool, id: i64) -> Result<kontrak::AddendumRow
 }
 
 /// Kontrak induk dari addendum. Baris yang hilang dianggap tidak ditemukan.
-async fn find_kontrak(pool: &MySqlPool, id: i64) -> Result<kontrak::KontrakRow, ApiError> {
+pub(crate) async fn find_kontrak(
+    pool: &MySqlPool,
+    id: i64,
+) -> Result<kontrak::KontrakRow, ApiError> {
     kontrak::find_row(pool, id)
         .await
         .map_err(internal)?

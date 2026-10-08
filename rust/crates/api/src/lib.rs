@@ -24,6 +24,7 @@ pub mod kecamatan;
 pub mod kegiatan;
 pub mod kontrak;
 pub mod kontrak_addendum;
+pub mod kontrak_register_gap;
 pub mod kontrak_xlsx;
 pub mod koordinat;
 pub mod lookup;
@@ -264,6 +265,11 @@ pub fn app(config: &Config, state: AppState) -> Router {
                 .put(kontrak::update)
                 .patch(kontrak::update)
                 .delete(kontrak::destroy),
+        )
+        .route("/api/kontrak-addendums/register-gaps", get(kontrak_register_gap::register_gaps))
+        .route(
+            "/api/kontrak/{id}/addendum-register-gaps",
+            get(kontrak_register_gap::register_gaps_for_kontrak),
         )
         .route("/api/kontrak-addendums", get(kontrak_addendum::all))
         .route(
