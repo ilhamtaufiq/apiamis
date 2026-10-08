@@ -259,7 +259,7 @@ fn sanitize_spse(value: &str) -> String {
         .join(" ")
 }
 
-fn decode_entities(value: &str) -> String {
+pub(crate) fn decode_entities(value: &str) -> String {
     let mut out = String::with_capacity(value.len());
     let mut rest = value;
     while let Some(pos) = rest.find('&') {
