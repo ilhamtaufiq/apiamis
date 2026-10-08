@@ -82,6 +82,8 @@ pub mod sipd_pekerjaan_links;
 pub mod route_permission;
 pub mod session;
 pub mod sk;
+pub mod spam_integration;
+pub mod spam_units;
 pub mod tags_write;
 pub mod tiket;
 pub mod tiket_write;
@@ -259,6 +261,57 @@ pub fn app(config: &Config, state: AppState) -> Router {
                 .layer(DefaultBodyLimit::max(foto::BODY_LIMIT)),
         )
         .route("/api/peripaan/{id}", delete(peripaan::destroy))
+        // Unit SPAM (SpamUnitController). `POST /api/spam-units/import` belum dipindah.
+        .route("/api/public/spam-units/stats", get(spam_units::public_stats))
+        .route("/api/public/spam-units/map-stats", get(spam_units::public_map_stats))
+        .route(
+            "/api/public/spam-units/map-stats/series",
+            get(spam_units::public_map_stats_series),
+        )
+        .route("/api/spam-units/stats", get(spam_units::stats))
+        .route("/api/spam-units/stats/series", get(spam_units::stats_series))
+        .route(
+            "/api/spam-units/integration/output-options",
+            get(spam_units::integration_output_options),
+        )
+        .route("/api/spam-units/integration", get(spam_units::integration))
+        .route(
+            "/api/spam-units/integration/desa/{desaId}",
+            get(spam_units::integration_by_desa),
+        )
+        .route("/api/spam-units/air-minum-pekerjaan", get(spam_units::air_minum_pekerjaan))
+        .route(
+            "/api/spam-units/{unitSpam}/pekerjaan",
+            post(spam_units::attach_pekerjaan),
+        )
+        .route(
+            "/api/spam-units/{unitSpam}/pekerjaan/{pekerjaanId}",
+            delete(spam_units::detach_pekerjaan),
+        )
+        .route(
+            "/api/spam-units/{unitSpam}/sync-pekerjaan",
+            post(spam_units::sync_pekerjaan),
+        )
+        .route(
+            "/api/spam-units/{unitSpam}/achievements",
+            post(spam_units::add_achievement),
+        )
+        .route("/api/spam-units/{unitSpam}/budgets", post(spam_units::add_budget))
+        .route(
+            "/api/spam-units/{unitSpam}/budgets/{budgetId}",
+            delete(spam_units::delete_budget),
+        )
+        .route(
+            "/api/spam-units",
+            get(spam_units::index).post(spam_units::store),
+        )
+        .route(
+            "/api/spam-units/{id}",
+            get(spam_units::show)
+                .put(spam_units::update)
+                .patch(spam_units::update)
+                .delete(spam_units::destroy),
+        )
         .route("/api/roles", get(roles::index).post(roles::store))
         .route(
             "/api/roles/{id}",
