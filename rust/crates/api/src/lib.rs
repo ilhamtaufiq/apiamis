@@ -68,6 +68,7 @@ pub mod pekerjaan_estimasi;
 pub mod pekerjaan_download;
 pub mod pekerjaan_import;
 pub mod peripaan;
+pub mod permissions;
 pub mod pekerjaan_detail;
 pub mod pekerjaan_rel;
 pub mod pekerjaan_write;
@@ -323,6 +324,17 @@ pub fn app(config: &Config, state: AppState) -> Router {
                 .delete(spam_units::destroy),
         )
         .route("/api/roles", get(roles::index).post(roles::store))
+        .route(
+            "/api/permissions",
+            get(permissions::index).post(permissions::store),
+        )
+        .route(
+            "/api/permissions/{id}",
+            get(permissions::show)
+                .put(permissions::update)
+                .patch(permissions::update)
+                .delete(permissions::destroy),
+        )
         .route(
             "/api/roles/{id}",
             get(roles::show)
