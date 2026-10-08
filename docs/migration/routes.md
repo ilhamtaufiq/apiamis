@@ -12,9 +12,9 @@ Sumber: `routes/api.php` (branch `rust`, dari `main` SHA `c19fd06`). Dibuat deng
 
 ### Status paritas (diperbarui)
 
-- Sudah di Rust: **219** (termasuk dokumen kontrak SPK, cover, ZIP cover, BAP, dan bap-context, serta PDF SPK lewat ONLYOFFICE; termasuk auth, lookup, kecamatan, desa, kegiatan, penyedia, tiket GET, checklist GET, foto dan penerima seluruh rute, berkas kecuali export-pdf dan upload-from-url, kontrak CRUD, relasi pekerjaan/kegiatan/penyedia, excel export, template, dan impor kontrak, addendum dan register-gaps GET, sk, notifikasi, dan master fase pekerjaan)
+- Sudah di Rust: **221** (termasuk dokumen kontrak SPK, cover, ZIP cover, BAP, dan bap-context, serta PDF SPK lewat ONLYOFFICE; termasuk auth, lookup, kecamatan, desa, kegiatan, penyedia, tiket GET, checklist GET, foto dan penerima seluruh rute, berkas kecuali export-pdf dan upload-from-url, kontrak CRUD, relasi pekerjaan/kegiatan/penyedia, excel export, template, dan impor kontrak, addendum dan register-gaps GET, sk, notifikasi, dan master fase pekerjaan)
 - Parsial di Rust: **2** (`GET /api/pekerjaan`: relasi daftar belum dibandingkan dengan produksi, lihat T21)
-- Belum: **189** (dihitung langsung dari kolom Status; termasuk addendum, export Excel draft, progress estimasi, destroy pekerjaan, dan modul lain yang belum dipindah)
+- Belum: **187** (dihitung langsung dari kolom Status; termasuk addendum, export Excel draft, progress estimasi, destroy pekerjaan, dan modul lain yang belum dipindah)
 - Dihapus (tidak dimigrasi): **77** (termasuk desa sync-kk, chat AI dan live-chat, panduan CMS, presence, search ai-summary, dan pengaturan AI di app-settings, sesuai keputusan user)
 
 Cara menghitung: cocokkan method dan path (`{param}` dinormalisasi) dengan route yang terdaftar di `rust/crates/api/src/lib.rs`.
@@ -111,8 +111,8 @@ Kolom **Status** diisi saat modul dipindah ke Rust. Awalnya semua `belum`.
 | No | Method | Path | Controller@action | Middleware | Status |
 | --- | --- | --- | --- | --- | --- |
 | 1 | GET | `/api/public/puspen/progress-fisik` | PuspenProgressFisikController@publicIndex | - | dihapus |
-| 2 | GET | `/api/public/spam-units/stats` | SpamUnitController@publicStats | - | belum |
-| 3 | GET | `/api/public/spam-units/map-stats` | SpamUnitController@publicMapStats | - | belum |
+| 2 | GET | `/api/public/spam-units/stats` | SpamUnitController@publicStats | - | rust |
+| 3 | GET | `/api/public/spam-units/map-stats` | SpamUnitController@publicMapStats | - | rust |
 | 4 | GET | `/api/public/spam-kelembagaan/form/{token}` | SpamKelembagaanShareController@publicShow | throttle:60,1 | belum |
 | 5 | POST | `/api/public/spam-kelembagaan/form/{token}` | SpamKelembagaanShareController@publicSubmit | throttle:10,1 | belum |
 | 6 | GET | `/api/public/spm-sanitasi/stats` | SpmSanitasiController@publicStats | - | belum |
@@ -299,23 +299,23 @@ Kolom **Status** diisi saat modul dipindah ke Rust. Awalnya semua `belum`.
 
 | No | Method | Path | Controller@action | Middleware | Status |
 | --- | --- | --- | --- | --- | --- |
-| 1 | GET | `/api/spam-units/stats` | SpamUnitController@stats | auth:sanctum | belum |
-| 2 | GET | `/api/spam-units/integration/output-options` | SpamUnitController@integrationOutputOptions | auth:sanctum | belum |
-| 3 | GET | `/api/spam-units/integration` | SpamUnitController@integration | auth:sanctum | belum |
-| 4 | GET | `/api/spam-units/integration/desa/{desaId}` | SpamUnitController@integrationByDesa | auth:sanctum | belum |
-| 5 | GET | `/api/spam-units/air-minum-pekerjaan` | SpamUnitController@airMinumPekerjaan | auth:sanctum | belum |
-| 6 | POST | `/api/spam-units/{unitSpam}/pekerjaan` | SpamUnitController@attachPekerjaan | auth:sanctum | belum |
-| 7 | DELETE | `/api/spam-units/{unitSpam}/pekerjaan/{pekerjaanId}` | SpamUnitController@detachPekerjaan | auth:sanctum | belum |
-| 8 | POST | `/api/spam-units/{unitSpam}/sync-pekerjaan` | SpamUnitController@syncPekerjaan | auth:sanctum | belum |
-| 9 | POST | `/api/spam-units/{unitSpam}/achievements` | SpamUnitController@addAchievement | auth:sanctum | belum |
-| 10 | POST | `/api/spam-units/{unitSpam}/budgets` | SpamUnitController@addBudget | auth:sanctum | belum |
-| 11 | DELETE | `/api/spam-units/{unitSpam}/budgets/{budgetId}` | SpamUnitController@deleteBudget | auth:sanctum | belum |
+| 1 | GET | `/api/spam-units/stats` | SpamUnitController@stats | auth:sanctum | rust |
+| 2 | GET | `/api/spam-units/integration/output-options` | SpamUnitController@integrationOutputOptions | auth:sanctum | rust |
+| 3 | GET | `/api/spam-units/integration` | SpamUnitController@integration | auth:sanctum | rust |
+| 4 | GET | `/api/spam-units/integration/desa/{desaId}` | SpamUnitController@integrationByDesa | auth:sanctum | rust |
+| 5 | GET | `/api/spam-units/air-minum-pekerjaan` | SpamUnitController@airMinumPekerjaan | auth:sanctum | rust |
+| 6 | POST | `/api/spam-units/{unitSpam}/pekerjaan` | SpamUnitController@attachPekerjaan | auth:sanctum | rust |
+| 7 | DELETE | `/api/spam-units/{unitSpam}/pekerjaan/{pekerjaanId}` | SpamUnitController@detachPekerjaan | auth:sanctum | rust |
+| 8 | POST | `/api/spam-units/{unitSpam}/sync-pekerjaan` | SpamUnitController@syncPekerjaan | auth:sanctum | rust |
+| 9 | POST | `/api/spam-units/{unitSpam}/achievements` | SpamUnitController@addAchievement | auth:sanctum | rust |
+| 10 | POST | `/api/spam-units/{unitSpam}/budgets` | SpamUnitController@addBudget | auth:sanctum | rust |
+| 11 | DELETE | `/api/spam-units/{unitSpam}/budgets/{budgetId}` | SpamUnitController@deleteBudget | auth:sanctum | rust |
 | 12 | POST | `/api/spam-units/import` | SpamUnitController@import | auth:sanctum | belum |
-| 13 | GET | `/api/spam-units` | SpamUnitController@index | auth:sanctum | belum |
-| 14 | POST | `/api/spam-units` | SpamUnitController@store | auth:sanctum | belum |
-| 15 | GET | `/api/spam-units/{id}` | SpamUnitController@show | auth:sanctum | belum |
-| 16 | PUT/PATCH | `/api/spam-units/{id}` | SpamUnitController@update | auth:sanctum | belum |
-| 17 | DELETE | `/api/spam-units/{id}` | SpamUnitController@destroy | auth:sanctum | belum |
+| 13 | GET | `/api/spam-units` | SpamUnitController@index | auth:sanctum | rust |
+| 14 | POST | `/api/spam-units` | SpamUnitController@store | auth:sanctum | rust |
+| 15 | GET | `/api/spam-units/{id}` | SpamUnitController@show | auth:sanctum | rust |
+| 16 | PUT/PATCH | `/api/spam-units/{id}` | SpamUnitController@update | auth:sanctum | rust |
+| 17 | DELETE | `/api/spam-units/{id}` | SpamUnitController@destroy | auth:sanctum | rust |
 
 ### spam-kelembagaan (8)
 
