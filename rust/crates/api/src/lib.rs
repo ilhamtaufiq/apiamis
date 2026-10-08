@@ -26,6 +26,7 @@ pub mod koordinat;
 pub mod lookup;
 pub mod maintenance;
 pub mod media;
+pub mod notifications;
 pub mod notify;
 pub mod output;
 pub mod pagination;
@@ -237,6 +238,27 @@ pub fn app(config: &Config, state: AppState) -> Router {
         .route("/api/post-pekerjaan-checklist", get(checklist::post_index))
         // Catch-all untuk /api: route yang belum ada di Rust tetap lewat pengecekan
         // permission (Laravel menolak lebih dulu, bukan 404).
+        .route("/api/notifications", get(notifications::index))
+        .route(
+            "/api/notifications/{id}/read",
+            post(notifications::mark_as_read),
+        )
+        .route(
+            "/api/notifications/mark-all-read",
+            post(notifications::mark_all_as_read),
+        )
+        .route(
+            "/api/notifications/broadcast",
+            post(notifications::send_broadcast),
+        )
+        .route(
+            "/api/notifications/broadcast-history",
+            get(notifications::broadcast_history),
+        )
+        .route(
+            "/api/notifications/broadcast/{id}",
+            delete(notifications::delete_broadcast),
+        )
         .route("/api/{*rest}", any(not_found))
         .with_state(state)
         .route_layer(axum::middleware::from_fn_with_state(
