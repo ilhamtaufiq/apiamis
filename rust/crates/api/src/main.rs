@@ -23,10 +23,19 @@ async fn main() {
     let database_url = std::env::var("DATABASE_URL").expect("DATABASE_URL belum di-set");
     let pool = sqlx::MySqlPool::connect_lazy(&database_url).expect("DATABASE_URL tidak valid");
 
-    axum::serve(listener, app(&config, AppState { pool }))
-        .with_graceful_shutdown(shutdown_signal())
-        .await
-        .expect("server berhenti dengan error");
+    axum::serve(
+        listener,
+        app(
+            &config,
+            AppState {
+                pool,
+                app_url: config.app_url.clone(),
+            },
+        ),
+    )
+    .with_graceful_shutdown(shutdown_signal())
+    .await
+    .expect("server berhenti dengan error");
 }
 
 async fn shutdown_signal() {

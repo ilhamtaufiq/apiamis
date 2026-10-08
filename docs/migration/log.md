@@ -34,7 +34,7 @@ Setiap kali ada langkah yang selesai, tambahkan entri di bagian **Riwayat** dan 
 ### Fase 2: Modul bisnis (4–7 bulan)
 
 - [ ] 2.1 Public API v1 (`/api/public/v1/*`)
-- [~] 2.2 Master data: kecamatan (GET list sudah jalan di Rust, diuji terhadap fixture dan DB), desa, kegiatan
+- [~] 2.2 Master data: `kecamatan`, `desa`, dan `kegiatan` (GET list) sudah di Rust. Diuji terhadap fixture produksi dan DB. Belum ada show per id, POST, PUT, atau DELETE
 - [ ] 2.3 Lookup dan konfigurasi
 - [ ] 2.4 Tiket dan SpamUnit
 - [ ] 2.5 Checklist proyek
@@ -81,6 +81,8 @@ Setiap kali ada langkah yang selesai, tambahkan entri di bagian **Riwayat** dan 
 | T11 | Produksi `apiamis.cianjur.space` mengembalikan exception Laravel lengkap (29 frame stack trace, path `/var/www/html/...`) untuk 404. Itu tanda `APP_DEBUG=true` | **Segera set `APP_DEBUG=false` di produksi.** Skrip rekaman sekarang tidak menyimpan body seperti itu |
 | T12 | Header `x-powered-by: PHP/8.3.35` terbuka ke publik | Hapus header ini dari server atau proxy |
 | T13 | Token API dan password akun pernah ditulis di percakapan. Token sudah dicabut, tapi password belum diganti | Ganti password akun. Untuk rekaman berikutnya, pakai akun uji khusus |
+| T14 | Data lokal (dump) tidak sama dengan produksi: `tbl_kegiatan` id 29, `sumber_dana` `PAD` di dump dan `DAU` di produksi | Dicatat di `KNOWN_DATA_DRIFT` pada tes paritas. Cek ulang setelah dump lengkap |
+| T15 | Timestamp `created_at` di dump lokal 7 jam berbeda dari produksi untuk baris yang sama (id 1 kegiatan) | Tes paritas tidak membandingkan timestamp. Pastikan zona waktu DB produksi sebelum fixture timestamp dipakai |
 | T10 | Kualitas data: 14 dari 20 kegiatan punya `pagu = 0`, 7 pekerjaan punya `pagu = 0`, dan 15 kegiatan punya total pekerjaan melebihi pagu kegiatan | Perlu konfirmasi dengan pemilik data sebelum dijadikan fixture acuan |
 
 ## Keputusan terbuka
@@ -116,4 +118,5 @@ Setiap kali ada langkah yang selesai, tambahkan entri di bagian **Riwayat** dan 
 | 2026-10-08 | 0.4 Rekaman tanpa token dari produksi | `rust/fixtures/live/`: `up` 200 dan 401 untuk kecamatan, desa, kegiatan, pekerjaan. 404 ditemukan membocorkan stack trace (T11), jadi tidak disimpan |
 | 2026-10-08 | 0.4 Rekaman dengan token | Daftar `kecamatan` (33), `desa` (15 per halaman), `kegiatan` (15), dan `pekerjaan` (20) direkam. Field pribadi dihapus: NIP, telepon, email, nama PPTK, nama pengawas dan pendamping. Token uji dicabut dan sekarang 401. Dua respon 404 tidak disimpan karena berisi stack trace (T11) |
 | 2026-10-08 | 2.2 GET /api/kecamatan di Rust | Endpoint dengan auth token Sanctum, query `tbl_kecamatan` + hitungan `tbl_desa`, dan mapping sama dengan `KecamatanResource`. Uji: mapping cocok 100% dengan fixture live (33 baris), uji DB lolos, smoke test server lokal: 401/401/200. Temuan saat uji: kolom TIMESTAMP harus dibaca sebagai `DateTime<Utc>` |
+| 2026-10-08 | 2.2 desa dan kegiatan di Rust | `GET /api/desa` (search, kecamatan_id, paginasi) dan `GET /api/kegiatan` (tahun, per_page=-1, paginasi). Uji: fixture halaman 1 cocok persis (termasuk meta dan links), paritas DB kegiatan cocok kecuali T14. Pagination untuk halaman selain 1 belum diverifikasi terhadap Laravel |
 | 2026-10-08 | Ruang lingkup diperluas | Repo punya lebih banyak modul dari rencana awal: blog, kanban, live chat, procurement SPSE, SIPD, Puspen, tanda tangan PDF, Google Drive, backup, dan WhatsApp. Perlu dimasukkan ke daftar modul Fase 2 |

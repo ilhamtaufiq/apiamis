@@ -9,7 +9,11 @@ use axum::{
 };
 use serde_json::{json, Value};
 use shared::{ApiError, Config};
+pub mod desa;
+pub mod format;
 pub mod kecamatan;
+pub mod kegiatan;
+pub mod pagination;
 
 use tower_http::{
     cors::{AllowHeaders, AllowMethods, AllowOrigin, CorsLayer},
@@ -40,6 +44,23 @@ const ALLOWED_ORIGINS: &[&str] = &[
 #[derive(Clone)]
 pub struct AppState {
     pub pool: sqlx::MySqlPool,
+    /// `APP_URL`, dipakai untuk URL pagination.
+    pub app_url: String,
+}
+
+/// Memastikan header `Authorization: Bearer <token>` valid. Dipakai handler yang butuh login.
+pub async fn require_auth(
+    state: &AppState,
+    headers: &axum::http::HeaderMap,
+) -> Result<auth::AuthUser, ApiError> {
+    let bearer = headers
+        .get(axum::http::header::AUTHORIZATION)
+        .and_then(|v| v.to_str().ok())
+        .and_then(|v| v.strip_prefix("Bearer "))
+        .ok_or_else(ApiError::unauthenticated)?;
+    auth::authenticate(&state.pool, bearer)
+        .await
+        .map_err(|_| ApiError::unauthenticated())
 }
 
 /// Router utama. Dipisah dari `main` supaya bisa diuji tanpa membuka port.
@@ -49,6 +70,8 @@ pub fn app(config: &Config, state: AppState) -> Router {
         .route("/up", get(up))
         .route("/api/health", get(health))
         .route("/api/kecamatan", get(kecamatan::index))
+        .route("/api/desa", get(desa::index))
+        .route("/api/kegiatan", get(kegiatan::index))
         .with_state(state)
         .fallback(not_found)
         .layer(TimeoutLayer::with_status_code(
@@ -123,6 +146,7 @@ mod tests {
             app_port: 0,
             request_timeout_secs: 30,
             body_limit_bytes: 1024,
+            app_url: "http://localhost".to_string(),
         }
     }
 
@@ -130,6 +154,7 @@ mod tests {
     fn test_state() -> AppState {
         AppState {
             pool: sqlx::MySqlPool::connect_lazy("mysql://test:test@127.0.0.1:1/none").unwrap(),
+            app_url: "http://localhost".to_string(),
         }
     }
 

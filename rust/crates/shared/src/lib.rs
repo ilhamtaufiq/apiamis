@@ -15,6 +15,8 @@ pub struct Config {
     pub app_port: u16,
     pub request_timeout_secs: u64,
     pub body_limit_bytes: usize,
+    /// `APP_URL`, dipakai untuk URL pada pagination (sama dengan Laravel).
+    pub app_url: String,
 }
 
 impl Config {
@@ -24,6 +26,7 @@ impl Config {
             app_port: parse_env("APP_PORT", 8000),
             request_timeout_secs: parse_env("RUST_REQUEST_TIMEOUT_SECS", 30),
             body_limit_bytes: parse_env("RUST_BODY_LIMIT_BYTES", 10 * 1024 * 1024),
+            app_url: env::var("APP_URL").unwrap_or_else(|_| "http://localhost".to_string()),
         }
     }
 }

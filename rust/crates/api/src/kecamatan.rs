@@ -11,7 +11,7 @@ use serde_json::{json, Value};
 use shared::ApiError;
 use sqlx::Row;
 
-use crate::AppState;
+use crate::{format::iso8601_utc, AppState};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct KecamatanRow {
@@ -31,14 +31,6 @@ pub fn to_resource(row: &KecamatanRow) -> Value {
         "created_at": iso8601_utc(row.created_at),
         "updated_at": iso8601_utc(row.updated_at),
     })
-}
-
-/// Format `Carbon::toIso8601String()` untuk zona UTC: `2025-11-30T10:00:00+00:00`.
-fn iso8601_utc(ts: Option<DateTime<Utc>>) -> Value {
-    match ts {
-        Some(t) => Value::String(t.format("%Y-%m-%dT%H:%M:%S+00:00").to_string()),
-        None => Value::Null,
-    }
 }
 
 /// Membaca semua kecamatan, urutan `id` seperti `Kecamatan::all()` di Laravel.
