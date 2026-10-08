@@ -97,6 +97,8 @@ pub mod spm_sanitasi_write;
 pub mod tags_write;
 pub mod tiket;
 pub mod tiket_write;
+pub mod user_pekerjaan;
+pub mod user_pekerjaan_gaps;
 pub mod users;
 pub mod users_write;
 pub mod validation;
@@ -203,6 +205,26 @@ pub fn app(config: &Config, state: AppState) -> Router {
             get(kegiatan_role_write::index).post(kegiatan_role_write::store),
         )
         .route("/api/kegiatan-role/{id}", delete(kegiatan_role_write::destroy))
+        // User-pekerjaan (UserPekerjaanController). Rute statis didaftarkan terpisah dari `{id}`.
+        // `broadcast-reminders` belum dipindah (butuh render email).
+        .route(
+            "/api/user-pekerjaan",
+            get(user_pekerjaan::index).post(user_pekerjaan::store),
+        )
+        .route("/api/user-pekerjaan/{id}", delete(user_pekerjaan::destroy))
+        .route("/api/user-pekerjaan/user/{userId}", get(user_pekerjaan::by_user))
+        .route(
+            "/api/user-pekerjaan/pekerjaan/{pekerjaanId}",
+            get(user_pekerjaan::by_pekerjaan),
+        )
+        .route(
+            "/api/user-pekerjaan/available-users",
+            get(user_pekerjaan::available_users),
+        )
+        .route(
+            "/api/user-pekerjaan/completeness-gaps",
+            get(user_pekerjaan::completeness_gaps),
+        )
         .route(
             "/api/pengawas",
             get(pengawas_write::index).post(pengawas_write::store),
