@@ -35,6 +35,7 @@ async fn list_paginates_and_find_returns_same_row() {
         kegiatan: HashMap::new(),
         pengawas: HashMap::new(),
         tags: HashMap::new(),
+        progress: HashMap::new(),
     };
     let v = to_resource(&shown, &rel);
     assert_eq!(v["assignment_sources"], serde_json::Value::Null);

@@ -233,6 +233,8 @@ pub struct Loaded {
     pub kegiatan: HashMap<i64, Value>,
     pub pengawas: HashMap<u64, Value>,
     pub tags: HashMap<u64, Vec<Value>>,
+    /// Metrik progres dari `tbl_progress.content`. Tidak ada entri = progres belum dicatat (0).
+    pub progress: HashMap<u64, crate::progress_metrics::Metrics>,
 }
 
 async fn load(pool: &MySqlPool, rows: &[PekerjaanRow]) -> Result<Loaded, sqlx::Error> {
@@ -258,6 +260,7 @@ async fn load(pool: &MySqlPool, rows: &[PekerjaanRow]) -> Result<Loaded, sqlx::E
         kegiatan: HashMap::new(),
         pengawas: HashMap::new(),
         tags: HashMap::new(),
+        progress: progress_for(pool, &pekerjaan_ids).await?,
     };
 
     for id in &kec_ids {
@@ -306,6 +309,28 @@ async fn load(pool: &MySqlPool, rows: &[PekerjaanRow]) -> Result<Loaded, sqlx::E
     Ok(out)
 }
 
+/// Metrik progres per pekerjaan dari baris `tbl_progress` pertama (urut id).
+pub async fn progress_for(
+    pool: &MySqlPool,
+    ids: &[u64],
+) -> Result<HashMap<u64, crate::progress_metrics::Metrics>, sqlx::Error> {
+    let mut out = HashMap::new();
+    for id in ids {
+        let row = sqlx::query(
+            "SELECT CAST(content AS CHAR) AS content FROM tbl_progress WHERE pekerjaan_id = ? ORDER BY id LIMIT 1",
+        )
+        .bind(id)
+        .fetch_optional(pool)
+        .await?;
+        if let Some(r) = row {
+            let raw: Option<String> = r.try_get("content")?;
+            let content = raw.and_then(|s| serde_json::from_str::<Value>(&s).ok());
+            out.insert(*id, crate::progress_metrics::summarize(content.as_ref()));
+        }
+    }
+    Ok(out)
+}
+
 /// `PengawasResource`: `jumlah_lokasi` dan `total_pagu` dihitung dari pekerjaan dengan `pengawas_id` ini.
 pub async fn pengawas_resource(pool: &MySqlPool, id: u64) -> Result<Option<Value>, sqlx::Error> {
     let row = sqlx::query(
@@ -341,6 +366,7 @@ pub fn to_resource(p: &PekerjaanRow, rel: &Loaded) -> Value {
         .and_then(|id| rel.kecamatan.get(&id).cloned());
     let desa_key = p.desa_id.and_then(|id| rel.desa.get(&id).cloned());
     let keg_key = p.kegiatan_id.and_then(|id| rel.kegiatan.get(&id).cloned());
+    let progress = rel.progress.get(&p.id);
     let peng = p.pengawas_id.and_then(|id| rel.pengawas.get(&id).cloned());
     let pend = p
         .pendamping_id
@@ -356,8 +382,8 @@ pub fn to_resource(p: &PekerjaanRow, rel: &Loaded) -> Value {
         // BELUM DIPINDAH: null, bukan nilai yang salah.
         "has_kontrak": Value::Null,
         "kontrak_count": Value::Null,
-        "progress_total": Value::Null,
-        "deviasi": Value::Null,
+        "progress_total": number_like_php(progress.map_or(0.0, |m| m.progress_total)),
+        "deviasi": number_like_php(progress.map_or(0.0, |m| m.deviasi)),
         "progress_estimasi_fisik": Value::Null,
         "progress_estimasi_keuangan": Value::Null,
         "progress_estimasi_keuangan_nilai": Value::Null,
@@ -555,9 +581,11 @@ mod tests {
             kegiatan: HashMap::new(),
             pengawas: HashMap::new(),
             tags: HashMap::new(),
+            progress: HashMap::new(),
         };
         let v = to_resource(&p, &rel);
-        assert_eq!(v["progress_total"], Value::Null);
+        assert_eq!(v["progress_total"], 0);
+        assert_eq!(v["deviasi"], 0);
         assert_eq!(v["assignment_sources"], Value::Null);
         assert_eq!(v["status"], "active");
         assert_eq!(v["pagu"], 1000);
