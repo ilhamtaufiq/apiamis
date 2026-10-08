@@ -22,7 +22,7 @@ use axum::{
     http::{HeaderMap, StatusCode},
     Json,
 };
-use chrono::{NaiveDate, NaiveDateTime};
+use chrono::{DateTime, NaiveDate, NaiveDateTime, Utc};
 use serde_json::{json, Map, Value};
 use shared::ApiError;
 use sqlx::{mysql::MySqlRow, Column, MySqlPool, Row, TypeInfo, ValueRef};
@@ -35,7 +35,7 @@ fn internal(e: impl std::fmt::Display) -> ApiError {
 
 /// Cast dari `$casts` model, hanya untuk tipe yang dipakai di profil.
 #[derive(Clone, Copy, PartialEq)]
-enum Cast {
+pub(crate) enum Cast {
     Float,
     Int,
     Bool,
@@ -83,7 +83,11 @@ fn column_json(row: &MySqlRow, i: usize, ty: &str, cast: Option<Cast>) -> Result
             return Ok(json!(v != 0));
         }
         Some(Cast::Int) => {
-            let v: i64 = row.try_get(i).map_err(internal)?;
+            // Kolom id MySQL sering BIGINT UNSIGNED: sqlx tidak mengizinkan i64 untuk kolom itu.
+            if let Ok(v) = row.try_get::<i64, _>(i) {
+                return Ok(json!(v));
+            }
+            let v: u64 = row.try_get(i).map_err(internal)?;
             return Ok(json!(v));
         }
         Some(Cast::Float) => {
@@ -108,7 +112,12 @@ fn column_json(row: &MySqlRow, i: usize, ty: &str, cast: Option<Cast>) -> Result
     if ty.contains("DOUBLE") || ty.contains("FLOAT") {
         return Ok(number_like_php(float_of(row, i, &ty)?));
     }
-    if ty.contains("DATETIME") || ty.contains("TIMESTAMP") {
+    if ty.contains("TIMESTAMP") {
+        // Kolom TIMESTAMP MySQL hanya bisa dibaca sebagai DateTime<Utc> oleh sqlx.
+        let v: DateTime<Utc> = row.try_get(i).map_err(internal)?;
+        return Ok(carbon_json(Some(v)));
+    }
+    if ty.contains("DATETIME") {
         let v: NaiveDateTime = row.try_get(i).map_err(internal)?;
         return Ok(carbon_json(Some(v.and_utc())));
     }
@@ -134,7 +143,7 @@ fn float_of(row: &MySqlRow, i: usize, ty: &str) -> Result<f64, ApiError> {
 }
 
 /// Model mentah (`toArray()` tanpa relasi): semua kolom, nilai dibentuk dari tipe dan cast.
-fn raw_model(row: &MySqlRow, casts: &[(&str, Cast)]) -> Result<Value, ApiError> {
+pub(crate) fn raw_model(row: &MySqlRow, casts: &[(&str, Cast)]) -> Result<Value, ApiError> {
     let mut map = Map::new();
     for (i, col) in row.columns().iter().enumerate() {
         let name = col.name();
