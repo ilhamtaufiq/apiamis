@@ -30,7 +30,7 @@ use crate::{
 
 pub const FULL_ACCESS_ROLES: &[&str] = &["admin", "manager", "super-admin", "operator"];
 
-pub const PARTIAL_HEADER: &str = "pekerjaan: foto_required_count dan foto_* saat summary, output dan draft saat summary, registers kontrak saat summary belum dipindah";
+pub const PARTIAL_HEADER: &str = "pekerjaan: show belum memakai PekerjaanDetailResource (foto, berkas, penerima, progress, kontrak lengkap belum dipindah)";
 
 const SORTABLE: &[&str] = &[
     "id",
@@ -245,6 +245,10 @@ pub struct Loaded {
     pub counts: HashMap<u64, crate::pekerjaan_rel::Counts>,
     pub kontrak: HashMap<u64, Vec<Value>>,
     pub sources: HashMap<u64, Vec<&'static str>>,
+    /// `output` dan `foto` dimuat hanya pada daftar `summary` yang terpaginasi.
+    pub output_loaded: bool,
+    pub outputs: HashMap<u64, Vec<crate::pekerjaan_rel::OutputRow>>,
+    pub foto_groups: HashMap<u64, Vec<crate::pekerjaan_rel::FotoGroup>>,
     pub mode: Mode,
     /// Relasi tags dan kontrak ikut dimuat (Laravel: tidak dimuat pada `per_page=-1` tanpa summary).
     pub tags_loaded: bool,
@@ -265,6 +269,9 @@ impl Loaded {
             counts: HashMap::new(),
             kontrak: HashMap::new(),
             sources: HashMap::new(),
+            output_loaded: mode.summary && !mode.unbounded,
+            outputs: HashMap::new(),
+            foto_groups: HashMap::new(),
             mode,
             tags_loaded: !mode.unbounded || mode.summary,
             kontrak_loaded: !mode.unbounded || mode.summary,
@@ -320,6 +327,9 @@ pub async fn load(
         counts: HashMap::new(),
         kontrak: HashMap::new(),
         sources: HashMap::new(),
+        output_loaded: mode.summary && !mode.unbounded,
+        outputs: HashMap::new(),
+        foto_groups: HashMap::new(),
         mode,
         tags_loaded: !mode.unbounded || mode.summary,
         kontrak_loaded: !mode.unbounded || mode.summary,
@@ -377,7 +387,16 @@ pub async fn load(
         if out.kontrak_loaded {
             out.kontrak.insert(
                 p.id,
-                crate::pekerjaan_rel::kontrak_items(pool, p.id, mode.summary).await?,
+                crate::pekerjaan_rel::kontrak_items(pool, p.id, !mode.unbounded, mode.summary)
+                    .await?,
+            );
+        }
+        if out.output_loaded {
+            out.outputs
+                .insert(p.id, crate::pekerjaan_rel::outputs_for(pool, p.id).await?);
+            out.foto_groups.insert(
+                p.id,
+                crate::pekerjaan_rel::foto_groups_for(pool, p.id).await?,
             );
         }
         let pengawas_nip = p
@@ -506,6 +525,14 @@ pub fn to_resource(p: &PekerjaanRow, rel: &Loaded) -> Value {
     let keg_key = p.kegiatan_id.and_then(|id| rel.kegiatan.get(&id).cloned());
     let progress = rel.progress.get(&p.id);
     let counts = rel.counts.get(&p.id).copied().unwrap_or_default();
+    // Cabang lengkap bila relasi output dan foto dimuat; selain itu cabang parsial.
+    let foto_full = rel.output_loaded.then(|| {
+        crate::pekerjaan_rel::foto_full(
+            rel.outputs.get(&p.id).map_or(&[], Vec::as_slice),
+            rel.foto_groups.get(&p.id).map_or(&[], Vec::as_slice),
+            counts.foto,
+        )
+    });
     let estimasi = match &rel.estimasi {
         Some(map) => map
             .get(&p.id)
@@ -535,12 +562,8 @@ pub fn to_resource(p: &PekerjaanRow, rel: &Loaded) -> Value {
         "deviasi_estimasi_fisik": estimasi["deviasi_estimasi_fisik"],
         "deviasi_estimasi_keuangan": estimasi["deviasi_estimasi_keuangan"],
         "foto_count": counts.foto,
-        "foto_required_count": Value::Null,
-        "foto_status": if rel.mode.summary && !rel.mode.unbounded {
-            Value::Null
-        } else {
-            json!(counts.foto_status())
-        },
+        "foto_required_count": foto_full.map_or(Value::Null, |f| json!(f.required)),
+        "foto_status": foto_full.map_or_else(|| json!(counts.foto_status()), |f| json!(f.status)),
         "kecamatan_id": p.kecamatan_id,
         "desa_id": p.desa_id,
         "kegiatan_id": p.kegiatan_id,
@@ -564,6 +587,14 @@ pub fn to_resource(p: &PekerjaanRow, rel: &Loaded) -> Value {
     }
     if !rel.kontrak_loaded {
         v.as_object_mut().map(|m| m.remove("kontrak"));
+    }
+    if rel.output_loaded {
+        let outputs = rel.outputs.get(&p.id).map_or_else(Vec::new, |o| {
+            o.iter()
+                .map(crate::pekerjaan_rel::OutputRow::to_resource)
+                .collect()
+        });
+        v["output"] = Value::Array(outputs);
     }
     v
 }
@@ -650,9 +681,7 @@ pub async fn index(
         .await
         .map_err(internal)?;
         let data: Vec<Value> = rows.iter().map(|p| to_resource(p, &rel)).collect();
-        return Ok(partial_header(
-            Json(json!({ "data": data })).into_response(),
-        ));
+        return Ok(Json(json!({ "data": data })).into_response());
     }
 
     let per_page = query
@@ -691,7 +720,7 @@ pub async fn index(
         &base,
         &query_without_page(raw.as_deref()),
     );
-    Ok(partial_header(Json(body).into_response()))
+    Ok(Json(body).into_response())
 }
 
 pub async fn show(

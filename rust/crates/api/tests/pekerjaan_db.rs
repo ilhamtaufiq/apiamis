@@ -6,7 +6,8 @@
 //!     cargo test -p api --test pekerjaan_db -- --ignored
 //! ```
 
-use api::pekerjaan::{find, list, to_resource, PekerjaanFilter};
+use api::pekerjaan::{find, list, load, to_resource, Mode, PekerjaanFilter};
+use api::pekerjaan_rel::Viewer;
 use sqlx::{MySqlPool, Row};
 use std::collections::HashMap;
 
@@ -194,6 +195,175 @@ async fn kontrak_addendum_and_assignment_sources() {
         .unwrap();
     sqlx::query("DELETE FROM user_pekerjaan WHERE user_id = 5 AND pekerjaan_id = ?")
         .bind(pid)
+        .execute(&pool)
+        .await
+        .unwrap();
+}
+
+#[tokio::test]
+#[ignore = "butuh DATABASE_URL dan data tbl_pekerjaan"]
+async fn summary_page_loads_output_foto_metrics_and_registers() {
+    let url = std::env::var("DATABASE_URL").expect("DATABASE_URL belum di-set");
+    let pool = MySqlPool::connect(&url).await.unwrap();
+    let pid: u64 = sqlx::query("SELECT id FROM tbl_pekerjaan ORDER BY id LIMIT 1")
+        .fetch_one(&pool)
+        .await
+        .unwrap()
+        .try_get("id")
+        .unwrap();
+    let p = find(&pool, pid).await.unwrap().unwrap();
+
+    // Bersihkan sisa uji sebelumnya.
+    sqlx::query("DELETE FROM tbl_document_registers WHERE nomor = 'UJI-REG-1'")
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("DELETE FROM tbl_kontrak WHERE spk = 'SPK-UJI-REG'")
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("DELETE FROM tbl_output WHERE pekerjaan_id = ? AND komponen = 'Uji Output'")
+        .bind(pid)
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("DELETE FROM tbl_foto WHERE pekerjaan_id = ? AND keterangan = '0%' AND koordinat = 'uji-reg'")
+        .bind(pid)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    // Output volume 2.10 wajib penerima: 3 unit, 15 foto, 3 penerima berbeda.
+    sqlx::query("INSERT INTO tbl_output (pekerjaan_id, komponen, satuan, volume, penerima_is_optional, created_at, updated_at) VALUES (?, 'Uji Output', 'unit', 2.10, 0, NOW(), NOW())")
+        .bind(pid)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let out_id: u64 = sqlx::query_scalar(
+        "SELECT id FROM tbl_output WHERE pekerjaan_id = ? AND komponen = 'Uji Output'",
+    )
+    .bind(pid)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    for i in 0..15 {
+        let penerima = i % 3 + 1;
+        sqlx::query("INSERT INTO tbl_foto (pekerjaan_id, komponen_id, penerima_id, keterangan, koordinat, created_at, updated_at) VALUES (?, ?, ?, '0%', 'uji-reg', NOW(), NOW())")
+            .bind(pid)
+            .bind(out_id)
+            .bind(penerima)
+            .execute(&pool)
+            .await
+            .unwrap();
+    }
+
+    sqlx::query("INSERT INTO tbl_kontrak (spk, kode_paket, tgl_spk, nilai_kontrak, created_at, updated_at) VALUES ('SPK-UJI-REG', 'KP-R', '2025-02-01', 1000.00, NOW(), NOW())")
+        .execute(&pool)
+        .await
+        .unwrap();
+    let kontrak: u64 = sqlx::query_scalar("SELECT id FROM tbl_kontrak WHERE spk = 'SPK-UJI-REG'")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    sqlx::query("INSERT IGNORE INTO kontrak_pekerjaan (kontrak_id, pekerjaan_id, created_at, updated_at) VALUES (?, ?, NOW(), NOW())")
+        .bind(kontrak)
+        .bind(pid)
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("INSERT IGNORE INTO tbl_document_types (name, code, created_at, updated_at) VALUES ('Uji Reg', 'uji-reg', NOW(), NOW())")
+        .execute(&pool)
+        .await
+        .unwrap();
+    let type_id: u64 =
+        sqlx::query_scalar("SELECT id FROM tbl_document_types WHERE code = 'uji-reg'")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    sqlx::query("INSERT INTO tbl_document_registers (kontrak_id, type_id, nomor, tanggal, sequence_number, year, nilai, created_at, updated_at) VALUES (?, ?, 'UJI-REG-1', '2025-03-04', 1, 2025, 1000.00, NOW(), NOW())")
+        .bind(kontrak)
+        .bind(type_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    let admin = Viewer {
+        user_id: 0,
+        is_admin: true,
+        nip: None,
+        role_ids: vec![],
+    };
+    // Daftar terpaginasi dengan summary: output dan foto dimuat, registers ikut.
+    let rel = load(
+        &pool,
+        std::slice::from_ref(&p),
+        Mode {
+            summary: true,
+            unbounded: false,
+        },
+        &admin,
+    )
+    .await
+    .unwrap();
+    let v = to_resource(&p, &rel);
+    assert_eq!(v["foto_count"], 15);
+    assert_eq!(v["foto_required_count"], 15);
+    assert_eq!(v["foto_status"], "selesai");
+    let output = v["output"].as_array().unwrap();
+    assert!(output
+        .iter()
+        .any(|o| o["komponen"] == "Uji Output" && o["volume"] == "2.10"));
+    let reg = v["kontrak"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|k| k["spk"] == "SPK-UJI-REG")
+        .expect("kontrak uji ada");
+    assert_eq!(reg["registers"][0]["nomor"], "UJI-REG-1");
+    assert_eq!(reg["registers"][0]["type"]["code"], "uji-reg");
+    assert_eq!(
+        reg["registers"][0]["tanggal"],
+        "2025-03-04T00:00:00.000000Z"
+    );
+    assert_eq!(reg["addendums"], serde_json::json!([]));
+    assert_eq!(reg["penyedia"], serde_json::Value::Null);
+
+    // Daftar tanpa summary: tanpa output, foto parsial, registers kosong.
+    let plain = load(
+        &pool,
+        std::slice::from_ref(&p),
+        Mode {
+            summary: false,
+            unbounded: false,
+        },
+        &admin,
+    )
+    .await
+    .unwrap();
+    let v2 = to_resource(&p, &plain);
+    assert!(v2.get("output").is_none());
+    assert_eq!(v2["foto_required_count"], serde_json::Value::Null);
+    assert_eq!(v2["foto_status"], "belum_selesai");
+
+    sqlx::query("DELETE FROM tbl_document_registers WHERE nomor = 'UJI-REG-1'")
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("DELETE FROM tbl_kontrak WHERE spk = 'SPK-UJI-REG'")
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("DELETE FROM tbl_foto WHERE pekerjaan_id = ? AND koordinat = 'uji-reg'")
+        .bind(pid)
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("DELETE FROM tbl_output WHERE pekerjaan_id = ? AND komponen = 'Uji Output'")
+        .bind(pid)
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("DELETE FROM tbl_document_types WHERE code = 'uji-reg'")
         .execute(&pool)
         .await
         .unwrap();

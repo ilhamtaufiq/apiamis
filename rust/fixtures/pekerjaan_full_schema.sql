@@ -172,3 +172,36 @@ CREATE TABLE IF NOT EXISTS `pengawas` (
   `updated_at` timestamp NULL DEFAULT NULL,
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB AUTO_INCREMENT=30 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `tbl_output` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `pekerjaan_id` bigint unsigned NOT NULL,
+  `komponen` varchar(255) NOT NULL,
+  `satuan` varchar(255) NOT NULL,
+  `volume` decimal(10,2) NOT NULL,
+  `penerima_is_optional` tinyint(1) NOT NULL DEFAULT '0',
+  `created_at` timestamp NULL DEFAULT NULL,
+  `updated_at` timestamp NULL DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `tbl_output_pekerjaan_id_foreign` (`pekerjaan_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `tbl_document_registers` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `kontrak_id` bigint unsigned NOT NULL,
+  `type_id` bigint unsigned NOT NULL,
+  `addendum_id` bigint unsigned DEFAULT NULL,
+  `attachment_type` varchar(255) DEFAULT NULL,
+  `nomor` varchar(255) NOT NULL,
+  `tanggal` date NOT NULL,
+  `sequence_number` int NOT NULL,
+  `year` int NOT NULL,
+  `description` text,
+  `nilai` decimal(18,2) DEFAULT NULL,
+  `created_at` timestamp NULL DEFAULT NULL,
+  `updated_at` timestamp NULL DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `tbl_document_registers_nomor_unique` (`nomor`),
+  KEY `tbl_document_registers_type_id_foreign` (`type_id`),
+  KEY `tbl_document_registers_kontrak_id_index` (`kontrak_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
