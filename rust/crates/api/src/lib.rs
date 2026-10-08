@@ -60,6 +60,7 @@ pub mod php;
 pub mod pekerjaan;
 pub mod pekerjaan_by;
 pub mod pekerjaan_checklist_write;
+pub mod pekerjaan_estimasi;
 pub mod peripaan;
 pub mod pekerjaan_detail;
 pub mod pekerjaan_rel;
@@ -340,6 +341,10 @@ pub fn app(config: &Config, state: AppState) -> Router {
             get(pekerjaan_by::pagu_by_kegiatan),
         )
         .route("/api/pekerjaan/{id}/media", get(pekerjaan_by::media))
+        .route(
+            "/api/pekerjaan/{id}/progress-estimasi",
+            get(pekerjaan_estimasi::show).put(pekerjaan_estimasi::update),
+        )
         .route(
             "/api/foto",
             get(foto::index)
