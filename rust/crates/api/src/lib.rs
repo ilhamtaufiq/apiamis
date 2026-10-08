@@ -64,6 +64,8 @@ pub mod pekerjaan_detail;
 pub mod pekerjaan_rel;
 pub mod pekerjaan_write;
 pub mod pengawas_write;
+pub mod procurement_docs;
+pub mod procurement_spse;
 pub mod penerima;
 pub mod penyedia;
 pub mod penyedia_write;
@@ -528,6 +530,39 @@ pub fn app(config: &Config, state: AppState) -> Router {
         .route("/api/kontrak/pekerjaan/{id}", get(kontrak::by_pekerjaan))
         .route("/api/kontrak/kegiatan/{id}", get(kontrak::by_kegiatan))
         .route("/api/kontrak/penyedia/{id}", get(kontrak::by_penyedia))
+        .route("/api/procurement/spse/status", get(procurement_spse::session_status))
+        .route(
+            "/api/procurement/spse/session",
+            post(procurement_spse::save_session).delete(procurement_spse::revoke_session),
+        )
+        .route("/api/procurement/spse/sync", post(procurement_spse::sync))
+        .route("/api/procurement/spse/sync/runs", get(procurement_spse::sync_runs))
+        .route("/api/procurement/spse/staging", get(procurement_spse::staging))
+        .route(
+            "/api/procurement/spse/staging/{id}",
+            get(procurement_spse::staging_detail),
+        )
+        .route(
+            "/api/procurement/spse/staging/apply",
+            post(procurement_spse::apply_staging),
+        )
+        .route("/api/procurement/spse/staging/map", post(procurement_spse::map_staging))
+        .route(
+            "/api/procurement/spse/staging/promote-draft",
+            post(procurement_spse::promote_staging),
+        )
+        .route(
+            "/api/procurement/spse/packages/{kode_paket}/documents",
+            get(procurement_docs::package_documents),
+        )
+        .route(
+            "/api/procurement/spse/packages/import-documents",
+            post(procurement_docs::import_documents),
+        )
+        .route(
+            "/api/procurement/spse/packages/download-zip",
+            post(procurement_docs::download_zip),
+        )
         .route("/api/notifications", get(notifications::index))
         .route(
             "/api/notifications/{id}/read",
