@@ -59,7 +59,7 @@ fn template_default(key: &str) -> Option<&'static str> {
 }
 
 /// Direktori template default. Dapat diganti dengan `KONTRAK_TEMPLATE_DIR`.
-fn template_dir() -> PathBuf {
+pub(crate) fn template_dir() -> PathBuf {
     std::env::var_os("KONTRAK_TEMPLATE_DIR")
         .map(PathBuf::from)
         .unwrap_or_else(|| {

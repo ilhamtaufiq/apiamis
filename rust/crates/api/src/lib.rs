@@ -10,6 +10,7 @@ use axum::{
 use serde_json::{json, Value};
 use shared::{ApiError, Config};
 pub mod access;
+pub mod app_settings;
 pub mod analytics;
 pub mod audit;
 pub mod audit_logs;
@@ -277,10 +278,36 @@ pub fn app(config: &Config, state: AppState) -> Router {
         )
         .route("/api/auth/logout", post(auth_routes::logout))
         .route("/api/auth/sync-token", post(auth_routes::sync_token))
-        .route("/api/app-settings", get(lookup::index))
+        .route(
+            "/api/app-settings",
+            get(lookup::index)
+                .post(app_settings::store)
+                .layer(DefaultBodyLimit::max(app_settings::BODY_LIMIT)),
+        )
         .route(
             "/api/app-settings/maintenance",
             get(lookup::maintenance_status),
+        )
+        .route(
+            "/api/app-settings/storage-stats",
+            get(app_settings::storage_stats),
+        )
+        .route(
+            "/api/app-settings/kontrak-templates",
+            get(app_settings::kontrak_templates),
+        )
+        .route(
+            "/api/app-settings/kontrak-templates/{key}/download",
+            get(app_settings::download_kontrak_template),
+        )
+        .route("/api/app-settings/backups", get(app_settings::backups_index))
+        .route(
+            "/api/app-settings/backups/jobs/{job_id}",
+            get(app_settings::backup_show_job),
+        )
+        .route(
+            "/api/app-settings/backups/{filename}",
+            get(app_settings::backup_download).delete(app_settings::backup_destroy),
         )
         .route("/api/tags", get(lookup::tags_index).post(tags_write::store))
         .route(

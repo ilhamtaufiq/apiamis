@@ -93,6 +93,22 @@ pub async fn attach(
     mime: &str,
     thumb: bool,
 ) -> Result<Stored, ApiError> {
+    attach_named(tx, model_type, model_id, collection, upload, mime, thumb, None).await
+}
+
+/// Sama dengan `attach`, tetapi nama berkas di disk bisa ditentukan (`usingFileName` di Laravel).
+/// `file_name` `None` memakai `{uuid}.{ext}`.
+#[allow(clippy::too_many_arguments)]
+pub async fn attach_named(
+    tx: &mut Transaction<'_, MySql>,
+    model_type: &str,
+    model_id: u64,
+    collection: &str,
+    upload: &Upload,
+    mime: &str,
+    thumb: bool,
+    file_name: Option<String>,
+) -> Result<Stored, ApiError> {
     let next: i64 = sqlx::query_scalar(
         "SELECT CAST(COALESCE(MAX(order_column), 0) + 1 AS SIGNED) FROM media WHERE model_type = ? AND model_id = ?",
     )
@@ -103,12 +119,14 @@ pub async fn attach(
     .map_err(internal)?;
 
     let uuid = new_uuid();
-    let ext = upload.extension();
-    let file_name = if ext.is_empty() {
-        uuid.clone()
-    } else {
-        format!("{uuid}.{ext}")
-    };
+    let file_name = file_name.unwrap_or_else(|| {
+        let ext = upload.extension();
+        if ext.is_empty() {
+            uuid.clone()
+        } else {
+            format!("{uuid}.{ext}")
+        }
+    });
     let res = sqlx::query(
         "INSERT INTO media (model_type, model_id, uuid, collection_name, name, file_name, mime_type, disk, conversions_disk, \
          size, manipulations, custom_properties, generated_conversions, responsive_images, order_column, created_at, updated_at) \
