@@ -12,9 +12,9 @@ Sumber: `routes/api.php` (branch `rust`, dari `main` SHA `c19fd06`). Dibuat deng
 
 ### Status paritas (diperbarui)
 
-- Sudah di Rust: **155** (termasuk dokumen kontrak SPK, cover, ZIP cover, BAP, dan bap-context, serta PDF SPK lewat ONLYOFFICE; termasuk auth, lookup, kecamatan, desa, kegiatan, penyedia, tiket GET, checklist GET, foto dan penerima seluruh rute, berkas kecuali export-pdf dan upload-from-url, kontrak CRUD, relasi pekerjaan/kegiatan/penyedia, excel export, template, dan impor kontrak, addendum dan register-gaps GET, sk, notifikasi, dan master fase pekerjaan)
+- Sudah di Rust: **163** (termasuk dokumen kontrak SPK, cover, ZIP cover, BAP, dan bap-context, serta PDF SPK lewat ONLYOFFICE; termasuk auth, lookup, kecamatan, desa, kegiatan, penyedia, tiket GET, checklist GET, foto dan penerima seluruh rute, berkas kecuali export-pdf dan upload-from-url, kontrak CRUD, relasi pekerjaan/kegiatan/penyedia, excel export, template, dan impor kontrak, addendum dan register-gaps GET, sk, notifikasi, dan master fase pekerjaan)
 - Parsial di Rust: **1** (`GET /api/pekerjaan`: relasi daftar belum dibandingkan dengan produksi, lihat T21)
-- Belum: **257** (dihitung langsung dari kolom Status; termasuk addendum, export Excel draft, progress estimasi, destroy pekerjaan, dan modul lain yang belum dipindah)
+- Belum: **249** (dihitung langsung dari kolom Status; termasuk addendum, export Excel draft, progress estimasi, destroy pekerjaan, dan modul lain yang belum dipindah)
 - Dihapus (tidak dimigrasi): **74** (termasuk desa sync-kk, chat AI dan live-chat, panduan CMS, presence, search ai-summary, dan pengaturan AI di app-settings, sesuai keputusan user)
 
 Cara menghitung: cocokkan method dan path (`{param}` dinormalisasi) dengan route yang terdaftar di `rust/crates/api/src/lib.rs`.
@@ -562,11 +562,11 @@ Kolom **Status** diisi saat modul dipindah ke Rust. Awalnya semua `belum`.
 
 | No | Method | Path | Controller@action | Middleware | Status |
 | --- | --- | --- | --- | --- | --- |
-| 1 | GET | `/api/roles` | RoleController@index | auth:sanctum | belum |
-| 2 | POST | `/api/roles` | RoleController@store | auth:sanctum | belum |
-| 3 | GET | `/api/roles/{id}` | RoleController@show | auth:sanctum | belum |
-| 4 | PUT/PATCH | `/api/roles/{id}` | RoleController@update | auth:sanctum | belum |
-| 5 | DELETE | `/api/roles/{id}` | RoleController@destroy | auth:sanctum | belum |
+| 1 | GET | `/api/roles` | RoleController@index | auth:sanctum | rust |
+| 2 | POST | `/api/roles` | RoleController@store | auth:sanctum | rust |
+| 3 | GET | `/api/roles/{id}` | RoleController@show | auth:sanctum | rust |
+| 4 | PUT/PATCH | `/api/roles/{id}` | RoleController@update | auth:sanctum | rust |
+| 5 | DELETE | `/api/roles/{id}` | RoleController@destroy | auth:sanctum | rust |
 
 ### permissions (10)
 
@@ -742,9 +742,9 @@ Kolom **Status** diisi saat modul dipindah ke Rust. Awalnya semua `belum`.
 | No | Method | Path | Controller@action | Middleware | Status |
 | --- | --- | --- | --- | --- | --- |
 | 1 | GET | `/api/document-types` | DocumentRegisterController@types | auth:sanctum | rust |
-| 2 | POST | `/api/document-types` | DocumentRegisterController@storeType | auth:sanctum | belum |
-| 3 | PUT | `/api/document-types/{id}` | DocumentRegisterController@updateType | auth:sanctum | belum |
-| 4 | DELETE | `/api/document-types/{id}` | DocumentRegisterController@destroyType | auth:sanctum | belum |
+| 2 | POST | `/api/document-types` | DocumentRegisterController@storeType | auth:sanctum | rust |
+| 3 | PUT | `/api/document-types/{id}` | DocumentRegisterController@updateType | auth:sanctum | rust |
+| 4 | DELETE | `/api/document-types/{id}` | DocumentRegisterController@destroyType | auth:sanctum | rust |
 
 ### document-registers (4)
 

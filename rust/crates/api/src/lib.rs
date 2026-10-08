@@ -21,6 +21,7 @@ pub mod crypt;
 pub mod desa;
 pub mod desa_write;
 pub mod docx_template;
+pub mod document_types_write;
 pub mod draft;
 pub mod format;
 pub mod foto;
@@ -58,6 +59,7 @@ pub mod progress_estimasi;
 pub mod progress_metrics;
 pub mod progress_write;
 pub mod ratelimit;
+pub mod roles;
 pub mod route_permission;
 pub mod session;
 pub mod sk;
@@ -206,6 +208,14 @@ pub fn app(config: &Config, state: AppState) -> Router {
         )
         .route("/api/audit-logs", get(audit_logs::index))
         .route("/api/audit-logs/{id}", get(audit_logs::show))
+        .route("/api/roles", get(roles::index).post(roles::store))
+        .route(
+            "/api/roles/{id}",
+            get(roles::show)
+                .put(roles::update)
+                .patch(roles::update)
+                .delete(roles::destroy),
+        )
         .route(
             "/api/master-fase-pekerjaan",
             get(master_fase::index).post(master_fase::store),
@@ -232,7 +242,16 @@ pub fn app(config: &Config, state: AppState) -> Router {
                 .patch(tags_write::update)
                 .delete(tags_write::destroy),
         )
-        .route("/api/document-types", get(lookup::document_types_index))
+        .route(
+            "/api/document-types",
+            get(lookup::document_types_index).post(document_types_write::store_type),
+        )
+        .route(
+            "/api/document-types/{id}",
+            put(document_types_write::update_type)
+                .patch(document_types_write::update_type)
+                .delete(document_types_write::destroy_type),
+        )
         .route("/api/penyedia", get(penyedia::index).post(penyedia_write::store))
         .route("/api/pekerjaan", get(pekerjaan::index))
         .route(
