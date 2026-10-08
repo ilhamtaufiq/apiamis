@@ -14,6 +14,7 @@ pub mod desa;
 pub mod format;
 pub mod kecamatan;
 pub mod kegiatan;
+pub mod lookup;
 pub mod maintenance;
 pub mod pagination;
 pub mod ratelimit;
@@ -93,6 +94,13 @@ pub fn app(config: &Config, state: AppState) -> Router {
         .route("/api/kegiatan", get(kegiatan::index))
         .route("/api/kegiatan/{id}", get(kegiatan::show))
         .route("/api/auth/login", post(auth_routes::login))
+        .route("/api/app-settings", get(lookup::index))
+        .route(
+            "/api/app-settings/maintenance",
+            get(lookup::maintenance_status),
+        )
+        .route("/api/tags", get(lookup::tags_index))
+        .route("/api/tags/{id}", get(lookup::tags_show))
         // Catch-all untuk /api: route yang belum ada di Rust tetap lewat pengecekan
         // permission (Laravel menolak lebih dulu, bukan 404).
         .route("/api/{*rest}", any(not_found))
