@@ -93,6 +93,7 @@ pub mod spam_integration;
 pub mod spam_units;
 pub mod spm_sanitasi;
 pub mod spm_sanitasi_capaian;
+pub mod spm_sanitasi_excel;
 pub mod spm_sanitasi_integration;
 pub mod spm_sanitasi_pekerjaan;
 pub mod spm_sanitasi_write;
@@ -759,6 +760,9 @@ pub fn app(config: &Config, state: AppState) -> Router {
             get(spm_sanitasi_integration::integration_by_desa),
         )
         .route("/api/spm-sanitasi/mck-pekerjaan", get(spm_sanitasi_pekerjaan::mck_pekerjaan))
+        .route("/api/spm-sanitasi/export", get(spm_sanitasi_excel::export))
+        .route("/api/spm-sanitasi/import/template", get(spm_sanitasi_excel::download_template))
+        .route("/api/spm-sanitasi/import", post(spm_sanitasi_excel::import))
         .route("/api/spm-sanitasi/{id}/pekerjaan", post(spm_sanitasi_pekerjaan::attach_pekerjaan))
         .route(
             "/api/spm-sanitasi/{id}/pekerjaan/{pekerjaanId}",
