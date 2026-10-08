@@ -339,7 +339,7 @@ async fn spse_nama_paket(
 }
 
 /// Ringkasan addendum yang disetujui terbaru (`latestApprovedAddendum`).
-async fn latest_approved_row(
+pub(crate) async fn latest_approved_row(
     pool: &MySqlPool,
     kontrak_id: i64,
 ) -> Result<Option<AddendumRow>, ApiError> {

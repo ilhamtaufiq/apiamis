@@ -116,6 +116,7 @@ async fn respond(state: &AppState, id: u64) -> Result<Json<Value>, ApiError> {
     Ok(Json(json!({ "data": v })))
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn audit_write(
     tx: &mut Transaction<'_, MySql>,
     headers: &HeaderMap,

@@ -12,9 +12,9 @@ Sumber: `routes/api.php` (branch `rust`, dari `main` SHA `c19fd06`). Dibuat deng
 
 ### Status paritas (diperbarui)
 
-- Sudah di Rust: **128** (termasuk auth, lookup, kecamatan, desa, kegiatan, penyedia, tiket GET, checklist GET, foto dan penerima seluruh rute, berkas kecuali export-pdf dan upload-from-url, kontrak CRUD, relasi pekerjaan/kegiatan/penyedia, excel export, template, dan impor kontrak, addendum dan register-gaps GET, sk, dan notifikasi)
+- Sudah di Rust: **136** (termasuk auth, lookup, kecamatan, desa, kegiatan, penyedia, tiket GET, checklist GET, foto dan penerima seluruh rute, berkas kecuali export-pdf dan upload-from-url, kontrak CRUD, relasi pekerjaan/kegiatan/penyedia, excel export, template, dan impor kontrak, addendum dan register-gaps GET, sk, dan notifikasi)
 - Parsial di Rust: **1** (`GET /api/pekerjaan`: relasi daftar belum dibandingkan dengan produksi, lihat T21)
-- Belum: **357** (dihitung langsung dari kolom Status; termasuk export dokumen, BAP, dan cover kontrak, addendum, export Excel draft, progress estimasi, destroy pekerjaan, dan modul lain yang belum dipindah)
+- Belum: **349** (dihitung langsung dari kolom Status; termasuk export dokumen, BAP, dan cover kontrak, addendum, export Excel draft, progress estimasi, destroy pekerjaan, dan modul lain yang belum dipindah)
 
 Cara menghitung: cocokkan method dan path (`{param}` dinormalisasi) dengan route yang terdaftar di `rust/crates/api/src/lib.rs`.
 
@@ -520,7 +520,7 @@ Kolom **Status** diisi saat modul dipindah ke Rust. Awalnya semua `belum`.
 
 | No | Method | Path | Controller@action | Middleware | Status |
 | --- | --- | --- | --- | --- | --- |
-| 1 | POST | `/api/koordinat/validate` | KoordinatValidationController@validateKoordinat | auth:sanctum | belum |
+| 1 | POST | `/api/koordinat/validate` | KoordinatValidationController@validateKoordinat | auth:sanctum | rust |
 
 ### foto (6)
 
@@ -550,11 +550,11 @@ Kolom **Status** diisi saat modul dipindah ke Rust. Awalnya semua `belum`.
 
 | No | Method | Path | Controller@action | Middleware | Status |
 | --- | --- | --- | --- | --- | --- |
-| 1 | GET | `/api/users` | UserController@index | auth:sanctum | belum |
-| 2 | POST | `/api/users` | UserController@store | auth:sanctum | belum |
-| 3 | GET | `/api/users/{id}` | UserController@show | auth:sanctum | belum |
-| 4 | PUT/PATCH | `/api/users/{id}` | UserController@update | auth:sanctum | belum |
-| 5 | DELETE | `/api/users/{id}` | UserController@destroy | auth:sanctum | belum |
+| 1 | GET | `/api/users` | UserController@index | auth:sanctum | rust |
+| 2 | POST | `/api/users` | UserController@store | auth:sanctum | rust |
+| 3 | GET | `/api/users/{id}` | UserController@show | auth:sanctum | rust |
+| 4 | PUT/PATCH | `/api/users/{id}` | UserController@update | auth:sanctum | rust |
+| 5 | DELETE | `/api/users/{id}` | UserController@destroy | auth:sanctum | rust |
 
 ### roles (5)
 
@@ -703,8 +703,8 @@ Kolom **Status** diisi saat modul dipindah ke Rust. Awalnya semua `belum`.
 
 | No | Method | Path | Controller@action | Middleware | Status |
 | --- | --- | --- | --- | --- | --- |
-| 1 | GET | `/api/progress/pekerjaan/{pekerjaanId}` | ProgressController@report | auth:sanctum | belum |
-| 2 | POST | `/api/progress/pekerjaan/{pekerjaanId}` | ProgressController@store | auth:sanctum | belum |
+| 1 | GET | `/api/progress/pekerjaan/{pekerjaanId}` | ProgressController@report | auth:sanctum | rust |
+| 2 | POST | `/api/progress/pekerjaan/{pekerjaanId}` | ProgressController@store | auth:sanctum | rust |
 
 ### puspen (14)
 

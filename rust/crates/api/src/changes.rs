@@ -39,6 +39,12 @@ pub const BERKAS: Target = Target {
     tab: "berkas",
 };
 
+pub const PROGRESS: Target = Target {
+    model_type: "App\\Models\\Progress",
+    label: "Progress",
+    tab: "progress",
+};
+
 pub const DESA: Target = Target {
     model_type: "App\\Models\\Desa",
     label: "Desa",

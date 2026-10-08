@@ -518,7 +518,7 @@ async fn update_impl(
     if let Some((old, new)) = diff(&before, &after) {
         changes::log_linked(
             &mut tx,
-            &headers,
+            headers,
             user.user_id,
             &changes::PENYEDIA,
             "updated",

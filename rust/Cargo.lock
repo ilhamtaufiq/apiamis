@@ -51,6 +51,7 @@ dependencies = [
  "auth",
  "axum",
  "base64",
+ "bcrypt",
  "calamine",
  "cbc",
  "chrono",

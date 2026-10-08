@@ -48,6 +48,7 @@ pub mod penyedia;
 pub mod penyedia_write;
 pub mod progress_estimasi;
 pub mod progress_metrics;
+pub mod progress_write;
 pub mod ratelimit;
 pub mod route_permission;
 pub mod session;
@@ -56,6 +57,7 @@ pub mod tags_write;
 pub mod tiket;
 pub mod tiket_write;
 pub mod users;
+pub mod users_write;
 
 use tower_http::{
     cors::{AllowHeaders, AllowMethods, AllowOrigin, CorsLayer},
@@ -163,6 +165,19 @@ pub fn app(config: &Config, state: AppState) -> Router {
             get(pengawas_write::index).post(pengawas_write::store),
         )
         .route("/api/pengawas/statistics", get(pengawas_write::statistics))
+        .route(
+            "/api/users",
+            get(users_write::index).post(users_write::store),
+        )
+        .route(
+            "/api/users/{id}",
+            get(users_write::show)
+                .put(users_write::update)
+                .patch(users_write::update)
+                .delete(users_write::destroy),
+        )
+        .route("/api/koordinat/validate", post(koordinat::validate_endpoint))
+        .route("/api/progress/pekerjaan/{id}", get(progress_write::report).post(progress_write::store))
         .route(
             "/api/pengawas/{id}",
             get(pengawas_write::show)

@@ -7,7 +7,18 @@
 use std::{collections::HashMap, path::PathBuf, sync::OnceLock};
 
 use serde_json::Value;
+use std::collections::BTreeMap;
+
+use axum::{
+    extract::State,
+    http::{HeaderMap, StatusCode},
+    Json,
+};
+use serde_json::json;
+use shared::ApiError;
 use sqlx::MySqlPool;
+
+use crate::{foto, require_auth, AppState};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Validation {
@@ -300,6 +311,82 @@ fn ring_contains(lng: f64, lat: f64, ring: &[Value]) -> bool {
         j = i;
     }
     inside
+}
+
+/// `POST /api/koordinat/validate` (`KoordinatValidationController@validateKoordinat`).
+pub async fn validate_endpoint(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(body): Json<Value>,
+) -> Result<Json<Value>, ApiError> {
+    require_auth(&state, &headers).await?;
+    let mut errs: BTreeMap<String, Vec<String>> = BTreeMap::new();
+    let pekerjaan_id = body.get("pekerjaan_id").and_then(|v| {
+        v.as_u64()
+            .or_else(|| v.as_str().and_then(|s| s.trim().parse().ok()))
+    });
+    let koordinat = body
+        .get("koordinat")
+        .and_then(|v| v.as_str())
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(str::to_string);
+
+    match pekerjaan_id {
+        None => foto::add(
+            &mut errs,
+            "pekerjaan_id",
+            "The pekerjaan id field is required.".into(),
+        ),
+        Some(p) => {
+            let exists: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM tbl_pekerjaan WHERE id = ?")
+                .bind(p)
+                .fetch_one(&state.pool)
+                .await
+                .map_err(|e| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+            if exists == 0 {
+                foto::add(
+                    &mut errs,
+                    "pekerjaan_id",
+                    "The selected pekerjaan id is invalid.".into(),
+                );
+            }
+        }
+    }
+    match koordinat {
+        None => foto::add(
+            &mut errs,
+            "koordinat",
+            "The koordinat field is required.".into(),
+        ),
+        Some(k) if k.chars().count() > 255 => foto::add(
+            &mut errs,
+            "koordinat",
+            "The koordinat field must not be greater than 255 characters.".into(),
+        ),
+        Some(_) => {}
+    }
+    if !errs.is_empty() {
+        return Err(ApiError::validation("The given data was invalid.", errs));
+    }
+    let (Some(pekerjaan_id), Some(koordinat)) = (
+        pekerjaan_id,
+        body.get("koordinat")
+            .and_then(|v| v.as_str())
+            .map(str::to_string),
+    ) else {
+        return Err(ApiError::new(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "validasi koordinat tidak lengkap",
+        ));
+    };
+    let hasil = validate_for_pekerjaan(&state.pool, pekerjaan_id, &koordinat)
+        .await
+        .map_err(|e| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    Ok(Json(json!({
+        "validasi_koordinat": hasil.valid,
+        "validasi_koordinat_message": hasil.message,
+    })))
 }
 
 #[cfg(test)]
