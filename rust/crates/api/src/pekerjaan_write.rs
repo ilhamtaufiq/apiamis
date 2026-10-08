@@ -236,10 +236,10 @@ async fn check_exists(pool: &MySqlPool, p: &Parsed) -> Result<(), ApiError> {
             .await
             .map_err(internal)?;
         if found == 0 {
-            errors
-                .entry(key.to_string())
-                .or_default()
-                .push(format!("The selected {} is invalid.", key.replace('_', " ")));
+            errors.entry(key.to_string()).or_default().push(format!(
+                "The selected {} is invalid.",
+                key.replace('_', " ")
+            ));
         }
     }
     if let Some(tags) = &p.tag_ids {
@@ -597,10 +597,9 @@ fn store_text(
                 }
                 None
             } else if t.chars().count() > max {
-                errors
-                    .entry(key.to_string())
-                    .or_default()
-                    .push(format!("The {attr} field must not be greater than {max} characters."));
+                errors.entry(key.to_string()).or_default().push(format!(
+                    "The {attr} field must not be greater than {max} characters."
+                ));
                 None
             } else {
                 Some(t.to_string())
@@ -865,14 +864,61 @@ async fn has_spam_or_sanitasi_links(
         if exists == 0 {
             continue;
         }
-        let n: i64 =
-            sqlx::query_scalar(&format!("SELECT COUNT(*) FROM {table} WHERE pekerjaan_id = ?"))
-                .bind(id)
-                .fetch_one(&mut **tx)
-                .await?;
+        let n: i64 = sqlx::query_scalar(&format!(
+            "SELECT COUNT(*) FROM {table} WHERE pekerjaan_id = ?"
+        ))
+        .bind(id)
+        .fetch_one(&mut **tx)
+        .await?;
         linked |= n > 0;
     }
     Ok(linked)
+}
+
+/// Deadlock InnoDB (SQLSTATE 40001). Transaksi yang kalah dijalankan ulang dari awal.
+fn is_deadlock(e: &sqlx::Error) -> bool {
+    matches!(e, sqlx::Error::Database(d) if d.code().as_deref() == Some("40001"))
+}
+
+/// Jumlah percobaan transaksi `store` dan `destroy` bila terjadi deadlock.
+const TX_ATTEMPTS: usize = 5;
+
+/// Jeda sebelum mengulang transaksi yang kalah deadlock.
+async fn deadlock_backoff(attempt: usize) {
+    tokio::time::sleep(std::time::Duration::from_millis(10 * attempt as u64)).await;
+}
+
+/// Satu transaksi `store`: insert, tag, audit, dan notifikasi. Mengembalikan id dan atribut untuk audit.
+async fn store_tx(
+    pool: &MySqlPool,
+    headers: &HeaderMap,
+    actor: u64,
+    n: &NewPekerjaan,
+    url: &str,
+) -> Result<u64, sqlx::Error> {
+    let mut tx = pool.begin().await?;
+    let name = crate::notify::actor_name(&mut tx, actor).await?;
+    let (id, attrs) = insert_pekerjaan(&mut tx, n).await?;
+    if let Some(tags) = &n.p.tag_ids {
+        sync_tags(&mut tx, id, tags).await?;
+    }
+    crate::audit::write(
+        &mut tx,
+        crate::audit::Entry {
+            actor,
+            event: "created",
+            auditable_type: "App\\Models\\Pekerjaan",
+            auditable_id: id,
+            old: None,
+            new: Some(attrs),
+            url,
+        },
+        headers,
+    )
+    .await?;
+    notify_admins_action(&mut tx, actor, id, "dibuat", &name).await?;
+    tx.commit().await?;
+    Ok(id)
 }
 
 /// `POST /api/pekerjaan`, setara `PekerjaanController@store`. Respon 200 dengan `PekerjaanDetailResource`.
@@ -882,38 +928,20 @@ pub async fn store(
     Json(body): Json<Value>,
 ) -> Result<Response, ApiError> {
     let user = require_auth(&state, &headers).await?;
-    let mut n =
+    let n =
         parse_store(&body).map_err(|e| ApiError::validation("The given data was invalid.", e))?;
     check_exists(&state.pool, &n.p).await?;
-
     let url = format!("{}/api/pekerjaan", state.app_url.trim_end_matches('/'));
-    let mut tx = state.pool.begin().await.map_err(internal)?;
-    let name = crate::notify::actor_name(&mut tx, user.user_id)
-        .await
-        .map_err(internal)?;
-    let (id, attrs) = insert_pekerjaan(&mut tx, &n).await.map_err(internal)?;
-    if let Some(tags) = n.p.tag_ids.take() {
-        sync_tags(&mut tx, id, &tags).await.map_err(internal)?;
-    }
-    crate::audit::write(
-        &mut tx,
-        crate::audit::Entry {
-            actor: user.user_id,
-            event: "created",
-            auditable_type: "App\\Models\\Pekerjaan",
-            auditable_id: id,
-            old: None,
-            new: Some(attrs),
-            url: &url,
-        },
-        &headers,
-    )
-    .await
-    .map_err(internal)?;
-    notify_admins_action(&mut tx, user.user_id, id, "dibuat", &name)
-        .await
-        .map_err(internal)?;
-    tx.commit().await.map_err(internal)?;
+
+    let mut attempt = 0;
+    let id = loop {
+        attempt += 1;
+        match store_tx(&state.pool, &headers, user.user_id, &n, &url).await {
+            Ok(id) => break id,
+            Err(e) if is_deadlock(&e) && attempt < TX_ATTEMPTS => deadlock_backoff(attempt).await,
+            Err(e) => return Err(internal(e)),
+        }
+    };
 
     let row = pekerjaan::find(&state.pool, id)
         .await
@@ -932,6 +960,44 @@ pub async fn store(
     )
     .await?;
     Ok(Json(json!({ "data": data })).into_response())
+}
+
+/// Satu transaksi `destroy`. `Ok(false)` bila masih tertaut ke SPAM atau SPM sanitasi (tidak ada perubahan).
+async fn destroy_tx(
+    pool: &MySqlPool,
+    headers: &HeaderMap,
+    actor: u64,
+    id: u64,
+    current: &pekerjaan::PekerjaanRow,
+    url: &str,
+) -> Result<bool, sqlx::Error> {
+    let mut tx = pool.begin().await?;
+    if has_spam_or_sanitasi_links(&mut tx, id).await? {
+        return Ok(false);
+    }
+    let name = crate::notify::actor_name(&mut tx, actor).await?;
+    // Baris pekerjaan dikunci lebih dulu, lalu audit dan notifikasi, sama dengan `store` dan `update`.
+    sqlx::query("DELETE FROM tbl_pekerjaan WHERE id = ?")
+        .bind(id)
+        .execute(&mut *tx)
+        .await?;
+    crate::audit::write(
+        &mut tx,
+        crate::audit::Entry {
+            actor,
+            event: "deleted",
+            auditable_type: "App\\Models\\Pekerjaan",
+            auditable_id: id,
+            old: Some(row_attributes(current)),
+            new: None,
+            url,
+        },
+        headers,
+    )
+    .await?;
+    notify_admins_action(&mut tx, actor, id, "dihapus", &name).await?;
+    tx.commit().await?;
+    Ok(true)
 }
 
 /// `DELETE /api/pekerjaan/{id}`, setara `PekerjaanController@destroy`.
@@ -963,41 +1029,23 @@ pub async fn destroy(
     }
 
     let url = format!("{}/api/pekerjaan/{id}", state.app_url.trim_end_matches('/'));
-    let mut tx = state.pool.begin().await.map_err(internal)?;
-    let name = crate::notify::actor_name(&mut tx, user.user_id)
-        .await
-        .map_err(internal)?;
-    if has_spam_or_sanitasi_links(&mut tx, id).await.map_err(internal)? {
-        return Err(ApiError::new(
-            axum::http::StatusCode::CONFLICT,
-            "Pekerjaan masih terhubung ke unit SPAM atau SPM sanitasi. Lepas tautan tersebut terlebih dahulu.",
-        ));
+    let mut attempt = 0;
+    loop {
+        attempt += 1;
+        match destroy_tx(&state.pool, &headers, user.user_id, id, &current, &url).await {
+            Ok(true) => break,
+            Ok(false) => {
+                return Err(ApiError::new(
+                    axum::http::StatusCode::CONFLICT,
+                    "Pekerjaan masih terhubung ke unit SPAM atau SPM sanitasi. Lepas tautan tersebut terlebih dahulu.",
+                ))
+            }
+            Err(e) if is_deadlock(&e) && attempt < TX_ATTEMPTS => {
+                deadlock_backoff(attempt).await
+            }
+            Err(e) => return Err(internal(e)),
+        }
     }
-    // Baris pekerjaan dikunci lebih dulu, lalu audit dan notifikasi, sama dengan `store` dan `update`.
-    sqlx::query("DELETE FROM tbl_pekerjaan WHERE id = ?")
-        .bind(id)
-        .execute(&mut *tx)
-        .await
-        .map_err(internal)?;
-    crate::audit::write(
-        &mut tx,
-        crate::audit::Entry {
-            actor: user.user_id,
-            event: "deleted",
-            auditable_type: "App\\Models\\Pekerjaan",
-            auditable_id: id,
-            old: Some(row_attributes(&current)),
-            new: None,
-            url: &url,
-        },
-        &headers,
-    )
-    .await
-    .map_err(internal)?;
-    notify_admins_action(&mut tx, user.user_id, id, "dihapus", &name)
-        .await
-        .map_err(internal)?;
-    tx.commit().await.map_err(internal)?;
 
     Ok(Json(json!({ "message": "Pekerjaan deleted successfully" })).into_response())
 }

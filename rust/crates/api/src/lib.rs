@@ -58,6 +58,7 @@ pub mod output;
 pub mod pagination;
 pub mod php;
 pub mod pekerjaan;
+pub mod pekerjaan_by;
 pub mod pekerjaan_checklist_write;
 pub mod peripaan;
 pub mod pekerjaan_detail;
@@ -322,6 +323,23 @@ pub fn app(config: &Config, state: AppState) -> Router {
                 .patch(pekerjaan_write::update)
                 .delete(pekerjaan_write::destroy),
         )
+        // Segmen statis (kecamatan, desa, kegiatan, stats, media) mengalahkan `{id}`.
+        .route("/api/pekerjaan/kecamatan/{kecamatanId}", get(pekerjaan_by::by_kecamatan))
+        .route(
+            "/api/pekerjaan/kecamatan/{kecamatanId}/desa/{desaId}",
+            get(pekerjaan_by::by_kecamatan_desa),
+        )
+        .route("/api/pekerjaan/desa/{desaId}", get(pekerjaan_by::by_desa))
+        .route("/api/pekerjaan/kegiatan/{kegiatanId}", get(pekerjaan_by::by_kegiatan))
+        .route(
+            "/api/pekerjaan/stats/pagu-kecamatan/{kecamatanId}",
+            get(pekerjaan_by::pagu_by_kecamatan),
+        )
+        .route(
+            "/api/pekerjaan/stats/pagu-kegiatan/{kegiatanId}",
+            get(pekerjaan_by::pagu_by_kegiatan),
+        )
+        .route("/api/pekerjaan/{id}/media", get(pekerjaan_by::media))
         .route(
             "/api/foto",
             get(foto::index)
