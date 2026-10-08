@@ -11,7 +11,9 @@ use serde_json::{json, Value};
 use shared::{ApiError, Config};
 pub mod access;
 pub mod audit;
+pub mod audit_logs;
 pub mod auth_routes;
+pub mod berita_acara;
 pub mod berkas;
 pub mod changes;
 pub mod checklist;
@@ -42,6 +44,7 @@ pub mod notifications;
 pub mod onlyoffice;
 pub mod notify;
 pub mod output;
+pub mod panduan;
 pub mod pagination;
 pub mod pekerjaan;
 pub mod pekerjaan_detail;
@@ -49,6 +52,7 @@ pub mod pekerjaan_rel;
 pub mod pekerjaan_write;
 pub mod pengawas_write;
 pub mod penerima;
+pub mod presence;
 pub mod penyedia;
 pub mod penyedia_write;
 pub mod progress_estimasi;
@@ -63,6 +67,7 @@ pub mod tiket;
 pub mod tiket_write;
 pub mod users;
 pub mod users_write;
+pub mod validation;
 
 use tower_http::{
     cors::{AllowHeaders, AllowMethods, AllowOrigin, CorsLayer},
@@ -196,6 +201,16 @@ pub fn app(config: &Config, state: AppState) -> Router {
         .route("/api/berkas/{id}/export-pdf", get(onlyoffice::berkas_export_pdf))
         .route("/api/onlyoffice/media/{id}/download", get(onlyoffice::media_download))
         .route("/api/onlyoffice/temp/{file}", get(onlyoffice::temp_download))
+        .route(
+            "/api/berita-acara/sequence",
+            get(berita_acara::get_sequence).post(berita_acara::update_sequence),
+        )
+        .route("/api/audit-logs", get(audit_logs::index))
+        .route("/api/audit-logs/{id}", get(audit_logs::show))
+        .route("/api/presence/heartbeat", post(presence::heartbeat))
+        .route("/api/presence/online", get(presence::online))
+        .route("/api/panduan", get(panduan::public_index))
+        .route("/api/panduan/{slug}", get(panduan::public_show))
         .route("/api/auth/logout", post(auth_routes::logout))
         .route("/api/auth/sync-token", post(auth_routes::sync_token))
         .route("/api/app-settings", get(lookup::index))

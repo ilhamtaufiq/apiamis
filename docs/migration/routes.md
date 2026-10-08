@@ -12,9 +12,9 @@ Sumber: `routes/api.php` (branch `rust`, dari `main` SHA `c19fd06`). Dibuat deng
 
 ### Status paritas (diperbarui)
 
-- Sudah di Rust: **146** (termasuk dokumen kontrak SPK, cover, ZIP cover, BAP, dan bap-context, serta PDF SPK lewat ONLYOFFICE; termasuk auth, lookup, kecamatan, desa, kegiatan, penyedia, tiket GET, checklist GET, foto dan penerima seluruh rute, berkas kecuali export-pdf dan upload-from-url, kontrak CRUD, relasi pekerjaan/kegiatan/penyedia, excel export, template, dan impor kontrak, addendum dan register-gaps GET, sk, dan notifikasi)
+- Sudah di Rust: **154** (termasuk dokumen kontrak SPK, cover, ZIP cover, BAP, dan bap-context, serta PDF SPK lewat ONLYOFFICE; termasuk auth, lookup, kecamatan, desa, kegiatan, penyedia, tiket GET, checklist GET, foto dan penerima seluruh rute, berkas kecuali export-pdf dan upload-from-url, kontrak CRUD, relasi pekerjaan/kegiatan/penyedia, excel export, template, dan impor kontrak, addendum dan register-gaps GET, sk, dan notifikasi)
 - Parsial di Rust: **1** (`GET /api/pekerjaan`: relasi daftar belum dibandingkan dengan produksi, lihat T21)
-- Belum: **339** (dihitung langsung dari kolom Status; termasuk addendum, export Excel draft, progress estimasi, destroy pekerjaan, dan modul lain yang belum dipindah)
+- Belum: **331** (dihitung langsung dari kolom Status; termasuk addendum, export Excel draft, progress estimasi, destroy pekerjaan, dan modul lain yang belum dipindah)
 - Dihapus (tidak dimigrasi): **1**
 
 Cara menghitung: cocokkan method dan path (`{param}` dinormalisasi) dengan route yang terdaftar di `rust/crates/api/src/lib.rs`.
@@ -83,8 +83,8 @@ Kolom **Status** diisi saat modul dipindah ke Rust. Awalnya semua `belum`.
 
 | No | Method | Path | Controller@action | Middleware | Status |
 | --- | --- | --- | --- | --- | --- |
-| 1 | GET | `/api/panduan` | PanduanPageController@publicIndex | - | belum |
-| 2 | GET | `/api/panduan/{slug}` | PanduanPageController@publicShow | - | belum |
+| 1 | GET | `/api/panduan` | PanduanPageController@publicIndex | - | rust |
+| 2 | GET | `/api/panduan/{slug}` | PanduanPageController@publicShow | - | rust |
 
 ### blog (15)
 
@@ -148,8 +148,8 @@ Kolom **Status** diisi saat modul dipindah ke Rust. Awalnya semua `belum`.
 
 | No | Method | Path | Controller@action | Middleware | Status |
 | --- | --- | --- | --- | --- | --- |
-| 1 | GET | `/api/berita-acara/sequence` | BeritaAcaraController@getSequence | auth:sanctum | belum |
-| 2 | POST | `/api/berita-acara/sequence` | BeritaAcaraController@updateSequence | auth:sanctum | belum |
+| 1 | GET | `/api/berita-acara/sequence` | BeritaAcaraController@getSequence | auth:sanctum | rust |
+| 2 | POST | `/api/berita-acara/sequence` | BeritaAcaraController@updateSequence | auth:sanctum | rust |
 
 ### pekerjaan (19)
 
@@ -227,8 +227,8 @@ Kolom **Status** diisi saat modul dipindah ke Rust. Awalnya semua `belum`.
 
 | No | Method | Path | Controller@action | Middleware | Status |
 | --- | --- | --- | --- | --- | --- |
-| 1 | GET | `/api/audit-logs` | AuditLogController@index | auth:sanctum,role:admin | belum |
-| 2 | GET | `/api/audit-logs/{auditLog}` | AuditLogController@show | auth:sanctum,role:admin | belum |
+| 1 | GET | `/api/audit-logs` | AuditLogController@index | auth:sanctum,role:admin | rust |
+| 2 | GET | `/api/audit-logs/{auditLog}` | AuditLogController@show | auth:sanctum,role:admin | rust |
 
 ### admin (7)
 
@@ -285,8 +285,8 @@ Kolom **Status** diisi saat modul dipindah ke Rust. Awalnya semua `belum`.
 
 | No | Method | Path | Controller@action | Middleware | Status |
 | --- | --- | --- | --- | --- | --- |
-| 1 | POST | `/api/presence/heartbeat` | UserPresenceController@heartbeat | auth:sanctum | belum |
-| 2 | GET | `/api/presence/online` | UserPresenceController@index | auth:sanctum | belum |
+| 1 | POST | `/api/presence/heartbeat` | UserPresenceController@heartbeat | auth:sanctum | rust |
+| 2 | GET | `/api/presence/online` | UserPresenceController@index | auth:sanctum | rust |
 
 ### search (2)
 
