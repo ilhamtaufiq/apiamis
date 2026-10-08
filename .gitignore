@@ -38,3 +38,6 @@ __pycache__/
 *.tmp
 .smart-coding-cache
 .agent
+
+# Worktree agent Claude Code
+.claude/worktrees/
