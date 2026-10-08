@@ -587,15 +587,15 @@ Kolom **Status** diisi saat modul dipindah ke Rust. Awalnya semua `belum`.
 
 | No | Method | Path | Controller@action | Middleware | Status |
 | --- | --- | --- | --- | --- | --- |
-| 1 | POST | `/api/route-permissions/check-access` | RoutePermissionController@check | auth:sanctum | belum |
-| 2 | GET | `/api/route-permissions/rules` | RoutePermissionController@rules | auth:sanctum | belum |
-| 3 | GET | `/api/route-permissions/user/accessible` | RoutePermissionController@accessible | auth:sanctum | belum |
+| 1 | POST | `/api/route-permissions/check-access` | RoutePermissionController@check | auth:sanctum | rust |
+| 2 | GET | `/api/route-permissions/rules` | RoutePermissionController@rules | auth:sanctum | rust |
+| 3 | GET | `/api/route-permissions/user/accessible` | RoutePermissionController@accessible | auth:sanctum | rust |
 | 4 | POST | `/api/route-permissions/sync` | RoutePermissionController@sync | auth:sanctum,role:admin | belum |
-| 5 | GET | `/api/route-permissions` | RoutePermissionController@index | auth:sanctum | belum |
-| 6 | POST | `/api/route-permissions` | RoutePermissionController@store | auth:sanctum | belum |
-| 7 | GET | `/api/route-permissions/{id}` | RoutePermissionController@show | auth:sanctum | belum |
-| 8 | PUT/PATCH | `/api/route-permissions/{id}` | RoutePermissionController@update | auth:sanctum | belum |
-| 9 | DELETE | `/api/route-permissions/{id}` | RoutePermissionController@destroy | auth:sanctum | belum |
+| 5 | GET | `/api/route-permissions` | RoutePermissionController@index | auth:sanctum | rust |
+| 6 | POST | `/api/route-permissions` | RoutePermissionController@store | auth:sanctum | rust |
+| 7 | GET | `/api/route-permissions/{id}` | RoutePermissionController@show | auth:sanctum | rust |
+| 8 | PUT/PATCH | `/api/route-permissions/{id}` | RoutePermissionController@update | auth:sanctum | rust |
+| 9 | DELETE | `/api/route-permissions/{id}` | RoutePermissionController@destroy | auth:sanctum | rust |
 
 ### tags (5)
 
