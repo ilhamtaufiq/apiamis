@@ -32,6 +32,7 @@ pub mod kontrak_register_gap;
 pub mod kontrak_xlsx;
 pub mod koordinat;
 pub mod lookup;
+pub mod mailer;
 pub mod maintenance;
 pub mod media;
 pub mod notifications;

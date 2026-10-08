@@ -80,6 +80,25 @@ class OnlyOfficeController extends Controller
         ]);
     }
 
+    /**
+     * Berkas sementara untuk konversi (kontrak). Nama harus UUID dengan ekstensi yang didukung.
+     */
+    public function tempDownload(string $file): BinaryFileResponse
+    {
+        abort_unless(
+            preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.[a-z]{2,5}$/', $file) === 1,
+            404,
+            'File tidak ditemukan.',
+        );
+
+        $path = storage_path('app/onlyoffice-temp/'.$file);
+        abort_unless(is_file($path), 404, 'File tidak ditemukan.');
+
+        return response()->file($path, [
+            'Cache-Control' => 'no-store',
+        ]);
+    }
+
     public function download(Request $request, Media $media): BinaryFileResponse
     {
         $expiresAt = (int) $request->query('expires', 0);

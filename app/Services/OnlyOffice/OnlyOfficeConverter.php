@@ -4,6 +4,7 @@ namespace App\Services\OnlyOffice;
 
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\URL;
 use Illuminate\Support\Str;
 use Spatie\MediaLibrary\MediaCollections\Models\Media;
 
@@ -44,6 +45,52 @@ class OnlyOfficeConverter
             $this->onlyOffice->buildDocumentKey($media),
             $media->file_name,
         );
+    }
+
+    /**
+     * Konversi berkas lokal (mis. docx hasil template kontrak). Document Server mengambil berkas
+     * lewat URL bertanda tangan sementara; salinan sementara dihapus setelah konversi.
+     */
+    public function convertLocalFileToPdf(string $localPath, string $title): ?string
+    {
+        if (! $this->onlyOffice->isEnabled() || ! file_exists($localPath)) {
+            return null;
+        }
+
+        $extension = strtolower(pathinfo($localPath, PATHINFO_EXTENSION));
+
+        if (! in_array($extension, self::CONVERTIBLE_EXTENSIONS, true)) {
+            return null;
+        }
+
+        $directory = storage_path('app/onlyoffice-temp');
+        if (! is_dir($directory)) {
+            mkdir($directory, 0775, true);
+        }
+
+        $fileName = Str::uuid()->toString().'.'.$extension;
+        $targetPath = $directory.'/'.$fileName;
+
+        if (! copy($localPath, $targetPath)) {
+            return null;
+        }
+
+        try {
+            $fileUrl = URL::temporarySignedRoute(
+                'onlyoffice.temp.download',
+                now()->addMinutes(15),
+                ['file' => $fileName],
+            );
+
+            return $this->convertRemoteFileToPdf(
+                $fileUrl,
+                $extension,
+                'temp_'.Str::uuid()->toString(),
+                $title,
+            );
+        } finally {
+            @unlink($targetPath);
+        }
     }
 
     public function convertRemoteFileToPdf(string $fileUrl, string $fileType, string $key, string $title): ?string

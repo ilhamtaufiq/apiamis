@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Services\OnlyOffice\OnlyOfficeConverter;
 use Illuminate\Support\Str;
 use PhpOffice\PhpWord\TemplateProcessor;
 
@@ -10,6 +11,7 @@ class DocumentExportService
     public function __construct(
         private readonly KontrakDocumentDataBuilder $dataBuilder,
         private readonly ExcelDocumentExportService $excelExportService,
+        private readonly OnlyOfficeConverter $onlyOfficeConverter,
     ) {}
 
     /**
@@ -78,26 +80,22 @@ class DocumentExportService
         $templateProcessor->saveAs($tempPath);
 
         if ($format === 'pdf') {
-            try {
-                \PhpOffice\PhpWord\Settings::setPdfRendererName(\PhpOffice\PhpWord\Settings::PDF_RENDERER_DOMPDF);
-                \PhpOffice\PhpWord\Settings::setPdfRendererPath(base_path('vendor/dompdf/dompdf'));
+            $pdfFileName = 'Kontrak_'.Str::slug($kontrak->pekerjaan->nama_paket).'_'.date('YmdHis').'.pdf';
+            $pdfPath = storage_path('app/public/temp/'.$pdfFileName);
 
-                $phpWord = \PhpOffice\PhpWord\IOFactory::load($tempPath);
+            $convertedPath = $this->onlyOfficeConverter->convertLocalFileToPdf($tempPath, $fileName);
 
-                $pdfFileName = 'Kontrak_'.Str::slug($kontrak->pekerjaan->nama_paket).'_'.date('YmdHis').'.pdf';
-                $pdfPath = storage_path('app/public/temp/'.$pdfFileName);
-
-                $pdfWriter = \PhpOffice\PhpWord\IOFactory::createWriter($phpWord, 'PDF');
-                $pdfWriter->save($pdfPath);
-
-                if (file_exists($tempPath)) {
-                    unlink($tempPath);
-                }
-
-                return $pdfPath;
-            } catch (\Exception $e) {
-                throw new \Exception('Gagal konversi ke PDF: '.$e->getMessage());
+            if (! $convertedPath || ! file_exists($convertedPath)) {
+                throw new \Exception('Gagal konversi ke PDF: ONLYOFFICE tidak mengembalikan hasil.');
             }
+
+            rename($convertedPath, $pdfPath);
+
+            if (file_exists($tempPath)) {
+                unlink($tempPath);
+            }
+
+            return $pdfPath;
         }
 
         return $tempPath;

@@ -133,6 +133,7 @@ Route::get('public/puspen/media-shares/{shareToken}/download', [PuspenMediaShare
 Route::post('onlyoffice/callback', [OnlyOfficeController::class, 'callback'])->name('onlyoffice.callback');
 Route::get('onlyoffice/health', [OnlyOfficeController::class, 'health'])->name('onlyoffice.health');
 Route::get('onlyoffice/media/{media}/download', [OnlyOfficeController::class, 'download'])->name('onlyoffice.media.download');
+Route::get('onlyoffice/temp/{file}', [OnlyOfficeController::class, 'tempDownload'])->name('onlyoffice.temp.download')->middleware('signed');
 
 Route::middleware('auth:sanctum')->group(function () {
     Broadcast::routes();

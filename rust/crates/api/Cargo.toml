@@ -27,6 +27,7 @@ image = { version = "0.25", default-features = false, features = ["jpeg", "png"]
 rust_xlsxwriter = "0.99"
 bcrypt = "0.17"
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+lettre = { version = "0.11", default-features = false, features = ["builder", "hostname", "smtp-transport", "tokio1", "tokio1-rustls", "aws-lc-rs", "webpki-roots"] }
 calamine = "0.36"
 csv = "1"
 
