@@ -424,20 +424,6 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::put('document-registers/{id}', [\App\Http\Controllers\DocumentRegisterController::class, 'update']);
     Route::delete('document-registers/{id}', [\App\Http\Controllers\DocumentRegisterController::class, 'destroy']);
 
-    Route::get('/debug-data', function () {
-        $kegiatan = \Illuminate\Support\Facades\DB::table('tbl_kegiatan')->limit(5)->get();
-        $pekerjaan = \Illuminate\Support\Facades\DB::table('tbl_pekerjaan')->limit(5)->get();
-        $sumPagu = \App\Models\Kegiatan::sum('pagu');
-        $pekerjaanRelation = \App\Models\Pekerjaan::with('kegiatan')->first();
-
-        return response()->json([
-            'kegiatan_raw' => $kegiatan,
-            'pekerjaan_raw' => $pekerjaan,
-            'sum_pagu_eloquent' => $sumPagu,
-            'pekerjaan_relation_test' => $pekerjaanRelation,
-        ]);
-    });
-
     // Notifications
     Route::get('/notifications', [\App\Http\Controllers\NotificationController::class, 'index']);
     Route::post('/notifications/{id}/read', [\App\Http\Controllers\NotificationController::class, 'markAsRead']);

@@ -202,16 +202,16 @@ pub async fn pekerjaan_page(
 
 /// Satu baris `pekerjaan_checklist`. Tanggal dibaca sebagai teks: `DB::table` Laravel tidak melakukan cast.
 #[derive(Debug, Clone)]
-struct CheckRow {
-    item_id: u64,
-    is_checked: bool,
-    checked_at: Option<String>,
-    updated_at: Option<String>,
-    checked_by: Option<u64>,
-    notes: Option<String>,
+pub(crate) struct CheckRow {
+    pub(crate) item_id: u64,
+    pub(crate) is_checked: bool,
+    pub(crate) checked_at: Option<String>,
+    pub(crate) updated_at: Option<String>,
+    pub(crate) checked_by: Option<u64>,
+    pub(crate) notes: Option<String>,
 }
 
-async fn checks_for(pool: &MySqlPool, pekerjaan_id: u64) -> Result<Vec<CheckRow>, sqlx::Error> {
+pub(crate) async fn checks_for(pool: &MySqlPool, pekerjaan_id: u64) -> Result<Vec<CheckRow>, sqlx::Error> {
     let rows = sqlx::query(
         "SELECT checklist_item_id, is_checked, CAST(checked_at AS CHAR) AS checked_at, \
          CAST(updated_at AS CHAR) AS updated_at, checked_by, notes FROM pekerjaan_checklist \
@@ -234,7 +234,7 @@ async fn checks_for(pool: &MySqlPool, pekerjaan_id: u64) -> Result<Vec<CheckRow>
         .collect()
 }
 
-async fn user_name(pool: &MySqlPool, id: u64) -> Result<Option<String>, sqlx::Error> {
+pub(crate) async fn user_name(pool: &MySqlPool, id: u64) -> Result<Option<String>, sqlx::Error> {
     sqlx::query_scalar("SELECT name FROM users WHERE id = ?")
         .bind(id)
         .fetch_optional(pool)
@@ -376,7 +376,7 @@ pub async fn pekerjaan_index(
 }
 
 /// Gate role untuk endpoint Checklist yang memakai `byUserRole()`. Role lain ditolak (fail-closed).
-async fn require_full_access(state: &AppState, headers: &HeaderMap) -> Result<(), ApiError> {
+pub(crate) async fn require_full_access(state: &AppState, headers: &HeaderMap) -> Result<(), ApiError> {
     let user = require_auth(state, headers).await?;
     let roles = auth::login::roles_of(&state.pool, user.user_id)
         .await

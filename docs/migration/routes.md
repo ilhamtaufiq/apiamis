@@ -12,10 +12,10 @@ Sumber: `routes/api.php` (branch `rust`, dari `main` SHA `c19fd06`). Dibuat deng
 
 ### Status paritas (diperbarui)
 
-- Sudah di Rust: **163** (termasuk dokumen kontrak SPK, cover, ZIP cover, BAP, dan bap-context, serta PDF SPK lewat ONLYOFFICE; termasuk auth, lookup, kecamatan, desa, kegiatan, penyedia, tiket GET, checklist GET, foto dan penerima seluruh rute, berkas kecuali export-pdf dan upload-from-url, kontrak CRUD, relasi pekerjaan/kegiatan/penyedia, excel export, template, dan impor kontrak, addendum dan register-gaps GET, sk, notifikasi, dan master fase pekerjaan)
-- Parsial di Rust: **1** (`GET /api/pekerjaan`: relasi daftar belum dibandingkan dengan produksi, lihat T21)
-- Belum: **249** (dihitung langsung dari kolom Status; termasuk addendum, export Excel draft, progress estimasi, destroy pekerjaan, dan modul lain yang belum dipindah)
-- Dihapus (tidak dimigrasi): **74** (termasuk desa sync-kk, chat AI dan live-chat, panduan CMS, presence, search ai-summary, dan pengaturan AI di app-settings, sesuai keputusan user)
+- Sudah di Rust: **181** (termasuk dokumen kontrak SPK, cover, ZIP cover, BAP, dan bap-context, serta PDF SPK lewat ONLYOFFICE; termasuk auth, lookup, kecamatan, desa, kegiatan, penyedia, tiket GET, checklist GET, foto dan penerima seluruh rute, berkas kecuali export-pdf dan upload-from-url, kontrak CRUD, relasi pekerjaan/kegiatan/penyedia, excel export, template, dan impor kontrak, addendum dan register-gaps GET, sk, notifikasi, dan master fase pekerjaan)
+- Parsial di Rust: **2** (`GET /api/pekerjaan`: relasi daftar belum dibandingkan dengan produksi, lihat T21)
+- Belum: **229** (dihitung langsung dari kolom Status; termasuk addendum, export Excel draft, progress estimasi, destroy pekerjaan, dan modul lain yang belum dipindah)
+- Dihapus (tidak dimigrasi): **75** (termasuk desa sync-kk, chat AI dan live-chat, panduan CMS, presence, search ai-summary, dan pengaturan AI di app-settings, sesuai keputusan user)
 
 Cara menghitung: cocokkan method dan path (`{param}` dinormalisasi) dengan route yang terdaftar di `rust/crates/api/src/lib.rs`.
 
@@ -190,9 +190,9 @@ Kolom **Status** diisi saat modul dipindah ke Rust. Awalnya semua `belum`.
 
 | No | Method | Path | Controller@action | Middleware | Status |
 | --- | --- | --- | --- | --- | --- |
-| 1 | GET | `/api/sipd-pekerjaan-links` | SipdPekerjaanLinkController@index | auth:sanctum | belum |
-| 2 | PUT | `/api/sipd-pekerjaan-links` | SipdPekerjaanLinkController@upsert | auth:sanctum | belum |
-| 3 | DELETE | `/api/sipd-pekerjaan-links` | SipdPekerjaanLinkController@destroy | auth:sanctum | belum |
+| 1 | GET | `/api/sipd-pekerjaan-links` | SipdPekerjaanLinkController@index | auth:sanctum | rust |
+| 2 | PUT | `/api/sipd-pekerjaan-links` | SipdPekerjaanLinkController@upsert | auth:sanctum | rust |
+| 3 | DELETE | `/api/sipd-pekerjaan-links` | SipdPekerjaanLinkController@destroy | auth:sanctum | rust |
 
 ### kegiatan-role (3)
 
@@ -514,9 +514,9 @@ Kolom **Status** diisi saat modul dipindah ke Rust. Awalnya semua `belum`.
 
 | No | Method | Path | Controller@action | Middleware | Status |
 | --- | --- | --- | --- | --- | --- |
-| 1 | GET | `/api/peripaan` | PetaPeripaanController@index | auth:sanctum | belum |
-| 2 | POST | `/api/peripaan` | PetaPeripaanController@store | auth:sanctum | belum |
-| 3 | DELETE | `/api/peripaan/{id}` | PetaPeripaanController@destroy | auth:sanctum | belum |
+| 1 | GET | `/api/peripaan` | PetaPeripaanController@index | auth:sanctum | rust |
+| 2 | POST | `/api/peripaan` | PetaPeripaanController@store | auth:sanctum | rust |
+| 3 | DELETE | `/api/peripaan/{id}` | PetaPeripaanController@destroy | auth:sanctum | rust |
 
 ### koordinat (1)
 
@@ -634,20 +634,20 @@ Kolom **Status** diisi saat modul dipindah ke Rust. Awalnya semua `belum`.
 | No | Method | Path | Controller@action | Middleware | Status |
 | --- | --- | --- | --- | --- | --- |
 | 1 | GET | `/api/checklist-items` | ChecklistItemController@index | auth:sanctum | rust |
-| 2 | POST | `/api/checklist-items` | ChecklistItemController@store | auth:sanctum | belum |
+| 2 | POST | `/api/checklist-items` | ChecklistItemController@store | auth:sanctum | rust |
 | 3 | GET | `/api/checklist-items/{id}` | ChecklistItemController@show | auth:sanctum | rust |
-| 4 | PUT/PATCH | `/api/checklist-items/{id}` | ChecklistItemController@update | auth:sanctum | belum |
-| 5 | DELETE | `/api/checklist-items/{id}` | ChecklistItemController@destroy | auth:sanctum | belum |
-| 6 | POST | `/api/checklist-items/reorder` | ChecklistItemController@reorder | auth:sanctum | belum |
+| 4 | PUT/PATCH | `/api/checklist-items/{id}` | ChecklistItemController@update | auth:sanctum | rust |
+| 5 | DELETE | `/api/checklist-items/{id}` | ChecklistItemController@destroy | auth:sanctum | rust |
+| 6 | POST | `/api/checklist-items/reorder` | ChecklistItemController@reorder | auth:sanctum | rust |
 
 ### pekerjaan-checklist (5)
 
 | No | Method | Path | Controller@action | Middleware | Status |
 | --- | --- | --- | --- | --- | --- |
 | 1 | GET | `/api/pekerjaan-checklist` | PekerjaanChecklistController@index | auth:sanctum | rust |
-| 2 | POST | `/api/pekerjaan-checklist/toggle` | PekerjaanChecklistController@toggle | auth:sanctum | belum |
+| 2 | POST | `/api/pekerjaan-checklist/toggle` | PekerjaanChecklistController@toggle | auth:sanctum | rust |
 | 3 | GET | `/api/pekerjaan-checklist/history` | PekerjaanChecklistController@history | auth:sanctum | rust |
-| 4 | GET | `/api/pekerjaan-checklist/export/excel` | PekerjaanChecklistController@exportExcel | auth:sanctum | belum |
+| 4 | GET | `/api/pekerjaan-checklist/export/excel` | PekerjaanChecklistController@exportExcel | auth:sanctum | rust |
 | 5 | GET | `/api/pekerjaan-checklist/export/pdf` | PekerjaanChecklistController@exportPdf | auth:sanctum | belum |
 
 ### post-pekerjaan-checklist (1)
@@ -750,16 +750,16 @@ Kolom **Status** diisi saat modul dipindah ke Rust. Awalnya semua `belum`.
 
 | No | Method | Path | Controller@action | Middleware | Status |
 | --- | --- | --- | --- | --- | --- |
-| 1 | GET | `/api/document-registers` | DocumentRegisterController@index | auth:sanctum | belum |
-| 2 | POST | `/api/document-registers` | DocumentRegisterController@store | auth:sanctum | belum |
-| 3 | PUT | `/api/document-registers/{id}` | DocumentRegisterController@update | auth:sanctum | belum |
-| 4 | DELETE | `/api/document-registers/{id}` | DocumentRegisterController@destroy | auth:sanctum | belum |
+| 1 | GET | `/api/document-registers` | DocumentRegisterController@index | auth:sanctum | parsial |
+| 2 | POST | `/api/document-registers` | DocumentRegisterController@store | auth:sanctum | rust |
+| 3 | PUT | `/api/document-registers/{id}` | DocumentRegisterController@update | auth:sanctum | rust |
+| 4 | DELETE | `/api/document-registers/{id}` | DocumentRegisterController@destroy | auth:sanctum | rust |
 
 ### debug-data (1)
 
 | No | Method | Path | Controller@action | Middleware | Status |
 | --- | --- | --- | --- | --- | --- |
-| 1 | GET | `/api/debug-data` | closure | auth:sanctum | belum |
+| 1 | GET | `/api/debug-data` | closure | auth:sanctum | dihapus |
 
 ### notifications (6)
 
@@ -826,9 +826,9 @@ Kolom **Status** diisi saat modul dipindah ke Rust. Awalnya semua `belum`.
 
 | No | Method | Path | Controller@action | Middleware | Status |
 | --- | --- | --- | --- | --- | --- |
-| 1 | GET | `/api/signature-libraries` | SignatureLibraryController@index | auth:sanctum | belum |
-| 2 | POST | `/api/signature-libraries` | SignatureLibraryController@store | auth:sanctum | belum |
-| 3 | DELETE | `/api/signature-libraries/{id}` | SignatureLibraryController@destroy | auth:sanctum | belum |
+| 1 | GET | `/api/signature-libraries` | SignatureLibraryController@index | auth:sanctum | rust |
+| 2 | POST | `/api/signature-libraries` | SignatureLibraryController@store | auth:sanctum | rust |
+| 3 | DELETE | `/api/signature-libraries/{id}` | SignatureLibraryController@destroy | auth:sanctum | rust |
 
 ### live-chat (5)
 

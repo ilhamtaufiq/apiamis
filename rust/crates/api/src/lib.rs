@@ -17,10 +17,12 @@ pub mod berita_acara;
 pub mod berkas;
 pub mod changes;
 pub mod checklist;
+pub mod checklist_items_write;
 pub mod crypt;
 pub mod desa;
 pub mod desa_write;
 pub mod docx_template;
+pub mod document_registers;
 pub mod document_types_write;
 pub mod draft;
 pub mod format;
@@ -48,6 +50,8 @@ pub mod notify;
 pub mod output;
 pub mod pagination;
 pub mod pekerjaan;
+pub mod pekerjaan_checklist_write;
+pub mod peripaan;
 pub mod pekerjaan_detail;
 pub mod pekerjaan_rel;
 pub mod pekerjaan_write;
@@ -60,6 +64,8 @@ pub mod progress_metrics;
 pub mod progress_write;
 pub mod ratelimit;
 pub mod roles;
+pub mod signature_library;
+pub mod sipd_pekerjaan_links;
 pub mod route_permission;
 pub mod session;
 pub mod sk;
@@ -208,6 +214,27 @@ pub fn app(config: &Config, state: AppState) -> Router {
         )
         .route("/api/audit-logs", get(audit_logs::index))
         .route("/api/audit-logs/{id}", get(audit_logs::show))
+        .route(
+            "/api/sipd-pekerjaan-links",
+            get(sipd_pekerjaan_links::index)
+                .put(sipd_pekerjaan_links::upsert)
+                .delete(sipd_pekerjaan_links::destroy),
+        )
+        .route(
+            "/api/signature-libraries",
+            get(signature_library::index).post(signature_library::store),
+        )
+        .route(
+            "/api/signature-libraries/{id}",
+            delete(signature_library::destroy),
+        )
+        .route(
+            "/api/peripaan",
+            get(peripaan::index)
+                .post(peripaan::store)
+                .layer(DefaultBodyLimit::max(foto::BODY_LIMIT)),
+        )
+        .route("/api/peripaan/{id}", delete(peripaan::destroy))
         .route("/api/roles", get(roles::index).post(roles::store))
         .route(
             "/api/roles/{id}",
@@ -245,6 +272,16 @@ pub fn app(config: &Config, state: AppState) -> Router {
         .route(
             "/api/document-types",
             get(lookup::document_types_index).post(document_types_write::store_type),
+        )
+        .route(
+            "/api/document-registers",
+            get(document_registers::index).post(document_registers::store),
+        )
+        .route(
+            "/api/document-registers/{id}",
+            put(document_registers::update)
+                .patch(document_registers::update)
+                .delete(document_registers::destroy),
         )
         .route(
             "/api/document-types/{id}",
@@ -365,9 +402,30 @@ pub fn app(config: &Config, state: AppState) -> Router {
                 .delete(tiket_write::destroy),
         )
         .route("/api/tiket/{id}/comments", post(tiket_write::store_comment))
-        .route("/api/checklist-items", get(checklist::items_index))
-        .route("/api/checklist-items/{id}", get(checklist::items_show))
+        .route(
+            "/api/checklist-items",
+            get(checklist::items_index).post(checklist_items_write::store),
+        )
+        .route(
+            "/api/checklist-items/reorder",
+            post(checklist_items_write::reorder),
+        )
+        .route(
+            "/api/checklist-items/{id}",
+            get(checklist::items_show)
+                .put(checklist_items_write::update)
+                .patch(checklist_items_write::update)
+                .delete(checklist_items_write::destroy),
+        )
         .route("/api/pekerjaan-checklist", get(checklist::pekerjaan_index))
+        .route(
+            "/api/pekerjaan-checklist/toggle",
+            post(pekerjaan_checklist_write::toggle),
+        )
+        .route(
+            "/api/pekerjaan-checklist/export/excel",
+            get(pekerjaan_checklist_write::export_excel),
+        )
         .route(
             "/api/pekerjaan-checklist/history",
             get(checklist::history_index),

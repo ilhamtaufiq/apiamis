@@ -370,7 +370,7 @@ async fn resource(
 }
 
 /// Atribut untuk audit: kolom tabel, JSON `attachment_nomors` diurai.
-fn attributes(row: &kontrak::AddendumRow) -> Map<String, Value> {
+pub(crate) fn attributes(row: &kontrak::AddendumRow) -> Map<String, Value> {
     let attachment: Value = row
         .attachment_nomors
         .as_deref()
