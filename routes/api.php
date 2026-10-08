@@ -115,12 +115,14 @@ Route::get('blog/{blog}/comments/count', [BlogCommentController::class, 'count']
 Route::get('public/puspen/progress-fisik', [PuspenProgressFisikController::class, 'publicIndex']);
 Route::get('public/spam-units/stats', [SpamUnitController::class, 'publicStats']);
 Route::get('public/spam-units/map-stats', [SpamUnitController::class, 'publicMapStats']);
+Route::get('public/spam-units/map-stats/series', [SpamUnitController::class, 'publicMapStatsSeries']);
 Route::get('public/spam-kelembagaan/form/{token}', [\App\Http\Controllers\SpamKelembagaanShareController::class, 'publicShow'])
     ->middleware('throttle:60,1');
 Route::post('public/spam-kelembagaan/form/{token}', [\App\Http\Controllers\SpamKelembagaanShareController::class, 'publicSubmit'])
     ->middleware('throttle:10,1');
 Route::get('public/spm-sanitasi/stats', [SpmSanitasiController::class, 'publicStats']);
 Route::get('public/spm-sanitasi/map-stats', [SpmSanitasiController::class, 'publicMapStats']);
+Route::get('public/spm-sanitasi/map-stats/series', [SpmSanitasiController::class, 'publicMapStatsSeries']);
 Route::post('public/contact', [ContactController::class, 'store'])->middleware('throttle:contact-inquiries');
 
 Route::get('public/puspen/media-shares/{shareToken}', [PuspenMediaShareController::class, 'publicShow']);

@@ -272,6 +272,27 @@ class SpamUnitController extends Controller
         ]);
     }
 
+    /**
+     * GET public/spam-units/map-stats/series?years=2020,2021,...
+     * Map-stats per tahun dalam satu respon, dikunci per tahun.
+     */
+    public function publicMapStatsSeries(Request $request): JsonResponse
+    {
+        $years = collect(explode(',', (string) $request->input('years')))
+            ->map(fn ($y) => trim($y))
+            ->filter(fn ($y) => preg_match('/^\\d{4}$/', $y) === 1)
+            ->unique()
+            ->take(20)
+            ->values();
+
+        $data = [];
+        foreach ($years as $year) {
+            $data[$year] = $this->integrationService->desaMapStats($year);
+        }
+
+        return response()->json(['success' => true, 'data' => $data]);
+    }
+
     public function stats(Request $request): JsonResponse
     {
         $tahunScope = $request->filled('tahun') ? $request->input('tahun') : null;
