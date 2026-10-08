@@ -37,8 +37,8 @@ Setiap kali ada langkah yang selesai, tambahkan entri di bagian **Riwayat** dan 
 - [ ] 2.1 Public API v1 (`/api/public/v1/*`)
 - [~] 2.2 Master data: `kecamatan`, `desa`, dan `kegiatan` sudah di Rust untuk GET list dan show per id. Diuji terhadap fixture produksi dan DB. Belum ada POST, PUT, atau DELETE
 - [~] 2.3 Lookup dan konfigurasi: `app-settings` (index publik dan maintenance), `tags` (index dan show), `document-types`, dan `penyedia` (index dengan search dan paginasi, show). Belum: `app-settings` admin (mail, kontrak-templates, backups, storage-stats) karena menyentuh SMTP, filesystem, dan jadwal backup. `master-fase-pekerjaan` tidak dimigrasi (lihat K7)
-- [ ] 2.4 Tiket dan SpamUnit
-- [ ] 2.5 Checklist proyek
+- [ ] 2.4 Tiket dan SpamUnit (terhalang 2.6: `TiketResource` memuat `PekerjaanResource`, SpamUnit memuat `pekerjaan.kegiatan`, `output`, dan `kontrak`)
+- [ ] 2.5 Checklist proyek (terhalang 2.6)
 - [ ] 2.6 Pekerjaan
 - [ ] 2.7 Progress dan foto
 - [ ] 2.8 SimulationNetwork (versioning JSON)
@@ -134,4 +134,5 @@ Setiap kali ada langkah yang selesai, tambahkan entri di bagian **Riwayat** dan 
 | 2026-10-08 | 2.3 Lookup dan konfigurasi | `app-settings` (index publik dan maintenance), `tags` (index dengan search, show). Tes DB dan smoke test cocok. Temuan T19 (setting publik) |
 | 2026-10-08 | Keputusan K7: `master-fase-pekerjaan` tidak dimigrasi | Hanya dipakai dalam repo ini (controller, model, route, migrasi, seeder, dan prefix permission). Kode dihapus saat dekomisioning, bukan sekarang |
 | 2026-10-08 | 2.3 document-types dan penyedia | `GET /api/document-types` (array langsung, datetime Carbon, sama seperti Eloquent), `GET /api/penyedia` (search, `per_page=-1`, paginasi) dan `GET /api/penyedia/{id}` dengan dokumen dari tabel `media`. Tes DB dipisah per tabel. Smoke test cocok. `app-settings` admin ditunda |
+| 2026-10-08 | Blokir 2.4 dan 2.5 | Tiket, SpamUnit, dan Checklist bergantung pada `PekerjaanResource` dan relasinya. `PekerjaanResource` memanggil `ProgressTabMetricsService`, `PekerjaanProgressEstimasiSummaryService`, dan metrik foto. Perlu keputusan urutan 2.6 sebelum modul ini bisa dipindah dengan benar |
 | 2026-10-08 | Ruang lingkup diperluas | Repo punya lebih banyak modul dari rencana awal: blog, kanban, live chat, procurement SPSE, SIPD, Puspen, tanda tangan PDF, Google Drive, backup, dan WhatsApp. Perlu dimasukkan ke daftar modul Fase 2 |
