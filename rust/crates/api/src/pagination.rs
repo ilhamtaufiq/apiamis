@@ -61,9 +61,27 @@ fn window(current: u64, last: u64) -> Vec<Slot> {
 ///
 /// `base_url` adalah `APP_URL` + path, tanpa query string.
 pub fn paginate(data: Vec<Value>, total: u64, params: PageParams, base_url: &str) -> Value {
+    paginate_with_query(data, total, params, base_url, "")
+}
+
+/// Sama seperti `paginate`, tetapi setiap link membawa `extra` (query string tanpa `page`),
+/// seperti `->appends($request->query())` di Laravel.
+pub fn paginate_with_query(
+    data: Vec<Value>,
+    total: u64,
+    params: PageParams,
+    base_url: &str,
+    extra: &str,
+) -> Value {
     let PageParams { page, per_page } = params;
     let last_page = total.div_ceil(per_page).max(1);
-    let url = |p: u64| format!("{base_url}?page={p}");
+    let url = |p: u64| {
+        if extra.is_empty() {
+            format!("{base_url}?page={p}")
+        } else {
+            format!("{base_url}?{extra}&page={p}")
+        }
+    };
     let (from, to) = if total == 0 {
         (Value::Null, Value::Null)
     } else {

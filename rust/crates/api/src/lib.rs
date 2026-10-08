@@ -17,6 +17,7 @@ pub mod kegiatan;
 pub mod lookup;
 pub mod maintenance;
 pub mod pagination;
+pub mod pekerjaan;
 pub mod penyedia;
 pub mod ratelimit;
 pub mod route_permission;
@@ -104,6 +105,8 @@ pub fn app(config: &Config, state: AppState) -> Router {
         .route("/api/tags/{id}", get(lookup::tags_show))
         .route("/api/document-types", get(lookup::document_types_index))
         .route("/api/penyedia", get(penyedia::index))
+        .route("/api/pekerjaan", get(pekerjaan::index))
+        .route("/api/pekerjaan/{id}", get(pekerjaan::show))
         .route("/api/penyedia/{id}", get(penyedia::show))
         // Catch-all untuk /api: route yang belum ada di Rust tetap lewat pengecekan
         // permission (Laravel menolak lebih dulu, bukan 404).

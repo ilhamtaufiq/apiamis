@@ -39,7 +39,7 @@ Setiap kali ada langkah yang selesai, tambahkan entri di bagian **Riwayat** dan 
 - [~] 2.3 Lookup dan konfigurasi: `app-settings` (index publik dan maintenance), `tags` (index dan show), `document-types`, dan `penyedia` (index dengan search dan paginasi, show). Belum: `app-settings` admin (mail, kontrak-templates, backups, storage-stats) karena menyentuh SMTP, filesystem, dan jadwal backup. `master-fase-pekerjaan` tidak dimigrasi (lihat K7)
 - [ ] 2.4 Tiket dan SpamUnit (terhalang 2.6: `TiketResource` memuat `PekerjaanResource`, SpamUnit memuat `pekerjaan.kegiatan`, `output`, dan `kontrak`)
 - [ ] 2.5 Checklist proyek (terhalang 2.6)
-- [ ] 2.6 Pekerjaan
+- [~] 2.6 Pekerjaan: hanya GET (`/api/pekerjaan`, `/api/pekerjaan/{id}`), dibatasi role `admin`, `manager`, `super-admin`, dan `operator` (fail-closed: role lain 403). Belum dipindah: progres, foto, kontrak, `assignment_sources`, pencarian `kontrak.penyedia`, sort `penerima_count`, dan `summary`. Bagian yang belum dipindah dikirim sebagai null dan respon diberi header `x-partial-response`. Frontend jangan dipindah ke endpoint ini sebelum bagian ini selesai
 - [ ] 2.7 Progress dan foto
 - [ ] 2.8 SimulationNetwork (versioning JSON)
 - [ ] 2.9 Kontrak dan Berita Acara
@@ -90,6 +90,8 @@ Setiap kali ada langkah yang selesai, tambahkan entri di bagian **Riwayat** dan 
 | T18 | 404 show per id: Rust mengembalikan `{"message":"Not Found."}`. Laravel memakai `ModelNotFoundException` dan bentuk respon bergantung pada `APP_DEBUG`. Karena produksi memakai `APP_DEBUG=true` (T11), respon produksi kemungkinan berbeda | Verifikasi setelah `APP_DEBUG=false`, lalu sesuaikan |
 | T19 | `GET /api/app-settings` publik dan mengembalikan semua setting kecuali key yang ada di daftar rahasia (`chat_api_key_*`, `mail_password`, `google_drive_*`, `s3_secret_access_key`). Setting lain (misalnya username atau host) ikut terbaca tanpa login | Tinjau daftar key yang aman, atau batasi endpoint ini ke login. Perilaku dipertahankan dulu agar setara dengan Laravel |
 | T20 | Frontend Arumanis (repo terpisah) mungkin masih memakai `master-fase-pekerjaan`. Repo ini tidak memuat frontend-nya | Konfirmasi dulu bahwa frontend tidak memakai endpoint ini sebelum 4.4 |
+| T21 | Endpoint Pekerjaan Rust belum memberi progres, foto, kontrak, atau assignment yang sama dengan Laravel. Fail-closed untuk role lain | Jangan dipakai frontend sebelum 2.6 lengkap. Pantau header `x-partial-response` |
+| T22 | Urutan link paginasi (`appends`) dan bentuk `per_page=-1` (batas 80) belum diverifikasi terhadap produksi | Verifikasi dengan respon produksi saat akun uji tersedia |
 | T10 | Kualitas data: 14 dari 20 kegiatan punya `pagu = 0`, 7 pekerjaan punya `pagu = 0`, dan 15 kegiatan punya total pekerjaan melebihi pagu kegiatan | Perlu konfirmasi dengan pemilik data sebelum dijadikan fixture acuan |
 
 ## Keputusan terbuka
@@ -135,4 +137,5 @@ Setiap kali ada langkah yang selesai, tambahkan entri di bagian **Riwayat** dan 
 | 2026-10-08 | Keputusan K7: `master-fase-pekerjaan` tidak dimigrasi | Hanya dipakai dalam repo ini (controller, model, route, migrasi, seeder, dan prefix permission). Kode dihapus saat dekomisioning, bukan sekarang |
 | 2026-10-08 | 2.3 document-types dan penyedia | `GET /api/document-types` (array langsung, datetime Carbon, sama seperti Eloquent), `GET /api/penyedia` (search, `per_page=-1`, paginasi) dan `GET /api/penyedia/{id}` dengan dokumen dari tabel `media`. Tes DB dipisah per tabel. Smoke test cocok. `app-settings` admin ditunda |
 | 2026-10-08 | Blokir 2.4 dan 2.5 | Tiket, SpamUnit, dan Checklist bergantung pada `PekerjaanResource` dan relasinya. `PekerjaanResource` memanggil `ProgressTabMetricsService`, `PekerjaanProgressEstimasiSummaryService`, dan metrik foto. Perlu keputusan urutan 2.6 sebelum modul ini bisa dipindah dengan benar |
+| 2026-10-08 | 2.6 Pekerjaan (GET, sebagian) | Opsi 1: list dan show dengan gate role. Filter tahun, kecamatan, desa, kegiatan, sub kegiatan, sub bidang, search, sort whitelist. Uji DB dan smoke test: operator 200 dengan paginasi dan header, role tanpa akses 403, tanpa token 401. Angka progres dan kontrak belum ada |
 | 2026-10-08 | Ruang lingkup diperluas | Repo punya lebih banyak modul dari rencana awal: blog, kanban, live chat, procurement SPSE, SIPD, Puspen, tanda tangan PDF, Google Drive, backup, dan WhatsApp. Perlu dimasukkan ke daftar modul Fase 2 |
