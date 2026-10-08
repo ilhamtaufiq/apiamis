@@ -16,6 +16,15 @@ use std::collections::HashMap;
 
 use crate::{desa::internal, format::iso8601_utc, maintenance, require_auth, AppState};
 
+/// Bentuk Carbon mentah (`toJSON`) untuk kolom datetime model Eloquent.
+/// Format belum diverifikasi terhadap produksi (lihat T17).
+pub fn carbon_json(ts: Option<DateTime<Utc>>) -> Value {
+    match ts {
+        Some(t) => Value::String(t.format("%Y-%m-%dT%H:%M:%S%.6fZ").to_string()),
+        None => Value::Null,
+    }
+}
+
 /// Setting yang nilainya tidak pernah dikirim ke klien (`AppSettingResource`).
 pub fn is_hidden_setting(key: &str) -> bool {
     key.starts_with("chat_api_key_")
@@ -349,4 +358,57 @@ mod tests {
         assert_eq!(v["slug"], "air");
         assert_eq!(v["created_at"], Value::Null);
     }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct DocumentTypeRow {
+    pub id: u64,
+    pub name: String,
+    pub code: String,
+    pub format_template: Option<String>,
+    pub created_at: Option<DateTime<Utc>>,
+    pub updated_at: Option<DateTime<Utc>>,
+}
+
+/// `DocumentType::all()` di-serialisasi langsung oleh Eloquent (tanpa Resource).
+pub fn document_type_json(d: &DocumentTypeRow) -> Value {
+    json!({
+        "id": d.id,
+        "name": d.name,
+        "code": d.code,
+        "format_template": d.format_template,
+        "created_at": carbon_json(d.created_at),
+        "updated_at": carbon_json(d.updated_at),
+    })
+}
+
+pub async fn document_types(pool: &MySqlPool) -> Result<Vec<DocumentTypeRow>, sqlx::Error> {
+    let rows = sqlx::query(
+        "SELECT id, name, code, format_template, created_at, updated_at FROM tbl_document_types ORDER BY id",
+    )
+    .fetch_all(pool)
+    .await?;
+    rows.iter()
+        .map(|r| {
+            Ok(DocumentTypeRow {
+                id: r.try_get("id")?,
+                name: r.try_get("name")?,
+                code: r.try_get("code")?,
+                format_template: r.try_get("format_template")?,
+                created_at: r.try_get("created_at")?,
+                updated_at: r.try_get("updated_at")?,
+            })
+        })
+        .collect()
+}
+
+/// `GET /api/document-types` (butuh login): array langsung, tanpa pembungkus `data`.
+pub async fn document_types_index(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> Result<Json<Value>, ApiError> {
+    require_auth(&state, &headers).await?;
+    let rows = document_types(&state.pool).await.map_err(internal)?;
+    let items: Vec<Value> = rows.iter().map(document_type_json).collect();
+    Ok(Json(Value::Array(items)))
 }

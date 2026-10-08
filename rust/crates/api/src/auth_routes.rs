@@ -7,7 +7,6 @@ use axum::{
     response::{IntoResponse, Response},
     Json,
 };
-use chrono::{DateTime, Utc};
 use serde_json::{json, Map, Value};
 use std::collections::BTreeMap;
 use std::time::Duration;
@@ -16,14 +15,7 @@ use crate::{desa::internal, maintenance, AppState};
 
 const LOGIN_MAX_PER_MINUTE: usize = 5;
 
-/// Bentuk Carbon saat di-serialisasi (`toJSON`), dipakai untuk kolom datetime model.
-/// Belum diverifikasi terhadap respon produksi (lihat log).
-fn carbon_json(ts: Option<DateTime<Utc>>) -> Value {
-    match ts {
-        Some(t) => Value::String(t.format("%Y-%m-%dT%H:%M:%S%.6fZ").to_string()),
-        None => Value::Null,
-    }
-}
+use crate::lookup::carbon_json;
 
 /// Bentuk `UserResource` dengan relasi roles dan permissions yang sudah dimuat.
 pub fn user_resource(

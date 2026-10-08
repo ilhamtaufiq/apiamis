@@ -82,3 +82,5 @@ jobs:
         run: cargo test -p api --test login_db -- --ignored
       - name: test integrasi lookup
         run: cargo test -p api --test lookup_db -- --ignored
+      - name: test integrasi penyedia dan document types
+        run: cargo test -p api --test penyedia_db -- --ignored
