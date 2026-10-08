@@ -35,6 +35,7 @@ pub mod lookup;
 pub mod maintenance;
 pub mod media;
 pub mod notifications;
+pub mod onlyoffice;
 pub mod notify;
 pub mod output;
 pub mod pagination;
@@ -188,6 +189,8 @@ pub fn app(config: &Config, state: AppState) -> Router {
         .route("/api/auth/login", post(auth_routes::login))
         .route("/api/auth/me", get(auth_routes::me))
         .route("/api/user", get(users_write::me_raw))
+        .route("/api/berkas/{id}/export-pdf", get(onlyoffice::berkas_export_pdf))
+        .route("/api/onlyoffice/media/{id}/download", get(onlyoffice::media_download))
         .route("/api/auth/logout", post(auth_routes::logout))
         .route("/api/auth/sync-token", post(auth_routes::sync_token))
         .route("/api/app-settings", get(lookup::index))

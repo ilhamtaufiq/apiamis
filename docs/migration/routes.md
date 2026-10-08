@@ -12,9 +12,9 @@ Sumber: `routes/api.php` (branch `rust`, dari `main` SHA `c19fd06`). Dibuat deng
 
 ### Status paritas (diperbarui)
 
-- Sudah di Rust: **137** (termasuk auth, lookup, kecamatan, desa, kegiatan, penyedia, tiket GET, checklist GET, foto dan penerima seluruh rute, berkas kecuali export-pdf dan upload-from-url, kontrak CRUD, relasi pekerjaan/kegiatan/penyedia, excel export, template, dan impor kontrak, addendum dan register-gaps GET, sk, dan notifikasi)
+- Sudah di Rust: **139** (termasuk auth, lookup, kecamatan, desa, kegiatan, penyedia, tiket GET, checklist GET, foto dan penerima seluruh rute, berkas kecuali export-pdf dan upload-from-url, kontrak CRUD, relasi pekerjaan/kegiatan/penyedia, excel export, template, dan impor kontrak, addendum dan register-gaps GET, sk, dan notifikasi)
 - Parsial di Rust: **1** (`GET /api/pekerjaan`: relasi daftar belum dibandingkan dengan produksi, lihat T21)
-- Belum: **347** (dihitung langsung dari kolom Status; termasuk export dokumen, BAP, dan cover kontrak, addendum, export Excel draft, progress estimasi, destroy pekerjaan, dan modul lain yang belum dipindah)
+- Belum: **345** (dihitung langsung dari kolom Status; termasuk export dokumen, BAP, dan cover kontrak, addendum, export Excel draft, progress estimasi, destroy pekerjaan, dan modul lain yang belum dipindah)
 - Dihapus (tidak dimigrasi): **1**
 
 Cara menghitung: cocokkan method dan path (`{param}` dinormalisasi) dengan route yang terdaftar di `rust/crates/api/src/lib.rs`.
@@ -128,7 +128,7 @@ Kolom **Status** diisi saat modul dipindah ke Rust. Awalnya semua `belum`.
 | --- | --- | --- | --- | --- | --- |
 | 1 | POST | `/api/onlyoffice/callback` | OnlyOfficeController@callback | - | belum |
 | 2 | GET | `/api/onlyoffice/health` | OnlyOfficeController@health | - | belum |
-| 3 | GET | `/api/onlyoffice/media/{media}/download` | OnlyOfficeController@download | - | belum |
+| 3 | GET | `/api/onlyoffice/media/{media}/download` | OnlyOfficeController@download | - | rust |
 | 4 | GET | `/api/onlyoffice/media/{media}/config` | OnlyOfficeController@config | auth:sanctum | belum |
 
 ###  (1)
@@ -501,7 +501,7 @@ Kolom **Status** diisi saat modul dipindah ke Rust. Awalnya semua `belum`.
 | --- | --- | --- | --- | --- | --- |
 | 1 | GET | `/api/berkas/jenis-dokumen` | BerkasController@jenisDokumen | auth:sanctum | rust |
 | 2 | POST | `/api/berkas/upload-from-url` | BerkasController@uploadFromUrl | auth:sanctum | belum |
-| 3 | GET | `/api/berkas/{berkas}/export-pdf` | BerkasController@convertToPdf | auth:sanctum | belum |
+| 3 | GET | `/api/berkas/{berkas}/export-pdf` | BerkasController@convertToPdf | auth:sanctum | rust |
 | 4 | DELETE | `/api/berkas/bulk` | BerkasController@bulkDestroy | auth:sanctum | rust |
 | 5 | GET | `/api/berkas` | BerkasController@index | auth:sanctum | rust |
 | 6 | POST | `/api/berkas` | BerkasController@store | auth:sanctum | rust |

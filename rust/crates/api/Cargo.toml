@@ -26,6 +26,7 @@ tracing-subscriber.workspace = true
 image = { version = "0.25", default-features = false, features = ["jpeg", "png"] }
 rust_xlsxwriter = "0.99"
 bcrypt = "0.17"
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 calamine = "0.36"
 csv = "1"
 
