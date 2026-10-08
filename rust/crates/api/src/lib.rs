@@ -42,6 +42,7 @@ pub mod route_permission;
 pub mod session;
 pub mod tags_write;
 pub mod tiket;
+pub mod tiket_write;
 pub mod users;
 
 use tower_http::{
@@ -215,8 +216,17 @@ pub fn app(config: &Config, state: AppState) -> Router {
                 .delete(penerima::destroy),
         )
         .route("/api/penyedia/{id}", get(penyedia::show))
-        .route("/api/tiket", get(tiket::index))
-        .route("/api/tiket/{id}", get(tiket::show))
+        .route("/api/tiket", get(tiket::index).post(tiket_write::store))
+        // Rute statis `bulk-update` didaftarkan sebelum `/{id}`.
+        .route("/api/tiket/bulk-update", post(tiket_write::bulk_update))
+        .route(
+            "/api/tiket/{id}",
+            get(tiket::show)
+                .put(tiket_write::update)
+                .patch(tiket_write::update)
+                .delete(tiket_write::destroy),
+        )
+        .route("/api/tiket/{id}/comments", post(tiket_write::store_comment))
         .route("/api/checklist-items", get(checklist::items_index))
         .route("/api/checklist-items/{id}", get(checklist::items_show))
         .route("/api/pekerjaan-checklist", get(checklist::pekerjaan_index))

@@ -44,6 +44,49 @@ pub fn change_message(model: &str, id: u64, action: &str, actor: &str, has_url: 
     message
 }
 
+/// ID semua user ber-role `admin`, urut id.
+pub async fn admin_ids(tx: &mut Transaction<'_, MySql>) -> Result<Vec<u64>, sqlx::Error> {
+    sqlx::query_scalar(
+        "SELECT u.id FROM users u \
+         JOIN model_has_roles mr ON mr.model_id = u.id AND mr.model_type = 'App\\\\Models\\\\User' \
+         JOIN roles r ON r.id = mr.role_id WHERE r.name = 'admin' ORDER BY u.id",
+    )
+    .fetch_all(&mut **tx)
+    .await
+}
+
+/// Kirim notifikasi database ke daftar user (tanpa mengecualikan siapa pun), seperti `Notification::send`.
+pub async fn to_users(
+    tx: &mut Transaction<'_, MySql>,
+    users: &[u64],
+    title: &str,
+    message: &str,
+    url: Option<&str>,
+    notif_type: &str,
+) -> Result<(), sqlx::Error> {
+    let data = json!({
+        "title": title,
+        "message": message,
+        "url": url,
+        "type": notif_type,
+        "is_banner": false,
+        "broadcast_history_id": null,
+    })
+    .to_string();
+    for user in users {
+        sqlx::query(
+            "INSERT INTO notifications (id, type, notifiable_type, notifiable_id, data, created_at, updated_at) \
+             VALUES (?, 'App\\\\Notifications\\\\AppNotification', 'App\\\\Models\\\\User', ?, ?, NOW(), NOW())",
+        )
+        .bind(new_uuid())
+        .bind(user)
+        .bind(&data)
+        .execute(&mut **tx)
+        .await?;
+    }
+    Ok(())
+}
+
 /// Kirim notifikasi ke semua user ber-role `admin`, kecuali pelaku.
 pub async fn admins(
     tx: &mut Transaction<'_, MySql>,

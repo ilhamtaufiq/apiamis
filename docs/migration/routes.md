@@ -12,9 +12,9 @@ Sumber: `routes/api.php` (branch `rust`, dari `main` SHA `c19fd06`). Dibuat deng
 
 ### Status paritas (diperbarui)
 
-- Sudah di Rust: **62** (termasuk auth, lookup, kecamatan, desa, kegiatan, penyedia, tiket GET, checklist GET, foto dan penerima seluruh rute, berkas kecuali export-pdf dan upload-from-url)
+- Sudah di Rust: **67** (termasuk auth, lookup, kecamatan, desa, kegiatan, penyedia, tiket GET, checklist GET, foto dan penerima seluruh rute, berkas kecuali export-pdf dan upload-from-url)
 - Parsial di Rust: **1** (`GET /api/pekerjaan`: relasi daftar belum dibandingkan dengan produksi, lihat T21)
-- Belum: **423** (dihitung langsung dari kolom Status; termasuk export Excel draft, progress estimasi, destroy pekerjaan, dan modul lain yang belum dipindah)
+- Belum: **418** (dihitung langsung dari kolom Status; termasuk export Excel draft, progress estimasi, destroy pekerjaan, dan modul lain yang belum dipindah)
 
 Cara menghitung: cocokkan method dan path (`{param}` dinormalisasi) dengan route yang terdaftar di `rust/crates/api/src/lib.rs`.
 
@@ -680,13 +680,13 @@ Kolom **Status** diisi saat modul dipindah ke Rust. Awalnya semua `belum`.
 
 | No | Method | Path | Controller@action | Middleware | Status |
 | --- | --- | --- | --- | --- | --- |
-| 1 | POST | `/api/tiket/bulk-update` | TiketController@bulkUpdate | auth:sanctum | belum |
+| 1 | POST | `/api/tiket/bulk-update` | TiketController@bulkUpdate | auth:sanctum | rust |
 | 2 | GET | `/api/tiket` | TiketController@index | auth:sanctum | rust |
-| 3 | POST | `/api/tiket` | TiketController@store | auth:sanctum | belum |
+| 3 | POST | `/api/tiket` | TiketController@store | auth:sanctum | rust |
 | 4 | GET | `/api/tiket/{id}` | TiketController@show | auth:sanctum | rust |
-| 5 | PUT/PATCH | `/api/tiket/{id}` | TiketController@update | auth:sanctum | belum |
-| 6 | DELETE | `/api/tiket/{id}` | TiketController@destroy | auth:sanctum | belum |
-| 7 | POST | `/api/tiket/{tiket}/comments` | TiketCommentController@store | auth:sanctum | belum |
+| 5 | PUT/PATCH | `/api/tiket/{id}` | TiketController@update | auth:sanctum | rust |
+| 6 | DELETE | `/api/tiket/{id}` | TiketController@destroy | auth:sanctum | rust |
+| 7 | POST | `/api/tiket/{tiket}/comments` | TiketCommentController@store | auth:sanctum | rust |
 
 ### usulan-kegiatan (6)
 
