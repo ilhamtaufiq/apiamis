@@ -66,10 +66,16 @@ def scrub(v):
 
 raw = open(src, encoding="utf-8", errors="replace").read()
 try:
-    body = scrub(json.loads(raw))
+    parsed = json.loads(raw)
     body_kind = "json"
+    # Respon exception Laravel (APP_DEBUG=true) memuat path server dan stack trace.
+    # Jangan disimpan sebagai fixture.
+    if isinstance(parsed, dict) and "exception" in parsed and "trace" in parsed:
+        body = "<debug exception omitted>"
+    else:
+        body = scrub(parsed)
 except ValueError:
-    body = raw[:2000]
+    body = "<non-json body omitted>" if "<html" in raw[:200].lower() else raw[:2000]
     body_kind = "text"
 
 record = {

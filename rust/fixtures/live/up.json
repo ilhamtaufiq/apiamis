@@ -1,0 +1,9 @@
+{
+  "body": {
+    "status": "up"
+  },
+  "body_kind": "json",
+  "content_type": "application/json",
+  "path": "/up",
+  "status": 200
+}

@@ -1,0 +1,9 @@
+{
+  "body": {
+    "message": "Unauthenticated."
+  },
+  "body_kind": "json",
+  "content_type": "application/json",
+  "path": "/api/kegiatan",
+  "status": 401
+}
