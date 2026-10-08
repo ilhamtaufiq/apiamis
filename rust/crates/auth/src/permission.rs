@@ -63,7 +63,7 @@ pub const MUTATION_RESOURCE_PREFIXES: &[&str] = &[
     "/pekerjaan-checklist",
     "/pengawas",
     "/master-fase-pekerjaan",
-    "/signature-library",
+    "/signature-libraries",
     "/koordinat",
     "/client-error-reports",
     "/auth/logout",

@@ -42,7 +42,7 @@ use serde_json::{json, Value};
 use shared::ApiError;
 use sqlx::{MySqlPool, Row};
 
-use crate::{desa::internal, maintenance, session, users, AppState};
+use crate::{desa::internal, maintenance, users, AppState};
 use auth::login;
 
 const HANDOFF_TTL_SECS: i64 = 60;
@@ -315,8 +315,19 @@ pub async fn create_handoff(State(state): State<AppState>, headers: HeaderMap) -
     {
         return too_many_attempts(retry);
     }
-    let Some(token) = session::token_from_headers(&headers, &state.session.name) else {
-        return ApiError::unauthenticated().into_response();
+    // Laravel hanya menerima Bearer untuk handoff (400 bila tidak ada), bukan cookie sesi.
+    let bearer = headers
+        .get(axum::http::header::AUTHORIZATION)
+        .and_then(|v| v.to_str().ok())
+        .and_then(|v| v.strip_prefix("Bearer "))
+        .map(str::trim)
+        .filter(|t| !t.is_empty());
+    let Some(token) = bearer.map(str::to_string) else {
+        return (
+            axum::http::StatusCode::BAD_REQUEST,
+            Json(json!({ "message": "Bearer token required." })),
+        )
+            .into_response();
     };
 
     let code = random_alnum(HANDOFF_CODE_LEN);
