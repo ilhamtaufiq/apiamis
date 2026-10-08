@@ -86,6 +86,39 @@ class SpmSanitasiController extends Controller
         $jenis = $request->filled('jenis') ? $request->string('jenis')->toString() : null;
         $tahun = $request->filled('tahun') ? $request->string('tahun')->toString() : null;
 
+        return response()->json([
+            'success' => true,
+            'data' => $this->buildStats($kecamatanId, $jenis, $tahun),
+        ]);
+    }
+
+    /**
+     * GET /spm-sanitasi/stats/series?years=2020,2021,...&kecamatan_id=
+     * Statistik per tahun konstruksi dalam satu respon, dengan kunci tahun.
+     */
+    public function statsSeries(Request $request): JsonResponse
+    {
+        $years = collect(explode(',', (string) $request->input('years')))
+            ->map(fn ($y) => trim($y))
+            ->filter(fn ($y) => preg_match('/^\d{4}$/', $y) === 1)
+            ->unique()
+            ->take(20)
+            ->values();
+        $kecamatanId = $request->integer('kecamatan_id') ?: null;
+
+        $data = [];
+        foreach ($years as $year) {
+            $data[$year] = $this->buildStats($kecamatanId, null, $year);
+        }
+
+        return response()->json(['success' => true, 'data' => $data]);
+    }
+
+    /**
+     * Payload statistik SPM sanitasi untuk filter tertentu (tahun null = semua tahun).
+     */
+    private function buildStats(?int $kecamatanId, ?string $jenis, ?string $tahun): array
+    {
         $counts = SpmSanitasi::query()
             ->when($kecamatanId, fn ($q) => $q->whereHas('desa', fn ($dq) => $dq->where('kecamatan_id', $kecamatanId)))
             ->when($jenis, fn ($q) => $q->where('jenis', $jenis))
@@ -104,9 +137,7 @@ class SpmSanitasiController extends Controller
         $totalInvestasi = (float) (clone $baseQuery)->sum('pembiayaan_total');
         $capaian = $this->capaianService->summary($kecamatanId, $jenis, $tahun);
 
-        return response()->json([
-            'success' => true,
-            'data' => array_merge([
+        return array_merge([
                 'spaldt_count' => (int) ($counts['spaldt'] ?? 0),
                 'spalds_count' => (int) ($counts['spalds'] ?? 0),
                 'iplt_count' => (int) ($counts['iplt'] ?? 0),
@@ -116,8 +147,7 @@ class SpmSanitasiController extends Controller
                 'berfungsi_count' => $berfungsi,
                 'total_pemanfaat_kk' => $totalPemanfaat,
                 'total_investasi' => $totalInvestasi,
-            ], $capaian),
-        ]);
+            ], $capaian);
     }
 
     public function capaian(Request $request): JsonResponse

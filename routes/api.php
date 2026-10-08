@@ -269,6 +269,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('spam-kelembagaan/submissions/{submission}/approve', [\App\Http\Controllers\SpamKelembagaanShareController::class, 'approveSubmission']);
     Route::post('spam-kelembagaan/submissions/{submission}/reject', [\App\Http\Controllers\SpamKelembagaanShareController::class, 'rejectSubmission']);
     Route::get('spm-sanitasi/stats', [SpmSanitasiController::class, 'stats']);
+    Route::get('spm-sanitasi/stats/series', [SpmSanitasiController::class, 'statsSeries']);
     Route::get('spm-sanitasi/capaian', [SpmSanitasiController::class, 'capaian']);
     Route::get('spm-sanitasi/integration', [SpmSanitasiController::class, 'integration']);
     Route::get('spm-sanitasi/integration/desa/{desaId}', [SpmSanitasiController::class, 'integrationByDesa']);
