@@ -44,7 +44,6 @@ pub mod notifications;
 pub mod onlyoffice;
 pub mod notify;
 pub mod output;
-pub mod panduan;
 pub mod pagination;
 pub mod pekerjaan;
 pub mod pekerjaan_detail;
@@ -52,7 +51,6 @@ pub mod pekerjaan_rel;
 pub mod pekerjaan_write;
 pub mod pengawas_write;
 pub mod penerima;
-pub mod presence;
 pub mod penyedia;
 pub mod penyedia_write;
 pub mod progress_estimasi;
@@ -207,10 +205,6 @@ pub fn app(config: &Config, state: AppState) -> Router {
         )
         .route("/api/audit-logs", get(audit_logs::index))
         .route("/api/audit-logs/{id}", get(audit_logs::show))
-        .route("/api/presence/heartbeat", post(presence::heartbeat))
-        .route("/api/presence/online", get(presence::online))
-        .route("/api/panduan", get(panduan::public_index))
-        .route("/api/panduan/{slug}", get(panduan::public_show))
         .route("/api/auth/logout", post(auth_routes::logout))
         .route("/api/auth/sync-token", post(auth_routes::sync_token))
         .route("/api/app-settings", get(lookup::index))

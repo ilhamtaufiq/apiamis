@@ -11,7 +11,6 @@ use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use App\Http\Resources\UserResource;
 use App\Services\MaintenanceModeService;
-use App\Services\UserPresenceService;
 use Laravel\Socialite\Facades\Socialite;
 
 class AuthController extends Controller
@@ -199,8 +198,6 @@ class AuthController extends Controller
     public function logout(Request $request)
     {
         $user = $request->user();
-        app(UserPresenceService::class)->remove($user);
-
         // Revoke current token
         $user->currentAccessToken()->delete();
 

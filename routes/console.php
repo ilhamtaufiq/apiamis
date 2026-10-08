@@ -11,5 +11,4 @@ Artisan::command('inspire', function () {
 use Illuminate\Support\Facades\Schedule;
 
 Schedule::command('blog-assets:cleanup-orphans --hours=24')->daily();
-Schedule::command('chat:index-knowledge')->weekly();
 

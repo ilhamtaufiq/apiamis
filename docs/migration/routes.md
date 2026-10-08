@@ -12,10 +12,10 @@ Sumber: `routes/api.php` (branch `rust`, dari `main` SHA `c19fd06`). Dibuat deng
 
 ### Status paritas (diperbarui)
 
-- Sudah di Rust: **154** (termasuk dokumen kontrak SPK, cover, ZIP cover, BAP, dan bap-context, serta PDF SPK lewat ONLYOFFICE; termasuk auth, lookup, kecamatan, desa, kegiatan, penyedia, tiket GET, checklist GET, foto dan penerima seluruh rute, berkas kecuali export-pdf dan upload-from-url, kontrak CRUD, relasi pekerjaan/kegiatan/penyedia, excel export, template, dan impor kontrak, addendum dan register-gaps GET, sk, dan notifikasi)
+- Sudah di Rust: **150** (termasuk dokumen kontrak SPK, cover, ZIP cover, BAP, dan bap-context, serta PDF SPK lewat ONLYOFFICE; termasuk auth, lookup, kecamatan, desa, kegiatan, penyedia, tiket GET, checklist GET, foto dan penerima seluruh rute, berkas kecuali export-pdf dan upload-from-url, kontrak CRUD, relasi pekerjaan/kegiatan/penyedia, excel export, template, dan impor kontrak, addendum dan register-gaps GET, sk, dan notifikasi)
 - Parsial di Rust: **1** (`GET /api/pekerjaan`: relasi daftar belum dibandingkan dengan produksi, lihat T21)
-- Belum: **331** (dihitung langsung dari kolom Status; termasuk addendum, export Excel draft, progress estimasi, destroy pekerjaan, dan modul lain yang belum dipindah)
-- Dihapus (tidak dimigrasi): **1**
+- Belum: **306** (dihitung langsung dari kolom Status; termasuk addendum, export Excel draft, progress estimasi, destroy pekerjaan, dan modul lain yang belum dipindah)
+- Dihapus (tidak dimigrasi): **30** (termasuk desa sync-kk, chat AI dan live-chat, panduan CMS, presence, search ai-summary, dan pengaturan AI di app-settings, sesuai keputusan user)
 
 Cara menghitung: cocokkan method dan path (`{param}` dinormalisasi) dengan route yang terdaftar di `rust/crates/api/src/lib.rs`.
 
@@ -56,8 +56,8 @@ Kolom **Status** diisi saat modul dipindah ke Rust. Awalnya semua `belum`.
 | 3 | GET | `/api/app-settings/maintenance` | AppSettingController@maintenanceStatus | - | rust |
 | 4 | GET | `/api/app-settings/storage-stats` | AppSettingController@storageStats | auth:sanctum,role:admin | belum |
 | 5 | POST | `/api/app-settings` | AppSettingController@store | auth:sanctum,role:admin | belum |
-| 6 | POST | `/api/app-settings/test-ai-connection` | AppSettingController@testAiConnection | auth:sanctum,role:admin | belum |
-| 7 | POST | `/api/app-settings/list-ai-models` | AppSettingController@listAiModels | auth:sanctum,role:admin | belum |
+| 6 | POST | `/api/app-settings/test-ai-connection` | AppSettingController@testAiConnection | auth:sanctum,role:admin | dihapus |
+| 7 | POST | `/api/app-settings/list-ai-models` | AppSettingController@listAiModels | auth:sanctum,role:admin | dihapus |
 | 8 | POST | `/api/app-settings/test-mail-connection` | AppSettingController@testMailConnection | auth:sanctum,role:admin | belum |
 | 9 | GET | `/api/app-settings/mail-templates` | AppSettingController@mailTemplates | auth:sanctum,role:admin | belum |
 | 10 | POST | `/api/app-settings/mail-templates` | AppSettingController@storeMailTemplates | auth:sanctum,role:admin | belum |
@@ -83,8 +83,8 @@ Kolom **Status** diisi saat modul dipindah ke Rust. Awalnya semua `belum`.
 
 | No | Method | Path | Controller@action | Middleware | Status |
 | --- | --- | --- | --- | --- | --- |
-| 1 | GET | `/api/panduan` | PanduanPageController@publicIndex | - | rust |
-| 2 | GET | `/api/panduan/{slug}` | PanduanPageController@publicShow | - | rust |
+| 1 | GET | `/api/panduan` | PanduanPageController@publicIndex | - | dihapus |
+| 2 | GET | `/api/panduan/{slug}` | PanduanPageController@publicShow | - | dihapus |
 
 ### blog (15)
 
@@ -234,13 +234,13 @@ Kolom **Status** diisi saat modul dipindah ke Rust. Awalnya semua `belum`.
 
 | No | Method | Path | Controller@action | Middleware | Status |
 | --- | --- | --- | --- | --- | --- |
-| 1 | GET | `/api/admin/panduan` | PanduanPageController@index | auth:sanctum,role:admin | belum |
-| 2 | POST | `/api/admin/panduan` | PanduanPageController@store | auth:sanctum,role:admin | belum |
-| 3 | POST | `/api/admin/panduan/seed` | PanduanPageController@seedDefaults | auth:sanctum,role:admin | belum |
-| 4 | GET | `/api/admin/panduan/{panduan}` | PanduanPageController@show | auth:sanctum,role:admin | belum |
-| 5 | PUT | `/api/admin/panduan/{panduan}` | PanduanPageController@update | auth:sanctum,role:admin | belum |
-| 6 | PATCH | `/api/admin/panduan/{panduan}` | PanduanPageController@update | auth:sanctum,role:admin | belum |
-| 7 | DELETE | `/api/admin/panduan/{panduan}` | PanduanPageController@destroy | auth:sanctum,role:admin | belum |
+| 1 | GET | `/api/admin/panduan` | PanduanPageController@index | auth:sanctum,role:admin | dihapus |
+| 2 | POST | `/api/admin/panduan` | PanduanPageController@store | auth:sanctum,role:admin | dihapus |
+| 3 | POST | `/api/admin/panduan/seed` | PanduanPageController@seedDefaults | auth:sanctum,role:admin | dihapus |
+| 4 | GET | `/api/admin/panduan/{panduan}` | PanduanPageController@show | auth:sanctum,role:admin | dihapus |
+| 5 | PUT | `/api/admin/panduan/{panduan}` | PanduanPageController@update | auth:sanctum,role:admin | dihapus |
+| 6 | PATCH | `/api/admin/panduan/{panduan}` | PanduanPageController@update | auth:sanctum,role:admin | dihapus |
+| 7 | DELETE | `/api/admin/panduan/{panduan}` | PanduanPageController@destroy | auth:sanctum,role:admin | dihapus |
 
 ### error-logs (10)
 
@@ -285,15 +285,15 @@ Kolom **Status** diisi saat modul dipindah ke Rust. Awalnya semua `belum`.
 
 | No | Method | Path | Controller@action | Middleware | Status |
 | --- | --- | --- | --- | --- | --- |
-| 1 | POST | `/api/presence/heartbeat` | UserPresenceController@heartbeat | auth:sanctum | rust |
-| 2 | GET | `/api/presence/online` | UserPresenceController@index | auth:sanctum | rust |
+| 1 | POST | `/api/presence/heartbeat` | UserPresenceController@heartbeat | auth:sanctum | dihapus |
+| 2 | GET | `/api/presence/online` | UserPresenceController@index | auth:sanctum | dihapus |
 
 ### search (2)
 
 | No | Method | Path | Controller@action | Middleware | Status |
 | --- | --- | --- | --- | --- | --- |
 | 1 | GET | `/api/search` | SearchController@index | auth:sanctum | belum |
-| 2 | POST | `/api/search/ai-summary` | SearchAiSummaryController@stream | auth:sanctum,throttle:30,1 | belum |
+| 2 | POST | `/api/search/ai-summary` | SearchAiSummaryController@stream | auth:sanctum,throttle:30,1 | dihapus |
 
 ### spam-units (17)
 
@@ -834,11 +834,11 @@ Kolom **Status** diisi saat modul dipindah ke Rust. Awalnya semua `belum`.
 
 | No | Method | Path | Controller@action | Middleware | Status |
 | --- | --- | --- | --- | --- | --- |
-| 1 | GET | `/api/live-chat/thread` | LiveChatController@myThread | auth:sanctum | belum |
-| 2 | GET | `/api/live-chat/inbox` | LiveChatController@inbox | auth:sanctum | belum |
-| 3 | GET | `/api/live-chat/threads/{thread}/messages` | LiveChatController@messages | auth:sanctum | belum |
-| 4 | POST | `/api/live-chat/threads/{thread}/messages` | LiveChatController@sendMessage | auth:sanctum | belum |
-| 5 | PATCH | `/api/live-chat/threads/{thread}/close` | LiveChatController@closeThread | auth:sanctum | belum |
+| 1 | GET | `/api/live-chat/thread` | LiveChatController@myThread | auth:sanctum | dihapus |
+| 2 | GET | `/api/live-chat/inbox` | LiveChatController@inbox | auth:sanctum | dihapus |
+| 3 | GET | `/api/live-chat/threads/{thread}/messages` | LiveChatController@messages | auth:sanctum | dihapus |
+| 4 | POST | `/api/live-chat/threads/{thread}/messages` | LiveChatController@sendMessage | auth:sanctum | dihapus |
+| 5 | PATCH | `/api/live-chat/threads/{thread}/close` | LiveChatController@closeThread | auth:sanctum | dihapus |
 
 ### arumanis-insight (1)
 
@@ -850,16 +850,16 @@ Kolom **Status** diisi saat modul dipindah ke Rust. Awalnya semua `belum`.
 
 | No | Method | Path | Controller@action | Middleware | Status |
 | --- | --- | --- | --- | --- | --- |
-| 1 | POST | `/api/chat` | ChatController@chat | auth:sanctum | belum |
-| 2 | POST | `/api/chat/stream` | ChatController@chatStream | auth:sanctum | belum |
-| 3 | GET | `/api/chat/models` | ChatController@listModels | auth:sanctum | belum |
-| 4 | GET | `/api/chat/sessions` | ChatController@sessions | auth:sanctum | belum |
-| 5 | POST | `/api/chat/sessions` | ChatController@createSession | auth:sanctum | belum |
-| 6 | DELETE | `/api/chat/sessions/{id}` | ChatController@deleteSession | auth:sanctum | belum |
-| 7 | PATCH | `/api/chat/sessions/{id}` | ChatController@renameSession | auth:sanctum | belum |
-| 8 | GET | `/api/chat/sessions/{id}/messages` | ChatController@sessionMessages | auth:sanctum | belum |
-| 9 | POST | `/api/chat/messages/{id}/vote` | ChatController@voteMessage | auth:sanctum | belum |
-| 10 | GET | `/api/chat/reports/download` | ChatController@downloadReport | auth:sanctum | belum |
+| 1 | POST | `/api/chat` | ChatController@chat | auth:sanctum | dihapus |
+| 2 | POST | `/api/chat/stream` | ChatController@chatStream | auth:sanctum | dihapus |
+| 3 | GET | `/api/chat/models` | ChatController@listModels | auth:sanctum | dihapus |
+| 4 | GET | `/api/chat/sessions` | ChatController@sessions | auth:sanctum | dihapus |
+| 5 | POST | `/api/chat/sessions` | ChatController@createSession | auth:sanctum | dihapus |
+| 6 | DELETE | `/api/chat/sessions/{id}` | ChatController@deleteSession | auth:sanctum | dihapus |
+| 7 | PATCH | `/api/chat/sessions/{id}` | ChatController@renameSession | auth:sanctum | dihapus |
+| 8 | GET | `/api/chat/sessions/{id}/messages` | ChatController@sessionMessages | auth:sanctum | dihapus |
+| 9 | POST | `/api/chat/messages/{id}/vote` | ChatController@voteMessage | auth:sanctum | dihapus |
+| 10 | GET | `/api/chat/reports/download` | ChatController@downloadReport | auth:sanctum | dihapus |
 
 ### paperless (7)
 

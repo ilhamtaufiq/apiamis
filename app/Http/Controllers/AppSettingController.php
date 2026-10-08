@@ -10,7 +10,6 @@ use App\Services\MailConfigService;
 use App\Services\MailContentService;
 use App\Services\MailTemplateService;
 use App\Services\MaintenanceModeService;
-use App\Services\OpenRouterService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
@@ -74,12 +73,6 @@ class AppSettingController extends Controller
             'app_name' => 'nullable|string|max:255',
             'app_description' => 'nullable|string|max:500',
             'tahun_anggaran' => 'nullable|string|max:4',
-            'chat_provider' => 'nullable|string|max:64',
-            'chat_base_url' => 'nullable|string|max:255',
-            'chat_model' => 'nullable|string|max:128',
-            'chat_api_key' => 'nullable|string|max:2000',
-            'chat_price_input_per_1m_idr' => 'nullable|numeric|min:0|max:100000000',
-            'chat_price_output_per_1m_idr' => 'nullable|numeric|min:0|max:100000000',
             'landing_page_active' => 'nullable|string|in:0,1',
             'spm_detail_page_active' => 'nullable|string|in:0,1',
             'capaian_publik_section_active' => 'nullable|string|in:0,1',
@@ -126,15 +119,6 @@ class AppSettingController extends Controller
             's3_secret_access_key' => 'nullable|string|max:255',
         ]);
 
-        $apiKeyProviders = array_merge(array_keys(OpenRouterService::providerOptions()), ['local']);
-
-        foreach ($apiKeyProviders as $providerId) {
-            $settingKey = $this->chatApiKeySettingKey($providerId);
-            $request->validate([
-                $settingKey => 'nullable|string|max:2000',
-            ]);
-        }
-
         $updatedSettings = [];
 
         // Handle text settings
@@ -150,67 +134,6 @@ class AppSettingController extends Controller
 
         if ($request->has('tahun_anggaran')) {
             $setting = AppSetting::setValue('tahun_anggaran', $request->tahun_anggaran, 'text');
-            $updatedSettings[] = $setting;
-        }
-
-        if ($request->has('chat_provider')) {
-            $setting = AppSetting::setValue('chat_provider', $request->chat_provider, 'text');
-            $updatedSettings[] = $setting;
-        }
-
-        if ($request->has('chat_base_url')) {
-            $setting = AppSetting::setValue('chat_base_url', $request->chat_base_url, 'text');
-            $updatedSettings[] = $setting;
-        }
-
-        if ($request->has('chat_model')) {
-            $setting = AppSetting::setValue('chat_model', $request->chat_model, 'text');
-            $updatedSettings[] = $setting;
-        }
-
-        if ($request->has('chat_api_key') && filled($request->input('chat_api_key'))) {
-            $setting = AppSetting::setValue('chat_api_key_local', $request->input('chat_api_key'), 'secret');
-            $updatedSettings[] = $setting;
-        }
-
-        if ($request->has('chat_price_input_per_1m_idr')) {
-            $setting = AppSetting::setValue('chat_price_input_per_1m_idr', $request->chat_price_input_per_1m_idr, 'text');
-            $updatedSettings[] = $setting;
-        }
-
-        if ($request->has('chat_price_output_per_1m_idr')) {
-            $setting = AppSetting::setValue('chat_price_output_per_1m_idr', $request->chat_price_output_per_1m_idr, 'text');
-            $updatedSettings[] = $setting;
-        }
-
-        foreach ($apiKeyProviders as $providerId) {
-            $settingKey = $this->chatApiKeySettingKey($providerId);
-
-            if ($request->has($settingKey) && filled($request->input($settingKey))) {
-                $setting = AppSetting::setValue($settingKey, $request->input($settingKey), 'secret');
-                $updatedSettings[] = $setting;
-            }
-        }
-
-        // Role yang boleh akses AMI asisten AI (JSON array nama role, kosong = semua role).
-        if ($request->has('ami_access_roles')) {
-            $rawRoles = $request->input('ami_access_roles');
-            if (is_string($rawRoles)) {
-                $decoded = json_decode($rawRoles, true);
-                $rawRoles = is_array($decoded) ? $decoded : array_filter(explode(',', $rawRoles));
-            }
-            $rolesArray = is_array($rawRoles) ? $rawRoles : [];
-            $validator = \Illuminate\Support\Facades\Validator::make(
-                ['ami_access_roles' => $rolesArray],
-                ['ami_access_roles' => 'nullable|array', 'ami_access_roles.*' => 'string|max:64']
-            );
-            $validator->validate();
-
-            $setting = AppSetting::setValue(
-                'ami_access_roles',
-                collect($rolesArray)->map(fn($r) => (string) $r)->unique()->values()->toJson(),
-                'text',
-            );
             $updatedSettings[] = $setting;
         }
 
@@ -640,139 +563,6 @@ class AppSettingController extends Controller
     }
 
     /**
-     * Test AI endpoint using stored settings (API key read from database unless overridden).
-     */
-    public function testAiConnection(Request $request)
-    {
-        $request->validate([
-            'base_url' => 'nullable|string|max:255',
-            'model' => 'nullable|string|max:128',
-            'api_key' => 'nullable|string|max:2000',
-        ]);
-
-        $baseUrl = rtrim(
-            (string) ($request->input('base_url') ?: AppSetting::getValue('chat_base_url', '')),
-            '/'
-        );
-        $model = (string) ($request->input('model') ?: AppSetting::getValue('chat_model', 'gc/gemini-2.5-flash'));
-        $apiKey = $request->input('api_key') ?: AppSetting::getValue('chat_api_key_local');
-
-        if ($baseUrl === '' || !filter_var($baseUrl, FILTER_VALIDATE_URL)) {
-            return response()->json(['ok' => false, 'error' => 'URL tidak valid.'], 400);
-        }
-
-        $headers = [
-            'Accept' => 'application/json',
-            'Content-Type' => 'application/json',
-        ];
-
-        if (filled($apiKey)) {
-            $headers['Authorization'] = 'Bearer ' . $apiKey;
-        }
-
-        try {
-            $modelsResponse = Http::withHeaders($headers)
-                ->timeout(10)
-                ->get($baseUrl . '/models');
-
-            if (!$modelsResponse->successful()) {
-                return response()->json([
-                    'ok' => false,
-                    'stage' => 'models',
-                    'error' => 'HTTP ' . $modelsResponse->status() . ': ' . substr($modelsResponse->body(), 0, 120),
-                ], 422);
-            }
-
-            if ($model === '') {
-                return response()->json(['ok' => true, 'stage' => 'models', 'used_stored_key' => !$request->filled('api_key')]);
-            }
-
-            $chatResponse = Http::withHeaders($headers)
-                ->timeout(20)
-                ->post($baseUrl . '/chat/completions', [
-                    'model' => $model,
-                    'messages' => [['role' => 'user', 'content' => 'ping']],
-                    'max_tokens' => 1,
-                    'stream' => false,
-                ]);
-
-            if ($chatResponse->successful()) {
-                return response()->json([
-                    'ok' => true,
-                    'stage' => 'chat',
-                    'model' => $model,
-                    'used_stored_key' => !$request->filled('api_key'),
-                ]);
-            }
-
-            return response()->json([
-                'ok' => false,
-                'stage' => 'chat',
-                'model' => $model,
-                'error' => $this->formatAiGatewayError($chatResponse->body(), $model),
-                'used_stored_key' => !$request->filled('api_key'),
-            ], 422);
-        } catch (\Throwable $e) {
-            return response()->json([
-                'ok' => false,
-                'error' => 'Gagal terhubung: ' . $e->getMessage(),
-            ], 502);
-        }
-    }
-
-    /**
-     * Ambil daftar model dari gateway AI (GET {base_url}/models).
-     * Proxy karena CORS + API key tersimpan di backend.
-     */
-    public function listAiModels(Request $request)
-    {
-        $baseUrl = rtrim(
-            (string) ($request->input('base_url') ?: AppSetting::getValue('chat_base_url', '')),
-            '/'
-        );
-        $apiKey = $request->input('api_key') ?: AppSetting::getValue('chat_api_key_local');
-
-        if ($baseUrl === '' || !filter_var($baseUrl, FILTER_VALIDATE_URL)) {
-            return response()->json(['error' => 'URL tidak valid.'], 400);
-        }
-
-        $headers = ['Accept' => 'application/json'];
-        if (filled($apiKey)) {
-            $headers['Authorization'] = 'Bearer ' . $apiKey;
-        }
-
-        try {
-            $res = Http::withHeaders($headers)
-                ->timeout(10)
-                ->get($baseUrl . '/models');
-
-            if (!$res->successful()) {
-                return response()->json([
-                    'error' => 'HTTP ' . $res->status() . ': ' . substr($res->body(), 0, 120),
-                ], 422);
-            }
-
-            $data = $res->json('data') ?? [];
-            $models = collect($data)
-                ->map(fn($m) => [
-                    'id' => $m['id'] ?? null,
-                    'available' => (bool) ($m['available'] ?? true),
-                    'min_tier' => $m['min_tier'] ?? null,
-                ])
-                ->filter(fn($m) => is_string($m['id']) && $m['id'] !== '')
-                ->values()
-                ->all();
-
-            return response()->json([
-                'models' => $models,
-                'used_stored_key' => !$request->filled('api_key'),
-            ]);
-        } catch (\Throwable $e) {
-            return response()->json(['error' => 'Gagal terhubung: ' . $e->getMessage()], 502);
-        }
-    }
-
-    /**
      * Get storage statistics (sizes of photos, files, and database)
      */
     public function storageStats()
@@ -852,12 +642,6 @@ class AppSettingController extends Controller
             'app_name',
             'app_description',
             'tahun_anggaran',
-            'chat_provider',
-            'chat_base_url',
-            'chat_model',
-            'chat_api_key',
-            'chat_price_input_per_1m_idr',
-            'chat_price_output_per_1m_idr',
             'kontrak_nama_ppk',
             'kontrak_nip_ppk',
             'kontrak_nama_pptk',
@@ -884,31 +668,5 @@ class AppSettingController extends Controller
         if ($normalized !== []) {
             $request->merge($normalized);
         }
-    }
-
-    private function chatApiKeySettingKey(string $providerId): string
-    {
-        return 'chat_api_key_' . str_replace('-', '_', $providerId);
-    }
-
-    private function formatAiGatewayError(string $raw, string $model): string
-    {
-        $decoded = json_decode($raw, true);
-        if (is_array($decoded)) {
-            $message = $decoded['message'] ?? $decoded['error'] ?? null;
-            $payloadModel = is_string($decoded['model'] ?? null) ? $decoded['model'] : $model;
-
-            if (is_string($message) && stripos($message, 'blocked') !== false) {
-                return 'Model "' . $payloadModel . '" diblokir gateway AI. Ganti ke gc/gemini-2.5-flash.';
-            }
-
-            if (is_string($message) && $message !== '') {
-                return 'Model "' . $payloadModel . '": ' . $message;
-            }
-        }
-
-        $trimmed = trim($raw);
-
-        return $trimmed !== '' ? substr($trimmed, 0, 200) : 'Model "' . $model . '" gagal diuji.';
     }
 }

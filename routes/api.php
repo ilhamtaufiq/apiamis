@@ -23,14 +23,12 @@ use App\Http\Controllers\KoordinatValidationController;
 use App\Http\Controllers\KecamatanController;
 use App\Http\Controllers\KegiatanController;
 use App\Http\Controllers\KanbanController;
-use App\Http\Controllers\LiveChatController;
 use App\Http\Controllers\KegiatanRoleController;
 use App\Http\Controllers\KontrakAddendumController;
 use App\Http\Controllers\KontrakController;
 use App\Http\Controllers\MenuPermissionController;
 use App\Http\Controllers\OnlyOfficeController;
 use App\Http\Controllers\OutputController;
-use App\Http\Controllers\PanduanPageController;
 use App\Http\Controllers\PaperlessController;
 use App\Http\Controllers\PekerjaanChecklistController;
 use App\Http\Controllers\PekerjaanController;
@@ -66,7 +64,6 @@ use App\Http\Controllers\UsulanKegiatanController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\UserDriveController;
 use App\Http\Controllers\UserPekerjaanController;
-use App\Http\Controllers\UserPresenceController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Broadcast;
 use Illuminate\Support\Facades\Route;
@@ -91,19 +88,12 @@ Route::get('app-settings', [AppSettingController::class, 'index']);
 Route::get('app-settings/maintenance', [AppSettingController::class, 'maintenanceStatus']);
 Route::get('app-settings/storage-stats', [AppSettingController::class, 'storageStats'])->middleware(['auth:sanctum', 'role:admin']);
 Route::post('app-settings', [AppSettingController::class, 'store'])->middleware(['auth:sanctum', 'role:admin']);
-Route::post('app-settings/test-ai-connection', [AppSettingController::class, 'testAiConnection'])->middleware(['auth:sanctum', 'role:admin']);
-Route::post('app-settings/list-ai-models', [AppSettingController::class, 'listAiModels'])->middleware(['auth:sanctum', 'role:admin']);
 Route::post('app-settings/test-mail-connection', [AppSettingController::class, 'testMailConnection'])->middleware(['auth:sanctum', 'role:admin']);
 Route::get('app-settings/mail-templates', [AppSettingController::class, 'mailTemplates'])->middleware(['auth:sanctum', 'role:admin']);
 Route::post('app-settings/mail-templates', [AppSettingController::class, 'storeMailTemplates'])->middleware(['auth:sanctum', 'role:admin']);
 Route::post('app-settings/mail-templates/{key}/test', [AppSettingController::class, 'testMailTemplate'])->middleware(['auth:sanctum', 'role:admin']);
 Route::get('app-settings/kontrak-templates', [AppSettingController::class, 'kontrakTemplates'])->middleware(['auth:sanctum', 'role:admin']);
 Route::get('app-settings/kontrak-templates/{key}/download', [AppSettingController::class, 'downloadKontrakTemplate'])->middleware(['auth:sanctum', 'role:admin']);
-
-// Public panduan CMS (for /docs dynamic pages)
-Route::get('panduan', [PanduanPageController::class, 'publicIndex']);
-Route::get('panduan/{slug}', [PanduanPageController::class, 'publicShow'])
-    ->where('slug', '[a-z0-9]+(?:-[a-z0-9]+)*');
 
 // Public Blog Routes
 Route::get('blog', [\App\Http\Controllers\BlogController::class, 'index']);
@@ -205,15 +195,6 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('audit-logs', [AuditLogController::class, 'index']);
         Route::get('audit-logs/{auditLog}', [AuditLogController::class, 'show']);
 
-        // Manajemen panduan (CMS docs) — admin only
-        Route::get('admin/panduan', [PanduanPageController::class, 'index']);
-        Route::post('admin/panduan', [PanduanPageController::class, 'store']);
-        Route::post('admin/panduan/seed', [PanduanPageController::class, 'seedDefaults']);
-        Route::get('admin/panduan/{panduan}', [PanduanPageController::class, 'show'])->whereNumber('panduan');
-        Route::put('admin/panduan/{panduan}', [PanduanPageController::class, 'update'])->whereNumber('panduan');
-        Route::patch('admin/panduan/{panduan}', [PanduanPageController::class, 'update'])->whereNumber('panduan');
-        Route::delete('admin/panduan/{panduan}', [PanduanPageController::class, 'destroy'])->whereNumber('panduan');
-
         // Frontend Error Logs
         Route::get('error-logs', [ClientErrorReportController::class, 'index']);
         Route::post('error-logs/bulk/resolve', [ClientErrorReportController::class, 'bulkResolve']);
@@ -238,13 +219,9 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('dashboard/stats', [DashboardController::class, 'stats']);
     Route::get('dashboard/analytics', [AnalyticsController::class, 'stats']);
     Route::get('dashboard/executive-progress', [DashboardController::class, 'executiveProgress']);
-    Route::post('presence/heartbeat', [UserPresenceController::class, 'heartbeat']);
-    Route::get('presence/online', [UserPresenceController::class, 'index']);
 
     // Global Search
     Route::get('search', [\App\Http\Controllers\SearchController::class, 'index']);
-    Route::post('search/ai-summary', [\App\Http\Controllers\SearchAiSummaryController::class, 'stream'])
-        ->middleware('throttle:30,1');
 
     // API Resources
     Route::get('spam-units/stats', [SpamUnitController::class, 'stats']);
@@ -561,25 +538,8 @@ Route::middleware('auth:sanctum')->group(function () {
     // ONLYOFFICE editor config (authenticated)
     Route::get('onlyoffice/media/{media}/config', [OnlyOfficeController::class, 'config']);
 
-    // Live chat user ↔ admin
-    Route::get('live-chat/thread', [LiveChatController::class, 'myThread']);
-    Route::get('live-chat/inbox', [LiveChatController::class, 'inbox']);
-    Route::get('live-chat/threads/{thread}/messages', [LiveChatController::class, 'messages']);
-    Route::post('live-chat/threads/{thread}/messages', [LiveChatController::class, 'sendMessage']);
-    Route::patch('live-chat/threads/{thread}/close', [LiveChatController::class, 'closeThread']);
-
-    // Asisten AI (with sessions, cache, and learning)
+    // Arumanis insight
     Route::get('arumanis-insight', [\App\Http\Controllers\ArumanisInsightController::class, 'index']);
-    Route::post('chat', [\App\Http\Controllers\ChatController::class, 'chat']);
-    Route::post('chat/stream', [\App\Http\Controllers\ChatController::class, 'chatStream']);
-    Route::get('chat/models', [\App\Http\Controllers\ChatController::class, 'listModels']);
-    Route::get('chat/sessions', [\App\Http\Controllers\ChatController::class, 'sessions']);
-    Route::post('chat/sessions', [\App\Http\Controllers\ChatController::class, 'createSession']);
-    Route::delete('chat/sessions/{id}', [\App\Http\Controllers\ChatController::class, 'deleteSession']);
-    Route::patch('chat/sessions/{id}', [\App\Http\Controllers\ChatController::class, 'renameSession']);
-    Route::get('chat/sessions/{id}/messages', [\App\Http\Controllers\ChatController::class, 'sessionMessages']);
-    Route::post('chat/messages/{id}/vote', [\App\Http\Controllers\ChatController::class, 'voteMessage']);
-    Route::get('chat/reports/download', [\App\Http\Controllers\ChatController::class, 'downloadReport']);
 
     // Paperless-ngx Integration
     Route::prefix('paperless')->group(function () {
