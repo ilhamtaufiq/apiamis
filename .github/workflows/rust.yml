@@ -1,15 +1,8 @@
 name: rust
 
+# CI sengaja dinonaktifkan otomatis dulu. Jalankan manual lewat workflow_dispatch.
 on:
-  push:
-    branches: [rust, main]
-    paths:
-      - "rust/**"
-      - ".github/workflows/rust.yml"
-  pull_request:
-    paths:
-      - "rust/**"
-      - ".github/workflows/rust.yml"
+  workflow_dispatch:
 
 permissions:
   contents: read
