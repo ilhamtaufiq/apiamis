@@ -117,7 +117,7 @@ pub async fn list(
     let total: i64 = count_q.fetch_one(pool).await?;
 
     let sql = format!(
-        "SELECT d.id, d.n_desa, d.luas, d.jumlah_penduduk, d.jumlah_kk, d.kecamatan_id, \
+        "SELECT d.id, d.n_desa, d.luas, d.jumlah_penduduk, CAST(d.jumlah_kk AS SIGNED) AS jumlah_kk, d.kecamatan_id, \
          d.created_at, d.updated_at, \
          k.id AS k_id, k.n_kec AS k_n_kec, k.created_at AS k_created_at, k.updated_at AS k_updated_at, \
          CAST((SELECT COUNT(*) FROM tbl_desa x WHERE x.kecamatan_id = k.id) AS SIGNED) AS k_jumlah_desa \
