@@ -35,6 +35,7 @@ pub mod document_registers;
 pub mod document_types_write;
 pub mod draft;
 pub mod draft_export;
+pub mod error_logs;
 pub mod format;
 pub mod foto;
 pub mod kecamatan;
@@ -576,6 +577,19 @@ pub fn app(config: &Config, state: AppState) -> Router {
         .route("/api/data-quality/items", get(quality_insight::items))
         .route("/api/data-quality/action-inbox", get(quality_insight::action_inbox))
         .route("/api/client-error-reports", post(quality_insight::store))
+        // Rute `/bulk/...` dan `/empty` didaftarkan eksplisit. Segmen statis mengalahkan `{errorLog}` di Axum.
+        .route("/api/error-logs", get(error_logs::index))
+        .route("/api/error-logs/bulk/resolve", post(error_logs::bulk_resolve))
+        .route("/api/error-logs/bulk/reopen", post(error_logs::bulk_reopen))
+        .route("/api/error-logs/bulk/delete", post(error_logs::bulk_destroy))
+        .route("/api/error-logs/bulk", delete(error_logs::bulk_destroy))
+        .route(
+            "/api/error-logs/empty",
+            post(error_logs::destroy_all).delete(error_logs::destroy_all),
+        )
+        .route("/api/error-logs/{errorLog}", get(error_logs::show))
+        .route("/api/error-logs/{errorLog}/resolve", post(error_logs::resolve))
+        .route("/api/error-logs/{errorLog}/reopen", post(error_logs::reopen))
         .route("/api/tiket", get(tiket::index).post(tiket_write::store))
         // Rute statis `bulk-update` didaftarkan sebelum `/{id}`.
         .route("/api/tiket/bulk-update", post(tiket_write::bulk_update))
