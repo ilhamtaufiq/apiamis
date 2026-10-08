@@ -34,7 +34,7 @@ Setiap kali ada langkah yang selesai, tambahkan entri di bagian **Riwayat** dan 
 ### Fase 2: Modul bisnis (4–7 bulan)
 
 - [ ] 2.1 Public API v1 (`/api/public/v1/*`)
-- [ ] 2.2 Master data: kecamatan, desa, kegiatan
+- [~] 2.2 Master data: kecamatan (GET list sudah jalan di Rust, diuji terhadap fixture dan DB), desa, kegiatan
 - [ ] 2.3 Lookup dan konfigurasi
 - [ ] 2.4 Tiket dan SpamUnit
 - [ ] 2.5 Checklist proyek
@@ -115,4 +115,5 @@ Setiap kali ada langkah yang selesai, tambahkan entri di bagian **Riwayat** dan 
 | 2026-10-08 | 0.4 Skrip rekaman fixture | `rust/fixtures/record.sh`: GET saja, redaksi field sensitif, diuji dengan server lokal palsu. Sandbox tidak bisa menjangkau `apiamis.cianjur.space` (403 dari kebijakan jaringan) |
 | 2026-10-08 | 0.4 Rekaman tanpa token dari produksi | `rust/fixtures/live/`: `up` 200 dan 401 untuk kecamatan, desa, kegiatan, pekerjaan. 404 ditemukan membocorkan stack trace (T11), jadi tidak disimpan |
 | 2026-10-08 | 0.4 Rekaman dengan token | Daftar `kecamatan` (33), `desa` (15 per halaman), `kegiatan` (15), dan `pekerjaan` (20) direkam. Field pribadi dihapus: NIP, telepon, email, nama PPTK, nama pengawas dan pendamping. Token uji dicabut dan sekarang 401. Dua respon 404 tidak disimpan karena berisi stack trace (T11) |
+| 2026-10-08 | 2.2 GET /api/kecamatan di Rust | Endpoint dengan auth token Sanctum, query `tbl_kecamatan` + hitungan `tbl_desa`, dan mapping sama dengan `KecamatanResource`. Uji: mapping cocok 100% dengan fixture live (33 baris), uji DB lolos, smoke test server lokal: 401/401/200. Temuan saat uji: kolom TIMESTAMP harus dibaca sebagai `DateTime<Utc>` |
 | 2026-10-08 | Ruang lingkup diperluas | Repo punya lebih banyak modul dari rencana awal: blog, kanban, live chat, procurement SPSE, SIPD, Puspen, tanda tangan PDF, Google Drive, backup, dan WhatsApp. Perlu dimasukkan ke daftar modul Fase 2 |
