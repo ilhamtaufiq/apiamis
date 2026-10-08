@@ -10,6 +10,7 @@ use axum::{
 use serde_json::{json, Value};
 use shared::{ApiError, Config};
 pub mod access;
+pub mod analytics;
 pub mod audit;
 pub mod audit_logs;
 pub mod auth_oauth;
@@ -21,6 +22,7 @@ pub mod changes;
 pub mod checklist;
 pub mod checklist_items_write;
 pub mod crypt;
+pub mod dashboard;
 pub mod desa;
 pub mod desa_profile;
 pub mod desa_write;
@@ -54,6 +56,7 @@ pub mod onlyoffice_editor;
 pub mod notify;
 pub mod output;
 pub mod pagination;
+pub mod php;
 pub mod pekerjaan;
 pub mod pekerjaan_checklist_write;
 pub mod peripaan;
@@ -70,6 +73,7 @@ pub mod progress_write;
 pub mod quality_insight;
 pub mod ratelimit;
 pub mod roles;
+pub mod search;
 pub mod signature_library;
 pub mod sipd_pekerjaan_links;
 pub mod route_permission;
@@ -545,6 +549,13 @@ pub fn app(config: &Config, state: AppState) -> Router {
             "/api/notifications/broadcast/{id}",
             delete(notifications::delete_broadcast),
         )
+        .route("/api/dashboard/stats", get(dashboard::stats))
+        .route("/api/dashboard/analytics", get(analytics::stats))
+        .route(
+            "/api/dashboard/executive-progress",
+            get(dashboard::executive_progress),
+        )
+        .route("/api/search", get(search::index))
         .route("/api/{*rest}", any(not_found))
         .with_state(state)
         .route_layer(axum::middleware::from_fn_with_state(
