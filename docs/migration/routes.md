@@ -246,16 +246,16 @@ Kolom **Status** diisi saat modul dipindah ke Rust. Awalnya semua `belum`.
 
 | No | Method | Path | Controller@action | Middleware | Status |
 | --- | --- | --- | --- | --- | --- |
-| 1 | GET | `/api/error-logs` | ClientErrorReportController@index | auth:sanctum,role:admin | belum |
-| 2 | POST | `/api/error-logs/bulk/resolve` | ClientErrorReportController@bulkResolve | auth:sanctum,role:admin | belum |
-| 3 | POST | `/api/error-logs/bulk/reopen` | ClientErrorReportController@bulkReopen | auth:sanctum,role:admin | belum |
-| 4 | POST | `/api/error-logs/bulk/delete` | ClientErrorReportController@bulkDestroy | auth:sanctum,role:admin | belum |
-| 5 | POST | `/api/error-logs/empty` | ClientErrorReportController@destroyAll | auth:sanctum,role:admin | belum |
-| 6 | DELETE | `/api/error-logs/bulk` | ClientErrorReportController@bulkDestroy | auth:sanctum,role:admin | belum |
-| 7 | DELETE | `/api/error-logs/empty` | ClientErrorReportController@destroyAll | auth:sanctum,role:admin | belum |
-| 8 | GET | `/api/error-logs/{errorLog}` | ClientErrorReportController@show | auth:sanctum,role:admin | belum |
-| 9 | POST | `/api/error-logs/{errorLog}/resolve` | ClientErrorReportController@resolve | auth:sanctum,role:admin | belum |
-| 10 | POST | `/api/error-logs/{errorLog}/reopen` | ClientErrorReportController@reopen | auth:sanctum,role:admin | belum |
+| 1 | GET | `/api/error-logs` | ClientErrorReportController@index | auth:sanctum,role:admin | rust |
+| 2 | POST | `/api/error-logs/bulk/resolve` | ClientErrorReportController@bulkResolve | auth:sanctum,role:admin | rust |
+| 3 | POST | `/api/error-logs/bulk/reopen` | ClientErrorReportController@bulkReopen | auth:sanctum,role:admin | rust |
+| 4 | POST | `/api/error-logs/bulk/delete` | ClientErrorReportController@bulkDestroy | auth:sanctum,role:admin | rust |
+| 5 | POST | `/api/error-logs/empty` | ClientErrorReportController@destroyAll | auth:sanctum,role:admin | rust |
+| 6 | DELETE | `/api/error-logs/bulk` | ClientErrorReportController@bulkDestroy | auth:sanctum,role:admin | rust |
+| 7 | DELETE | `/api/error-logs/empty` | ClientErrorReportController@destroyAll | auth:sanctum,role:admin | rust |
+| 8 | GET | `/api/error-logs/{errorLog}` | ClientErrorReportController@show | auth:sanctum,role:admin | rust |
+| 9 | POST | `/api/error-logs/{errorLog}/resolve` | ClientErrorReportController@resolve | auth:sanctum,role:admin | rust |
+| 10 | POST | `/api/error-logs/{errorLog}/reopen` | ClientErrorReportController@reopen | auth:sanctum,role:admin | rust |
 
 ### sk (5)
 
