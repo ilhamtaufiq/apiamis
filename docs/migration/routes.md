@@ -4,7 +4,7 @@ Sumber: `routes/api.php` (branch `rust`, dari `main` SHA `c19fd06`). Dibuat deng
 
 ## Ringkasan
 
-- Total route (termasuk hasil expand `apiResource`): **486**
+- Total route (termasuk hasil expand `apiResource`): **487**
 - Dilindungi `auth:sanctum`: **458**
 - Dengan `role:admin`: **79**
 - Tanpa `auth:sanctum` (publik / OAuth / webhook): **28**
@@ -12,9 +12,9 @@ Sumber: `routes/api.php` (branch `rust`, dari `main` SHA `c19fd06`). Dibuat deng
 
 ### Status paritas (diperbarui)
 
-- Sudah di Rust: **139** (termasuk auth, lookup, kecamatan, desa, kegiatan, penyedia, tiket GET, checklist GET, foto dan penerima seluruh rute, berkas kecuali export-pdf dan upload-from-url, kontrak CRUD, relasi pekerjaan/kegiatan/penyedia, excel export, template, dan impor kontrak, addendum dan register-gaps GET, sk, dan notifikasi)
+- Sudah di Rust: **146** (termasuk dokumen kontrak SPK, cover, ZIP cover, BAP, dan bap-context, serta PDF SPK lewat ONLYOFFICE; termasuk auth, lookup, kecamatan, desa, kegiatan, penyedia, tiket GET, checklist GET, foto dan penerima seluruh rute, berkas kecuali export-pdf dan upload-from-url, kontrak CRUD, relasi pekerjaan/kegiatan/penyedia, excel export, template, dan impor kontrak, addendum dan register-gaps GET, sk, dan notifikasi)
 - Parsial di Rust: **1** (`GET /api/pekerjaan`: relasi daftar belum dibandingkan dengan produksi, lihat T21)
-- Belum: **345** (dihitung langsung dari kolom Status; termasuk export dokumen, BAP, dan cover kontrak, addendum, export Excel draft, progress estimasi, destroy pekerjaan, dan modul lain yang belum dipindah)
+- Belum: **339** (dihitung langsung dari kolom Status; termasuk addendum, export Excel draft, progress estimasi, destroy pekerjaan, dan modul lain yang belum dipindah)
 - Dihapus (tidak dimigrasi): **1**
 
 Cara menghitung: cocokkan method dan path (`{param}` dinormalisasi) dengan route yang terdaftar di `rust/crates/api/src/lib.rs`.
@@ -122,7 +122,7 @@ Kolom **Status** diisi saat modul dipindah ke Rust. Awalnya semua `belum`.
 | 10 | GET | `/api/public/puspen/media-shares/{shareToken}/preview/{media}` | PuspenMediaShareController@publicPreview | - | belum |
 | 11 | GET | `/api/public/puspen/media-shares/{shareToken}/download` | PuspenMediaShareController@publicDownload | - | belum |
 
-### onlyoffice (4)
+### onlyoffice (5)
 
 | No | Method | Path | Controller@action | Middleware | Status |
 | --- | --- | --- | --- | --- | --- |
@@ -130,6 +130,7 @@ Kolom **Status** diisi saat modul dipindah ke Rust. Awalnya semua `belum`.
 | 2 | GET | `/api/onlyoffice/health` | OnlyOfficeController@health | - | belum |
 | 3 | GET | `/api/onlyoffice/media/{media}/download` | OnlyOfficeController@download | - | rust |
 | 4 | GET | `/api/onlyoffice/media/{media}/config` | OnlyOfficeController@config | auth:sanctum | belum |
+| 5 | GET | `/api/onlyoffice/temp/{file}` | OnlyOfficeController@tempDownload (`onlyoffice.temp.download`, bertanda tangan) | signed | rust (token HMAC Rust, dipakai untuk SPK PDF) |
 
 ###  (1)
 
@@ -423,11 +424,11 @@ Kolom **Status** diisi saat modul dipindah ke Rust. Awalnya semua `belum`.
 | No | Method | Path | Controller@action | Middleware | Status |
 | --- | --- | --- | --- | --- | --- |
 | 1 | GET | `/api/kontrak/export/excel` | KontrakController@exportExcel | auth:sanctum | rust |
-| 2 | GET | `/api/kontrak/export-all-covers` | KontrakController@exportAllCovers | auth:sanctum | belum |
+| 2 | GET | `/api/kontrak/export-all-covers` | KontrakController@exportAllCovers | auth:sanctum | rust |
 | 3 | GET | `/api/kontrak/pekerjaan/{pekerjaanId}` | KontrakController@byPekerjaan | auth:sanctum | rust |
 | 4 | GET | `/api/kontrak/kegiatan/{kegiatanId}` | KontrakController@byKegiatan | auth:sanctum | rust |
 | 5 | GET | `/api/kontrak/penyedia/{penyediaId}` | KontrakController@byPenyedia | auth:sanctum | rust |
-| 6 | GET | `/api/kontrak/{id}/export` | KontrakController@export | auth:sanctum | belum |
+| 6 | GET | `/api/kontrak/{id}/export` | KontrakController@export | auth:sanctum | rust |
 | 7 | GET | `/api/kontrak/{kontrak}/addendums` | KontrakAddendumController@index | auth:sanctum | rust |
 | 8 | GET | `/api/kontrak/{kontrak}/addendum-register-gaps` | KontrakAddendumController@registerGapsForKontrak | auth:sanctum | rust |
 | 9 | POST | `/api/kontrak/{kontrak}/addendums` | KontrakAddendumController@store | auth:sanctum | rust |
@@ -439,10 +440,10 @@ Kolom **Status** diisi saat modul dipindah ke Rust. Awalnya semua `belum`.
 | 15 | GET | `/api/kontrak/{id}` | KontrakController@show | auth:sanctum | rust |
 | 16 | PUT/PATCH | `/api/kontrak/{id}` | KontrakController@update | auth:sanctum | rust |
 | 17 | DELETE | `/api/kontrak/{id}` | KontrakController@destroy | auth:sanctum | rust |
-| 18 | GET | `/api/kontrak/{kontrak}/export` | KontrakController@exportDoc | auth:sanctum | belum |
-| 19 | GET | `/api/kontrak/{kontrak}/export-cover` | KontrakController@exportCover | auth:sanctum | belum |
-| 20 | GET | `/api/kontrak/{kontrak}/bap-context` | KontrakController@bapContext | auth:sanctum | belum |
-| 21 | GET | `/api/kontrak/{kontrak}/export-bap` | KontrakController@exportBAP | auth:sanctum | belum |
+| 18 | GET | `/api/kontrak/{kontrak}/export` | KontrakController@exportDoc | auth:sanctum | rust (tidak terpanggil di Laravel: ditutup rute 6, jadi tidak dipindah terpisah) |
+| 19 | GET | `/api/kontrak/{kontrak}/export-cover` | KontrakController@exportCover | auth:sanctum | rust |
+| 20 | GET | `/api/kontrak/{kontrak}/bap-context` | KontrakController@bapContext | auth:sanctum | rust |
+| 21 | GET | `/api/kontrak/{kontrak}/export-bap` | KontrakController@exportBAP | auth:sanctum | rust |
 
 ### kontrak-addendums (13)
 

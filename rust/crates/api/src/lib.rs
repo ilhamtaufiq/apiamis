@@ -18,6 +18,7 @@ pub mod checklist;
 pub mod crypt;
 pub mod desa;
 pub mod desa_write;
+pub mod docx_template;
 pub mod draft;
 pub mod format;
 pub mod foto;
@@ -28,6 +29,8 @@ pub mod kegiatan_role_write;
 pub mod kegiatan_write;
 pub mod kontrak;
 pub mod kontrak_addendum;
+pub mod kontrak_document;
+pub mod kontrak_document_data;
 pub mod kontrak_register_gap;
 pub mod kontrak_xlsx;
 pub mod koordinat;
@@ -192,6 +195,7 @@ pub fn app(config: &Config, state: AppState) -> Router {
         .route("/api/user", get(users_write::me_raw))
         .route("/api/berkas/{id}/export-pdf", get(onlyoffice::berkas_export_pdf))
         .route("/api/onlyoffice/media/{id}/download", get(onlyoffice::media_download))
+        .route("/api/onlyoffice/temp/{file}", get(onlyoffice::temp_download))
         .route("/api/auth/logout", post(auth_routes::logout))
         .route("/api/auth/sync-token", post(auth_routes::sync_token))
         .route("/api/app-settings", get(lookup::index))
@@ -374,6 +378,23 @@ pub fn app(config: &Config, state: AppState) -> Router {
             post(kontrak_addendum::generate_numbers),
         )
         .route("/api/kontrak/export/excel", get(kontrak_xlsx::export_excel))
+        .route(
+            "/api/kontrak/export-all-covers",
+            get(kontrak_document::export_all_covers),
+        )
+        .route("/api/kontrak/{id}/export", get(kontrak_document::export))
+        .route(
+            "/api/kontrak/{id}/export-cover",
+            get(kontrak_document::export_cover),
+        )
+        .route(
+            "/api/kontrak/{id}/bap-context",
+            get(kontrak_document::bap_context),
+        )
+        .route(
+            "/api/kontrak/{id}/export-bap",
+            get(kontrak_document::export_bap),
+        )
         .route(
             "/api/kontrak/import/template",
             get(kontrak_xlsx::download_template),

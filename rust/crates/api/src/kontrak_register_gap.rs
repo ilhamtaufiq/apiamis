@@ -40,7 +40,7 @@ fn fmt_date(d: Option<NaiveDate>) -> Value {
 }
 
 /// Item celah (satu register) beserta data kontrak, pekerjaan, penyedia, dan pengawas.
-async fn gap_items(pool: &MySqlPool) -> Result<Vec<(i64, Value)>, ApiError> {
+pub(crate) async fn gap_items(pool: &MySqlPool) -> Result<Vec<(i64, Value)>, ApiError> {
     let type_ids: Vec<i64> = sqlx::query_scalar(
         "SELECT CAST(id AS SIGNED) FROM tbl_document_types WHERE LOWER(TRIM(code)) IN ('add', 'addendum') ORDER BY id",
     )

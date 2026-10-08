@@ -30,6 +30,8 @@ reqwest = { version = "0.12", default-features = false, features = ["json", "rus
 lettre = { version = "0.11", default-features = false, features = ["builder", "hostname", "smtp-transport", "tokio1", "tokio1-rustls", "aws-lc-rs", "webpki-roots"] }
 calamine = "0.36"
 csv = "1"
+zip = { version = "8", default-features = false, features = ["deflate"] }
+regex = "1"
 
 [dev-dependencies]
 tower.workspace = true

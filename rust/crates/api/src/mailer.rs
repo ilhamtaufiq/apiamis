@@ -27,7 +27,8 @@ pub struct SmtpSettings {
     pub from_name: String,
 }
 
-async fn setting(pool: &MySqlPool, key: &str) -> Result<Option<String>, sqlx::Error> {
+/// Nilai `app_settings` untuk satu kunci (baris pertama), `None` bila kunci tidak ada atau nilainya NULL.
+pub(crate) async fn setting(pool: &MySqlPool, key: &str) -> Result<Option<String>, sqlx::Error> {
     let value: Option<Option<String>> =
         sqlx::query_scalar("SELECT `value` FROM app_settings WHERE `key` = ? ORDER BY id LIMIT 1")
             .bind(key)

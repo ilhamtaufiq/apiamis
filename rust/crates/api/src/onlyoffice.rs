@@ -383,3 +383,101 @@ fn pdf_response(bytes: Vec<u8>, download_name: &str) -> Response {
     )
         .into_response()
 }
+
+// ---------------------------------------------------------------------------
+// Dokumen yang dibuat di memori (SPK, cover, BAP): ditulis sementara lalu diunduh Document Server.
+// ---------------------------------------------------------------------------
+
+/// Direktori berkas sementara untuk konversi (`ONLYOFFICE_TEMP_DIR`, default folder temp sistem).
+fn temp_dir() -> PathBuf {
+    std::env::var_os("ONLYOFFICE_TEMP_DIR")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| std::env::temp_dir().join("apiamis-onlyoffice"))
+}
+
+/// Token tautan sementara: HMAC-SHA256 hex dari `onlyoffice-temp:{file}:{expires}`.
+pub fn temp_token(file: &str, expires: i64, secret: &str) -> String {
+    let mut mac = HmacSha256::new_from_slice(secret.as_bytes())
+        .expect("HMAC menerima kunci dengan panjang apa pun");
+    mac.update(format!("onlyoffice-temp:{file}:{expires}").as_bytes());
+    hex(&mac.finalize().into_bytes())
+}
+
+fn random_hex() -> String {
+    let mut bytes = [0u8; 16];
+    rand::RngCore::fill_bytes(&mut rand::thread_rng(), &mut bytes);
+    hex(&bytes)
+}
+
+/// Nama berkas sementara yang valid: 32 karakter hex huruf kecil dan ekstensi `.docx`.
+fn is_temp_name(name: &str) -> bool {
+    name.strip_suffix(".docx").is_some_and(|stem| {
+        stem.len() == 32 && stem.chars().all(|c| c.is_ascii_digit() || ('a'..='f').contains(&c))
+    })
+}
+
+/// Konversi `.docx` di memori ke PDF. Berkas ditulis ke `temp_dir`, diunduh Document Server lewat
+/// `{app_url}/api/onlyoffice/temp/{file}`, lalu dihapus. `None` bila ONLYOFFICE tidak aktif atau gagal.
+pub async fn convert_docx_to_pdf(app_url: &str, docx: &[u8], title: &str) -> Option<Vec<u8>> {
+    let settings = Settings::from_env();
+    if !settings.enabled() {
+        return None;
+    }
+    let dir = temp_dir();
+    tokio::fs::create_dir_all(&dir).await.ok()?;
+    let file = format!("{}.docx", random_hex());
+    let path = dir.join(&file);
+    tokio::fs::write(&path, docx).await.ok()?;
+
+    let expires = now_secs() + 15 * 60;
+    let token = temp_token(&file, expires, &settings.download_secret());
+    let url = format!(
+        "{}/api/onlyoffice/temp/{file}?expires={expires}&token={token}",
+        app_url.trim_end_matches('/')
+    );
+    let key = format!("kontrak-{}", random_hex());
+    let pdf = convert_to_pdf(&settings, &url, "docx", &key, title).await;
+    let _ = tokio::fs::remove_file(&path).await;
+    pdf
+}
+
+/// `GET /api/onlyoffice/temp/{file}?expires=&token=`: rute publik untuk Document Server (`onlyoffice.temp.download`).
+pub async fn temp_download(
+    Path(file): Path<String>,
+    Query(query): Query<HashMap<String, String>>,
+) -> Result<Response, ApiError> {
+    if !is_temp_name(&file) {
+        return Err(ApiError::not_found());
+    }
+    let expires: i64 = query
+        .get("expires")
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(0);
+    let token = query.get("token").cloned().unwrap_or_default();
+    let settings = Settings::from_env();
+    let expected = temp_token(&file, expires, &settings.download_secret());
+    let valid = expires > 0
+        && expires >= now_secs()
+        && !token.is_empty()
+        && constant_time_eq(&expected, &token);
+    if !valid {
+        return Err(ApiError::new(
+            StatusCode::FORBIDDEN,
+            "Tautan unduhan tidak valid atau kedaluwarsa.",
+        ));
+    }
+    let bytes = tokio::fs::read(temp_dir().join(&file))
+        .await
+        .map_err(|_| ApiError::not_found())?;
+    Ok((
+        [
+            (
+                header::CONTENT_TYPE,
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            ),
+            (header::CACHE_CONTROL, "no-store"),
+        ],
+        bytes,
+    )
+        .into_response())
+}
