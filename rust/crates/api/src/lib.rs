@@ -20,6 +20,7 @@ pub mod maintenance;
 pub mod pagination;
 pub mod pekerjaan;
 pub mod pekerjaan_rel;
+pub mod pekerjaan_write;
 pub mod penyedia;
 pub mod progress_estimasi;
 pub mod progress_metrics;
@@ -116,7 +117,12 @@ pub fn app(config: &Config, state: AppState) -> Router {
         .route("/api/document-types", get(lookup::document_types_index))
         .route("/api/penyedia", get(penyedia::index))
         .route("/api/pekerjaan", get(pekerjaan::index))
-        .route("/api/pekerjaan/{id}", get(pekerjaan::show))
+        .route(
+            "/api/pekerjaan/{id}",
+            get(pekerjaan::show)
+                .put(pekerjaan_write::update)
+                .patch(pekerjaan_write::update),
+        )
         .route("/api/penyedia/{id}", get(penyedia::show))
         .route("/api/tiket", get(tiket::index))
         .route("/api/tiket/{id}", get(tiket::show))

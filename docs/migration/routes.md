@@ -13,8 +13,8 @@ Sumber: `routes/api.php` (branch `rust`, dari `main` SHA `c19fd06`). Dibuat deng
 ### Status paritas (diperbarui)
 
 - Sudah di Rust: **23** (termasuk auth, lookup, kecamatan, desa, kegiatan, penyedia, tiket GET, checklist GET)
-- Parsial di Rust: **2** (`GET /api/pekerjaan` dan `GET /api/pekerjaan/{id}`, lihat T25)
-- Belum: **461** (termasuk seluruh `PUT/PATCH`, semua POST/DELETE selain login, logout, dan sync-token)
+- Parsial di Rust: **3** (`GET /api/pekerjaan`, `GET /api/pekerjaan/{id}`, dan `PUT/PATCH /api/pekerjaan/{id}`, lihat T25 dan K12)
+- Belum: **460** (termasuk seluruh `PUT/PATCH`, semua POST/DELETE selain login, logout, dan sync-token)
 
 Cara menghitung: cocokkan method dan path (`{param}` dinormalisasi) dengan route yang terdaftar di `rust/crates/api/src/lib.rs`.
 
@@ -165,7 +165,7 @@ Kolom **Status** diisi saat modul dipindah ke Rust. Awalnya semua `belum`.
 | 10 | GET | `/api/pekerjaan` | PekerjaanController@index | auth:sanctum | parsial |
 | 11 | POST | `/api/pekerjaan` | PekerjaanController@store | auth:sanctum | belum |
 | 12 | GET | `/api/pekerjaan/{id}` | PekerjaanController@show | auth:sanctum | parsial |
-| 13 | PUT/PATCH | `/api/pekerjaan/{id}` | PekerjaanController@update | auth:sanctum | belum |
+| 13 | PUT/PATCH | `/api/pekerjaan/{id}` | PekerjaanController@update | auth:sanctum | parsial |
 | 14 | DELETE | `/api/pekerjaan/{id}` | PekerjaanController@destroy | auth:sanctum | belum |
 | 15 | GET | `/api/pekerjaan/{pekerjaan}/media` | PekerjaanController@media | auth:sanctum | belum |
 | 16 | GET | `/api/pekerjaan/{pekerjaan}/download-all-berkas` | PekerjaanController@downloadAllBerkas | auth:sanctum | belum |
