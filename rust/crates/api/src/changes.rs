@@ -27,6 +27,12 @@ pub const OUTPUT: Target = Target {
     tab: "output",
 };
 
+pub const KONTRAK: Target = Target {
+    model_type: "App\\Models\\Kontrak",
+    label: "Kontrak",
+    tab: "kontrak",
+};
+
 pub const BERKAS: Target = Target {
     model_type: "App\\Models\\Berkas",
     label: "Berkas",

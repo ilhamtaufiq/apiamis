@@ -165,7 +165,7 @@ pub async fn build(
 }
 
 /// `isChecklistComplete()`: ada item checklist dan semuanya tercentang.
-async fn checklist_complete(pool: &MySqlPool, pekerjaan_id: u64) -> Result<bool, ApiError> {
+pub(crate) async fn checklist_complete(pool: &MySqlPool, pekerjaan_id: u64) -> Result<bool, ApiError> {
     let total: i64 = sqlx::query_scalar(
         "SELECT COUNT(*) FROM pekerjaan_checklist pc JOIN tbl_checklist_items ci ON ci.id = pc.checklist_item_id \
          WHERE pc.pekerjaan_id = ?",

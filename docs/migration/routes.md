@@ -12,9 +12,9 @@ Sumber: `routes/api.php` (branch `rust`, dari `main` SHA `c19fd06`). Dibuat deng
 
 ### Status paritas (diperbarui)
 
-- Sudah di Rust: **78** (termasuk auth, lookup, kecamatan, desa, kegiatan, penyedia, tiket GET, checklist GET, foto dan penerima seluruh rute, berkas kecuali export-pdf dan upload-from-url)
+- Sudah di Rust: **86** (termasuk auth, lookup, kecamatan, desa, kegiatan, penyedia, tiket GET, checklist GET, foto dan penerima seluruh rute, berkas kecuali export-pdf dan upload-from-url, kontrak CRUD dan relasi pekerjaan/kegiatan/penyedia, sk, dan notifikasi)
 - Parsial di Rust: **1** (`GET /api/pekerjaan`: relasi daftar belum dibandingkan dengan produksi, lihat T21)
-- Belum: **407** (dihitung langsung dari kolom Status; termasuk export Excel draft, progress estimasi, destroy pekerjaan, dan modul lain yang belum dipindah)
+- Belum: **399** (dihitung langsung dari kolom Status; termasuk export kontrak, import kontrak, addendum, export Excel draft, progress estimasi, destroy pekerjaan, dan modul lain yang belum dipindah)
 
 Cara menghitung: cocokkan method dan path (`{param}` dinormalisasi) dengan route yang terdaftar di `rust/crates/api/src/lib.rs`.
 
@@ -423,9 +423,9 @@ Kolom **Status** diisi saat modul dipindah ke Rust. Awalnya semua `belum`.
 | --- | --- | --- | --- | --- | --- |
 | 1 | GET | `/api/kontrak/export/excel` | KontrakController@exportExcel | auth:sanctum | belum |
 | 2 | GET | `/api/kontrak/export-all-covers` | KontrakController@exportAllCovers | auth:sanctum | belum |
-| 3 | GET | `/api/kontrak/pekerjaan/{pekerjaanId}` | KontrakController@byPekerjaan | auth:sanctum | belum |
-| 4 | GET | `/api/kontrak/kegiatan/{kegiatanId}` | KontrakController@byKegiatan | auth:sanctum | belum |
-| 5 | GET | `/api/kontrak/penyedia/{penyediaId}` | KontrakController@byPenyedia | auth:sanctum | belum |
+| 3 | GET | `/api/kontrak/pekerjaan/{pekerjaanId}` | KontrakController@byPekerjaan | auth:sanctum | rust |
+| 4 | GET | `/api/kontrak/kegiatan/{kegiatanId}` | KontrakController@byKegiatan | auth:sanctum | rust |
+| 5 | GET | `/api/kontrak/penyedia/{penyediaId}` | KontrakController@byPenyedia | auth:sanctum | rust |
 | 6 | GET | `/api/kontrak/{id}/export` | KontrakController@export | auth:sanctum | belum |
 | 7 | GET | `/api/kontrak/{kontrak}/addendums` | KontrakAddendumController@index | auth:sanctum | belum |
 | 8 | GET | `/api/kontrak/{kontrak}/addendum-register-gaps` | KontrakAddendumController@registerGapsForKontrak | auth:sanctum | belum |
@@ -433,11 +433,11 @@ Kolom **Status** diisi saat modul dipindah ke Rust. Awalnya semua `belum`.
 | 10 | POST | `/api/kontrak/{kontrak}/addendum-numbers` | KontrakAddendumController@generateNumbers | auth:sanctum | belum |
 | 11 | POST | `/api/kontrak/import` | KontrakController@import | auth:sanctum | belum |
 | 12 | GET | `/api/kontrak/import/template` | KontrakController@downloadTemplate | auth:sanctum | belum |
-| 13 | GET | `/api/kontrak` | KontrakController@index | auth:sanctum | belum |
-| 14 | POST | `/api/kontrak` | KontrakController@store | auth:sanctum | belum |
-| 15 | GET | `/api/kontrak/{id}` | KontrakController@show | auth:sanctum | belum |
-| 16 | PUT/PATCH | `/api/kontrak/{id}` | KontrakController@update | auth:sanctum | belum |
-| 17 | DELETE | `/api/kontrak/{id}` | KontrakController@destroy | auth:sanctum | belum |
+| 13 | GET | `/api/kontrak` | KontrakController@index | auth:sanctum | rust |
+| 14 | POST | `/api/kontrak` | KontrakController@store | auth:sanctum | rust |
+| 15 | GET | `/api/kontrak/{id}` | KontrakController@show | auth:sanctum | rust |
+| 16 | PUT/PATCH | `/api/kontrak/{id}` | KontrakController@update | auth:sanctum | rust |
+| 17 | DELETE | `/api/kontrak/{id}` | KontrakController@destroy | auth:sanctum | rust |
 | 18 | GET | `/api/kontrak/{kontrak}/export` | KontrakController@exportDoc | auth:sanctum | belum |
 | 19 | GET | `/api/kontrak/{kontrak}/export-cover` | KontrakController@exportCover | auth:sanctum | belum |
 | 20 | GET | `/api/kontrak/{kontrak}/bap-context` | KontrakController@bapContext | auth:sanctum | belum |
