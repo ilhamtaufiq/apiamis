@@ -15,7 +15,7 @@ Setiap kali ada langkah yang selesai, tambahkan entri di bagian **Riwayat** dan 
 - [x] 0.1 Inventaris route dari `routes/api.php` dan `routes/web.php` ke `docs/migration/routes.md`
 - [x] 0.2 Inventaris model, observer, cast, listener, event, dan service ke `docs/migration/models.md`
 - [x] 0.3 Inventaris data (tabel, kolom terenkripsi, JSON, decimal, soft delete) ke `docs/schema.md`, dari dump struktur MySQL 8.0.30 (111 tabel)
-- [~] 0.4 Fixture perilaku untuk endpoint prioritas. Rekaman tanpa token dari `apiamis.cianjur.space` sudah ada di `rust/fixtures/live/` (up, dan 401 untuk endpoint yang butuh login). Belum ada rekaman dengan token, jadi respon 200 untuk data bisnis belum direkam
+- [~] 0.4 Fixture perilaku untuk endpoint prioritas. Di `rust/fixtures/live/` ada: `up`, daftar `kecamatan`, `desa`, `kegiatan`, dan `pekerjaan` (200 dengan token uji, data pribadi dihapus), serta 401 tanpa token. Belum ada: show per id, `pekerjaan` dengan filter, dan respon 422 dari POST
 - [~] 0.5 Dump database staging sebagai data uji tetap. Ada dump data `tbl_kegiatan` (20 baris) dan `tbl_pekerjaan` (558 baris), belum dump lengkap semua tabel bisnis
 - [ ] 0.6 Konfirmasi keputusan terbuka (lihat bagian Keputusan)
 
@@ -80,6 +80,7 @@ Setiap kali ada langkah yang selesai, tambahkan entri di bagian **Riwayat** dan 
 | T9 | `pagu` di `tbl_pekerjaan` 550 dari 558 baris di atas 2^24, dan kolomnya `FLOAT` (single precision). Data sampel saat ini hanya kelipatan 1.000, jadi belum ada angka yang berubah, tetapi input berdigit penuh akan dibulatkan. Contoh: `123456789` menjadi `123456792` | Ubah ke `DECIMAL(15,2)` setelah cutover, atau cukup dicatat sebagai risiko. Cek dengan `docs/migration/checks/pagu_checks.sql` |
 | T11 | Produksi `apiamis.cianjur.space` mengembalikan exception Laravel lengkap (29 frame stack trace, path `/var/www/html/...`) untuk 404. Itu tanda `APP_DEBUG=true` | **Segera set `APP_DEBUG=false` di produksi.** Skrip rekaman sekarang tidak menyimpan body seperti itu |
 | T12 | Header `x-powered-by: PHP/8.3.35` terbuka ke publik | Hapus header ini dari server atau proxy |
+| T13 | Token API dan password akun pernah ditulis di percakapan. Token sudah dicabut, tapi password belum diganti | Ganti password akun. Untuk rekaman berikutnya, pakai akun uji khusus |
 | T10 | Kualitas data: 14 dari 20 kegiatan punya `pagu = 0`, 7 pekerjaan punya `pagu = 0`, dan 15 kegiatan punya total pekerjaan melebihi pagu kegiatan | Perlu konfirmasi dengan pemilik data sebelum dijadikan fixture acuan |
 
 ## Keputusan terbuka
@@ -113,4 +114,5 @@ Setiap kali ada langkah yang selesai, tambahkan entri di bagian **Riwayat** dan 
 | 2026-10-08 | 0.5 Data uji dari dump `tbl_kegiatan` dan `tbl_pekerjaan` | Dimuat ke MariaDB lokal. Pengecekan pagu disimpan di `docs/migration/checks/pagu_checks.sql`. Temuan T9 dan T10. Data pribadi (NIP) tidak dicatat dan tidak di-commit |
 | 2026-10-08 | 0.4 Skrip rekaman fixture | `rust/fixtures/record.sh`: GET saja, redaksi field sensitif, diuji dengan server lokal palsu. Sandbox tidak bisa menjangkau `apiamis.cianjur.space` (403 dari kebijakan jaringan) |
 | 2026-10-08 | 0.4 Rekaman tanpa token dari produksi | `rust/fixtures/live/`: `up` 200 dan 401 untuk kecamatan, desa, kegiatan, pekerjaan. 404 ditemukan membocorkan stack trace (T11), jadi tidak disimpan |
+| 2026-10-08 | 0.4 Rekaman dengan token | Daftar `kecamatan` (33), `desa` (15 per halaman), `kegiatan` (15), dan `pekerjaan` (20) direkam. Field pribadi dihapus: NIP, telepon, email, nama PPTK, nama pengawas dan pendamping. Token uji dicabut dan sekarang 401. Dua respon 404 tidak disimpan karena berisi stack trace (T11) |
 | 2026-10-08 | Ruang lingkup diperluas | Repo punya lebih banyak modul dari rencana awal: blog, kanban, live chat, procurement SPSE, SIPD, Puspen, tanda tangan PDF, Google Drive, backup, dan WhatsApp. Perlu dimasukkan ke daftar modul Fase 2 |
