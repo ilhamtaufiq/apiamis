@@ -94,6 +94,7 @@ pub mod spam_units;
 pub mod spm_sanitasi;
 pub mod spm_sanitasi_capaian;
 pub mod spm_sanitasi_write;
+pub mod survey_lokasi;
 pub mod tags_write;
 pub mod tiket;
 pub mod tiket_write;
@@ -271,6 +272,31 @@ pub fn app(config: &Config, state: AppState) -> Router {
                 .layer(DefaultBodyLimit::max(foto::BODY_LIMIT)),
         )
         .route("/api/peripaan/{id}", delete(peripaan::destroy))
+        // Survei lokasi (SurveyLokasiController). `stats` statis, jadi tidak tertangkap `{id}`.
+        .route("/api/survey-lokasi/stats", get(survey_lokasi::stats))
+        .route(
+            "/api/survey-lokasi",
+            get(survey_lokasi::index)
+                .post(survey_lokasi::store)
+                .layer(DefaultBodyLimit::max(foto::BODY_LIMIT)),
+        )
+        .route(
+            "/api/survey-lokasi/{id}",
+            get(survey_lokasi::show)
+                .put(survey_lokasi::update)
+                .patch(survey_lokasi::update)
+                .delete(survey_lokasi::destroy)
+                .layer(DefaultBodyLimit::max(foto::BODY_LIMIT)),
+        )
+        .route(
+            "/api/survey-lokasi/{id}/verifikasi",
+            post(survey_lokasi::verifikasi).layer(DefaultBodyLimit::max(foto::BODY_LIMIT)),
+        )
+        .route(
+            "/api/survey-lokasi/{id}/foto",
+            post(survey_lokasi::upload_foto).layer(DefaultBodyLimit::max(foto::BODY_LIMIT)),
+        )
+        .route("/api/survey-lokasi/{id}/foto/{media_id}", delete(survey_lokasi::delete_foto))
         // Unit SPAM (SpamUnitController). `POST /api/spam-units/import` belum dipindah.
         .route("/api/public/spam-units/stats", get(spam_units::public_stats))
         .route("/api/public/spam-units/map-stats", get(spam_units::public_map_stats))
