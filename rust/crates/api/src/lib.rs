@@ -18,6 +18,9 @@ pub mod auth_routes;
 pub mod berita_acara;
 pub mod berkas;
 pub mod berkas_upload_url;
+pub mod blog;
+pub mod blog_comments;
+pub mod blog_write;
 pub mod changes;
 pub mod checklist;
 pub mod checklist_items_write;
@@ -458,6 +461,39 @@ pub fn app(config: &Config, state: AppState) -> Router {
             get(checklist::history_index),
         )
         .route("/api/post-pekerjaan-checklist", get(checklist::post_index))
+        // Blog. `comments` (statis) didaftarkan sebelum `{id}`; `upload-video` sebelum `{id}` juga.
+        .route("/api/blog", get(blog::index).post(blog_write::store))
+        .route("/api/blog/comments", get(blog_comments::admin_index))
+        .route(
+            "/api/blog/upload-video",
+            post(blog_write::upload_video).layer(DefaultBodyLimit::max(blog_write::VIDEO_BODY_LIMIT)),
+        )
+        .route(
+            "/api/blog/comments/{comment}",
+            put(blog_comments::update)
+                .patch(blog_comments::update)
+                .delete(blog_comments::destroy),
+        )
+        .route(
+            "/api/blog/{id}",
+            get(blog::show)
+                .put(blog_write::update)
+                .patch(blog_write::update)
+                .delete(blog_write::destroy),
+        )
+        .route(
+            "/api/blog/{id}/feature",
+            post(blog_write::feature).delete(blog_write::unfeature),
+        )
+        .route(
+            "/api/blog/{id}/comments",
+            get(blog_comments::index).post(blog_comments::store),
+        )
+        .route(
+            "/api/blog/{id}/comments/thread/{comment}",
+            get(blog_comments::thread),
+        )
+        .route("/api/blog/{id}/comments/count", get(blog_comments::count))
         // Catch-all untuk /api: route yang belum ada di Rust tetap lewat pengecekan
         // permission (Laravel menolak lebih dulu, bukan 404).
         .route("/api/kontrak", get(kontrak::index).post(kontrak::store))
