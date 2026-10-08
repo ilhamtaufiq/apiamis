@@ -47,21 +47,23 @@ import json, re, sys
 src, dst, path, status, ctype = sys.argv[1:6]
 SENSITIVE = {
     "token", "password", "remember_token", "nik", "nip", "email", "alamat",
-    "encrypted_cookies", "access_token", "refresh_token", "google_id", "avatar",
+    "encrypted_cookies", "access_token", "refresh_token", "google_id", "avatar", "nama_pptk",
 }
-SENSITIVE_HINT = re.compile(r"(token|password|secret|cookie|nik|nip|email)", re.I)
+SENSITIVE_HINT = re.compile(r"(token|password|secret|cookie|nik|nip|email|telepon|telp|phone|hp|alamat|address|npwp|ktp|whatsapp)", re.I)
 
-def scrub(v):
+PERSON_PARENTS = {"pengawas", "pendamping", "penerima"}
+
+def scrub(v, parent=None):
     if isinstance(v, dict):
         out = {}
         for k, val in v.items():
-            if k in SENSITIVE or SENSITIVE_HINT.search(k):
+            if k in SENSITIVE or SENSITIVE_HINT.search(k) or (parent in PERSON_PARENTS and k == "nama"):
                 out[k] = "<redacted>"
             else:
-                out[k] = scrub(val)
+                out[k] = scrub(val, k)
         return out
     if isinstance(v, list):
-        return [scrub(x) for x in v]
+        return [scrub(x, parent) for x in v]
     return v
 
 raw = open(src, encoding="utf-8", errors="replace").read()

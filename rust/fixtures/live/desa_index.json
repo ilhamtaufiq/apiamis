@@ -1,9 +1,371 @@
 {
   "body": {
-    "message": "Unauthenticated."
+    "data": [
+      {
+        "created_at": null,
+        "id": 1,
+        "jumlah_kk": 1232,
+        "jumlah_penduduk": 2905,
+        "kecamatan": {
+          "created_at": null,
+          "id": 1,
+          "jumlah_desa": 11,
+          "nama_kecamatan": "Agrabinta",
+          "updated_at": null
+        },
+        "kecamatan_id": 1,
+        "luas": 2076,
+        "nama_desa": "Bojongkaso",
+        "updated_at": "2026-07-14T14:19:23+00:00"
+      },
+      {
+        "created_at": null,
+        "id": 2,
+        "jumlah_kk": 1114,
+        "jumlah_penduduk": 2677,
+        "kecamatan": {
+          "created_at": null,
+          "id": 1,
+          "jumlah_desa": 11,
+          "nama_kecamatan": "Agrabinta",
+          "updated_at": null
+        },
+        "kecamatan_id": 1,
+        "luas": 800,
+        "nama_desa": "Bunisari",
+        "updated_at": "2026-07-14T14:19:23+00:00"
+      },
+      {
+        "created_at": null,
+        "id": 3,
+        "jumlah_kk": 825,
+        "jumlah_penduduk": 1965,
+        "kecamatan": {
+          "created_at": null,
+          "id": 1,
+          "jumlah_desa": 11,
+          "nama_kecamatan": "Agrabinta",
+          "updated_at": null
+        },
+        "kecamatan_id": 1,
+        "luas": 544,
+        "nama_desa": "Karangsari",
+        "updated_at": "2026-07-14T14:19:23+00:00"
+      },
+      {
+        "created_at": null,
+        "id": 4,
+        "jumlah_kk": 2344,
+        "jumlah_penduduk": 5780,
+        "kecamatan": {
+          "created_at": null,
+          "id": 1,
+          "jumlah_desa": 11,
+          "nama_kecamatan": "Agrabinta",
+          "updated_at": null
+        },
+        "kecamatan_id": 1,
+        "luas": 2490,
+        "nama_desa": "Mekarsari",
+        "updated_at": "2026-07-14T14:19:23+00:00"
+      },
+      {
+        "created_at": null,
+        "id": 5,
+        "jumlah_kk": 804,
+        "jumlah_penduduk": 1837,
+        "kecamatan": {
+          "created_at": null,
+          "id": 1,
+          "jumlah_desa": 11,
+          "nama_kecamatan": "Agrabinta",
+          "updated_at": null
+        },
+        "kecamatan_id": 1,
+        "luas": 668,
+        "nama_desa": "Mulyasari",
+        "updated_at": "2026-07-14T14:19:23+00:00"
+      },
+      {
+        "created_at": null,
+        "id": 6,
+        "jumlah_kk": 1069,
+        "jumlah_penduduk": 2475,
+        "kecamatan": {
+          "created_at": null,
+          "id": 1,
+          "jumlah_desa": 11,
+          "nama_kecamatan": "Agrabinta",
+          "updated_at": null
+        },
+        "kecamatan_id": 1,
+        "luas": 1554,
+        "nama_desa": "Neglasari",
+        "updated_at": "2026-07-14T14:19:23+00:00"
+      },
+      {
+        "created_at": null,
+        "id": 7,
+        "jumlah_kk": 1974,
+        "jumlah_penduduk": 4721,
+        "kecamatan": {
+          "created_at": null,
+          "id": 1,
+          "jumlah_desa": 11,
+          "nama_kecamatan": "Agrabinta",
+          "updated_at": null
+        },
+        "kecamatan_id": 1,
+        "luas": 2550,
+        "nama_desa": "Sinarlaut",
+        "updated_at": "2026-07-14T14:19:23+00:00"
+      },
+      {
+        "created_at": null,
+        "id": 8,
+        "jumlah_kk": 1806,
+        "jumlah_penduduk": 4251,
+        "kecamatan": {
+          "created_at": null,
+          "id": 1,
+          "jumlah_desa": 11,
+          "nama_kecamatan": "Agrabinta",
+          "updated_at": null
+        },
+        "kecamatan_id": 1,
+        "luas": 4228,
+        "nama_desa": "Sukamanah",
+        "updated_at": "2026-07-14T14:19:23+00:00"
+      },
+      {
+        "created_at": null,
+        "id": 9,
+        "jumlah_kk": 1552,
+        "jumlah_penduduk": 4069,
+        "kecamatan": {
+          "created_at": null,
+          "id": 1,
+          "jumlah_desa": 11,
+          "nama_kecamatan": "Agrabinta",
+          "updated_at": null
+        },
+        "kecamatan_id": 1,
+        "luas": 1678,
+        "nama_desa": "Tanjungsari",
+        "updated_at": "2026-07-14T14:19:23+00:00"
+      },
+      {
+        "created_at": null,
+        "id": 10,
+        "jumlah_kk": 2775,
+        "jumlah_penduduk": 6734,
+        "kecamatan": {
+          "created_at": null,
+          "id": 1,
+          "jumlah_desa": 11,
+          "nama_kecamatan": "Agrabinta",
+          "updated_at": null
+        },
+        "kecamatan_id": 1,
+        "luas": 788,
+        "nama_desa": "Wanasari",
+        "updated_at": "2026-07-14T14:19:23+00:00"
+      },
+      {
+        "created_at": null,
+        "id": 11,
+        "jumlah_kk": 996,
+        "jumlah_penduduk": 2447,
+        "kecamatan": {
+          "created_at": null,
+          "id": 1,
+          "jumlah_desa": 11,
+          "nama_kecamatan": "Agrabinta",
+          "updated_at": null
+        },
+        "kecamatan_id": 1,
+        "luas": 0,
+        "nama_desa": "Wangunjaya",
+        "updated_at": "2026-07-14T14:19:23+00:00"
+      },
+      {
+        "created_at": null,
+        "id": 12,
+        "jumlah_kk": 3352,
+        "jumlah_penduduk": 9277,
+        "kecamatan": {
+          "created_at": null,
+          "id": 2,
+          "jumlah_desa": 11,
+          "nama_kecamatan": "Bojongpicung",
+          "updated_at": null
+        },
+        "kecamatan_id": 2,
+        "luas": 344,
+        "nama_desa": "Bojongpicung",
+        "updated_at": "2026-07-14T14:19:22+00:00"
+      },
+      {
+        "created_at": null,
+        "id": 13,
+        "jumlah_kk": 2565,
+        "jumlah_penduduk": 6870,
+        "kecamatan": {
+          "created_at": null,
+          "id": 2,
+          "jumlah_desa": 11,
+          "nama_kecamatan": "Bojongpicung",
+          "updated_at": null
+        },
+        "kecamatan_id": 2,
+        "luas": 322,
+        "nama_desa": "Cibarengkok",
+        "updated_at": "2026-07-14T14:19:22+00:00"
+      },
+      {
+        "created_at": null,
+        "id": 14,
+        "jumlah_kk": 1931,
+        "jumlah_penduduk": 5297,
+        "kecamatan": {
+          "created_at": null,
+          "id": 2,
+          "jumlah_desa": 11,
+          "nama_kecamatan": "Bojongpicung",
+          "updated_at": null
+        },
+        "kecamatan_id": 2,
+        "luas": 308,
+        "nama_desa": "Cikondang",
+        "updated_at": "2026-07-14T14:19:22+00:00"
+      },
+      {
+        "created_at": null,
+        "id": 15,
+        "jumlah_kk": 3287,
+        "jumlah_penduduk": 9199,
+        "kecamatan": {
+          "created_at": null,
+          "id": 2,
+          "jumlah_desa": 11,
+          "nama_kecamatan": "Bojongpicung",
+          "updated_at": null
+        },
+        "kecamatan_id": 2,
+        "luas": 389,
+        "nama_desa": "Hegarmanah",
+        "updated_at": "2026-07-14T14:19:22+00:00"
+      }
+    ],
+    "links": {
+      "first": "http://apiamis.cianjur.space/api/desa?page=1",
+      "last": "http://apiamis.cianjur.space/api/desa?page=25",
+      "next": "http://apiamis.cianjur.space/api/desa?page=2",
+      "prev": null
+    },
+    "meta": {
+      "current_page": 1,
+      "from": 1,
+      "last_page": 25,
+      "links": [
+        {
+          "active": false,
+          "label": "&laquo; Previous",
+          "page": null,
+          "url": null
+        },
+        {
+          "active": true,
+          "label": "1",
+          "page": 1,
+          "url": "http://apiamis.cianjur.space/api/desa?page=1"
+        },
+        {
+          "active": false,
+          "label": "2",
+          "page": 2,
+          "url": "http://apiamis.cianjur.space/api/desa?page=2"
+        },
+        {
+          "active": false,
+          "label": "3",
+          "page": 3,
+          "url": "http://apiamis.cianjur.space/api/desa?page=3"
+        },
+        {
+          "active": false,
+          "label": "4",
+          "page": 4,
+          "url": "http://apiamis.cianjur.space/api/desa?page=4"
+        },
+        {
+          "active": false,
+          "label": "5",
+          "page": 5,
+          "url": "http://apiamis.cianjur.space/api/desa?page=5"
+        },
+        {
+          "active": false,
+          "label": "6",
+          "page": 6,
+          "url": "http://apiamis.cianjur.space/api/desa?page=6"
+        },
+        {
+          "active": false,
+          "label": "7",
+          "page": 7,
+          "url": "http://apiamis.cianjur.space/api/desa?page=7"
+        },
+        {
+          "active": false,
+          "label": "8",
+          "page": 8,
+          "url": "http://apiamis.cianjur.space/api/desa?page=8"
+        },
+        {
+          "active": false,
+          "label": "9",
+          "page": 9,
+          "url": "http://apiamis.cianjur.space/api/desa?page=9"
+        },
+        {
+          "active": false,
+          "label": "10",
+          "page": 10,
+          "url": "http://apiamis.cianjur.space/api/desa?page=10"
+        },
+        {
+          "active": false,
+          "label": "...",
+          "url": null
+        },
+        {
+          "active": false,
+          "label": "24",
+          "page": 24,
+          "url": "http://apiamis.cianjur.space/api/desa?page=24"
+        },
+        {
+          "active": false,
+          "label": "25",
+          "page": 25,
+          "url": "http://apiamis.cianjur.space/api/desa?page=25"
+        },
+        {
+          "active": false,
+          "label": "Next &raquo;",
+          "page": 2,
+          "url": "http://apiamis.cianjur.space/api/desa?page=2"
+        }
+      ],
+      "path": "http://apiamis.cianjur.space/api/desa",
+      "per_page": 15,
+      "to": 15,
+      "total": 365
+    }
   },
   "body_kind": "json",
   "content_type": "application/json",
   "path": "/api/desa",
-  "status": 401
+  "status": 200
 }

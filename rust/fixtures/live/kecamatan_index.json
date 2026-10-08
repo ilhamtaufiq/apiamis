@@ -1,9 +1,241 @@
 {
   "body": {
-    "message": "Unauthenticated."
+    "data": [
+      {
+        "created_at": null,
+        "id": 1,
+        "jumlah_desa": 11,
+        "nama_kecamatan": "Agrabinta",
+        "updated_at": null
+      },
+      {
+        "created_at": null,
+        "id": 2,
+        "jumlah_desa": 11,
+        "nama_kecamatan": "Bojongpicung",
+        "updated_at": null
+      },
+      {
+        "created_at": null,
+        "id": 3,
+        "jumlah_desa": 13,
+        "nama_kecamatan": "Campaka",
+        "updated_at": null
+      },
+      {
+        "created_at": null,
+        "id": 4,
+        "jumlah_desa": 5,
+        "nama_kecamatan": "Campakamulya",
+        "updated_at": null
+      },
+      {
+        "created_at": null,
+        "id": 5,
+        "jumlah_desa": 11,
+        "nama_kecamatan": "Cianjur",
+        "updated_at": null
+      },
+      {
+        "created_at": null,
+        "id": 6,
+        "jumlah_desa": 18,
+        "nama_kecamatan": "Cibeber",
+        "updated_at": null
+      },
+      {
+        "created_at": null,
+        "id": 7,
+        "jumlah_desa": 14,
+        "nama_kecamatan": "Cibinong",
+        "updated_at": null
+      },
+      {
+        "created_at": null,
+        "id": 8,
+        "jumlah_desa": 14,
+        "nama_kecamatan": "Cidaun",
+        "updated_at": null
+      },
+      {
+        "created_at": null,
+        "id": 9,
+        "jumlah_desa": 10,
+        "nama_kecamatan": "Cijati",
+        "updated_at": null
+      },
+      {
+        "created_at": null,
+        "id": 10,
+        "jumlah_desa": 10,
+        "nama_kecamatan": "Cikadu",
+        "updated_at": null
+      },
+      {
+        "created_at": null,
+        "id": 11,
+        "jumlah_desa": 18,
+        "nama_kecamatan": "Cikalongkulon",
+        "updated_at": null
+      },
+      {
+        "created_at": null,
+        "id": 12,
+        "jumlah_desa": 10,
+        "nama_kecamatan": "Cilaku",
+        "updated_at": null
+      },
+      {
+        "created_at": null,
+        "id": 13,
+        "jumlah_desa": 7,
+        "nama_kecamatan": "Cipanas",
+        "updated_at": null
+      },
+      {
+        "created_at": null,
+        "id": 14,
+        "jumlah_desa": 9,
+        "nama_kecamatan": "Ciranjang",
+        "updated_at": null
+      },
+      {
+        "created_at": null,
+        "id": 15,
+        "jumlah_desa": 16,
+        "nama_kecamatan": "Cugenang",
+        "updated_at": null
+      },
+      {
+        "created_at": null,
+        "id": 16,
+        "jumlah_desa": 8,
+        "nama_kecamatan": "Gekbrong",
+        "updated_at": null
+      },
+      {
+        "created_at": null,
+        "id": 17,
+        "jumlah_desa": 8,
+        "nama_kecamatan": "Haurwangi",
+        "updated_at": null
+      },
+      {
+        "created_at": null,
+        "id": 18,
+        "jumlah_desa": 14,
+        "nama_kecamatan": "Kadupandak",
+        "updated_at": null
+      },
+      {
+        "created_at": null,
+        "id": 19,
+        "jumlah_desa": 16,
+        "nama_kecamatan": "Karangtengah",
+        "updated_at": null
+      },
+      {
+        "created_at": null,
+        "id": 20,
+        "jumlah_desa": 12,
+        "nama_kecamatan": "Leles",
+        "updated_at": null
+      },
+      {
+        "created_at": null,
+        "id": 21,
+        "jumlah_desa": 13,
+        "nama_kecamatan": "Mande",
+        "updated_at": null
+      },
+      {
+        "created_at": null,
+        "id": 22,
+        "jumlah_desa": 11,
+        "nama_kecamatan": "Naringgul",
+        "updated_at": null
+      },
+      {
+        "created_at": null,
+        "id": 23,
+        "jumlah_desa": 7,
+        "nama_kecamatan": "Pacet",
+        "updated_at": null
+      },
+      {
+        "created_at": null,
+        "id": 24,
+        "jumlah_desa": 14,
+        "nama_kecamatan": "Pagelaran",
+        "updated_at": null
+      },
+      {
+        "created_at": null,
+        "id": 25,
+        "jumlah_desa": 9,
+        "nama_kecamatan": "Pasirkuda",
+        "updated_at": null
+      },
+      {
+        "created_at": null,
+        "id": 26,
+        "jumlah_desa": 11,
+        "nama_kecamatan": "Sindangbarang",
+        "updated_at": null
+      },
+      {
+        "created_at": null,
+        "id": 27,
+        "jumlah_desa": 10,
+        "nama_kecamatan": "Sukaluyu",
+        "updated_at": null
+      },
+      {
+        "created_at": null,
+        "id": 28,
+        "jumlah_desa": 10,
+        "nama_kecamatan": "Sukanagara",
+        "updated_at": null
+      },
+      {
+        "created_at": null,
+        "id": 29,
+        "jumlah_desa": 11,
+        "nama_kecamatan": "Sukaresmi",
+        "updated_at": null
+      },
+      {
+        "created_at": null,
+        "id": 30,
+        "jumlah_desa": 10,
+        "nama_kecamatan": "Takokak",
+        "updated_at": null
+      },
+      {
+        "created_at": null,
+        "id": 31,
+        "jumlah_desa": 12,
+        "nama_kecamatan": "Tanggeung",
+        "updated_at": null
+      },
+      {
+        "created_at": null,
+        "id": 32,
+        "jumlah_desa": 11,
+        "nama_kecamatan": "Warungkondang",
+        "updated_at": null
+      },
+      {
+        "created_at": null,
+        "id": 99,
+        "jumlah_desa": 1,
+        "nama_kecamatan": "Cianjurkab",
+        "updated_at": "2025-12-18T11:05:36+00:00"
+      }
+    ]
   },
   "body_kind": "json",
   "content_type": "application/json",
   "path": "/api/kecamatan",
-  "status": 401
+  "status": 200
 }
