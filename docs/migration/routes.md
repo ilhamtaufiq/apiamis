@@ -90,21 +90,21 @@ Kolom **Status** diisi saat modul dipindah ke Rust. Awalnya semua `belum`.
 
 | No | Method | Path | Controller@action | Middleware | Status |
 | --- | --- | --- | --- | --- | --- |
-| 1 | GET | `/api/blog` | BlogController@index | - | belum |
-| 2 | GET | `/api/blog/comments` | BlogCommentController@adminIndex | auth:sanctum | belum |
-| 3 | GET | `/api/blog/{blog}` | BlogController@show | - | belum |
-| 4 | GET | `/api/blog/{blog}/comments` | BlogCommentController@index | - | belum |
-| 5 | GET | `/api/blog/{blog}/comments/thread/{comment}` | BlogCommentController@thread | - | belum |
-| 6 | GET | `/api/blog/{blog}/comments/count` | BlogCommentController@count | - | belum |
-| 7 | POST | `/api/blog/{blog}/comments` | BlogCommentController@store | auth:sanctum,throttle:blog-comments | belum |
-| 8 | PUT | `/api/blog/comments/{comment}` | BlogCommentController@update | auth:sanctum,throttle:blog-comments | belum |
-| 9 | DELETE | `/api/blog/comments/{comment}` | BlogCommentController@destroy | auth:sanctum | belum |
-| 10 | POST | `/api/blog/upload-video` | BlogController@uploadVideo | auth:sanctum | belum |
-| 11 | POST | `/api/blog/{blog}/feature` | BlogController@feature | auth:sanctum | belum |
-| 12 | DELETE | `/api/blog/{blog}/feature` | BlogController@unfeature | auth:sanctum | belum |
-| 13 | POST | `/api/blog` | BlogController@store | auth:sanctum | belum |
-| 14 | PUT/PATCH | `/api/blog/{id}` | BlogController@update | auth:sanctum | belum |
-| 15 | DELETE | `/api/blog/{id}` | BlogController@destroy | auth:sanctum | belum |
+| 1 | GET | `/api/blog` | BlogController@index | - | rust |
+| 2 | GET | `/api/blog/comments` | BlogCommentController@adminIndex | auth:sanctum | rust |
+| 3 | GET | `/api/blog/{blog}` | BlogController@show | - | rust |
+| 4 | GET | `/api/blog/{blog}/comments` | BlogCommentController@index | - | rust |
+| 5 | GET | `/api/blog/{blog}/comments/thread/{comment}` | BlogCommentController@thread | - | rust |
+| 6 | GET | `/api/blog/{blog}/comments/count` | BlogCommentController@count | - | rust |
+| 7 | POST | `/api/blog/{blog}/comments` | BlogCommentController@store | auth:sanctum,throttle:blog-comments | rust |
+| 8 | PUT | `/api/blog/comments/{comment}` | BlogCommentController@update | auth:sanctum,throttle:blog-comments | rust |
+| 9 | DELETE | `/api/blog/comments/{comment}` | BlogCommentController@destroy | auth:sanctum | rust |
+| 10 | POST | `/api/blog/upload-video` | BlogController@uploadVideo | auth:sanctum | rust |
+| 11 | POST | `/api/blog/{blog}/feature` | BlogController@feature | auth:sanctum | rust |
+| 12 | DELETE | `/api/blog/{blog}/feature` | BlogController@unfeature | auth:sanctum | rust |
+| 13 | POST | `/api/blog` | BlogController@store | auth:sanctum | rust |
+| 14 | PUT/PATCH | `/api/blog/{id}` | BlogController@update | auth:sanctum | rust |
+| 15 | DELETE | `/api/blog/{id}` | BlogController@destroy | auth:sanctum | rust |
 
 ### public (11)
 
