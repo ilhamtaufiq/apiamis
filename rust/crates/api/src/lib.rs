@@ -15,14 +15,17 @@ pub mod audit_logs;
 pub mod auth_routes;
 pub mod berita_acara;
 pub mod berkas;
+pub mod berkas_upload_url;
 pub mod changes;
 pub mod checklist;
 pub mod crypt;
 pub mod desa;
+pub mod desa_profile;
 pub mod desa_write;
 pub mod docx_template;
 pub mod document_types_write;
 pub mod draft;
+pub mod draft_export;
 pub mod format;
 pub mod foto;
 pub mod kecamatan;
@@ -44,6 +47,7 @@ pub mod maintenance;
 pub mod media;
 pub mod notifications;
 pub mod onlyoffice;
+pub mod onlyoffice_editor;
 pub mod notify;
 pub mod output;
 pub mod pagination;
@@ -156,6 +160,7 @@ pub fn app(config: &Config, state: AppState) -> Router {
                 .delete(desa_write::destroy),
         )
         .route("/api/desa/kecamatan/{id}", get(desa_write::by_kecamatan))
+        .route("/api/desa/{id}/profile", get(desa_profile::profile))
         .route("/api/kegiatan", get(kegiatan::index))
         .route("/api/kegiatan", post(kegiatan_write::store))
         .route(
@@ -201,6 +206,9 @@ pub fn app(config: &Config, state: AppState) -> Router {
         .route("/api/user", get(users_write::me_raw))
         .route("/api/berkas/{id}/export-pdf", get(onlyoffice::berkas_export_pdf))
         .route("/api/onlyoffice/media/{id}/download", get(onlyoffice::media_download))
+        .route("/api/onlyoffice/media/{id}/config", get(onlyoffice_editor::config))
+        .route("/api/onlyoffice/callback", post(onlyoffice_editor::callback))
+        .route("/api/onlyoffice/health", get(onlyoffice_editor::health))
         .route("/api/onlyoffice/temp/{file}", get(onlyoffice::temp_download))
         .route(
             "/api/berita-acara/sequence",
@@ -280,6 +288,7 @@ pub fn app(config: &Config, state: AppState) -> Router {
         // Rute statis (summary, rekap, pekerjaan/...) didaftarkan sebelum `/api/penerima/{id}`.
         // Berkas: `export-pdf`, `upload-from-url`, dan `quick-share` masih di Laravel.
         .route("/api/berkas/jenis-dokumen", get(berkas::jenis_dokumen))
+        .route("/api/berkas/upload-from-url", post(berkas_upload_url::upload_from_url))
         .route("/api/berkas/bulk", delete(berkas::bulk_destroy))
         .route(
             "/api/berkas",
@@ -297,6 +306,7 @@ pub fn app(config: &Config, state: AppState) -> Router {
                 .layer(DefaultBodyLimit::max(foto::BODY_LIMIT)),
         )
         .route("/api/draft-pekerjaan", get(draft::index).post(draft::store))
+        .route("/api/draft-pekerjaan/export/excel", get(draft_export::export_excel))
         .route(
             "/api/draft-pekerjaan/{id}",
             get(draft::show)
