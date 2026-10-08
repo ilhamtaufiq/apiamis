@@ -455,69 +455,16 @@ async fn write_audit(
     .await
 }
 
-/// UUID v4 untuk kolom `notifications.id`.
-fn new_uuid() -> String {
-    use rand::RngCore;
-    let mut b = [0u8; 16];
-    rand::thread_rng().fill_bytes(&mut b);
-    b[6] = (b[6] & 0x0f) | 0x40;
-    b[8] = (b[8] & 0x3f) | 0x80;
-    let h: String = b.iter().map(|x| format!("{x:02x}")).collect();
-    format!(
-        "{}-{}-{}-{}-{}",
-        &h[0..8],
-        &h[8..12],
-        &h[12..16],
-        &h[16..20],
-        &h[20..32]
-    )
-}
-
 /// Notifikasi database untuk admin, kecuali pelaku. `broadcast` belum dipindah (K3).
 async fn notify_admins(
     tx: &mut sqlx::Transaction<'_, MySql>,
     actor: u64,
     id: u64,
 ) -> Result<(), sqlx::Error> {
-    let actor_name: Option<String> = sqlx::query_scalar("SELECT name FROM users WHERE id = ?")
-        .bind(actor)
-        .fetch_optional(&mut **tx)
-        .await?
-        .flatten();
-    let actor_name = actor_name.unwrap_or_else(|| "System".to_string());
-
-    let admins: Vec<u64> = sqlx::query_scalar(
-        "SELECT u.id FROM users u \
-         JOIN model_has_roles mr ON mr.model_id = u.id AND mr.model_type = 'App\\\\Models\\\\User' \
-         JOIN roles r ON r.id = mr.role_id WHERE r.name = 'admin' ORDER BY u.id",
-    )
-    .fetch_all(&mut **tx)
-    .await?;
-
-    let data = json!({
-        "title": "Data Pekerjaan updated",
-        "message": format!(
-            "Model Pekerjaan dengan ID #{id} telah updated oleh {actor_name}. Klik untuk membuka detail perubahan."
-        ),
-        "url": format!("/pekerjaan/{id}"),
-        "type": "info",
-        "is_banner": false,
-        "broadcast_history_id": null,
-    })
-    .to_string();
-
-    for admin in admins.into_iter().filter(|a| *a != actor) {
-        sqlx::query(
-            "INSERT INTO notifications (id, type, notifiable_type, notifiable_id, data, created_at, updated_at) \
-             VALUES (?, 'App\\\\Notifications\\\\AppNotification', 'App\\\\Models\\\\User', ?, ?, NOW(), NOW())",
-        )
-        .bind(new_uuid())
-        .bind(admin)
-        .bind(&data)
-        .execute(&mut **tx)
-        .await?;
-    }
-    Ok(())
+    let name = crate::notify::actor_name(tx, actor).await?;
+    let message = crate::notify::change_message("Pekerjaan", id, "updated", &name, true);
+    let url = format!("/pekerjaan/{id}");
+    crate::notify::admins(tx, actor, "Data Pekerjaan updated", &message, Some(&url)).await
 }
 
 /// `PUT/PATCH /api/pekerjaan/{id}`.
@@ -612,7 +559,7 @@ mod tests {
 
     #[test]
     fn uuid_has_v4_layout() {
-        let u = new_uuid();
+        let u = crate::notify::new_uuid();
         assert_eq!(u.len(), 36);
         assert_eq!(&u[14..15], "4");
     }

@@ -12,7 +12,7 @@ Sumber: `app/Http/Controllers/FotoController.php`, `BerkasController.php`, `app/
 ## Foto (`/api/foto`)
 
 - Store: validasi `pekerjaan_id`, `komponen_id`, `penerima_id`, `koordinat` (wajib), `file` (jpg/jpeg/png, maks 50 MB). Berkas disimpan ke disk lalu satu baris `media`.
-- Konversi `thumb` dikerjakan queue (`QUEUE_CONNECTION` default `database`, `queue_conversions_by_default` true). Di Rust tidak ada worker, jadi thumbnail tidak dibuat. Respon `foto_thumb_url` sudah jatuh ke URL asli, jadi tampilan tetap berfungsi, hanya lebih berat.
+- Konversi `thumb` dibuat sinkron saat upload (`->nonQueued()` di `Foto::registerMediaConversions`), bukan lewat queue. Di Rust thumbnail tidak dibuat (T34). `foto_thumb_url` jatuh ke URL asli, jadi bentuk JSON sama, hanya berkas yang diunduh lebih besar.
 - Update dan destroy juga menulis media dan menghapus berkas.
 
 ## Berkas (`/api/berkas`)
@@ -24,7 +24,7 @@ Sumber: `app/Http/Controllers/FotoController.php`, `BerkasController.php`, `app/
 
 ## Rencana
 
-1. Foto CRUD di Rust: tulis berkas ke `storage/app/public/{media_id}/`, insert `media`, konversi thumbnail dilewati (dicatat). Verifikasi dengan fixture media.
+1. Foto CRUD di Rust: selesai untuk show, store, update, destroy, dan bulk destroy (`foto.rs`, `media.rs`). Tersisa: daftar `GET /api/foto`, yang butuh `byUserRole` di query daftar.
 2. Berkas CRUD (tanpa konversi PDF, ZIP, dan upload-from-URL) di Rust.
 3. Konversi PDF, ZIP streaming, dan upload-from-URL setelah K2 diputuskan.
 

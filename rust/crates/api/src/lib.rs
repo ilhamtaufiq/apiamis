@@ -4,21 +4,26 @@ use axum::{
     extract::DefaultBodyLimit,
     http::{header, HeaderValue, Method, StatusCode},
     response::{IntoResponse, Response},
-    routing::{any, get, post},
+    routing::{any, delete, get, post},
     Json, Router,
 };
 use serde_json::{json, Value};
 use shared::{ApiError, Config};
+pub mod access;
 pub mod audit;
 pub mod auth_routes;
 pub mod checklist;
 pub mod crypt;
 pub mod desa;
 pub mod format;
+pub mod foto;
 pub mod kecamatan;
 pub mod kegiatan;
+pub mod koordinat;
 pub mod lookup;
 pub mod maintenance;
+pub mod media;
+pub mod notify;
 pub mod pagination;
 pub mod pekerjaan;
 pub mod pekerjaan_rel;
@@ -131,6 +136,21 @@ pub fn app(config: &Config, state: AppState) -> Router {
             get(pekerjaan::show)
                 .put(pekerjaan_write::update)
                 .patch(pekerjaan_write::update),
+        )
+        .route(
+            "/api/foto",
+            post(foto::store).layer(DefaultBodyLimit::max(foto::BODY_LIMIT)),
+        )
+        // Sebelum `/api/foto/{id}`: segmen statis menang atas parameter.
+        .route("/api/foto/bulk", delete(foto::bulk_destroy))
+        .route(
+            "/api/foto/{id}",
+            get(foto::show)
+                .put(foto::update)
+                .patch(foto::update)
+                .post(foto::update_post)
+                .delete(foto::destroy)
+                .layer(DefaultBodyLimit::max(foto::BODY_LIMIT)),
         )
         .route("/api/penyedia/{id}", get(penyedia::show))
         .route("/api/tiket", get(tiket::index))
