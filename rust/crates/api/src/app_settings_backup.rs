@@ -13,9 +13,11 @@
 //! Perbedaan dengan Laravel:
 //! - Dump database ditulis lewat sqlx, tanpa `mysqldump`. Format berkas sama dengan Laravel
 //!   (penanda `/*__ARUMANIS_STMT__*/`). Nilai yang bukan UTF-8 ditulis sebagai `X'...'`.
-//! - `s3_direct` saat S3 aktif menjawab 501. Upload S3 multipart belum dipindah.
-//! - Restore dari berkas yang hanya ada di S3 menjawab 501. Media di disk selain `local` dan `public`
-//!   ditolak sebelum database diubah.
+//! - `s3_direct` saat S3 aktif: ZIP dibuat di berkas sementara (Laravel memakai `php://temp`), lalu
+//!   diunggah dengan `PutObject` di bawah 16 MiB, selain itu multipart (part = max(5 MiB, size/10000)).
+//!   Bila unggah multipart gagal, multipart dibatalkan (Laravel tidak membatalkannya).
+//! - Restore dari berkas yang hanya ada di S3: diunduh ke `system-backups` lalu dihapus setelah restore.
+//!   Media di disk selain `local` dan `public` ditolak sebelum database diubah.
 //! - Status job ditulis atomik (berkas sementara lalu rename). Job tidak punya PID sendiri, karena
 //!   berjalan di proses API. Job yang dimulai Laravel tetap bisa dibatalkan dengan kirim sinyal.
 //! - Validasi `store`/`s3/test` memakai `parse_body`: JSON atau `x-www-form-urlencoded`.
@@ -78,10 +80,6 @@ fn bad_request(e: impl std::fmt::Display) -> ApiError {
 
 fn unprocessable(msg: impl Into<String>) -> ApiError {
     ApiError::new(StatusCode::UNPROCESSABLE_ENTITY, msg.into())
-}
-
-fn not_implemented(msg: &str) -> ApiError {
-    ApiError::new(StatusCode::NOT_IMPLEMENTED, msg.to_string())
 }
 
 fn invalid(errors: Errs) -> ApiError {
@@ -434,12 +432,6 @@ pub async fn backup_store(
         return Err(invalid(errs));
     }
 
-    if s3_direct && s3_backup_enabled(&state.pool).await? {
-        return Err(not_implemented(
-            "Backup langsung ke S3 belum didukung di layanan Rust.",
-        ));
-    }
-
     let job_id = new_uuid();
     let filename = build_backup_filename(label.as_deref());
     let queued = obj(json!({
@@ -459,7 +451,15 @@ pub async fn backup_store(
     let worker_job = job_id.clone();
     let worker_file = filename.clone();
     tokio::spawn(async move {
-        run_backup_job(pool, app_url, worker_job, worker_file, include_media).await;
+        run_backup_job(
+            pool,
+            app_url,
+            worker_job,
+            worker_file,
+            include_media,
+            s3_direct,
+        )
+        .await;
     });
 
     let data = read_job(&job_id)
@@ -483,6 +483,7 @@ async fn run_backup_job(
     job_id: String,
     filename: String,
     include_media: bool,
+    s3_requested: bool,
 ) {
     let zip_path = backup_dir().join(&filename);
     let initial = read_job(&job_id).unwrap_or_default();
@@ -491,6 +492,9 @@ async fn run_backup_job(
         return;
     }
 
+    // `s3_direct && isS3BackupEnabled()`: konfigurasi S3 yang belum lengkap tetap memakai jalur S3
+    // dan gagal di sana, seperti Laravel.
+    let s3_direct = s3_requested && s3_backup_enabled(&pool).await.unwrap_or(false);
     save(
         &job_id,
         obj(json!({
@@ -498,7 +502,7 @@ async fn run_backup_job(
             "status": "running",
             "filename": filename,
             "include_media": include_media,
-            "s3_direct": false,
+            "s3_direct": s3_direct,
             "created_at": initial.get("created_at").cloned().unwrap_or_else(|| json!(now_iso())),
             "started_at": now_iso(),
             "message": "Menyiapkan dump database",
@@ -506,7 +510,12 @@ async fn run_backup_job(
         })),
     );
 
-    match create_archive(&pool, &app_url, &job_id, &filename, include_media).await {
+    let outcome = if s3_direct {
+        create_archive_s3(&pool, &app_url, &job_id, &filename, include_media).await
+    } else {
+        create_archive(&pool, &app_url, &job_id, &filename, include_media).await
+    };
+    match outcome {
         Ok(result) => {
             let prev = read_job(&job_id).unwrap_or_default();
             save(
@@ -591,6 +600,95 @@ async fn create_archive(
         let _ = std::fs::remove_file(&zip_path);
     }
     outcome
+}
+
+/// `createBackupArchiveS3`: dump, ZIP sementara di luar `system-backups`, lalu unggah ke S3.
+/// Tidak ada salinan lokal di `system-backups`. Galat diberi awalan `Backup ke S3 gagal:` seperti Laravel.
+async fn create_archive_s3(
+    pool: &MySqlPool,
+    app_url: &str,
+    job_id: &str,
+    filename: &str,
+    include_media: bool,
+) -> JobResult<Value> {
+    let tmp = std::env::temp_dir();
+    let sql_path = tmp.join(format!("arumanis_sql_{}.sql", new_uuid()));
+    let zip_path = tmp.join(format!("arumanis_s3_{}.zip", new_uuid()));
+    let outcome = s3_archive_inner(
+        pool,
+        app_url,
+        job_id,
+        filename,
+        include_media,
+        &zip_path,
+        &sql_path,
+    )
+    .await;
+    let _ = std::fs::remove_file(&sql_path);
+    let _ = std::fs::remove_file(&zip_path);
+    outcome.map_err(|stop| match stop {
+        Stop::Failed(msg) => Stop::Failed(format!("Backup ke S3 gagal: {msg}")),
+        Stop::Cancelled => Stop::Cancelled,
+    })
+}
+
+async fn s3_archive_inner(
+    pool: &MySqlPool,
+    app_url: &str,
+    job_id: &str,
+    filename: &str,
+    include_media: bool,
+    zip_path: &Path,
+    sql_path: &Path,
+) -> JobResult<Value> {
+    patch_job(
+        job_id,
+        json!({ "message": "Membuat dump database…", "progress": 10 }),
+    )?;
+    let db_name: Option<String> = sqlx::query_scalar("SELECT DATABASE()")
+        .fetch_one(pool)
+        .await?;
+    let db_name = db_name.unwrap_or_default();
+    dump_database(pool, &db_name, sql_path, job_id).await?;
+
+    patch_job(
+        job_id,
+        json!({ "message": "Streaming arsip ZIP langsung ke S3…", "progress": 30 }),
+    )?;
+    let cfg = s3_config(pool).await?;
+    let media_dirs = if include_media {
+        Some(collect_media_dirs(pool).await?)
+    } else {
+        None
+    };
+    let (jid, zp, sp) = (
+        job_id.to_string(),
+        zip_path.to_path_buf(),
+        sql_path.to_path_buf(),
+    );
+    let media_count =
+        tokio::task::spawn_blocking(move || write_archive(&jid, &zp, &sp, media_dirs, &db_name))
+            .await
+            .map_err(|e| Stop::Failed(e.to_string()))??;
+
+    patch_job(
+        job_id,
+        json!({ "message": "Mengunggah arsip ke S3 (multipart)…", "progress": 95 }),
+    )?;
+    let key = object_key(filename);
+    s3_upload_file(&cfg, &key, zip_path, S3_MUP_THRESHOLD, S3_PART_MIN).await?;
+    let size = s3_head_size(&cfg, &key)
+        .await?
+        .ok_or_else(|| "Objek backup tidak ditemukan di S3 setelah diunggah".to_string())?;
+
+    Ok(json!({
+        "filename": filename,
+        "download_url": format!("{}/api/app-settings/backups/{filename}", app_url.trim_end_matches('/')),
+        "size": size,
+        "include_media": include_media,
+        "media_files": media_count,
+        "storage": "s3",
+    }))
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -1095,6 +1193,8 @@ async fn restore_request(
         ));
     }
 
+    // Salinan lokal sementara bila backup hanya ada di S3 (dihapus setelah restore, seperti Laravel).
+    let mut downloaded: Option<PathBuf> = None;
     let source = if has_file {
         upload_path.to_path_buf()
     } else {
@@ -1103,19 +1203,55 @@ async fn restore_request(
         let local = backup_dir().join(&filename);
         if local.is_file() {
             local
-        } else if s3_backup_enabled(&state.pool).await? {
-            return Err(not_implemented(
-                "Restore dari backup yang hanya ada di S3 belum didukung di layanan Rust.",
-            ));
         } else {
-            return Err(ApiError::new(
-                StatusCode::NOT_FOUND,
-                "Backup tidak ditemukan",
-            ));
+            // `getBackupDisk`: S3 dipakai bila aktif dan objek ada. Galat konfigurasi atau HEAD
+            // dianggap tidak ada, sehingga jawabannya 404.
+            let cfg = if s3_backup_enabled(&state.pool).await? {
+                s3_config(&state.pool).await.ok()
+            } else {
+                None
+            };
+            let key = object_key(&filename);
+            let found = match &cfg {
+                Some(c) => match s3_head_size(c, &key).await {
+                    Ok(found) => found.is_some(),
+                    Err(e) => {
+                        tracing::warn!(filename = %filename, error = %e, "gagal memeriksa backup di S3");
+                        false
+                    }
+                },
+                None => false,
+            };
+            match cfg {
+                Some(c) if found => {
+                    tokio::fs::create_dir_all(backup_dir())
+                        .await
+                        .map_err(internal)?;
+                    if s3_download(&c, &key, &local).await.is_err() {
+                        let _ = tokio::fs::remove_file(&local).await;
+                        return Err(ApiError::new(
+                            StatusCode::BAD_GATEWAY,
+                            "Gagal mengunduh backup dari S3",
+                        ));
+                    }
+                    downloaded = Some(local.clone());
+                    local
+                }
+                _ => {
+                    return Err(ApiError::new(
+                        StatusCode::NOT_FOUND,
+                        "Backup tidak ditemukan",
+                    ));
+                }
+            }
         }
     };
 
-    let data = restore_from_zip(&state.pool, &source).await?;
+    let result = restore_from_zip(&state.pool, &source).await;
+    if let Some(copy) = downloaded {
+        let _ = tokio::fs::remove_file(&copy).await;
+    }
+    let data = result?;
     Ok(Json(
         json!({ "data": data, "message": "Restore backup berhasil dijalankan" }),
     ))
@@ -1298,12 +1434,394 @@ fn restore_media(zip_path: &Path, entries: &[MediaEntry]) -> Result<(), ApiError
 // Uji koneksi S3 (`testS3Connection`)
 // ---------------------------------------------------------------------------
 
-struct S3Cfg {
-    endpoint: Option<String>,
-    region: String,
-    bucket: String,
-    key: String,
-    secret: String,
+/// Konfigurasi S3 (`getS3Disk`). `endpoint` kosong berarti AWS dengan virtual-host.
+#[derive(Debug, Clone)]
+pub struct S3Cfg {
+    pub endpoint: Option<String>,
+    pub region: String,
+    pub bucket: String,
+    pub key: String,
+    pub secret: String,
+}
+
+/// Ambang unggah multipart `ObjectUploader` (`mup_threshold`, AWS SDK PHP): 16 MiB.
+pub const S3_MUP_THRESHOLD: u64 = 16 * 1024 * 1024;
+/// Ukuran part minimum `MultipartUploader::PART_MIN_SIZE`.
+pub const S3_PART_MIN: u64 = 5 * 1024 * 1024;
+/// Jumlah part maksimum `MultipartUploader::PART_MAX_NUM`.
+const S3_PART_MAX_NUM: u64 = 10_000;
+/// Batas waktu satu permintaan S3 (satu part bisa besar).
+const S3_REQUEST_TIMEOUT: Duration = Duration::from_secs(900);
+
+/// Kunci objek seperti Laravel: `system-backups/{filename}`.
+pub fn object_key(filename: &str) -> String {
+    format!("{BACKUP_DIR}/{filename}")
+}
+
+/// `getS3Disk`: konfigurasi lengkap dari `app_settings`. Nilai kosong atau "0" dianggap tidak ada.
+pub async fn s3_config(pool: &MySqlPool) -> Result<S3Cfg, String> {
+    let mut values: BTreeMap<&str, Option<String>> = BTreeMap::new();
+    for key in [
+        "s3_endpoint",
+        "s3_region",
+        "s3_bucket",
+        "s3_access_key_id",
+        "s3_secret_access_key",
+    ] {
+        let value = mailer::setting(pool, key)
+            .await
+            .map_err(|e| e.to_string())?;
+        values.insert(key, value.filter(|s| php_truthy(s)));
+    }
+    let get = |k: &str| values.get(k).cloned().flatten();
+    match (
+        get("s3_region"),
+        get("s3_bucket"),
+        get("s3_access_key_id"),
+        get("s3_secret_access_key"),
+    ) {
+        (Some(region), Some(bucket), Some(key), Some(secret)) => Ok(S3Cfg {
+            endpoint: get("s3_endpoint"),
+            region,
+            bucket,
+            key,
+            secret,
+        }),
+        _ => Err("Pengaturan AWS S3 belum lengkap atau belum dikonfigurasi.".into()),
+    }
+}
+
+/// Encoding URI SigV4: huruf, angka, `-._~` apa adanya. `/` dibiarkan bila `encode_slash` false.
+fn aws_encode(s: &str, encode_slash: bool) -> String {
+    let mut out = String::with_capacity(s.len());
+    for b in s.bytes() {
+        let plain = b.is_ascii_alphanumeric()
+            || matches!(b, b'-' | b'.' | b'_' | b'~')
+            || (b == b'/' && !encode_slash);
+        if plain {
+            out.push(b as char);
+        } else {
+            out.push_str(&format!("%{b:02X}"));
+        }
+    }
+    out
+}
+
+/// Dasar URL dan awalan path kanonik. Dengan endpoint: path-style (`use_path_style_endpoint`).
+fn s3_base(cfg: &S3Cfg) -> (String, String) {
+    match cfg.endpoint.as_deref() {
+        Some(ep) => (
+            ep.trim_end_matches('/').to_string(),
+            format!("/{}", cfg.bucket),
+        ),
+        None => (
+            format!("https://{}.s3.{}.amazonaws.com", cfg.bucket, cfg.region),
+            String::new(),
+        ),
+    }
+}
+
+/// Satu permintaan S3 berpenandatangan SigV4. `query` boleh tidak terurut; `extra` adalah header
+/// tambahan yang ikut ditandatangani (mis. `x-amz-acl`).
+async fn s3_send(
+    cfg: &S3Cfg,
+    method: reqwest::Method,
+    object: Option<&str>,
+    query: &[(&str, &str)],
+    extra: &[(&str, &str)],
+    body: Option<Vec<u8>>,
+) -> Result<reqwest::Response, String> {
+    let (base, prefix) = s3_base(cfg);
+    let path = match object {
+        Some(o) => format!("/{o}"),
+        None => "/".to_string(),
+    };
+    let canonical_uri = format!("{prefix}{}", aws_encode(&path, false));
+    let mut pairs: Vec<(String, String)> = query
+        .iter()
+        .map(|(k, v)| (aws_encode(k, true), aws_encode(v, true)))
+        .collect();
+    pairs.sort();
+    let canonical_query = pairs
+        .iter()
+        .map(|(k, v)| format!("{k}={v}"))
+        .collect::<Vec<_>>()
+        .join("&");
+    let url_text = if canonical_query.is_empty() {
+        format!("{base}{canonical_uri}")
+    } else {
+        format!("{base}{canonical_uri}?{canonical_query}")
+    };
+    let url = reqwest::Url::parse(&url_text).map_err(|e| e.to_string())?;
+    let host = match (url.host_str(), url.port()) {
+        (Some(h), Some(p)) => format!("{h}:{p}"),
+        (Some(h), None) => h.to_string(),
+        _ => return Err("URL S3 tidak memiliki host".into()),
+    };
+
+    let payload_hash = sha256_hex(body.as_deref().unwrap_or(&[]));
+    let amz_date = Utc::now().format("%Y%m%dT%H%M%SZ").to_string();
+    let authorization = sigv4_sign(
+        cfg,
+        method.as_str(),
+        &canonical_uri,
+        &canonical_query,
+        &host,
+        &amz_date,
+        &payload_hash,
+        extra,
+    );
+    let client = reqwest::Client::builder()
+        .timeout(S3_REQUEST_TIMEOUT)
+        .build()
+        .map_err(|e| e.to_string())?;
+    let mut req = client
+        .request(method, url)
+        .header("x-amz-content-sha256", payload_hash)
+        .header("x-amz-date", amz_date)
+        .header("authorization", authorization);
+    for (k, v) in extra {
+        req = req.header(*k, *v);
+    }
+    if let Some(bytes) = body {
+        req = req.body(bytes);
+    }
+    req.send().await.map_err(|e| e.to_string())
+}
+
+/// Galat S3 dalam bentuk `HTTP {status}: {Code}: {Message}`.
+async fn s3_fail(res: reqwest::Response) -> String {
+    let status = res.status().as_u16();
+    let body = res.text().await.unwrap_or_default();
+    match (xml_tag(&body, "Code"), xml_tag(&body, "Message")) {
+        (Some(code), Some(msg)) => format!("HTTP {status}: {code}: {msg}"),
+        (Some(code), None) => format!("HTTP {status}: {code}"),
+        _ => format!("HTTP {status}"),
+    }
+}
+
+/// Unggah `path` ke `key`: `PutObject` bila ukuran di bawah `threshold`, selain itu multipart.
+/// Ukuran part = max(`part_min`, ceil(ukuran / 10000)), seperti `MultipartUploader::determinePartSize`.
+/// Multipart yang gagal dibatalkan.
+pub async fn s3_upload_file(
+    cfg: &S3Cfg,
+    key: &str,
+    path: &Path,
+    threshold: u64,
+    part_min: u64,
+) -> Result<(), String> {
+    let size = tokio::fs::metadata(path)
+        .await
+        .map_err(|e| e.to_string())?
+        .len();
+    let acl = [("x-amz-acl", "private")];
+    if size < threshold {
+        let body = tokio::fs::read(path).await.map_err(|e| e.to_string())?;
+        let res = s3_send(cfg, reqwest::Method::PUT, Some(key), &[], &acl, Some(body)).await?;
+        return if res.status().is_success() {
+            Ok(())
+        } else {
+            Err(s3_fail(res).await)
+        };
+    }
+
+    let part_size = part_min.max(size.div_ceil(S3_PART_MAX_NUM));
+    let res = s3_send(
+        cfg,
+        reqwest::Method::POST,
+        Some(key),
+        &[("uploads", "")],
+        &acl,
+        None,
+    )
+    .await?;
+    if !res.status().is_success() {
+        return Err(s3_fail(res).await);
+    }
+    let text = res.text().await.map_err(|e| e.to_string())?;
+    let upload_id = xml_tag(&text, "UploadId")
+        .ok_or_else(|| "UploadId tidak ada pada respons S3".to_string())?;
+
+    let parts = s3_upload_parts(cfg, key, &upload_id, path, part_size).await;
+    let parts = match parts {
+        Ok(parts) => parts,
+        Err(e) => {
+            abort_multipart(cfg, key, &upload_id).await;
+            return Err(e);
+        }
+    };
+
+    let mut xml = String::from("<CompleteMultipartUpload>");
+    for (number, etag) in &parts {
+        xml.push_str(&format!(
+            "<Part><PartNumber>{number}</PartNumber><ETag>{etag}</ETag></Part>"
+        ));
+    }
+    xml.push_str("</CompleteMultipartUpload>");
+    let res = s3_send(
+        cfg,
+        reqwest::Method::POST,
+        Some(key),
+        &[("uploadId", upload_id.as_str())],
+        &[],
+        Some(xml.into_bytes()),
+    )
+    .await;
+    let outcome = match res {
+        Ok(res) if res.status().is_success() => {
+            let body = res.text().await.unwrap_or_default();
+            if body.contains("<Error>") {
+                Err(match (xml_tag(&body, "Code"), xml_tag(&body, "Message")) {
+                    (Some(code), Some(msg)) => format!("{code}: {msg}"),
+                    _ => "CompleteMultipartUpload gagal".to_string(),
+                })
+            } else {
+                Ok(())
+            }
+        }
+        Ok(res) => Err(s3_fail(res).await),
+        Err(e) => Err(e),
+    };
+    if outcome.is_err() {
+        abort_multipart(cfg, key, &upload_id).await;
+    }
+    outcome
+}
+
+/// Unggah part berurutan. Mengembalikan `(nomor part, ETag)`.
+async fn s3_upload_parts(
+    cfg: &S3Cfg,
+    key: &str,
+    upload_id: &str,
+    path: &Path,
+    part_size: u64,
+) -> Result<Vec<(u32, String)>, String> {
+    let mut file = tokio::fs::File::open(path)
+        .await
+        .map_err(|e| e.to_string())?;
+    let mut parts = Vec::new();
+    let mut number: u32 = 1;
+    loop {
+        let mut buf = vec![0u8; part_size as usize];
+        let filled = read_full(&mut file, &mut buf).await?;
+        if filled == 0 {
+            break;
+        }
+        buf.truncate(filled);
+        let number_text = number.to_string();
+        let res = s3_send(
+            cfg,
+            reqwest::Method::PUT,
+            Some(key),
+            &[
+                ("partNumber", number_text.as_str()),
+                ("uploadId", upload_id),
+            ],
+            &[],
+            Some(buf),
+        )
+        .await?;
+        if !res.status().is_success() {
+            return Err(s3_fail(res).await);
+        }
+        let etag = res
+            .headers()
+            .get(header::ETAG)
+            .and_then(|v| v.to_str().ok())
+            .unwrap_or_default()
+            .to_string();
+        parts.push((number, etag));
+        number += 1;
+    }
+    Ok(parts)
+}
+
+/// Isi `buf` sampai penuh atau sampai akhir berkas. Mengembalikan jumlah byte yang terisi.
+async fn read_full(file: &mut tokio::fs::File, buf: &mut [u8]) -> Result<usize, String> {
+    let mut filled = 0;
+    while filled < buf.len() {
+        let n = file
+            .read(&mut buf[filled..])
+            .await
+            .map_err(|e| e.to_string())?;
+        if n == 0 {
+            break;
+        }
+        filled += n;
+    }
+    Ok(filled)
+}
+
+async fn abort_multipart(cfg: &S3Cfg, key: &str, upload_id: &str) {
+    if let Err(e) = s3_send(
+        cfg,
+        reqwest::Method::DELETE,
+        Some(key),
+        &[("uploadId", upload_id)],
+        &[],
+        None,
+    )
+    .await
+    {
+        tracing::warn!(key, error = %e, "gagal membatalkan multipart upload S3");
+    }
+}
+
+/// `HeadObject`: ukuran objek, atau `None` bila tidak ada (404).
+pub async fn s3_head_size(cfg: &S3Cfg, key: &str) -> Result<Option<u64>, String> {
+    let res = s3_send(cfg, reqwest::Method::HEAD, Some(key), &[], &[], None).await?;
+    let status = res.status().as_u16();
+    if status == 404 {
+        return Ok(None);
+    }
+    if !(200..300).contains(&status) {
+        return Err(format!("HTTP {status}"));
+    }
+    let size = res
+        .headers()
+        .get(header::CONTENT_LENGTH)
+        .and_then(|v| v.to_str().ok())
+        .and_then(|v| v.parse::<u64>().ok())
+        .ok_or_else(|| "Content-Length tidak ada pada respons S3".to_string())?;
+    Ok(Some(size))
+}
+
+/// `GetObject` ke berkas `dest`. Galat HTTP menjadi `Err`; pemanggil membuang `dest` yang setengah jadi.
+pub async fn s3_download(cfg: &S3Cfg, key: &str, dest: &Path) -> Result<(), String> {
+    let mut res = s3_send(cfg, reqwest::Method::GET, Some(key), &[], &[], None).await?;
+    if !res.status().is_success() {
+        return Err(s3_fail(res).await);
+    }
+    let mut out = tokio::fs::File::create(dest)
+        .await
+        .map_err(|e| e.to_string())?;
+    while let Some(chunk) = res.chunk().await.map_err(|e| e.to_string())? {
+        out.write_all(&chunk).await.map_err(|e| e.to_string())?;
+    }
+    out.flush().await.map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+/// `DeleteObject`. S3 menjawab sukses juga bila objek memang tidak ada.
+pub async fn s3_delete(cfg: &S3Cfg, key: &str) -> Result<(), String> {
+    let res = s3_send(cfg, reqwest::Method::DELETE, Some(key), &[], &[], None).await?;
+    if res.status().is_success() {
+        Ok(())
+    } else {
+        Err(s3_fail(res).await)
+    }
+}
+
+/// `deleteBackup` untuk S3: galat konfigurasi dan S3 hanya dicatat, seperti Laravel.
+pub async fn s3_delete_backup(pool: &MySqlPool, filename: &str) {
+    match s3_config(pool).await {
+        Ok(cfg) => {
+            if let Err(e) = s3_delete(&cfg, &object_key(filename)).await {
+                tracing::warn!(filename, error = %e, "gagal menghapus backup dari S3");
+            }
+        }
+        Err(e) => tracing::warn!(filename, error = %e, "gagal menghapus backup dari S3"),
+    }
 }
 
 /// `input ?: stored` seperti PHP: nilai kosong atau "0" dianggap tidak ada.
@@ -1467,13 +1985,49 @@ fn sigv4_authorization(
     canonical_query: &str,
     amz_date: &str,
 ) -> String {
+    sigv4_sign(
+        cfg,
+        "GET",
+        canonical_uri,
+        canonical_query,
+        host,
+        amz_date,
+        &sha256_hex(b""),
+        &[],
+    )
+}
+
+/// Nilai `Authorization` SigV4. Header yang ditandatangani: `host`, `x-amz-content-sha256`,
+/// `x-amz-date`, dan `extra` (nama huruf kecil), diurutkan menurut nama.
+#[allow(clippy::too_many_arguments)]
+fn sigv4_sign(
+    cfg: &S3Cfg,
+    method: &str,
+    canonical_uri: &str,
+    canonical_query: &str,
+    host: &str,
+    amz_date: &str,
+    payload_hash: &str,
+    extra: &[(&str, &str)],
+) -> String {
     let date = &amz_date[..8];
-    let payload_hash = sha256_hex(b"");
-    let signed_headers = "host;x-amz-content-sha256;x-amz-date";
-    let canonical_headers =
-        format!("host:{host}\nx-amz-content-sha256:{payload_hash}\nx-amz-date:{amz_date}\n");
+    let mut headers: Vec<(String, String)> = vec![
+        ("host".into(), host.into()),
+        ("x-amz-content-sha256".into(), payload_hash.into()),
+        ("x-amz-date".into(), amz_date.into()),
+    ];
+    for (k, v) in extra {
+        headers.push((k.to_ascii_lowercase(), v.trim().to_string()));
+    }
+    headers.sort_by(|a, b| a.0.cmp(&b.0));
+    let canonical_headers: String = headers.iter().map(|(k, v)| format!("{k}:{v}\n")).collect();
+    let signed_headers = headers
+        .iter()
+        .map(|(k, _)| k.as_str())
+        .collect::<Vec<_>>()
+        .join(";");
     let canonical_request = format!(
-        "GET\n{canonical_uri}\n{canonical_query}\n{canonical_headers}\n{signed_headers}\n{payload_hash}"
+        "{method}\n{canonical_uri}\n{canonical_query}\n{canonical_headers}\n{signed_headers}\n{payload_hash}"
     );
     let scope = format!("{date}/{}/s3/aws4_request", cfg.region);
     let string_to_sign = format!(

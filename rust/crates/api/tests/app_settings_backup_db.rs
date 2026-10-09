@@ -639,16 +639,8 @@ async fn restore_requests_validation_and_admin_only_on_apiamis() {
     .await;
     assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
 
-    // Nama yang tidak ada: 404, atau 501 bila S3 backup aktif (belum dipindah).
-    let s3_on: Option<String> = sqlx::query_scalar("SELECT CAST(`value` AS CHAR) FROM app_settings WHERE `key` = 's3_backup_enabled' ORDER BY id LIMIT 1")
-        .fetch_optional(&pool)
-        .await
-        .unwrap();
-    let expected = if s3_on.as_deref() == Some("1") {
-        StatusCode::NOT_IMPLEMENTED
-    } else {
-        StatusCode::NOT_FOUND
-    };
+    // Nama yang tidak ada: 404. Dengan S3 aktif tetapi tanpa konfigurasi S3 (`getBackupDisk`), juga 404.
+    let expected = StatusCode::NOT_FOUND;
     let (status, _, _) = send_raw(
         &pool,
         Method::POST,

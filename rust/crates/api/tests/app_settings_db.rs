@@ -918,12 +918,13 @@ async fn backups_local_index_job_download_and_destroy() {
     assert_eq!(st, StatusCode::NOT_FOUND);
     assert_eq!(data["message"], "Backup tidak ditemukan");
 
-    // Dengan S3 aktif, hapus dan unduh berkas yang tidak lokal ditolak tanpa mengubah apa pun.
+    // Dengan S3 aktif tetapi tanpa konfigurasi S3, hapus mengikuti Laravel: salinan lokal dihapus,
+    // galat S3 hanya dicatat, dan respons tetap sukses. Unduh berkas yang tidak lokal masih 501.
     sqlx::query("UPDATE app_settings SET `value` = '1' WHERE `key` = 's3_backup_enabled'")
         .execute(&pool)
         .await
         .unwrap();
-    let (st, _) = send(
+    let (st, data) = send(
         &pool,
         Method::DELETE,
         "/api/app-settings/backups/uji-backup-a.zip",
@@ -932,8 +933,9 @@ async fn backups_local_index_job_download_and_destroy() {
         None,
     )
     .await;
-    assert_eq!(st, StatusCode::NOT_IMPLEMENTED);
-    assert!(dir.join("uji-backup-a.zip").exists());
+    assert_eq!(st, StatusCode::OK);
+    assert_eq!(data["message"], "Backup berhasil dihapus");
+    assert!(!dir.join("uji-backup-a.zip").exists());
     let (st, _, _) = send_raw(
         &pool,
         Method::GET,
