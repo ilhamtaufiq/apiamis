@@ -16,6 +16,7 @@ pub const WHITELIST: &[&str] = &[
     "/auth/logout",
     "/auth/profile",
     "/auth/avatar",
+    "/auth/impersonate/stop",
     "/broadcasting/auth",
     "/menu-permissions/user/menus",
     "/route-permissions/rules",

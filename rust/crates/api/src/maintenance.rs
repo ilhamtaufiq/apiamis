@@ -33,6 +33,7 @@ pub const EXEMPT_PATHS: &[&str] = &[
     "app-settings/backups/google-drive/callback",
     "auth/handoff",
     "auth/handoff/exchange",
+    "auth/impersonate/stop",
     "up",
 ];
 

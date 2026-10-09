@@ -19,6 +19,8 @@ pub const DEFAULT_COOKIE_NAME: &str = "arumanis_session";
 pub const DEFAULT_AUTH_COOKIE_NAME: &str = "arumanis_token";
 /// Cookie impersonasi milik BFF; ikut dihapus saat logout.
 pub const IMPERSONATOR_COOKIE: &str = "arumanis_impersonator_session";
+/// Cookie httpOnly berisi token admin asli saat sedang impersonasi (`ARUMANIS_IMPERSONATOR_COOKIE`).
+pub const DEFAULT_IMPERSONATOR_COOKIE_NAME: &str = "arumanis_impersonator";
 /// Sama dengan `maxAge` di BFF: 12 jam.
 pub const MAX_AGE_SECS: u64 = 60 * 60 * 12;
 
@@ -33,6 +35,9 @@ pub struct SessionCookie {
     pub auth_secure: bool,
     /// Umur cookie token dalam detik (`SANCTUM_TOKEN_EXPIRATION` menit, default 720).
     pub auth_max_age_secs: u64,
+    /// Nama cookie token admin asli saat impersonasi (`ARUMANIS_IMPERSONATOR_COOKIE`).
+    /// Atributnya sama dengan `auth_name`.
+    pub impersonator_name: String,
 }
 
 impl Default for SessionCookie {
@@ -43,6 +48,7 @@ impl Default for SessionCookie {
             auth_name: DEFAULT_AUTH_COOKIE_NAME.to_string(),
             auth_secure: false,
             auth_max_age_secs: MAX_AGE_SECS,
+            impersonator_name: DEFAULT_IMPERSONATOR_COOKIE_NAME.to_string(),
         }
     }
 }
@@ -62,6 +68,10 @@ impl SessionCookie {
                 .ok()
                 .filter(|v| !v.is_empty())
                 .unwrap_or_else(|| DEFAULT_AUTH_COOKIE_NAME.to_string()),
+            impersonator_name: std::env::var("ARUMANIS_IMPERSONATOR_COOKIE")
+                .ok()
+                .filter(|v| !v.is_empty())
+                .unwrap_or_else(|| DEFAULT_IMPERSONATOR_COOKIE_NAME.to_string()),
             // Sama dengan config/sanctum.php: `SESSION_COOKIE_SECURE` lebih dulu, lalu APP_ENV.
             auth_secure: match std::env::var("SESSION_COOKIE_SECURE") {
                 Ok(v) => v.trim().eq_ignore_ascii_case("true"),
@@ -104,6 +114,28 @@ impl SessionCookie {
     /// Header `Set-Cookie` untuk menghapus `arumanis_token` (logout).
     pub fn auth_clear_header(&self) -> Option<HeaderValue> {
         HeaderValue::from_str(&format!("{}={}; Max-Age=0", self.auth_name, self.auth_attrs())).ok()
+    }
+
+    /// Header `Set-Cookie` untuk `arumanis_impersonator`: token admin asli saat impersonasi dimulai.
+    pub fn impersonator_set_header(&self, token: &str) -> Option<HeaderValue> {
+        HeaderValue::from_str(&format!(
+            "{}={}{}; Max-Age={}",
+            self.impersonator_name,
+            percent_encode(token),
+            self.auth_attrs(),
+            self.auth_max_age_secs
+        ))
+        .ok()
+    }
+
+    /// Header `Set-Cookie` untuk menghapus `arumanis_impersonator` (stop impersonasi, logout).
+    pub fn impersonator_clear_header(&self) -> Option<HeaderValue> {
+        HeaderValue::from_str(&format!(
+            "{}={}; Max-Age=0",
+            self.impersonator_name,
+            self.auth_attrs()
+        ))
+        .ok()
     }
 
     fn attrs(&self) -> String {

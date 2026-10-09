@@ -503,6 +503,11 @@ pub fn app(config: &Config, state: AppState) -> Router {
                 .layer(DefaultBodyLimit::max(auth_profile::AVATAR_BODY_LIMIT))
                 .delete(auth_profile::delete_avatar),
         )
+        // `stop` harus didaftarkan sebelum `{user}` agar tidak diurai sebagai id user.
+        .route(
+            "/api/auth/impersonate/stop",
+            post(auth_profile::stop_impersonation),
+        )
         .route(
             "/api/auth/impersonate/{user}",
             post(auth_profile::impersonate),

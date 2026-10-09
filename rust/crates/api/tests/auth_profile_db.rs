@@ -466,17 +466,10 @@ async fn impersonate_admin_gets_token_for_target_and_audit_row() {
     assert_eq!(body["user"]["id"], json!(target_id));
     assert_eq!(body["user"]["email"], IMP_TARGET_EMAIL);
     assert_eq!(body["message"], "Now impersonating Uji AP Tujuan");
-    let token = body["token"].as_str().expect("token harus string");
-    assert!(
-        token.contains('|'),
-        "format token Sanctum id|plain: {token}"
-    );
+    // Token tidak lagi di body; hanya di cookie httpOnly.
+    assert!(body.get("token").is_none(), "token tidak boleh ada di body");
 
-    // Token itu benar-benar milik target dan bernama `impersonation-token`.
-    let auth_user = auth::authenticate(&pool, token)
-        .await
-        .expect("token harus valid");
-    assert_eq!(auth_user.user_id, target_id);
+    // Token impersonasi bernama `impersonation-token` untuk target.
     let named: i64 = sqlx::query_scalar::<_, i64>(
         "SELECT CAST(COUNT(*) AS SIGNED) FROM personal_access_tokens WHERE name = 'impersonation-token' AND tokenable_type = ? AND tokenable_id = ?",
     )
