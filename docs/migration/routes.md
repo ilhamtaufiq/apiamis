@@ -65,17 +65,17 @@ Kolom **Status** diisi saat modul dipindah ke Rust. Awalnya semua `belum`.
 | 12 | GET | `/api/app-settings/kontrak-templates` | AppSettingController@kontrakTemplates | auth:sanctum,role:admin | rust |
 | 13 | GET | `/api/app-settings/kontrak-templates/{key}/download` | AppSettingController@downloadKontrakTemplate | auth:sanctum,role:admin | rust |
 | 14 | GET | `/api/app-settings/backups` | BackupController@index | auth:sanctum,role:admin | rust |
-| 15 | POST | `/api/app-settings/backups` | BackupController@store | auth:sanctum,role:admin | belum |
+| 15 | POST | `/api/app-settings/backups` | BackupController@store | auth:sanctum,role:admin | rust |
 | 16 | GET | `/api/app-settings/backups/jobs/{jobId}` | BackupController@showJob | auth:sanctum,role:admin | rust |
-| 17 | DELETE | `/api/app-settings/backups/jobs/{jobId}` | BackupController@cancelJob | auth:sanctum,role:admin | belum |
-| 18 | POST | `/api/app-settings/backups/restore` | BackupController@restore | auth:sanctum,role:admin | belum |
+| 17 | DELETE | `/api/app-settings/backups/jobs/{jobId}` | BackupController@cancelJob | auth:sanctum,role:admin | rust |
+| 18 | POST | `/api/app-settings/backups/restore` | BackupController@restore | auth:sanctum,role:admin | rust |
 | 19 | GET | `/api/app-settings/backups/google-drive/status` | GoogleDriveBackupController@status | auth:sanctum,role:admin | rust |
 | 20 | GET | `/api/app-settings/backups/google-drive/connect` | GoogleDriveBackupController@connect | auth:sanctum,role:admin | rust |
 | 21 | DELETE | `/api/app-settings/backups/google-drive` | GoogleDriveBackupController@disconnect | auth:sanctum,role:admin | rust |
 | 22 | GET | `/api/app-settings/backups/google-drive/jobs/{jobId}` | GoogleDriveBackupController@showUploadJob | auth:sanctum,role:admin | rust |
 | 23 | DELETE | `/api/app-settings/backups/google-drive/jobs/{jobId}` | GoogleDriveBackupController@cancelUploadJob | auth:sanctum,role:admin | rust |
 | 24 | POST | `/api/app-settings/backups/{filename}/google-drive` | GoogleDriveBackupController@upload | auth:sanctum,role:admin | rust |
-| 25 | POST | `/api/app-settings/backups/s3/test` | BackupController@testS3Connection | auth:sanctum,role:admin | belum |
+| 25 | POST | `/api/app-settings/backups/s3/test` | BackupController@testS3Connection | auth:sanctum,role:admin | rust |
 | 26 | GET | `/api/app-settings/backups/{filename}` | BackupController@download | auth:sanctum,role:admin | rust |
 | 27 | DELETE | `/api/app-settings/backups/{filename}` | BackupController@destroy | auth:sanctum,role:admin | rust |
 
