@@ -649,7 +649,7 @@ Kolom **Status** diisi saat modul dipindah ke Rust. Awalnya semua `belum`.
 | 2 | POST | `/api/pekerjaan-checklist/toggle` | PekerjaanChecklistController@toggle | auth:sanctum | rust |
 | 3 | GET | `/api/pekerjaan-checklist/history` | PekerjaanChecklistController@history | auth:sanctum | rust |
 | 4 | GET | `/api/pekerjaan-checklist/export/excel` | PekerjaanChecklistController@exportExcel | auth:sanctum | rust |
-| 5 | GET | `/api/pekerjaan-checklist/export/pdf` | PekerjaanChecklistController@exportPdf | auth:sanctum | belum |
+| 5 | GET | `/api/pekerjaan-checklist/export/pdf` | PekerjaanChecklistController@exportPdf | auth:sanctum | rust |
 
 ### post-pekerjaan-checklist (1)
 
