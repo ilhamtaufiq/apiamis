@@ -117,11 +117,13 @@ pub mod survey_tugas;
 pub mod tags_write;
 pub mod tiket;
 pub mod tiket_write;
+pub mod tool_pdfs;
 pub mod user_pekerjaan;
 pub mod user_pekerjaan_gaps;
 pub mod user_pekerjaan_broadcast;
 pub mod users;
 pub mod users_write;
+pub mod usulan_kegiatan;
 pub mod validation;
 
 use tower_http::{
@@ -1033,6 +1035,39 @@ pub fn app(config: &Config, state: AppState) -> Router {
             "/api/events/{id}/upload",
             post(events::upload).layer(DefaultBodyLimit::max(events::BODY_LIMIT)),
         )
+        // Usulan kegiatan (UsulanKegiatanController). `export-excel` statis, tidak tertangkap `{id}`.
+        .route(
+            "/api/usulan-kegiatan/export-excel",
+            get(usulan_kegiatan::export_excel),
+        )
+        .route(
+            "/api/usulan-kegiatan",
+            get(usulan_kegiatan::index)
+                .post(usulan_kegiatan::store)
+                .layer(DefaultBodyLimit::max(usulan_kegiatan::BODY_LIMIT)),
+        )
+        .route(
+            "/api/usulan-kegiatan/{id}",
+            get(usulan_kegiatan::show)
+                .put(usulan_kegiatan::update)
+                .patch(usulan_kegiatan::update)
+                .delete(usulan_kegiatan::destroy)
+                .layer(DefaultBodyLimit::max(usulan_kegiatan::BODY_LIMIT)),
+        )
+        // Tool PDF (ToolPdfController). Rute statis `bulk-download` dan `sign` didaftarkan sebelum `{id}`.
+        .route("/api/tool-pdfs/bulk-download", post(tool_pdfs::bulk_download))
+        .route(
+            "/api/tool-pdfs/sign",
+            post(tool_pdfs::sign).layer(DefaultBodyLimit::max(tool_pdfs::BODY_LIMIT)),
+        )
+        .route("/api/tool-pdfs/{id}/download", get(tool_pdfs::download))
+        .route(
+            "/api/tool-pdfs",
+            get(tool_pdfs::index)
+                .post(tool_pdfs::store)
+                .layer(DefaultBodyLimit::max(tool_pdfs::BODY_LIMIT)),
+        )
+        .route("/api/tool-pdfs/{id}", delete(tool_pdfs::destroy))
         .route("/api/{*rest}", any(not_found))
         .with_state(state)
         .route_layer(axum::middleware::from_fn_with_state(
