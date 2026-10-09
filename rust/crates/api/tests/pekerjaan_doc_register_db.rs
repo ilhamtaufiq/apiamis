@@ -474,5 +474,67 @@ async fn document_register_shape_filters_and_scope() {
     assert_eq!(body["meta"]["total"], 1);
     assert_eq!(body["meta"]["summary"]["pho_completed"], 1);
 
+    // per_page=0: `paginate()` memakai `Model::$perPage` (15), bukan error dan bukan 20.
+    let (status, body) = get(&pool, &format!("{base}&per_page=0"), Some(admin)).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(ids(&body["data"]), vec![p1, p2, p3], "{body}");
+    assert_eq!(body["meta"]["per_page"], 15, "{body}");
+    assert_eq!(body["meta"]["last_page"], 1, "{body}");
+    assert_eq!(body["meta"]["from"], 1, "{body}");
+    assert_eq!(body["meta"]["to"], 3, "{body}");
+
+    // per_page negatif selain -1: tanpa batas (semua baris), last_page 1, from/to dari rumus Laravel.
+    let (status, body) = get(&pool, &format!("{base}&per_page=-2"), Some(admin)).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["success"], true, "{body}");
+    assert_eq!(ids(&body["data"]), vec![p1, p2, p3], "{body}");
+    assert_eq!(body["meta"]["per_page"], -2, "{body}");
+    assert_eq!(body["meta"]["last_page"], 1, "{body}");
+    assert_eq!(body["meta"]["current_page"], 1, "{body}");
+    assert_eq!(body["meta"]["total"], 3, "{body}");
+    assert_eq!(body["meta"]["from"], 1, "{body}");
+    assert_eq!(body["meta"]["to"], 3, "{body}");
+    let (_, body) = get(&pool, &format!("{base}&per_page=-2&page=2"), Some(admin)).await;
+    assert_eq!(ids(&body["data"]), vec![p1, p2, p3], "{body}");
+    assert_eq!(body["meta"]["current_page"], 2, "{body}");
+    assert_eq!(body["meta"]["from"], -1, "{body}");
+    assert_eq!(body["meta"]["to"], 1, "{body}");
+
+    // Datetime: `created_at` dan timestamp pivot memakai Carbon toJSON (UTC, 6 digit).
+    let all = body_all(&pool, admin, base).await;
+    let p1_row = &all["data"][0];
+    assert_eq!(p1_row["id"], p1);
+    let ts = |v: &Value| -> bool {
+        let s = v.as_str().unwrap_or_default();
+        s.len() == 27 && s.as_bytes()[10] == b'T' && s.ends_with(".000000Z")
+    };
+    assert!(ts(&p1_row["created_at"]), "{p1_row}");
+    assert!(ts(&p1_row["kontrak"][0]["pivot"]["created_at"]), "{p1_row}");
+    assert!(ts(&p1_row["kontrak"][0]["created_at"]), "{p1_row}");
+
+    // Kolom `array` cast: list dari kunci "0..n-1" berurutan, `{}` menjadi [], objek tetap objek.
+    sqlx::query(
+        "UPDATE tbl_berita_acara SET data = ? WHERE pekerjaan_id = ?",
+    )
+    .bind(r#"{"serah_terima_pertama": "0", "lampiran": {"0": "x", "1": "y"}, "kosong": {}, "urut": {"1": "b", "0": "a"}}"#)
+    .bind(p1)
+    .execute(&pool)
+    .await
+    .unwrap();
+    let body = body_all(&pool, admin, base).await;
+    let data = &body["data"][0]["beritaAcara"]["data"];
+    assert_eq!(data["lampiran"], json!(["x", "y"]), "{body}");
+    assert_eq!(data["kosong"], json!([]), "{body}");
+    assert!(data["urut"].is_object(), "{body}");
+    assert_eq!(data["urut"]["0"], "a", "{body}");
+    assert_eq!(body["meta"]["summary"]["pho_completed"], 1, "{body}");
+
     cleanup(&pool).await;
+}
+
+/// Semua baris untuk `base` (per_page=-1), dipakai untuk memeriksa bentuk baris.
+async fn body_all(pool: &MySqlPool, token: &str, base: &str) -> Value {
+    let (status, body) = get(pool, &format!("{base}&per_page=-1"), Some(token)).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    body
 }
