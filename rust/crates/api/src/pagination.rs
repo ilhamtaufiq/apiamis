@@ -206,6 +206,35 @@ pub fn paginate_laravel(
     })
 }
 
+/// Paginator Laravel mentah (`response()->json($query->paginate())`): tanpa pembungkus `meta`,
+/// sehingga `current_page`, `links`, `first_page_url` dst. berada di root. Dipakai oleh
+/// endpoint yang mengembalikan `LengthAwarePaginator` langsung, bukan API Resource.
+pub fn paginate_flat(
+    data: Vec<Value>,
+    total: u64,
+    params: PageParams,
+    base_url: &str,
+    url_for: &dyn Fn(u64) -> String,
+) -> Value {
+    let body = paginate_laravel(data, total, params, base_url, url_for);
+    let (meta, links) = (&body["meta"], &body["links"]);
+    json!({
+        "current_page": meta["current_page"],
+        "data": body["data"],
+        "first_page_url": links["first"],
+        "from": meta["from"],
+        "last_page": meta["last_page"],
+        "last_page_url": links["last"],
+        "links": meta["links"],
+        "next_page_url": links["next"],
+        "path": meta["path"],
+        "per_page": meta["per_page"],
+        "prev_page_url": links["prev"],
+        "to": meta["to"],
+        "total": meta["total"],
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

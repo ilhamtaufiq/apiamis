@@ -13,7 +13,7 @@ use std::collections::HashMap;
 
 use axum::{
     body::Bytes,
-    extract::{Path, Query, State},
+    extract::{Path, Query, RawQuery, State},
     http::{HeaderMap, StatusCode},
     response::{IntoResponse, Response},
     Json,
@@ -27,6 +27,7 @@ use crate::{
     format::number_like_php,
     lookup::{carbon_json, document_type_json, DocumentTypeRow},
     pagination::{self, PageParams},
+    pekerjaan::{laravel_page_url, laravel_query_pairs},
     pekerjaan_doc_register::{read, select_list, K, KONTRAK_COLS, PEKERJAAN_COLS, PENYEDIA_COLS},
     require_auth,
     validation::Errors,
@@ -240,6 +241,7 @@ async fn kontrak_json(pool: &MySqlPool, kontrak_id: i64) -> Result<Value, ApiErr
 pub async fn index(
     State(state): State<AppState>,
     headers: HeaderMap,
+    RawQuery(raw): RawQuery,
     Query(query): Query<HashMap<String, String>>,
 ) -> Result<Response, ApiError> {
     require_auth(&state, &headers).await?;
@@ -315,25 +317,16 @@ pub async fn index(
     }
     let base = format!("{}/api/document-registers", state.app_url.trim_end_matches('/'));
     let params = PageParams { page, per_page };
-    Ok(Json(pagination::paginate_with_query(
+    // Paginator Laravel mentah (`paginate()` lalu `response()->json`), tanpa pembungkus `meta`.
+    let pairs = laravel_query_pairs(raw.as_deref());
+    Ok(Json(pagination::paginate_flat(
         data,
         total as u64,
         params,
         &base,
-        &query_string_without_page(&query),
+        &|p| laravel_page_url(&base, &pairs, p),
     ))
     .into_response())
-}
-
-/// `appends($request->query())`: query lain selain `page`, tanpa urutan yang dijamin.
-fn query_string_without_page(query: &HashMap<String, String>) -> String {
-    let mut parts: Vec<String> = query
-        .iter()
-        .filter(|(k, _)| k.as_str() != "page")
-        .map(|(k, v)| format!("{k}={v}"))
-        .collect();
-    parts.sort();
-    parts.join("&")
 }
 
 async fn addendum_json(pool: &MySqlPool, id: i64) -> Result<Value, ApiError> {

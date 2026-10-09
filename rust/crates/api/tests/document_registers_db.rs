@@ -190,8 +190,8 @@ async fn document_registers_numbering_and_crud() {
     )
     .await;
     assert_eq!(status, StatusCode::OK, "{body}");
-    assert_eq!(body["meta"]["total"], 2, "{body}");
-    assert_eq!(body["meta"]["per_page"], 20);
+    assert_eq!(body["total"], 2, "{body}");
+    assert_eq!(body["per_page"], 20);
     assert_eq!(body["data"][0]["kontrak"]["id"], kontrak);
     assert_eq!(body["data"][0]["type"]["id"], type_id);
 
