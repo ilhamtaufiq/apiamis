@@ -975,7 +975,7 @@ pub async fn download_kontrak_template(
 // ---------------------------------------------------------------------------
 
 /// Akar disk `local` (`storage/app/private`). Dapat diganti dengan `PRIVATE_STORAGE_PATH`.
-fn private_root() -> PathBuf {
+pub(crate) fn private_root() -> PathBuf {
     std::env::var_os("PRIVATE_STORAGE_PATH")
         .map(PathBuf::from)
         .unwrap_or_else(|| {
@@ -986,7 +986,7 @@ fn private_root() -> PathBuf {
         })
 }
 
-fn backup_dir() -> PathBuf {
+pub(crate) fn backup_dir() -> PathBuf {
     private_root().join(BACKUP_DIR)
 }
 
@@ -995,7 +995,7 @@ fn job_path(job_id: &str) -> PathBuf {
 }
 
 /// `guardFilename`: `^[A-Za-z0-9._-]+\.zip$`.
-fn guard_filename(name: &str) -> Result<(), ApiError> {
+pub(crate) fn guard_filename(name: &str) -> Result<(), ApiError> {
     let ok = name.len() > 4
         && name.ends_with(".zip")
         && name[..name.len() - 4]
@@ -1012,7 +1012,7 @@ fn guard_filename(name: &str) -> Result<(), ApiError> {
 }
 
 /// `guardJobId`: `^[A-Za-z0-9-]+$`.
-fn guard_job_id(job_id: &str) -> Result<(), ApiError> {
+pub(crate) fn guard_job_id(job_id: &str) -> Result<(), ApiError> {
     let ok = !job_id.is_empty()
         && job_id
             .chars()

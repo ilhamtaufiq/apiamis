@@ -37,6 +37,7 @@ pub mod draft;
 pub mod draft_export;
 pub mod error_logs;
 pub mod format;
+pub mod google_drive_backup;
 pub mod foto;
 pub mod kecamatan;
 pub mod kecamatan_write;
@@ -464,6 +465,30 @@ pub fn app(config: &Config, state: AppState) -> Router {
         .route(
             "/api/app-settings/kontrak-templates/{key}/download",
             get(app_settings::download_kontrak_template),
+        )
+        .route(
+            "/api/app-settings/backups/google-drive/status",
+            get(google_drive_backup::status),
+        )
+        .route(
+            "/api/app-settings/backups/google-drive/connect",
+            get(google_drive_backup::connect),
+        )
+        .route(
+            "/api/app-settings/backups/google-drive",
+            delete(google_drive_backup::disconnect),
+        )
+        .route(
+            "/api/app-settings/backups/google-drive/callback",
+            get(google_drive_backup::callback),
+        )
+        .route(
+            "/api/app-settings/backups/google-drive/jobs/{job_id}",
+            get(google_drive_backup::show_upload_job).delete(google_drive_backup::cancel_upload_job),
+        )
+        .route(
+            "/api/app-settings/backups/{filename}/google-drive",
+            post(google_drive_backup::upload),
         )
         .route("/api/app-settings/backups", get(app_settings::backups_index))
         .route(

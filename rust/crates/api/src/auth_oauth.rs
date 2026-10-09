@@ -86,7 +86,7 @@ pub enum Php {
 }
 
 impl Php {
-    fn arr(items: Vec<(&str, Php)>) -> Php {
+    pub fn arr(items: Vec<(&str, Php)>) -> Php {
         Php::Arr(items.into_iter().map(|(k, v)| (k.to_string(), v)).collect())
     }
 
@@ -237,7 +237,7 @@ fn unix_now() -> i64 {
 }
 
 /// `Cache::put`: upsert baris dengan kedaluwarsa `now + ttl`.
-async fn cache_put(
+pub async fn cache_put(
     pool: &MySqlPool,
     key: &str,
     value: &Php,
@@ -256,7 +256,7 @@ async fn cache_put(
 }
 
 /// `Cache::pull`: ambil lalu hapus dalam satu transaksi. Baris kedaluwarsa dihapus, hasilnya `None`.
-async fn cache_pull(pool: &MySqlPool, key: &str) -> Result<Option<Php>, sqlx::Error> {
+pub async fn cache_pull(pool: &MySqlPool, key: &str) -> Result<Option<Php>, sqlx::Error> {
     let full = format!("{}{key}", cache_prefix());
     let mut tx = pool.begin().await?;
     let row = sqlx::query(
@@ -295,7 +295,7 @@ fn oauth_state_key(state: &str) -> String {
     format!("oauth_state:{state}")
 }
 
-fn random_alnum(len: usize) -> String {
+pub fn random_alnum(len: usize) -> String {
     rand::thread_rng()
         .sample_iter(&Alphanumeric)
         .take(len)
@@ -431,7 +431,7 @@ fn too_many_attempts(retry_secs: u64) -> Response {
 }
 
 /// Sama dengan `client_ip` di `auth_routes`: IP pertama dari `X-Forwarded-For`.
-fn client_ip(headers: &HeaderMap) -> String {
+pub fn client_ip(headers: &HeaderMap) -> String {
     headers
         .get("x-forwarded-for")
         .and_then(|v| v.to_str().ok())
@@ -921,11 +921,11 @@ fn redirect(url: &str) -> Response {
 }
 
 /// `env()` Laravel: nilai environment, atau default bila variabel tidak ada.
-fn env_or(key: &str, default: &str) -> String {
+pub fn env_or(key: &str, default: &str) -> String {
     std::env::var(key).unwrap_or_else(|_| default.to_string())
 }
 
-fn http_client() -> &'static reqwest::Client {
+pub fn http_client() -> &'static reqwest::Client {
     static CLIENT: OnceLock<reqwest::Client> = OnceLock::new();
     CLIENT.get_or_init(|| {
         reqwest::Client::builder()
