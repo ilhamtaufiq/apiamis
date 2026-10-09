@@ -51,7 +51,7 @@ Kolom **Status** diisi saat modul dipindah ke Rust. Awalnya semua `belum`.
 
 | No | Method | Path | Controller@action | Middleware | Status |
 | --- | --- | --- | --- | --- | --- |
-| 1 | GET | `/api/app-settings/backups/google-drive/callback` | GoogleDriveBackupController@callback | throttle:20,1 | belum |
+| 1 | GET | `/api/app-settings/backups/google-drive/callback` | GoogleDriveBackupController@callback | throttle:20,1 | rust |
 | 2 | GET | `/api/app-settings` | AppSettingController@index | - | rust |
 | 3 | GET | `/api/app-settings/maintenance` | AppSettingController@maintenanceStatus | - | rust |
 | 4 | GET | `/api/app-settings/storage-stats` | AppSettingController@storageStats | auth:sanctum,role:admin | rust |
@@ -69,12 +69,12 @@ Kolom **Status** diisi saat modul dipindah ke Rust. Awalnya semua `belum`.
 | 16 | GET | `/api/app-settings/backups/jobs/{jobId}` | BackupController@showJob | auth:sanctum,role:admin | rust |
 | 17 | DELETE | `/api/app-settings/backups/jobs/{jobId}` | BackupController@cancelJob | auth:sanctum,role:admin | belum |
 | 18 | POST | `/api/app-settings/backups/restore` | BackupController@restore | auth:sanctum,role:admin | belum |
-| 19 | GET | `/api/app-settings/backups/google-drive/status` | GoogleDriveBackupController@status | auth:sanctum,role:admin | belum |
-| 20 | GET | `/api/app-settings/backups/google-drive/connect` | GoogleDriveBackupController@connect | auth:sanctum,role:admin | belum |
-| 21 | DELETE | `/api/app-settings/backups/google-drive` | GoogleDriveBackupController@disconnect | auth:sanctum,role:admin | belum |
-| 22 | GET | `/api/app-settings/backups/google-drive/jobs/{jobId}` | GoogleDriveBackupController@showUploadJob | auth:sanctum,role:admin | belum |
-| 23 | DELETE | `/api/app-settings/backups/google-drive/jobs/{jobId}` | GoogleDriveBackupController@cancelUploadJob | auth:sanctum,role:admin | belum |
-| 24 | POST | `/api/app-settings/backups/{filename}/google-drive` | GoogleDriveBackupController@upload | auth:sanctum,role:admin | belum |
+| 19 | GET | `/api/app-settings/backups/google-drive/status` | GoogleDriveBackupController@status | auth:sanctum,role:admin | rust |
+| 20 | GET | `/api/app-settings/backups/google-drive/connect` | GoogleDriveBackupController@connect | auth:sanctum,role:admin | rust |
+| 21 | DELETE | `/api/app-settings/backups/google-drive` | GoogleDriveBackupController@disconnect | auth:sanctum,role:admin | rust |
+| 22 | GET | `/api/app-settings/backups/google-drive/jobs/{jobId}` | GoogleDriveBackupController@showUploadJob | auth:sanctum,role:admin | rust |
+| 23 | DELETE | `/api/app-settings/backups/google-drive/jobs/{jobId}` | GoogleDriveBackupController@cancelUploadJob | auth:sanctum,role:admin | rust |
+| 24 | POST | `/api/app-settings/backups/{filename}/google-drive` | GoogleDriveBackupController@upload | auth:sanctum,role:admin | rust |
 | 25 | POST | `/api/app-settings/backups/s3/test` | BackupController@testS3Connection | auth:sanctum,role:admin | belum |
 | 26 | GET | `/api/app-settings/backups/{filename}` | BackupController@download | auth:sanctum,role:admin | rust |
 | 27 | DELETE | `/api/app-settings/backups/{filename}` | BackupController@destroy | auth:sanctum,role:admin | rust |
