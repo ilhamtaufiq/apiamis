@@ -40,6 +40,9 @@ start_rust() {
         return
     fi
 
+    log "Running schema migrations (apiamis-api migrate)..."
+    /usr/local/bin/apiamis-api migrate || { log "ERROR: migrasi gagal, API tidak dijalankan"; exit 1; }
+
     log "Starting Rust API on port ${APP_PORT:-8000}..."
     /usr/local/bin/apiamis-api >> /proc/1/fd/2 2>&1 &
     RUST_PID=$!

@@ -10,6 +10,7 @@ use axum::{
 use serde_json::{json, Value};
 use shared::{ApiError, Config};
 pub mod access;
+pub mod migrate;
 pub mod app_settings;
 pub mod app_settings_mail;
 pub mod app_settings_backup;

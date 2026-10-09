@@ -14,6 +14,11 @@ async fn main() {
         .with_env_filter(EnvFilter::try_from_default_env().unwrap_or_else(|_| "info".into()))
         .init();
 
+    if std::env::args().nth(1).as_deref() == Some("migrate") {
+        run_migrate().await;
+        return;
+    }
+
     let config = Config::from_env();
     let addr = SocketAddr::from(([0, 0, 0, 0], config.app_port));
 
@@ -32,6 +37,20 @@ async fn main() {
     .with_graceful_shutdown(shutdown_signal())
     .await
     .expect("server berhenti dengan error");
+}
+
+async fn run_migrate() {
+    let database_url = std::env::var("DATABASE_URL").expect("DATABASE_URL belum di-set");
+    let pool = sqlx::MySqlPool::connect(&database_url)
+        .await
+        .expect("gagal konek ke DATABASE_URL");
+    match api::migrate::run(&pool).await {
+        Ok(r) => tracing::info!(?r, "migrasi selesai"),
+        Err(e) => {
+            tracing::error!(error = %e, "migrasi gagal");
+            std::process::exit(1);
+        }
+    }
 }
 
 async fn shutdown_signal() {
