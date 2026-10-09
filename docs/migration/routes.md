@@ -481,7 +481,7 @@ Kolom **Status** diisi saat modul dipindah ke Rust. Awalnya semua `belum`.
 | 11 | GET | `/api/procurement/spse/packages/{kode_paket}/documents` | SpseProcurementController@packageDocuments | auth:sanctum | rust |
 | 12 | POST | `/api/procurement/spse/packages/import-documents` | SpseProcurementController@importPackageDocuments | auth:sanctum | rust |
 | 13 | POST | `/api/procurement/spse/packages/download-zip` | SpseProcurementController@downloadPackageZip | auth:sanctum | rust |
-| 14 | POST | `/api/procurement/spse/kontrak/push` | SpseProcurementController@pushKontrak | auth:sanctum | belum |
+| 14 | POST | `/api/procurement/spse/kontrak/push` | SpseProcurementController@pushKontrak | auth:sanctum | parsial |
 
 ### penerima (9)
 

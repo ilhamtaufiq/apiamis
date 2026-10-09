@@ -85,6 +85,7 @@ pub mod pekerjaan_write;
 pub mod pengawas_write;
 pub mod procurement_docs;
 pub mod procurement_spse;
+pub mod procurement_push;
 pub mod penerima;
 pub mod penyedia;
 pub mod penyedia_write;
@@ -949,6 +950,10 @@ pub fn app(config: &Config, state: AppState) -> Router {
         .route(
             "/api/procurement/spse/packages/download-zip",
             post(procurement_docs::download_zip),
+        )
+        .route(
+            "/api/procurement/spse/kontrak/push",
+            post(procurement_push::push_kontrak),
         )
         .route("/api/notifications", get(notifications::index))
         .route(

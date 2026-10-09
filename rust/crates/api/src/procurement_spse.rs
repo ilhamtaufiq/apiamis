@@ -47,7 +47,7 @@ const DEFAULT_SLUG: &str = "cianjurkab";
 const SESSION_HOURS: i64 = 8;
 const MAX_PAGES: u64 = 50;
 const ERROR_LOG_LIMIT: usize = 50;
-const USER_AGENT: &str =
+pub(crate) const USER_AGENT: &str =
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
 pub(crate) const JSON_ACCEPT: &str = "application/json, text/javascript, */*; q=0.01";
 pub(crate) const PAGE_ACCEPT: &str = "text/html,application/xhtml+xml,application/pdf,*/*;q=0.8";
@@ -450,7 +450,7 @@ pub(crate) async fn require_session(pool: &MySqlPool, user_id: u64) -> Result<Se
         .ok_or_else(|| ApiError::new(StatusCode::UNAUTHORIZED, NO_SESSION_MSG))
 }
 
-async fn deactivate_session(pool: &MySqlPool, session_id: i64) -> Result<(), ApiError> {
+pub(crate) async fn deactivate_session(pool: &MySqlPool, session_id: i64) -> Result<(), ApiError> {
     sqlx::query("UPDATE tbl_spse_sessions SET is_active = 0, updated_at = NOW() WHERE id = ?")
         .bind(session_id)
         .execute(pool)
@@ -463,7 +463,7 @@ async fn deactivate_session(pool: &MySqlPool, session_id: i64) -> Result<(), Api
 // HTTP ke SPSE (SpseHttpClient)
 // ---------------------------------------------------------------------------
 
-fn client() -> &'static reqwest::Client {
+pub(crate) fn client() -> &'static reqwest::Client {
     static CLIENT: OnceLock<reqwest::Client> = OnceLock::new();
     CLIENT.get_or_init(|| {
         reqwest::Client::builder()
@@ -486,7 +486,7 @@ pub(crate) struct Resp {
     pub body: Vec<u8>,
 }
 
-async fn send(rb: reqwest::RequestBuilder) -> Result<Resp, reqwest::Error> {
+pub(crate) async fn send(rb: reqwest::RequestBuilder) -> Result<Resp, reqwest::Error> {
     let r = rb.send().await?;
     let status = r.status().as_u16();
     let url = r.url().to_string();
@@ -510,7 +510,7 @@ async fn send(rb: reqwest::RequestBuilder) -> Result<Resp, reqwest::Error> {
     })
 }
 
-fn with_cookies(rb: reqwest::RequestBuilder, cookies: &[Cookie]) -> reqwest::RequestBuilder {
+pub(crate) fn with_cookies(rb: reqwest::RequestBuilder, cookies: &[Cookie]) -> reqwest::RequestBuilder {
     rb.header(header::COOKIE, cookie_header(cookies))
 }
 
@@ -560,7 +560,7 @@ pub(crate) async fn diagnose(s: &Session) -> Option<String> {
     None
 }
 
-fn assert_authenticated(r: &Resp) -> Result<(), SpseError> {
+pub(crate) fn assert_authenticated(r: &Resp) -> Result<(), SpseError> {
     let location = r.location.as_deref().unwrap_or("").to_lowercase();
     let login_redirect =
         !location.is_empty() && (location.contains("/login") || location.contains("loginctr"));
@@ -662,7 +662,7 @@ pub(crate) async fn is_downloadable_binary(
     !resp.body.is_empty()
 }
 
-fn token_from_cookies(cookies: &[Cookie]) -> Option<String> {
+pub(crate) fn token_from_cookies(cookies: &[Cookie]) -> Option<String> {
     cookies
         .iter()
         .filter(|c| c.name.eq_ignore_ascii_case("SPSE_SESSION"))
