@@ -213,7 +213,7 @@ Kolom **Status** diisi saat modul dipindah ke Rust. Awalnya semua `belum`.
 | 5 | GET | `/api/user-pekerjaan/pekerjaan/{pekerjaanId}` | UserPekerjaanController@byPekerjaan | auth:sanctum,role:admin | rust |
 | 6 | GET | `/api/user-pekerjaan/available-users` | UserPekerjaanController@availableUsers | auth:sanctum,role:admin | rust |
 | 7 | GET | `/api/user-pekerjaan/completeness-gaps` | UserPekerjaanController@completenessGaps | auth:sanctum,role:admin | rust |
-| 8 | POST | `/api/user-pekerjaan/broadcast-reminders` | UserPekerjaanController@broadcastReminders | auth:sanctum,role:admin | belum |
+| 8 | POST | `/api/user-pekerjaan/broadcast-reminders` | UserPekerjaanController@broadcastReminders | auth:sanctum,role:admin | rust |
 
 ### data-quality (3)
 
