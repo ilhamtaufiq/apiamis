@@ -90,6 +90,7 @@ pub mod signature_library;
 pub mod sipd_pekerjaan_links;
 pub mod route_permission;
 pub mod route_permissions;
+pub mod route_permissions_sync;
 pub mod session;
 pub mod sk;
 pub mod spam_import;
@@ -411,6 +412,10 @@ pub fn app(config: &Config, state: AppState) -> Router {
         .route(
             "/api/route-permissions/user/accessible",
             get(route_permissions::accessible),
+        )
+        .route(
+            "/api/route-permissions/sync",
+            post(route_permissions_sync::sync),
         )
         .route(
             "/api/route-permissions",
