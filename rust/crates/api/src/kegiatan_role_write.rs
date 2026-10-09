@@ -1,26 +1,42 @@
 //! Pemetaan kegiatan ke role: `GET /api/kegiatan-role`, `POST /api/kegiatan-role`, dan
 //! `DELETE /api/kegiatan-role/{id}`. Mengikuti `KegiatanRoleController` dan model `KegiatanRole`
 //! (hanya `Auditable`, tanpa notifikasi admin).
+//!
+//! Route ini berada di grup `role:admin` (`routes/api.php`): setelah `auth:sanctum` (401 tanpa
+//! token), non-admin mendapat 403 dari Spatie `RoleMiddleware`.
 
 use std::collections::{BTreeMap, HashMap};
 
 use axum::{
-    extract::{Path, Query, State},
+    extract::{rejection::JsonRejection, Path, Query, State},
     http::{HeaderMap, StatusCode},
     response::{IntoResponse, Response},
     Json,
 };
 use serde_json::{json, Map, Value};
 use shared::ApiError;
-use sqlx::{MySql, Row, Transaction};
+use sqlx::{MySql, MySqlPool, Row, Transaction};
 
 use crate::{audit, foto, kegiatan_write, lookup::carbon_json, pagination, require_auth, AppState};
 
 const MODEL: &str = "App\\Models\\KegiatanRole";
 const PER_PAGE: u64 = 20;
+/// Pesan `Spatie\Permission\Middleware\RoleMiddleware` (sama dengan `sk.rs`).
+const FORBIDDEN_MESSAGE: &str = "User does not have the right roles.";
 
 fn internal(e: impl std::fmt::Display) -> ApiError {
     ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, e.to_string())
+}
+
+/// Setara middleware `role:admin`: 403 bila user tidak punya role `admin`.
+async fn ensure_admin(pool: &MySqlPool, user_id: u64) -> Result<(), ApiError> {
+    let roles = auth::login::roles_of(pool, user_id)
+        .await
+        .map_err(internal)?;
+    if roles.iter().any(|(_, name)| name == "admin") {
+        return Ok(());
+    }
+    Err(ApiError::new(StatusCode::FORBIDDEN, FORBIDDEN_MESSAGE))
 }
 
 /// Kolom `kegiatan_role` untuk audit.
@@ -113,7 +129,8 @@ pub async fn index(
     headers: HeaderMap,
     Query(query): Query<HashMap<String, String>>,
 ) -> Result<Response, ApiError> {
-    require_auth(&state, &headers).await?;
+    let user = require_auth(&state, &headers).await?;
+    ensure_admin(&state.pool, user.user_id).await?;
     let page = query
         .get("page")
         .and_then(|v| v.parse::<u64>().ok())
@@ -155,9 +172,15 @@ pub async fn index(
 pub async fn store(
     State(state): State<AppState>,
     headers: HeaderMap,
-    Json(body): Json<Value>,
+    body: Result<Json<Value>, JsonRejection>,
 ) -> Result<Response, ApiError> {
     let user = require_auth(&state, &headers).await?;
+    // Laravel memeriksa role sebelum body divalidasi: non-admin tetap 403 walau body rusak.
+    ensure_admin(&state.pool, user.user_id).await?;
+    let Json(body) = match body {
+        Ok(json) => json,
+        Err(rejection) => return Ok(rejection.into_response()),
+    };
     let mut errs: BTreeMap<String, Vec<String>> = BTreeMap::new();
     let role_id = body.get("role_id").and_then(|v| {
         v.as_u64()
@@ -275,9 +298,11 @@ pub async fn destroy(
 ) -> Result<Json<Value>, ApiError> {
     let user = require_auth(&state, &headers).await?;
     let id: u64 = id.parse().map_err(|_| ApiError::not_found())?;
+    // Laravel mengikat model (404 bila tidak ada) sebelum middleware `role:admin` dijalankan.
     let before = attributes(&state.pool, id)
         .await?
         .ok_or_else(ApiError::not_found)?;
+    ensure_admin(&state.pool, user.user_id).await?;
     let url = format!(
         "{}/api/kegiatan-role/{id}",
         state.app_url.trim_end_matches('/')
