@@ -72,6 +72,7 @@ pub mod pekerjaan_checklist_write;
 pub mod pekerjaan_estimasi;
 pub mod pekerjaan_download;
 pub mod pekerjaan_import;
+pub mod menu_permissions;
 pub mod peripaan;
 pub mod permissions;
 pub mod pekerjaan_detail;
@@ -108,6 +109,7 @@ pub mod spm_sanitasi_integration;
 pub mod spm_sanitasi_pekerjaan;
 pub mod spm_sanitasi_write;
 pub mod survey_lokasi;
+pub mod survey_tugas;
 pub mod tags_write;
 pub mod tiket;
 pub mod tiket_write;
@@ -337,6 +339,18 @@ pub fn app(config: &Config, state: AppState) -> Router {
             post(survey_lokasi::upload_foto).layer(DefaultBodyLimit::max(foto::BODY_LIMIT)),
         )
         .route("/api/survey-lokasi/{id}/foto/{media_id}", delete(survey_lokasi::delete_foto))
+        // Tugas survei (SurveyTugasController). Mutasi di-guard `role:admin` di handler.
+        .route(
+            "/api/survey-tugas",
+            get(survey_tugas::index).post(survey_tugas::store),
+        )
+        .route(
+            "/api/survey-tugas/{id}",
+            get(survey_tugas::show)
+                .put(survey_tugas::update)
+                .patch(survey_tugas::update)
+                .delete(survey_tugas::destroy),
+        )
         // Unit SPAM (SpamUnitController). `POST /api/spam-units/import` belum dipindah.
         .route(
             "/api/spam-units/import",
@@ -391,6 +405,22 @@ pub fn app(config: &Config, state: AppState) -> Router {
                 .put(spam_units::update)
                 .patch(spam_units::update)
                 .delete(spam_units::destroy),
+        )
+        // Izin menu (MenuPermissionController). `user/menus` dua segmen, tidak bertabrakan dengan `{id}`.
+        .route(
+            "/api/menu-permissions/user/menus",
+            get(menu_permissions::get_user_menus),
+        )
+        .route(
+            "/api/menu-permissions",
+            get(menu_permissions::index).post(menu_permissions::store),
+        )
+        .route(
+            "/api/menu-permissions/{id}",
+            get(menu_permissions::show)
+                .put(menu_permissions::update)
+                .patch(menu_permissions::update)
+                .delete(menu_permissions::destroy),
         )
         .route("/api/roles", get(roles::index).post(roles::store))
         .route(

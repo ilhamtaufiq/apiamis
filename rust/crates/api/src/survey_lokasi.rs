@@ -572,7 +572,7 @@ fn diff(
 
 /// Setelah `UPDATE` tanpa `updated_at`: bila ada perubahan, set `updated_at = NOW()` dan catat audit `updated`.
 #[allow(clippy::too_many_arguments)]
-async fn audit_update(
+pub(crate) async fn audit_update(
     tx: &mut Transaction<'_, MySql>,
     headers: &HeaderMap,
     actor: u64,
