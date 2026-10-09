@@ -87,6 +87,90 @@ fn map_row(r: &sqlx::mysql::MySqlRow) -> Result<PekerjaanRow, sqlx::Error> {
     })
 }
 
+/// `trim()` PHP: spasi, tab, baris baru, CR, NUL, dan vertical tab.
+fn php_trim(s: &str) -> &str {
+    s.trim_matches(|c: char| matches!(c, ' ' | '\t' | '\n' | '\r' | '\0' | '\x0B'))
+}
+
+/// `!empty()` PHP untuk string: "" dan "0" dianggap kosong.
+pub fn php_not_empty(s: &str) -> bool {
+    !(s.is_empty() || s == "0")
+}
+
+/// `filter_var(.., FILTER_VALIDATE_BOOLEAN)` (dipakai `$request->boolean()`): "1", "true", "on", "yes".
+pub fn php_bool(s: &str) -> bool {
+    matches!(
+        php_trim(s).to_ascii_lowercase().as_str(),
+        "1" | "true" | "on" | "yes"
+    )
+}
+
+/// `(int)` PHP untuk string: awalan numerik (termasuk bentuk `1.9` dan `1e2`), selain itu 0.
+pub fn php_int(s: &str) -> i64 {
+    let t = s.trim_start_matches([' ', '\t', '\n', '\r', '\x0B', '\x0C']);
+    let b = t.as_bytes();
+    let mut i = usize::from(matches!(b.first(), Some(b'+' | b'-')));
+    let int_start = i;
+    while i < b.len() && b[i].is_ascii_digit() {
+        i += 1;
+    }
+    let mut has_digits = i > int_start;
+    let mut is_float = false;
+    if i < b.len() && b[i] == b'.' {
+        let frac_start = i + 1;
+        let mut j = frac_start;
+        while j < b.len() && b[j].is_ascii_digit() {
+            j += 1;
+        }
+        if has_digits || j > frac_start {
+            has_digits = true;
+            is_float = true;
+            i = j;
+        }
+    }
+    if !has_digits {
+        return 0;
+    }
+    if i < b.len() && (b[i] == b'e' || b[i] == b'E') {
+        let mut j = i + 1;
+        if j < b.len() && (b[j] == b'+' || b[j] == b'-') {
+            j += 1;
+        }
+        let exp_start = j;
+        while j < b.len() && b[j].is_ascii_digit() {
+            j += 1;
+        }
+        if j > exp_start {
+            is_float = true;
+            i = j;
+        }
+    }
+    let num = &t[..i];
+    if is_float {
+        num.parse::<f64>().map(|f| f as i64).unwrap_or(0)
+    } else {
+        num.parse::<i64>().unwrap_or(if num.starts_with('-') {
+            i64::MIN
+        } else {
+            i64::MAX
+        })
+    }
+}
+
+/// `filter_var(.., FILTER_VALIDATE_INT)` (dipakai `Paginator` untuk `page`): bilangan bulat desimal tanpa nol di depan.
+pub fn php_filter_int(s: &str) -> Option<i64> {
+    let t = php_trim(s);
+    let digits = t.strip_prefix(['+', '-']).unwrap_or(t);
+    let valid = !digits.is_empty()
+        && digits.bytes().all(|b| b.is_ascii_digit())
+        && (digits == "0" || !digits.starts_with('0'));
+    if valid {
+        t.parse::<i64>().ok()
+    } else {
+        None
+    }
+}
+
 #[derive(Debug, Default, Clone)]
 pub struct PekerjaanFilter {
     pub tahun: Option<String>,
@@ -96,13 +180,23 @@ pub struct PekerjaanFilter {
     pub nama_sub_kegiatan: Option<String>,
     pub sub_bidang: Option<String>,
     pub search: Option<String>,
+    /// `status` selain `all`; `active` berarti tanpa yang dibatalkan.
+    pub status: Option<String>,
+    /// Ada di query (`has`): nilai dibaca dengan `boolean()`.
+    pub is_konsultan: Option<bool>,
+    pub pengawas_id: Option<String>,
+    pub pendamping_id: Option<String>,
+    pub tag_id: Option<String>,
     pub sort_by: String,
     pub sort_desc: bool,
 }
 
 impl PekerjaanFilter {
+    /// Parameter index Laravel. `has() && !empty()` memakai `php_not_empty` (""/"0" diabaikan);
+    /// `filled()` memakai trim, dan nilainya dikirim apa adanya.
     pub fn from_query(q: &HashMap<String, String>) -> Self {
-        let nonempty = |k: &str| q.get(k).filter(|v| !v.is_empty()).cloned();
+        let nonempty = |k: &str| q.get(k).filter(|v| php_not_empty(v)).cloned();
+        let filled = |k: &str| q.get(k).filter(|v| !php_trim(v).is_empty()).cloned();
         let sort_by = q.get("sort_by").cloned().unwrap_or_default();
         let sort_dir = q.get("sort_direction").map(|s| s.to_lowercase());
         Self {
@@ -110,11 +204,16 @@ impl PekerjaanFilter {
             kecamatan_id: nonempty("kecamatan_id"),
             desa_id: nonempty("desa_id"),
             kegiatan_id: nonempty("kegiatan_id"),
-            nama_sub_kegiatan: nonempty("nama_sub_kegiatan"),
-            sub_bidang: nonempty("sub_bidang"),
-            search: nonempty("search")
-                .map(|s| s.trim().to_string())
+            nama_sub_kegiatan: filled("nama_sub_kegiatan"),
+            sub_bidang: filled("sub_bidang"),
+            search: filled("search")
+                .map(|s| php_trim(&s).to_string())
                 .filter(|s| !s.is_empty()),
+            status: filled("status").filter(|s| s != "all"),
+            is_konsultan: q.get("is_konsultan").map(|v| php_bool(v)),
+            pengawas_id: nonempty("pengawas_id"),
+            pendamping_id: nonempty("pendamping_id"),
+            tag_id: nonempty("tag_id"),
             sort_desc: sort_dir.as_deref() != Some("asc"),
             sort_by,
         }
@@ -153,6 +252,35 @@ impl PekerjaanFilter {
                 " AND p.kegiatan_id IN (SELECT id FROM tbl_kegiatan WHERE sub_bidang = ?)",
             );
             b.push(v.clone());
+        }
+        if let Some(v) = &self.pengawas_id {
+            sql.push_str(" AND p.pengawas_id = ?");
+            b.push(v.clone());
+        }
+        if let Some(v) = &self.pendamping_id {
+            sql.push_str(" AND p.pendamping_id = ?");
+            b.push(v.clone());
+        }
+        if let Some(v) = &self.tag_id {
+            // whereHas('tags', tbl_tags.id = ?): tag harus ada di tbl_tags.
+            sql.push_str(
+                " AND p.id IN (SELECT pt.pekerjaan_id FROM pekerjaan_tag pt \
+                 JOIN tbl_tags t ON t.id = pt.tag_id WHERE t.id = ?)",
+            );
+            b.push(v.clone());
+        }
+        if let Some(v) = self.is_konsultan {
+            sql.push_str(" AND p.is_konsultan = ?");
+            b.push(if v { "1" } else { "0" }.to_string());
+        }
+        // notCanceled(): status NULL dihitung aktif.
+        match self.status.as_deref() {
+            Some("active") => sql.push_str(" AND (p.status IS NULL OR p.status != 'canceled')"),
+            Some(s) => {
+                sql.push_str(" AND p.status = ?");
+                b.push(s.to_string());
+            }
+            None => {}
         }
         if let Some(s) = &self.search {
             let like = format!("%{s}%");
@@ -551,7 +679,8 @@ pub fn to_resource(p: &PekerjaanRow, rel: &Loaded) -> Value {
         "nama_paket": p.nama_paket,
         "pagu": p.pagu.map(number_like_php),
         "is_konsultan": p.is_konsultan,
-        "status": p.status.clone().filter(|s| !s.is_empty()).unwrap_or_else(|| "active".to_string()),
+        // `$this->status ?: 'active'`: string kosong dan "0" dianggap falsy.
+        "status": p.status.clone().filter(|s| !s.is_empty() && s != "0").unwrap_or_else(|| "active".to_string()),
         "catatan": p.catatan,
         // BELUM DIPINDAH: null, bukan nilai yang salah.
         "has_kontrak": counts.has_kontrak(),
@@ -614,19 +743,89 @@ fn empty_estimasi() -> Value {
 
 /// `summary` di Laravel: `$request->boolean('summary')`.
 pub fn summary_requested(query: &HashMap<String, String>) -> bool {
-    matches!(
-        query.get("summary").map(String::as_str),
-        Some("1" | "true" | "on" | "yes")
-    )
+    query.get("summary").is_some_and(|v| php_bool(v))
 }
 
-/// Query string tanpa `page`, untuk `appends($request->query())`.
+/// Pasangan query seperti `parse_str` PHP: kunci dan nilai di-decode, urutan kunci pertama dipertahankan,
+/// nilai terakhir menang. Kunci dengan `[` (array PHP) belum didukung.
+pub fn laravel_query_pairs(raw: Option<&str>) -> Vec<(String, String)> {
+    let mut out: Vec<(String, String)> = Vec::new();
+    for kv in raw.unwrap_or("").split('&').filter(|s| !s.is_empty()) {
+        let (k, v) = kv.split_once('=').unwrap_or((kv, ""));
+        // PHP mengganti spasi dan titik di nama kunci dengan `_`.
+        let k = url_decode(k).replace([' ', '.'], "_");
+        if k.is_empty() {
+            continue;
+        }
+        let v = url_decode(v);
+        match out.iter_mut().find(|(ek, _)| *ek == k) {
+            Some(slot) => slot.1 = v,
+            None => out.push((k, v)),
+        }
+    }
+    out
+}
+
+/// Url halaman `n` seperti `Paginator::url()`: `array_merge($query, [page => n])` dengan `page` di posisi
+/// aslinya (ditambahkan di akhir bila belum ada), lalu `http_build_query(.., RFC3986)`.
+pub fn laravel_page_url(base: &str, pairs: &[(String, String)], page: u64) -> String {
+    let mut parts = pairs.to_vec();
+    match parts.iter_mut().find(|(k, _)| k == "page") {
+        Some(slot) => slot.1 = page.to_string(),
+        None => parts.push(("page".to_string(), page.to_string())),
+    }
+    let query = parts
+        .iter()
+        .map(|(k, v)| format!("{}={}", rfc3986(k), rfc3986(v)))
+        .collect::<Vec<_>>()
+        .join("&");
+    format!("{base}?{query}")
+}
+
+/// `urldecode()` PHP: `+` menjadi spasi, `%XX` didecode, sisanya dibiarkan.
+fn url_decode(s: &str) -> String {
+    let b = s.as_bytes();
+    let mut out = Vec::with_capacity(b.len());
+    let mut i = 0;
+    while i < b.len() {
+        match b[i] {
+            b'+' => out.push(b' '),
+            b'%' if i + 2 < b.len() => {
+                let hex = std::str::from_utf8(&b[i + 1..i + 3]).ok();
+                match hex.and_then(|h| u8::from_str_radix(h, 16).ok()) {
+                    Some(byte) => {
+                        out.push(byte);
+                        i += 2;
+                    }
+                    None => out.push(b'%'),
+                }
+            }
+            c => out.push(c),
+        }
+        i += 1;
+    }
+    String::from_utf8_lossy(&out).into_owned()
+}
+
+/// Query string tanpa `page`, untuk `appends($request->query())` pada rute lain (foto, penerima).
 pub fn query_without_page(raw: Option<&str>) -> String {
     raw.unwrap_or("")
         .split('&')
         .filter(|kv| !kv.is_empty() && !kv.starts_with("page="))
         .collect::<Vec<_>>()
         .join("&")
+}
+
+/// `rawurlencode()` (RFC 3986): huruf, angka, `-_.~` dibiarkan; selain itu `%XX` huruf besar.
+fn rfc3986(s: &str) -> String {
+    s.bytes()
+        .map(|c| match c {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
+                (c as char).to_string()
+            }
+            _ => format!("%{c:02X}"),
+        })
+        .collect()
 }
 
 pub async fn index(
@@ -646,8 +845,23 @@ pub async fn index(
 
     let filter = PekerjaanFilter::from_query(&query);
 
-    if query.get("per_page").map(String::as_str) == Some("-1") {
-        let (rows, _) = list(&state.pool, &filter, &scope, None, Some(80))
+    // `orderBy()` Laravel melempar exception (500) bila kolom diizinkan tetapi arahnya bukan asc/desc.
+    let sort_allowed =
+        SORTABLE.contains(&filter.sort_by.as_str()) || filter.sort_by == "penerima_count";
+    let sort_dir = query
+        .get("sort_direction")
+        .map_or("desc".to_string(), |s| s.to_lowercase());
+    if sort_allowed && sort_dir != "asc" && sort_dir != "desc" {
+        return Err(ApiError::new(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "Server Error".to_string(),
+        ));
+    }
+
+    // `(int) per_page === -1`. Laravel memakai cap 500 bila `summary`, selain itu 80.
+    if query.get("per_page").is_some_and(|v| php_int(v) == -1) {
+        let cap = if summary_requested(&query) { 500 } else { 80 };
+        let (rows, _) = list(&state.pool, &filter, &scope, None, Some(cap))
             .await
             .map_err(internal)?;
         let rel = load(
@@ -661,23 +875,31 @@ pub async fn index(
         )
         .await
         .map_err(internal)?;
-        let data: Vec<Value> = rows.iter().map(|p| to_resource(p, &rel)).collect();
+        let data: Vec<Value> = rows
+            .iter()
+            .map(|p| {
+                let mut v = to_resource(p, &rel);
+                // Laravel tidak memuat `pendamping` pada per_page=-1: kuncinya tidak ada (bukan null).
+                if let Some(m) = v.as_object_mut() {
+                    m.remove("pendamping");
+                }
+                v
+            })
+            .collect();
         return Ok(Json(json!({ "data": data })).into_response());
     }
 
-    let per_page = query
-        .get("per_page")
-        .and_then(|v| v.parse::<u64>().ok())
-        .filter(|v| *v >= 1)
-        .unwrap_or(20)
-        .min(100);
+    // `(int) $request->get('per_page', 20)`; di bawah 1 jadi 20, di atas 100 jadi 100.
+    let pp = query.get("per_page").map_or(20, |v| php_int(v));
+    let per_page = if pp < 1 { 20 } else { pp.min(100) as u64 };
+    // Paginator::resolveCurrentPage: FILTER_VALIDATE_INT dan >= 1, selain itu halaman 1.
     let page = query
         .get("page")
-        .and_then(|v| v.parse::<u64>().ok())
+        .and_then(|v| php_filter_int(v))
         .filter(|v| *v >= 1)
-        .unwrap_or(1);
+        .unwrap_or(1) as u64;
     let params = PageParams { page, per_page };
-    let offset = (page - 1) * per_page;
+    let offset = (page - 1).saturating_mul(per_page);
     let (rows, total) = list(&state.pool, &filter, &scope, Some((per_page, offset)), None)
         .await
         .map_err(internal)?;
@@ -694,13 +916,10 @@ pub async fn index(
     .map_err(internal)?;
     let data: Vec<Value> = rows.iter().map(|p| to_resource(p, &rel)).collect();
     let base = format!("{}/api/pekerjaan", state.app_url.trim_end_matches('/'));
-    let body = pagination::paginate_with_query(
-        data,
-        total,
-        params,
-        &base,
-        &query_without_page(raw.as_deref()),
-    );
+    let pairs = laravel_query_pairs(raw.as_deref());
+    let body = pagination::paginate_laravel(data, total, params, &base, &|p| {
+        laravel_page_url(&base, &pairs, p)
+    });
     Ok(Json(body).into_response())
 }
 
@@ -766,12 +985,63 @@ mod tests {
     }
 
     #[test]
-    fn appends_query_without_page() {
+    fn page_links_keep_query_order_and_rfc3986_encoding() {
+        let base = "http://x/api/pekerjaan";
+        let pairs = laravel_query_pairs(Some("per_page=5&page=3&search=a+b%21"));
         assert_eq!(
-            query_without_page(Some("per_page=5&page=3&search=a")),
-            "per_page=5&search=a"
+            laravel_page_url(base, &pairs, 4),
+            "http://x/api/pekerjaan?per_page=5&page=4&search=a%20b%21"
         );
-        assert_eq!(query_without_page(None), "");
+        let none = laravel_query_pairs(None);
+        assert_eq!(
+            laravel_page_url(base, &none, 2),
+            "http://x/api/pekerjaan?page=2"
+        );
+        // Nilai terakhir menang, posisi kunci pertama dipertahankan (parse_str).
+        let dup = laravel_query_pairs(Some("a=1&b=2&a=3"));
+        assert_eq!(
+            laravel_page_url(base, &dup, 1),
+            "http://x/api/pekerjaan?a=3&b=2&page=1"
+        );
+    }
+
+    #[test]
+    fn php_scalar_rules_match_laravel() {
+        // (int) PHP: awalan numerik.
+        assert_eq!(php_int("2abc"), 2);
+        assert_eq!(php_int(" 1e1"), 10);
+        assert_eq!(php_int("1.9"), 1);
+        assert_eq!(php_int("-1"), -1);
+        assert_eq!(php_int("-1.5"), -1);
+        assert_eq!(php_int("abc"), 0);
+        assert_eq!(php_int(""), 0);
+        // FILTER_VALIDATE_INT: tanpa nol di depan, spasi dipangkas.
+        assert_eq!(php_filter_int(" 2 "), Some(2));
+        assert_eq!(php_filter_int("+3"), Some(3));
+        assert_eq!(php_filter_int("02"), None);
+        assert_eq!(php_filter_int("1.0"), None);
+        assert_eq!(php_filter_int(""), None);
+        // filter_var(FILTER_VALIDATE_BOOLEAN) dan empty().
+        assert!(php_bool("TRUE"));
+        assert!(php_bool(" yes "));
+        assert!(!php_bool("0"));
+        assert!(!php_bool(""));
+        assert!(!php_not_empty("0"));
+        assert!(php_not_empty("00"));
+    }
+
+    #[test]
+    fn zero_and_blank_filters_are_ignored_like_laravel() {
+        let mut q = HashMap::new();
+        q.insert("tahun".to_string(), "0".to_string());
+        q.insert("sub_bidang".to_string(), "   ".to_string());
+        q.insert("status".to_string(), "all".to_string());
+        q.insert("is_konsultan".to_string(), String::new());
+        let f = PekerjaanFilter::from_query(&q);
+        assert!(f.tahun.is_none());
+        assert!(f.sub_bidang.is_none());
+        assert!(f.status.is_none());
+        assert_eq!(f.is_konsultan, Some(false));
     }
 
     #[test]
