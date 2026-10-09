@@ -17,6 +17,7 @@ pub mod analytics;
 pub mod audit;
 pub mod audit_logs;
 pub mod auth_oauth;
+pub mod auth_profile;
 pub mod auth_routes;
 pub mod berita_acara;
 pub mod berkas;
@@ -88,6 +89,7 @@ pub mod penyedia_write;
 pub mod progress_estimasi;
 pub mod progress_metrics;
 pub mod progress_write;
+pub mod public_routes;
 pub mod quality_insight;
 pub mod ratelimit;
 pub mod roles;
@@ -481,6 +483,18 @@ pub fn app(config: &Config, state: AppState) -> Router {
         )
         .route("/api/auth/logout", post(auth_routes::logout))
         .route("/api/auth/sync-token", post(auth_routes::sync_token))
+        // Profil, avatar, dan impersonasi (AuthController). Impersonasi hanya admin: role dicek ulang di handler.
+        .route("/api/auth/profile", put(auth_profile::update_profile))
+        .route(
+            "/api/auth/avatar",
+            post(auth_profile::upload_avatar)
+                .layer(DefaultBodyLimit::max(auth_profile::AVATAR_BODY_LIMIT))
+                .delete(auth_profile::delete_avatar),
+        )
+        .route(
+            "/api/auth/impersonate/{user}",
+            post(auth_profile::impersonate),
+        )
         .route(
             "/api/app-settings",
             get(lookup::index)
@@ -960,6 +974,12 @@ pub fn app(config: &Config, state: AppState) -> Router {
         .route("/api/search", get(search::index))
         .route("/api/public/spm-sanitasi/stats", get(spm_sanitasi::public_stats))
         .route("/api/public/spm-sanitasi/map-stats", get(spm_sanitasi::public_map_stats))
+        // Form publik kelembagaan SPAM (throttle per rute) dan hubungi kami (throttle contact-inquiries).
+        .route(
+            "/api/public/spam-kelembagaan/form/{token}",
+            get(public_routes::spam_kelembagaan_show).post(public_routes::spam_kelembagaan_submit),
+        )
+        .route("/api/public/contact", post(public_routes::contact))
         .route("/api/spm-sanitasi/stats", get(spm_sanitasi::stats))
         .route("/api/spm-sanitasi/stats/series", get(spm_sanitasi::stats_series))
         .route("/api/spm-sanitasi/capaian", get(spm_sanitasi_capaian::capaian))
