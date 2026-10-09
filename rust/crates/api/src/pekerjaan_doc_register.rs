@@ -46,7 +46,7 @@ const HAS_KONTRAK: &str = "EXISTS (SELECT 1 FROM kontrak_pekerjaan hkp INNER JOI
 
 /// Tipe kolom untuk pembacaan dan cast Eloquent.
 #[derive(Clone, Copy)]
-enum K {
+pub(crate) enum K {
     /// Integer (cast `integer` atau kolom tanpa cast).
     Int,
     /// `boolean` dari tinyint.
@@ -65,7 +65,7 @@ enum K {
     Json,
 }
 
-const PEKERJAAN_COLS: &[(&str, K)] = &[
+pub(crate) const PEKERJAAN_COLS: &[(&str, K)] = &[
     ("id", K::Int),
     ("kode_rekening", K::Txt),
     ("nama_paket", K::Txt),
@@ -82,7 +82,7 @@ const PEKERJAAN_COLS: &[(&str, K)] = &[
     ("pendamping_id", K::Int),
 ];
 
-const KONTRAK_COLS: &[(&str, K)] = &[
+pub(crate) const KONTRAK_COLS: &[(&str, K)] = &[
     ("id", K::Int),
     ("id_kegiatan", K::Int),
     ("id_pekerjaan", K::Int),
@@ -108,7 +108,7 @@ const KONTRAK_COLS: &[(&str, K)] = &[
     ("updated_at", K::Ts),
 ];
 
-const PENYEDIA_COLS: &[(&str, K)] = &[
+pub(crate) const PENYEDIA_COLS: &[(&str, K)] = &[
     ("id", K::Int),
     ("nama", K::Txt),
     ("direktur", K::Txt),
@@ -226,7 +226,7 @@ fn date_json(d: Option<NaiveDate>) -> Value {
 }
 
 /// Daftar kolom `SELECT` dengan cast yang sesuai tipe. `alias` kosong berarti tanpa prefiks.
-fn select_list(alias: &str, cols: &[(&str, K)]) -> String {
+pub(crate) fn select_list(alias: &str, cols: &[(&str, K)]) -> String {
     let p = if alias.is_empty() {
         String::new()
     } else {
@@ -244,7 +244,7 @@ fn select_list(alias: &str, cols: &[(&str, K)]) -> String {
 }
 
 /// Membaca baris menjadi atribut JSON, dengan cast Eloquent per kolom.
-fn read(r: &MySqlRow, cols: &[(&str, K)]) -> Result<Map<String, Value>, sqlx::Error> {
+pub(crate) fn read(r: &MySqlRow, cols: &[(&str, K)]) -> Result<Map<String, Value>, sqlx::Error> {
     let mut m = Map::new();
     for (c, k) in cols {
         let v = match k {

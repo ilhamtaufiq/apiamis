@@ -3,9 +3,9 @@
 //!
 //! Catatan paritas:
 //! - `tanggal` (cast `date`) dikirim sebagai `YYYY-MM-DDT00:00:00.000000Z`, seperti serialisasi Carbon.
-//! - `index` memuat `kontrak` dengan atribut model lengkap dan `type`, `addendum` sebagai model
-//!   lengkap. `kontrak.pekerjaan`/`pekerjaans` dan `kontrak.penyedia` hanya memuat kolom yang dipakai
-//!   frontend (id, nama, kode rekening), bukan seluruh kolom model Laravel. Ini tercatat sebagai sisa.
+//! - `index` memuat `kontrak` (dengan `pekerjaan` dan `penyedia`), `type`, dan `addendum` sebagai model
+//!   lengkap, dengan kolom dan cast dari tabel. Tanggal cast `date` memakai bentuk Carbon (`toJSON`),
+//!   termasuk pada `addendum`. `kontrak.pekerjaans` tidak dimuat Laravel, jadi tidak dikirim.
 //! - `store` menomori dengan `tbl_document_sequences` (tipe `berita-acara`) di dalam transaksi, sama
 //!   dengan Laravel. Error `RuntimeException` menjadi 422 dan transaksi dibatalkan.
 
@@ -25,10 +25,9 @@ use sqlx::{MySql, MySqlPool, Row, Transaction};
 
 use crate::{
     format::number_like_php,
-    kontrak,
-    kontrak_addendum,
     lookup::{carbon_json, document_type_json, DocumentTypeRow},
     pagination::{self, PageParams},
+    pekerjaan_doc_register::{read, select_list, K, KONTRAK_COLS, PEKERJAAN_COLS, PENYEDIA_COLS},
     require_auth,
     validation::Errors,
     AppState,
@@ -172,71 +171,69 @@ async fn find(pool: &MySqlPool, id: i64) -> Result<RegRow, ApiError> {
         .ok_or_else(ApiError::not_found)
 }
 
-/// Relasi `kontrak` untuk indeks: atribut model kontrak, plus `pekerjaan`, `pekerjaans`, dan `penyedia`
-/// (kolom ringkas, lihat catatan paritas di atas).
-async fn kontrak_json(pool: &MySqlPool, kontrak_id: i64) -> Result<Value, ApiError> {
-    let Some(row) = kontrak::find_row(pool, kontrak_id).await.map_err(internal)? else {
-        return Ok(Value::Null);
-    };
-    let mut m = kontrak::attributes(&row);
-    let pekerjaan = match row.id_pekerjaan {
-        Some(pid) => pekerjaan_brief(pool, pid).await?,
-        None => Value::Null,
-    };
-    let mut list = Vec::new();
-    let links: Vec<i64> = sqlx::query_scalar(
-        "SELECT CAST(pekerjaan_id AS SIGNED) FROM kontrak_pekerjaan WHERE kontrak_id = ? ORDER BY pekerjaan_id",
-    )
-    .bind(kontrak_id)
-    .fetch_all(pool)
-    .await
-    .map_err(internal)?;
-    for pid in links {
-        list.push(pekerjaan_brief(pool, pid).await?);
-    }
-    m.insert("pekerjaan".into(), pekerjaan);
-    m.insert("pekerjaans".into(), Value::Array(list));
-    m.insert(
-        "penyedia".into(),
-        match row.id_penyedia {
-            Some(pid) => penyedia_brief(pool, pid).await?,
-            None => Value::Null,
-        },
-    );
-    Ok(Value::Object(m))
-}
+/// Kolom `SELECT *` model `KontrakAddendum` beserta cast Eloquent-nya (urutan kolom tabel).
+const ADDENDUM_COLS: &[(&str, K)] = &[
+    ("id", K::Int),
+    ("kontrak_id", K::Int),
+    ("addendum_ke", K::Int),
+    ("nomor_addendum", K::Txt),
+    ("attachment_nomors", K::Json),
+    ("tanggal_addendum", K::Date),
+    ("jenis_addendum", K::Txt),
+    ("alasan", K::Txt),
+    ("deskripsi_perubahan", K::Txt),
+    ("nilai_kontrak_sebelum", K::Flt),
+    ("nilai_kontrak_sesudah", K::Flt),
+    ("tgl_selesai_sebelum", K::Date),
+    ("tgl_selesai_sesudah", K::Date),
+    ("status", K::Txt),
+    ("kelengkapan_override", K::Bool),
+    ("created_by", K::Int),
+    ("approved_by", K::Int),
+    ("approved_at", K::Ts),
+    ("created_at", K::Ts),
+    ("updated_at", K::Ts),
+];
 
-async fn pekerjaan_brief(pool: &MySqlPool, id: i64) -> Result<Value, ApiError> {
-    let row = sqlx::query(
-        "SELECT CAST(id AS SIGNED), nama_paket, kode_rekening FROM tbl_pekerjaan WHERE id = ?",
-    )
-    .bind(id)
-    .fetch_optional(pool)
-    .await
-    .map_err(internal)?;
-    Ok(match row {
-        Some(r) => json!({
-            "id": r.try_get::<i64, _>(0).map_err(internal)?,
-            "nama_paket": r.try_get::<Option<String>, _>(1).map_err(internal)?,
-            "kode_rekening": r.try_get::<Option<String>, _>(2).map_err(internal)?,
-        }),
-        None => Value::Null,
-    })
-}
-
-async fn penyedia_brief(pool: &MySqlPool, id: i64) -> Result<Value, ApiError> {
-    let row = sqlx::query("SELECT CAST(id AS SIGNED), nama FROM tbl_penyedia WHERE id = ?")
+/// Satu baris model Eloquent sebagai atribut JSON (`toArray()`), atau null bila baris tidak ada.
+async fn model_json(
+    pool: &MySqlPool,
+    table: &str,
+    cols: &[(&str, K)],
+    id: i64,
+) -> Result<Value, ApiError> {
+    let sql = format!("SELECT {} FROM {table} WHERE id = ?", select_list("", cols));
+    let row = sqlx::query(&sql)
         .bind(id)
         .fetch_optional(pool)
         .await
         .map_err(internal)?;
-    Ok(match row {
-        Some(r) => json!({
-            "id": r.try_get::<i64, _>(0).map_err(internal)?,
-            "nama": r.try_get::<Option<String>, _>(1).map_err(internal)?,
-        }),
+    match row {
+        Some(r) => Ok(Value::Object(read(&r, cols).map_err(internal)?)),
+        None => Ok(Value::Null),
+    }
+}
+
+/// Relasi `kontrak` untuk indeks: atribut lengkap `Kontrak`, plus `pekerjaan` dan `penyedia`
+/// (`with('kontrak.pekerjaan', 'kontrak.penyedia')`). Laravel tidak memuat `kontrak.pekerjaans`
+/// di indeks ini, jadi kunci itu tidak ada di respons.
+async fn kontrak_json(pool: &MySqlPool, kontrak_id: i64) -> Result<Value, ApiError> {
+    let Value::Object(mut m) = model_json(pool, "tbl_kontrak", KONTRAK_COLS, kontrak_id).await? else {
+        return Ok(Value::Null);
+    };
+    let id_pekerjaan = m.get("id_pekerjaan").and_then(Value::as_i64);
+    let id_penyedia = m.get("id_penyedia").and_then(Value::as_i64);
+    let pekerjaan = match id_pekerjaan {
+        Some(id) => model_json(pool, "tbl_pekerjaan", PEKERJAAN_COLS, id).await?,
         None => Value::Null,
-    })
+    };
+    let penyedia = match id_penyedia {
+        Some(id) => model_json(pool, "tbl_penyedia", PENYEDIA_COLS, id).await?,
+        None => Value::Null,
+    };
+    m.insert("pekerjaan".into(), pekerjaan);
+    m.insert("penyedia".into(), penyedia);
+    Ok(Value::Object(m))
 }
 
 /// `GET /api/document-registers?tahun=&type_id=&addendum_id=&search=&per_page=`.
@@ -340,18 +337,7 @@ fn query_string_without_page(query: &HashMap<String, String>) -> String {
 }
 
 async fn addendum_json(pool: &MySqlPool, id: i64) -> Result<Value, ApiError> {
-    let row = sqlx::query(&format!("{} WHERE id = ?", kontrak::SELECT_ADDENDUM))
-        .bind(id)
-        .fetch_optional(pool)
-        .await
-        .map_err(internal)?;
-    match row {
-        Some(r) => {
-            let a = kontrak::map_addendum(&r).map_err(internal)?;
-            Ok(Value::Object(kontrak_addendum::attributes(&a)))
-        }
-        None => Ok(Value::Null),
-    }
+    model_json(pool, "tbl_kontrak_addendums", ADDENDUM_COLS, id).await
 }
 
 /// Bentuk generik `{sequence}` dst. dari `generateNumber`.
