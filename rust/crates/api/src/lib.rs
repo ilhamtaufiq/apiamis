@@ -4,7 +4,7 @@ use axum::{
     extract::DefaultBodyLimit,
     http::{header, HeaderValue, Method, StatusCode},
     response::{IntoResponse, Response},
-    routing::{any, delete, get, post, put},
+    routing::{any, delete, get, patch, post, put},
     Json, Router,
 };
 use serde_json::{json, Value};
@@ -39,9 +39,11 @@ pub mod document_types_write;
 pub mod draft;
 pub mod draft_export;
 pub mod error_logs;
+pub mod events;
 pub mod format;
 pub mod google_drive_backup;
 pub mod foto;
+pub mod kanban;
 pub mod kecamatan;
 pub mod kecamatan_write;
 pub mod kegiatan;
@@ -1008,6 +1010,28 @@ pub fn app(config: &Config, state: AppState) -> Router {
                 .put(spm_sanitasi_write::update)
                 .patch(spm_sanitasi_write::update)
                 .delete(spm_sanitasi_write::destroy),
+        )
+        // Kanban. Rute statis `cards/from-tiket` didaftarkan sebelum `cards/{id}`.
+        .route("/api/kanban/board", get(kanban::board))
+        .route("/api/kanban/cards", post(kanban::store_card))
+        .route("/api/kanban/cards/from-tiket", post(kanban::import_from_tiket))
+        .route(
+            "/api/kanban/cards/{id}",
+            put(kanban::update_card).delete(kanban::destroy_card),
+        )
+        .route("/api/kanban/cards/{id}/move", patch(kanban::move_card))
+        // Calendar events. Upload punya batas body sendiri (10 MB plus overhead multipart).
+        .route("/api/events", get(events::index).post(events::store))
+        .route(
+            "/api/events/{id}",
+            get(events::show)
+                .put(events::update)
+                .patch(events::update)
+                .delete(events::destroy),
+        )
+        .route(
+            "/api/events/{id}/upload",
+            post(events::upload).layer(DefaultBodyLimit::max(events::BODY_LIMIT)),
         )
         .route("/api/{*rest}", any(not_found))
         .with_state(state)
