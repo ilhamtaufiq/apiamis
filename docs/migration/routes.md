@@ -390,7 +390,7 @@ Kolom **Status** diisi saat modul dipindah ke Rust. Awalnya semua `belum`.
 | No | Method | Path | Controller@action | Middleware | Status |
 | --- | --- | --- | --- | --- | --- |
 | 1 | POST | `/api/desa/sync-kk` | DesaController@syncKk | auth:sanctum | dihapus |
-| 2 | GET | `/api/desa/{desa}/profile` | DesaController@profile | auth:sanctum | belum |
+| 2 | GET | `/api/desa/{desa}/profile` | DesaController@profile | auth:sanctum | rust |
 | 3 | GET | `/api/desa` | DesaController@index | auth:sanctum | rust |
 | 4 | POST | `/api/desa` | DesaController@store | auth:sanctum | rust |
 | 5 | GET | `/api/desa/{id}` | DesaController@show | auth:sanctum | rust |
