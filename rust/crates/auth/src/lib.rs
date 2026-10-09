@@ -35,15 +35,33 @@ pub struct AuthUser {
     pub abilities: Vec<String>,
 }
 
+/// Umur maksimum token dalam menit, dari `SANCTUM_TOKEN_EXPIRATION` (default 720 seperti Laravel).
+/// `None` berarti tanpa batas, sama dengan `expiration => null` di Sanctum.
+pub fn token_max_age_minutes() -> Option<i64> {
+    match std::env::var("SANCTUM_TOKEN_EXPIRATION") {
+        Ok(v) if v.trim().is_empty() || v.trim() == "null" => None,
+        Ok(v) => match v.trim().parse::<i64>() {
+            Ok(0) => None,
+            Ok(n) if n > 0 => Some(n),
+            _ => Some(720),
+        },
+        Err(_) => Some(720),
+    }
+}
+
 /// Memverifikasi header `Authorization: Bearer <token>` (nilai tanpa prefix).
 pub async fn authenticate(pool: &MySqlPool, bearer: &str) -> Result<AuthUser, AuthError> {
     let (token_id, plain) = parse_token(bearer).ok_or(AuthError::Invalid)?;
 
+    let max_age = token_max_age_minutes();
     let row = sqlx::query(
         "SELECT token, tokenable_type, tokenable_id, abilities, \
-         CAST(expires_at IS NOT NULL AND expires_at < NOW() AS SIGNED) AS expired \
+         CAST((expires_at IS NOT NULL AND expires_at < NOW()) \
+           OR (? IS NOT NULL AND created_at <= NOW() - INTERVAL ? MINUTE) AS SIGNED) AS expired \
          FROM personal_access_tokens WHERE id = ?",
     )
+    .bind(max_age)
+    .bind(max_age.unwrap_or(0))
     .bind(token_id)
     .fetch_optional(pool)
     .await?

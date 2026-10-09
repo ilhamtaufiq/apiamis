@@ -1020,12 +1020,21 @@ pub async fn destroy(
 
 /// `GET /api/usulan-kegiatan/export-excel`: semua usulan (tanpa scope), urut `created_at` menurun.
 pub async fn export_excel(State(state): State<AppState>, headers: HeaderMap) -> Result<Response, ApiError> {
-    require_auth(&state, &headers).await?;
-    let sql = format!("{SELECT_USULAN} ORDER BY u.created_at DESC, u.id DESC");
-    let raw_rows = sqlx::query(&sql)
-        .fetch_all(&state.pool)
-        .await
-        .map_err(internal)?;
+    let user = require_auth(&state, &headers).await?;
+    // Scope sama dengan `index`: non-admin hanya mengekspor usulan miliknya. Laravel tidak membatasi
+    // di sini; ini perbaikan yang dicatat di log.
+    let admin = is_admin(&state.pool, user.user_id).await?;
+    let (where_sql, binds): (&str, Vec<u64>) = if admin {
+        ("", Vec::new())
+    } else {
+        (" WHERE u.user_id = ?", vec![user.user_id])
+    };
+    let sql = format!("{SELECT_USULAN}{where_sql} ORDER BY u.created_at DESC, u.id DESC");
+    let mut q = sqlx::query(&sql);
+    for b in binds {
+        q = q.bind(b);
+    }
+    let raw_rows = q.fetch_all(&state.pool).await.map_err(internal)?;
     let rows = raw_rows
         .iter()
         .map(map_row)
