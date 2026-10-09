@@ -244,6 +244,19 @@ fn json_field(v: Value) -> Option<String> {
     }
 }
 
+/// Field formulir/JSON sebagai `Map` (nilai kosong = `null`), untuk rute lain yang memakai `read_input`.
+pub(crate) async fn flat_input(
+    state: &AppState,
+    request: Request,
+) -> Result<Map<String, Value>, ApiError> {
+    let input = read_input(state, request).await?;
+    Ok(input
+        .fields
+        .into_iter()
+        .map(|(k, v)| (k, v.map_or(Value::Null, Value::String)))
+        .collect())
+}
+
 async fn read_input(state: &AppState, request: Request) -> Result<Input, ApiError> {
     let content_type = request
         .headers()
@@ -355,7 +368,7 @@ fn check_email(errs: &mut Errs, input: &Input, key: &str, max: usize) {
 }
 
 /// Pendekatan untuk aturan `email` Laravel (tanpa validasi DNS).
-fn is_email(v: &str) -> bool {
+pub(crate) fn is_email(v: &str) -> bool {
     let re =
         regex::Regex::new(r"^[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)+$")
             .expect("regex email valid");
@@ -538,7 +551,7 @@ fn text_settings(input: &Input) -> Vec<(&'static str, Option<String>, &'static s
 }
 
 /// `AppSetting::setValue` (`updateOrCreate`). Audit hanya bila ada perubahan.
-async fn upsert_setting(
+pub(crate) async fn upsert_setting(
     tx: &mut Transaction<'_, MySql>,
     actor: u64,
     url: &str,

@@ -58,10 +58,10 @@ Kolom **Status** diisi saat modul dipindah ke Rust. Awalnya semua `belum`.
 | 5 | POST | `/api/app-settings` | AppSettingController@store | auth:sanctum,role:admin | rust |
 | 6 | POST | `/api/app-settings/test-ai-connection` | AppSettingController@testAiConnection | auth:sanctum,role:admin | dihapus |
 | 7 | POST | `/api/app-settings/list-ai-models` | AppSettingController@listAiModels | auth:sanctum,role:admin | dihapus |
-| 8 | POST | `/api/app-settings/test-mail-connection` | AppSettingController@testMailConnection | auth:sanctum,role:admin | belum |
-| 9 | GET | `/api/app-settings/mail-templates` | AppSettingController@mailTemplates | auth:sanctum,role:admin | belum |
-| 10 | POST | `/api/app-settings/mail-templates` | AppSettingController@storeMailTemplates | auth:sanctum,role:admin | belum |
-| 11 | POST | `/api/app-settings/mail-templates/{key}/test` | AppSettingController@testMailTemplate | auth:sanctum,role:admin | belum |
+| 8 | POST | `/api/app-settings/test-mail-connection` | AppSettingController@testMailConnection | auth:sanctum,role:admin | rust |
+| 9 | GET | `/api/app-settings/mail-templates` | AppSettingController@mailTemplates | auth:sanctum,role:admin | rust |
+| 10 | POST | `/api/app-settings/mail-templates` | AppSettingController@storeMailTemplates | auth:sanctum,role:admin | rust |
+| 11 | POST | `/api/app-settings/mail-templates/{key}/test` | AppSettingController@testMailTemplate | auth:sanctum,role:admin | rust |
 | 12 | GET | `/api/app-settings/kontrak-templates` | AppSettingController@kontrakTemplates | auth:sanctum,role:admin | rust |
 | 13 | GET | `/api/app-settings/kontrak-templates/{key}/download` | AppSettingController@downloadKontrakTemplate | auth:sanctum,role:admin | rust |
 | 14 | GET | `/api/app-settings/backups` | BackupController@index | auth:sanctum,role:admin | rust |
