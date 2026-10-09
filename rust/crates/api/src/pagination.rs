@@ -136,6 +136,76 @@ pub fn paginate_with_query(
     })
 }
 
+/// Paginator `LengthAwarePaginator` Laravel dengan url halaman dari pemanggil (`url_for`), agar urutan
+/// dan pengodean query mengikuti `Arr::query` (`->appends($request->query())`).
+///
+/// Berbeda dari `paginate_with_query`:
+/// - `links.prev` dan `meta.links[0]` memuat url dan nomor halaman sebelumnya bila halaman > 1
+///   (`previousPageUrl()`); di halaman 1 keduanya null.
+/// - `from` dan `to` null bila halaman itu kosong (`firstItem()` dan `lastItem()` memakai jumlah item di halaman).
+pub fn paginate_laravel(
+    data: Vec<Value>,
+    total: u64,
+    params: PageParams,
+    base_url: &str,
+    url_for: &dyn Fn(u64) -> String,
+) -> Value {
+    let PageParams { page, per_page } = params;
+    let last_page = total.div_ceil(per_page).max(1);
+    let (from, to) = if data.is_empty() {
+        (Value::Null, Value::Null)
+    } else {
+        let from = (page - 1) * per_page + 1;
+        (json!(from), json!(from + data.len() as u64 - 1))
+    };
+    let prev_page = (page > 1).then_some(page - 1);
+    let next_page = (page < last_page).then_some(page + 1);
+
+    let mut meta_links = vec![json!({
+        "url": prev_page.map(url_for),
+        "label": "&laquo; Previous",
+        "page": prev_page,
+        "active": false,
+    })];
+    for slot in window(page, last_page) {
+        meta_links.push(match slot {
+            Slot::Page(n) => json!({
+                "url": url_for(n),
+                "label": n.to_string(),
+                "page": n,
+                "active": n == page,
+            }),
+            Slot::Dots => json!({ "url": Value::Null, "label": "...", "active": false }),
+        });
+    }
+    meta_links.push(json!({
+        "url": next_page.map(url_for),
+        "label": "Next &raquo;",
+        "page": next_page,
+        "active": false,
+    }));
+
+    json!({
+        "data": data,
+        "links": {
+            "first": url_for(1),
+            "last": url_for(last_page),
+            "prev": prev_page.map(url_for),
+            "next": next_page.map(url_for),
+        },
+        "meta": {
+            "current_page": page,
+            "from": from,
+            "last_page": last_page,
+            "links": meta_links,
+            "path": base_url,
+            "per_page": per_page,
+            "to": to,
+            "total": total,
+        },
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
