@@ -317,14 +317,14 @@ pub async fn create_handoff(State(state): State<AppState>, headers: HeaderMap) -
     {
         return too_many_attempts(retry);
     }
-    // Laravel hanya menerima Bearer untuk handoff (400 bila tidak ada), bukan cookie sesi.
-    let bearer = headers
-        .get(axum::http::header::AUTHORIZATION)
-        .and_then(|v| v.to_str().ok())
-        .and_then(|v| v.strip_prefix("Bearer "))
+    // Bearer, lalu cookie `arumanis_token` (sama seperti middleware Laravel). Tanpa keduanya: 400.
+    // Cookie sesi (`arumanis_session`) tetap tidak dipakai di sini.
+    let token = crate::session::bearer_from_headers(&headers)
         .map(str::trim)
-        .filter(|t| !t.is_empty());
-    let Some(token) = bearer.map(str::to_string) else {
+        .filter(|t| !t.is_empty())
+        .map(str::to_string)
+        .or_else(|| crate::session::auth_cookie_token(&headers, &state.session.auth_name));
+    let Some(token) = token else {
         return (
             axum::http::StatusCode::BAD_REQUEST,
             Json(json!({ "message": "Bearer token required." })),
@@ -376,7 +376,14 @@ pub async fn exchange_handoff(
         Ok(None) => return handoff_gone(),
         Err(e) => return internal(e).into_response(),
     };
-    Json(json!({ "user": user, "token": token })).into_response()
+    let cookie = state.session.auth_set_header(&token);
+    let mut response = Json(json!({ "user": user, "token": token })).into_response();
+    if let Some(cookie) = cookie {
+        response
+            .headers_mut()
+            .append(axum::http::header::SET_COOKIE, cookie);
+    }
+    response
 }
 
 /// Aturan `required|string|size:48` dengan pesan Laravel. Input di-trim seperti `TrimStrings`.

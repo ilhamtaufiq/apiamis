@@ -29,9 +29,15 @@ return Application::configure(basePath: dirname(__DIR__))
             'maintenance' => \App\Http\Middleware\EnsureNotInMaintenance::class,
         ]);
 
+        // Cookie token browser (`arumanis_token`) tidak dienkripsi, karena berisi token Sanctum mentah
+        $middleware->encryptCookies(except: [
+            env('ARUMANIS_AUTH_COOKIE', 'arumanis_token'),
+        ]);
+
         // Sanctum
         $middleware->api(prepend: [
             \App\Http\Middleware\AcceptSessionCookie::class,
+            \App\Http\Middleware\AcceptAuthCookie::class,
             \Laravel\Sanctum\Http\Middleware\EnsureFrontendRequestsAreStateful::class,
         ]);
 

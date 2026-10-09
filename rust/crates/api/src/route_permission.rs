@@ -23,7 +23,7 @@ pub async fn check(State(state): State<AppState>, req: Request<Body>, next: Next
     }
     let method = req.method().as_str().to_string();
 
-    let Some(token) = crate::session::token_from_headers(req.headers(), &state.session.name) else {
+    let Some(token) = crate::session::token_from_headers(req.headers(), &state.session) else {
         return next.run(req).await;
     };
     let Ok(user) = auth::authenticate(&state.pool, &token).await else {

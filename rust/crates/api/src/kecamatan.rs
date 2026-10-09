@@ -119,7 +119,7 @@ pub async fn index(
     State(state): State<AppState>,
     headers: HeaderMap,
 ) -> Result<Json<Value>, ApiError> {
-    let token = crate::session::token_from_headers(&headers, &state.session.name)
+    let token = crate::session::token_from_headers(&headers, &state.session)
         .ok_or_else(ApiError::unauthenticated)?;
 
     auth::authenticate(&state.pool, &token)

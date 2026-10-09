@@ -153,7 +153,7 @@ pub async fn check(State(state): State<AppState>, req: Request<Body>, next: Next
 
 /// User id dari token Bearer yang valid; `None` jika tidak ada atau tidak valid.
 async fn bearer_user(state: &AppState, headers: &HeaderMap) -> Option<u64> {
-    let token = crate::session::token_from_headers(headers, &state.session.name)?;
+    let token = crate::session::token_from_headers(headers, &state.session)?;
     auth::authenticate(&state.pool, &token)
         .await
         .ok()

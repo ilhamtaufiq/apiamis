@@ -81,4 +81,20 @@ return [
         'validate_csrf_token' => Illuminate\Foundation\Http\Middleware\ValidateCsrfToken::class,
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | Cookie Auth Browser (arumanis_token)
+    |--------------------------------------------------------------------------
+    |
+    | Token Sanctum yang sama dengan `token` pada respon login disimpan juga di
+    | cookie httpOnly untuk alur SSO browser. Masa berlaku cookie mengikuti
+    | `expiration` di atas. Secure default true di production.
+    |
+    */
+
+    'auth_cookie' => [
+        'name' => env('ARUMANIS_AUTH_COOKIE', 'arumanis_token'),
+        'secure' => env('SESSION_COOKIE_SECURE', env('APP_ENV', 'production') === 'production'),
+    ],
+
 ];

@@ -186,7 +186,7 @@ pub async fn require_auth(
     state: &AppState,
     headers: &axum::http::HeaderMap,
 ) -> Result<auth::AuthUser, ApiError> {
-    let token = session::token_from_headers(headers, &state.session.name)
+    let token = session::token_from_headers(headers, &state.session)
         .ok_or_else(ApiError::unauthenticated)?;
     auth::authenticate(&state.pool, &token)
         .await
@@ -197,6 +197,7 @@ pub async fn require_auth(
 pub fn app(config: &Config, state: AppState) -> Router {
     let permission_state = state.clone();
     let maintenance_state = state.clone();
+    let csrf_state = state.clone();
     Router::new()
         // Sama seperti `health: '/up'` di bootstrap/app.php (Laravel).
         .route("/up", get(up))
@@ -1137,6 +1138,11 @@ pub fn app(config: &Config, state: AppState) -> Router {
             Duration::from_secs(config.request_timeout_secs),
         ))
         .layer(DefaultBodyLimit::max(config.body_limit_bytes))
+        // CSRF untuk cookie `arumanis_token`. Di dalam CORS agar 401 tetap membawa header CORS.
+        .layer(axum::middleware::from_fn_with_state(
+            csrf_state,
+            session::reject_cookie_csrf,
+        ))
         .layer(cors_layer())
         .layer(TraceLayer::new_for_http())
         .layer(PropagateRequestIdLayer::x_request_id())

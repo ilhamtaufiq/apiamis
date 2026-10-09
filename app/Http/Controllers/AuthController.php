@@ -175,7 +175,7 @@ class AuthController extends Controller
         return response()->json([
             'user' => new UserResource($user),
             'token' => $token,
-        ]);
+        ])->withCookie($this->authCookie($token));
     }
 
     /**
@@ -203,7 +203,7 @@ class AuthController extends Controller
 
         return response()->json([
             'message' => 'Logged out successfully'
-        ]);
+        ])->withCookie($this->forgetAuthCookie());
     }
 
     /**
@@ -391,12 +391,53 @@ class AuthController extends Controller
         return response()->json([
             'user' => new UserResource($user),
             'token' => $payload['token'],
-        ]);
+        ])->withCookie($this->authCookie($payload['token']));
     }
 
     private function handoffCacheKey(string $code): string
     {
         return 'auth_handoff:' . $code;
+    }
+
+    /**
+     * Cookie httpOnly berisi token Sanctum untuk alur SSO browser.
+     * Host-only (tanpa Domain), Path=/, SameSite=Lax.
+     */
+    private function authCookie(string $token)
+    {
+        $config = config('sanctum.auth_cookie');
+
+        return cookie(
+            $config['name'],
+            $token,
+            (int) config('sanctum.expiration', 720),
+            '/',
+            null,
+            (bool) $config['secure'],
+            true,
+            false,
+            'lax'
+        );
+    }
+
+    /**
+     * Cookie kedaluwarsa (Max-Age=0) dengan nama, path, dan atribut yang sama.
+     */
+    private function forgetAuthCookie()
+    {
+        $config = config('sanctum.auth_cookie');
+
+        return cookie(
+            $config['name'],
+            '',
+            -1,
+            '/',
+            null,
+            (bool) $config['secure'],
+            true,
+            false,
+            'lax'
+        );
     }
 
     private function resolveOAuthCallbackBase(Request $request): string

@@ -200,6 +200,9 @@ pub async fn login(
     if let Some(cookie) = state.session.set_header(&token) {
         response.headers_mut().append(header::SET_COOKIE, cookie);
     }
+    if let Some(cookie) = state.session.auth_set_header(&token) {
+        response.headers_mut().append(header::SET_COOKIE, cookie);
+    }
     response
 }
 
@@ -271,6 +274,9 @@ pub async fn logout(
         if let Some(cookie) = state.session.clear_header(name) {
             response.headers_mut().append(header::SET_COOKIE, cookie);
         }
+    }
+    if let Some(cookie) = state.session.auth_clear_header() {
+        response.headers_mut().append(header::SET_COOKIE, cookie);
     }
     Ok(response)
 }
