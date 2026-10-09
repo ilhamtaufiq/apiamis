@@ -155,7 +155,7 @@ Kolom **Status** diisi saat modul dipindah ke Rust. Awalnya semua `belum`.
 
 | No | Method | Path | Controller@action | Middleware | Status |
 | --- | --- | --- | --- | --- | --- |
-| 1 | GET | `/api/pekerjaan/document-register` | PekerjaanController@documentRegister | auth:sanctum | belum |
+| 1 | GET | `/api/pekerjaan/document-register` | PekerjaanController@documentRegister | auth:sanctum | parsial |
 | 2 | GET | `/api/pekerjaan/kecamatan/{kecamatanId}` | PekerjaanController@byKecamatan | auth:sanctum | rust |
 | 3 | GET | `/api/pekerjaan/desa/{desaId}` | PekerjaanController@byDesa | auth:sanctum | rust |
 | 4 | GET | `/api/pekerjaan/kegiatan/{kegiatanId}` | PekerjaanController@byKegiatan | auth:sanctum | rust |
