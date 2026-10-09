@@ -67,6 +67,14 @@ Ini prasyarat paling penting. Selama Laravel masih mengurus token dan role, Lara
 - Hapus dependensi PHP dari `Dockerfile` dan `.dockerignore`.
 - Perbarui `CLAUDE.md`, `README.md`, dan `AGENTS.md` yang masih menyebut Laravel.
 
+## Keputusan yang sudah diambil
+
+- Websocket Reverb: dihapus total (config, channels, Broadcast::routes, proxy Apache/Docker, dan blok Reverb di entrypoint).
+- Dokumentasi API `l5-swagger`: dihapus (paket dan config). Anotasi `@OA` di controller tinggal sebagai komentar sampai `app/` dihapus di fase 6.
+- Desa profile: dihapus (route Laravel dan Rust). Modul `raw_model` dipertahankan karena dipakai `spam_units` dan `spam_integration`.
+- Procurement kontrak/push: tetap stub. Tes ke SPSE sandbox dilakukan user sendiri.
+- Baseline schema: `rust/migrations/0000_baseline.sql` dibuat dari backup production (struktur 110 tabel dan 139 baris `migrations`, tanpa data).
+
 ## Keputusan yang perlu Anda ambil
 
 1. **Token kedaluwarsa:** setuju pakai 720 menit seperti Laravel sekarang?

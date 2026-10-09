@@ -2496,7 +2496,7 @@ pub async fn fetch_raw_rows(
     }
     let rows = q.fetch_all(c).await.map_err(internal)?;
     rows.iter()
-        .map(|r| crate::desa_profile::raw_model(r, &[]))
+        .map(|r| crate::raw_model::raw_model(r, &[]))
         .collect()
 }
 

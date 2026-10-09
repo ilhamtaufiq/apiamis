@@ -10,9 +10,5 @@ Route::get('/', function () {
         'api' => url('/api'),
     ];
 
-    if (! app()->environment('production')) {
-        $payload['docs'] = url('/api/documentation');
-    }
-
     return response()->json($payload);
 });

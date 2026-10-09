@@ -114,7 +114,6 @@ Route::get('onlyoffice/media/{media}/download', [OnlyOfficeController::class, 'd
 Route::get('onlyoffice/temp/{file}', [OnlyOfficeController::class, 'tempDownload'])->name('onlyoffice.temp.download')->middleware('signed');
 
 Route::middleware('auth:sanctum')->group(function () {
-    Broadcast::routes();
     Route::post('auth/logout', [AuthController::class, 'logout']);
     Route::get('auth/me', [AuthController::class, 'me']);
     // Self-service profil & avatar (semua user pada datanya sendiri)
@@ -256,7 +255,6 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::patch('survey-tugas/{survey_tugas}', [SurveyTugasController::class, 'update'])->middleware('role:admin');
     Route::delete('survey-tugas/{survey_tugas}', [SurveyTugasController::class, 'destroy'])->middleware('role:admin');
     Route::apiResource('kecamatan', KecamatanController::class);
-    Route::get('desa/{desa}/profile', [DesaController::class, 'profile']);
     Route::apiResource('desa', DesaController::class);
     Route::apiResource('penyedia', PenyediaController::class)->parameters(['penyedia' => 'penyedia']);
     Route::apiResource('kegiatan', KegiatanController::class);

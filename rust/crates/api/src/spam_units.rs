@@ -6,7 +6,7 @@
 //!
 //! Catatan paritas:
 //! - Binding model `{spamUnit}` dan `{unitSpam}` dijalankan sebelum auth (404 lebih dulu), seperti
-//!   pola `desa_profile`. `{id}` pada show/update/destroy juga 404 sebelum auth.
+//!   pola `raw_model`. `{id}` pada show/update/destroy juga 404 sebelum auth.
 //! - Setiap `save()` yang mengubah baris menulis audit dan notifikasi admin (`Auditable`,
 //!   `NotifiesAdminsOnChanges`). Hapus massal tidak memicu event.
 //! - `GET /api/public/*` tanpa token: `byUserRole()` menghasilkan `1 = 0`, sama dengan Laravel.
@@ -30,7 +30,7 @@ use shared::ApiError;
 use sqlx::{MySql, MySqlConnection, MySqlPool, Row, Transaction};
 
 use crate::{
-    desa_profile::{raw_model, Cast},
+    raw_model::{raw_model, Cast},
     format::number_like_php,
     foto::base_url,
     pagination::{self},

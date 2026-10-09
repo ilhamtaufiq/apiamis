@@ -20,16 +20,7 @@ if [ ! -L /var/www/html/public/storage ]; then
     php artisan storage:link
 fi
 
-# Auto-enable Reverb when credentials exist but BROADCAST_CONNECTION was not switched (common Coolify oversight).
-if [ -n "${REVERB_APP_KEY:-}" ] && [ "${BROADCAST_CONNECTION:-}" != "reverb" ]; then
-    log "REVERB_APP_KEY detected — setting BROADCAST_CONNECTION=reverb (was: ${BROADCAST_CONNECTION:-unset})"
-    export BROADCAST_CONNECTION=reverb
-fi
-
-log "Broadcast driver: ${BROADCAST_CONNECTION:-unset}"
-log "Reverb app key: ${REVERB_APP_KEY:+set}${REVERB_APP_KEY:-unset}"
-
-# Clear and cache config for production (after BROADCAST_CONNECTION export above)
+# Clear and cache config for production
 php artisan config:clear
 php artisan config:cache
 php artisan route:cache
@@ -41,45 +32,7 @@ if [ -f "scripts/index_knowledge.py" ] && [ -x "venv/bin/python" ]; then
     ./venv/bin/python scripts/index_knowledge.py || log "AI Indexing failed, but continuing..."
 fi
 
-REVERB_PID=""
 RUST_PID=""
-
-start_reverb() {
-    if [ "${DISABLE_REVERB:-false}" = "true" ]; then
-        log "Reverb disabled via DISABLE_REVERB=true"
-        return
-    fi
-
-    if [ -z "${REVERB_APP_KEY:-}" ]; then
-        log "Skipping Reverb: REVERB_APP_KEY is not set"
-        return
-    fi
-
-    if [ "${BROADCAST_CONNECTION:-}" != "reverb" ]; then
-        log "Skipping Reverb: BROADCAST_CONNECTION is not reverb (${BROADCAST_CONNECTION:-unset})"
-        return
-    fi
-
-    REVERB_HOST_BIND="${REVERB_SERVER_HOST:-0.0.0.0}"
-    REVERB_PORT_BIND="${REVERB_SERVER_PORT:-8080}"
-    log "Starting Laravel Reverb on ${REVERB_HOST_BIND}:${REVERB_PORT_BIND}..."
-
-    REVERB_ARGS=(--host="${REVERB_HOST_BIND}" --port="${REVERB_PORT_BIND}")
-    if [ -n "${REVERB_HOST:-}" ]; then
-        REVERB_ARGS+=(--hostname="${REVERB_HOST}")
-    fi
-
-    php artisan reverb:start "${REVERB_ARGS[@]}" >> /proc/1/fd/2 2>&1 &
-    REVERB_PID=$!
-
-    sleep 2
-    if kill -0 "$REVERB_PID" 2>/dev/null; then
-        log "Reverb started (pid ${REVERB_PID})"
-    else
-        log "ERROR: Reverb process exited immediately — check REVERB_APP_SECRET and storage/logs"
-        REVERB_PID=""
-    fi
-}
 
 start_rust() {
     if [ -z "${DATABASE_URL:-}" ]; then
@@ -100,7 +53,6 @@ start_rust() {
     fi
 }
 
-start_reverb
 start_rust
 
 apache2-foreground &
@@ -108,9 +60,6 @@ APACHE_PID=$!
 
 shutdown() {
     kill "$APACHE_PID" 2>/dev/null || true
-    if [ -n "$REVERB_PID" ]; then
-        kill "$REVERB_PID" 2>/dev/null || true
-    fi
     if [ -n "$RUST_PID" ]; then
         kill "$RUST_PID" 2>/dev/null || true
     fi

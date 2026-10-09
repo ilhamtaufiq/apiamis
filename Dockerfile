@@ -38,8 +38,8 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry \
 FROM php:8.3-apache-bookworm
 WORKDIR /var/www/html
 
-# Enable Apache rewrite, headers, and WebSocket proxy for Reverb (/app/*)
-RUN a2enmod rewrite headers proxy proxy_http proxy_wstunnel
+# Enable Apache rewrite and headers
+RUN a2enmod rewrite headers
 
 # Ekstensi PHP sebagai binary prebuilt (detik, bukan menit).
 COPY --from=mlocati/php-extension-installer /usr/bin/install-php-extensions /usr/local/bin/
@@ -70,7 +70,7 @@ RUN rm -rf bootstrap/cache/*.php \
     && rm -rf storage/framework/sessions/* \
     && rm -rf storage/framework/views/*
 
-# Apache vhost: Laravel public/ + Reverb proxy (/app, /apps -> :8080)
+# Apache vhost: Laravel public/
 COPY docker/000-default.conf /etc/apache2/sites-available/000-default.conf
 
 # Copy and make entrypoint executable
@@ -79,6 +79,6 @@ COPY --from=rust-build /usr/local/bin/apiamis-api /usr/local/bin/apiamis-api
 COPY docker-entrypoint.sh /usr/local/bin/
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 
-EXPOSE 80 8080
+EXPOSE 80
 
 CMD ["/usr/local/bin/docker-entrypoint.sh"]
