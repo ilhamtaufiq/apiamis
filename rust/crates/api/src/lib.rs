@@ -71,6 +71,7 @@ pub mod pekerjaan_import;
 pub mod peripaan;
 pub mod permissions;
 pub mod pekerjaan_detail;
+pub mod pekerjaan_doc_register;
 pub mod pekerjaan_rel;
 pub mod pekerjaan_write;
 pub mod pengawas_write;
@@ -508,6 +509,10 @@ pub fn app(config: &Config, state: AppState) -> Router {
                 .delete(pekerjaan_write::destroy),
         )
         // Segmen statis (kecamatan, desa, kegiatan, stats, media) mengalahkan `{id}`.
+        .route(
+            "/api/pekerjaan/document-register",
+            get(pekerjaan_doc_register::index),
+        )
         .route("/api/pekerjaan/kecamatan/{kecamatanId}", get(pekerjaan_by::by_kecamatan))
         .route(
             "/api/pekerjaan/kecamatan/{kecamatanId}/desa/{desaId}",
