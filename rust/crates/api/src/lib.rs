@@ -468,7 +468,6 @@ pub fn app(config: &Config, state: AppState) -> Router {
             get(app_settings::download_kontrak_template),
         )
         .route(
-<<<<<<< HEAD
             "/api/app-settings/backups/google-drive/status",
             get(google_drive_backup::status),
         )
@@ -491,7 +490,8 @@ pub fn app(config: &Config, state: AppState) -> Router {
         .route(
             "/api/app-settings/backups/{filename}/google-drive",
             post(google_drive_backup::upload),
-=======
+        )
+        .route(
             "/api/app-settings/test-mail-connection",
             post(app_settings_mail::test_mail_connection),
         )
@@ -502,7 +502,6 @@ pub fn app(config: &Config, state: AppState) -> Router {
         .route(
             "/api/app-settings/mail-templates/{key}/test",
             post(app_settings_mail::mail_template_test),
->>>>>>> migrate/app-settings-mail
         )
         .route("/api/app-settings/backups", get(app_settings::backups_index))
         .route(
