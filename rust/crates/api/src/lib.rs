@@ -105,6 +105,7 @@ pub mod session;
 pub mod sk;
 pub mod spam_import;
 pub mod spam_integration;
+pub mod spam_kelembagaan;
 pub mod spam_units;
 pub mod spm_sanitasi;
 pub mod spm_sanitasi_capaian;
@@ -118,6 +119,7 @@ pub mod tags_write;
 pub mod tiket;
 pub mod tiket_write;
 pub mod tool_pdfs;
+pub mod user_drive;
 pub mod user_pekerjaan;
 pub mod user_pekerjaan_gaps;
 pub mod user_pekerjaan_broadcast;
@@ -1068,6 +1070,47 @@ pub fn app(config: &Config, state: AppState) -> Router {
                 .layer(DefaultBodyLimit::max(tool_pdfs::BODY_LIMIT)),
         )
         .route("/api/tool-pdfs/{id}", delete(tool_pdfs::destroy))
+        // User drive (UserDriveController). Rute statis (`folders`, `files`, `bulk`) didaftarkan
+        // sebelum `{id}`. Unggahan memakai batas body khusus, seperti rute foto.
+        .route("/api/user-drive", get(user_drive::index))
+        .route("/api/user-drive/folders", post(user_drive::store_folder))
+        .route(
+            "/api/user-drive/files",
+            post(user_drive::store_file).layer(DefaultBodyLimit::max(user_drive::BODY_LIMIT)),
+        )
+        .route("/api/user-drive/bulk", delete(user_drive::bulk_destroy))
+        .route("/api/user-drive/{id}/share", post(user_drive::share))
+        .route(
+            "/api/user-drive/{id}",
+            get(user_drive::show)
+                .put(user_drive::rename)
+                .delete(user_drive::destroy),
+        )
+        // Spam kelembagaan admin (SpamKelembagaanShareController). Form publik `/api/public/...` belum dipindah.
+        .route(
+            "/api/spam-kelembagaan/share-links",
+            get(spam_kelembagaan::index_links).post(spam_kelembagaan::store_link),
+        )
+        .route(
+            "/api/spam-kelembagaan/share-links/{id}",
+            put(spam_kelembagaan::update_link).delete(spam_kelembagaan::destroy_link),
+        )
+        .route(
+            "/api/spam-kelembagaan/submissions",
+            get(spam_kelembagaan::index_submissions),
+        )
+        .route(
+            "/api/spam-kelembagaan/submissions/{id}",
+            get(spam_kelembagaan::show_submission),
+        )
+        .route(
+            "/api/spam-kelembagaan/submissions/{id}/approve",
+            post(spam_kelembagaan::approve_submission),
+        )
+        .route(
+            "/api/spam-kelembagaan/submissions/{id}/reject",
+            post(spam_kelembagaan::reject_submission),
+        )
         .route("/api/{*rest}", any(not_found))
         .with_state(state)
         .route_layer(axum::middleware::from_fn_with_state(
