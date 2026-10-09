@@ -42,10 +42,10 @@ Kolom **Status** diisi saat modul dipindah ke Rust. Awalnya semua `belum`.
 | 5 | GET | `/api/auth/google/callback` | AuthController@handleGoogleCallback | - | rust |
 | 6 | POST | `/api/auth/logout` | AuthController@logout | auth:sanctum | rust |
 | 7 | GET | `/api/auth/me` | AuthController@me | auth:sanctum | rust |
-| 8 | PUT | `/api/auth/profile` | AuthController@updateProfile | auth:sanctum | belum |
-| 9 | POST | `/api/auth/avatar` | AuthController@uploadAvatar | auth:sanctum | belum |
-| 10 | DELETE | `/api/auth/avatar` | AuthController@deleteAvatar | auth:sanctum | belum |
-| 11 | POST | `/api/auth/impersonate/{user}` | AuthController@impersonate | auth:sanctum,role:admin | belum |
+| 8 | PUT | `/api/auth/profile` | AuthController@updateProfile | auth:sanctum | rust |
+| 9 | POST | `/api/auth/avatar` | AuthController@uploadAvatar | auth:sanctum | rust |
+| 10 | DELETE | `/api/auth/avatar` | AuthController@deleteAvatar | auth:sanctum | rust |
+| 11 | POST | `/api/auth/impersonate/{user}` | AuthController@impersonate | auth:sanctum,role:admin | rust |
 
 ### app-settings (27)
 
@@ -113,11 +113,11 @@ Kolom **Status** diisi saat modul dipindah ke Rust. Awalnya semua `belum`.
 | 1 | GET | `/api/public/puspen/progress-fisik` | PuspenProgressFisikController@publicIndex | - | dihapus |
 | 2 | GET | `/api/public/spam-units/stats` | SpamUnitController@publicStats | - | rust |
 | 3 | GET | `/api/public/spam-units/map-stats` | SpamUnitController@publicMapStats | - | rust |
-| 4 | GET | `/api/public/spam-kelembagaan/form/{token}` | SpamKelembagaanShareController@publicShow | throttle:60,1 | belum |
-| 5 | POST | `/api/public/spam-kelembagaan/form/{token}` | SpamKelembagaanShareController@publicSubmit | throttle:10,1 | belum |
+| 4 | GET | `/api/public/spam-kelembagaan/form/{token}` | SpamKelembagaanShareController@publicShow | throttle:60,1 | rust |
+| 5 | POST | `/api/public/spam-kelembagaan/form/{token}` | SpamKelembagaanShareController@publicSubmit | throttle:10,1 | rust |
 | 6 | GET | `/api/public/spm-sanitasi/stats` | SpmSanitasiController@publicStats | - | rust |
 | 7 | GET | `/api/public/spm-sanitasi/map-stats` | SpmSanitasiController@publicMapStats | - | rust |
-| 8 | POST | `/api/public/contact` | ContactController@store | throttle:contact-inquiries | belum |
+| 8 | POST | `/api/public/contact` | ContactController@store | throttle:contact-inquiries | rust |
 | 9 | GET | `/api/public/puspen/media-shares/{shareToken}` | PuspenMediaShareController@publicShow | - | dihapus |
 | 10 | GET | `/api/public/puspen/media-shares/{shareToken}/preview/{media}` | PuspenMediaShareController@publicPreview | - | dihapus |
 | 11 | GET | `/api/public/puspen/media-shares/{shareToken}/download` | PuspenMediaShareController@publicDownload | - | dihapus |
@@ -179,12 +179,12 @@ Kolom **Status** diisi saat modul dipindah ke Rust. Awalnya semua `belum`.
 
 | No | Method | Path | Controller@action | Middleware | Status |
 | --- | --- | --- | --- | --- | --- |
-| 1 | GET | `/api/menu-permissions/user/menus` | MenuPermissionController@getUserMenus | auth:sanctum | belum |
-| 2 | GET | `/api/menu-permissions` | MenuPermissionController@index | auth:sanctum | belum |
-| 3 | POST | `/api/menu-permissions` | MenuPermissionController@store | auth:sanctum | belum |
-| 4 | GET | `/api/menu-permissions/{id}` | MenuPermissionController@show | auth:sanctum | belum |
-| 5 | PUT/PATCH | `/api/menu-permissions/{id}` | MenuPermissionController@update | auth:sanctum | belum |
-| 6 | DELETE | `/api/menu-permissions/{id}` | MenuPermissionController@destroy | auth:sanctum | belum |
+| 1 | GET | `/api/menu-permissions/user/menus` | MenuPermissionController@getUserMenus | auth:sanctum | rust |
+| 2 | GET | `/api/menu-permissions` | MenuPermissionController@index | auth:sanctum | rust |
+| 3 | POST | `/api/menu-permissions` | MenuPermissionController@store | auth:sanctum | rust |
+| 4 | GET | `/api/menu-permissions/{id}` | MenuPermissionController@show | auth:sanctum | rust |
+| 5 | PUT/PATCH | `/api/menu-permissions/{id}` | MenuPermissionController@update | auth:sanctum | rust |
+| 6 | DELETE | `/api/menu-permissions/{id}` | MenuPermissionController@destroy | auth:sanctum | rust |
 
 ### sipd-pekerjaan-links (3)
 
@@ -321,14 +321,14 @@ Kolom **Status** diisi saat modul dipindah ke Rust. Awalnya semua `belum`.
 
 | No | Method | Path | Controller@action | Middleware | Status |
 | --- | --- | --- | --- | --- | --- |
-| 1 | GET | `/api/spam-kelembagaan/share-links` | SpamKelembagaanShareController@indexLinks | auth:sanctum | belum |
-| 2 | POST | `/api/spam-kelembagaan/share-links` | SpamKelembagaanShareController@storeLink | auth:sanctum | belum |
-| 3 | PUT | `/api/spam-kelembagaan/share-links/{shareLink}` | SpamKelembagaanShareController@updateLink | auth:sanctum | belum |
-| 4 | DELETE | `/api/spam-kelembagaan/share-links/{shareLink}` | SpamKelembagaanShareController@destroyLink | auth:sanctum | belum |
-| 5 | GET | `/api/spam-kelembagaan/submissions` | SpamKelembagaanShareController@indexSubmissions | auth:sanctum | belum |
-| 6 | GET | `/api/spam-kelembagaan/submissions/{submission}` | SpamKelembagaanShareController@showSubmission | auth:sanctum | belum |
-| 7 | POST | `/api/spam-kelembagaan/submissions/{submission}/approve` | SpamKelembagaanShareController@approveSubmission | auth:sanctum | belum |
-| 8 | POST | `/api/spam-kelembagaan/submissions/{submission}/reject` | SpamKelembagaanShareController@rejectSubmission | auth:sanctum | belum |
+| 1 | GET | `/api/spam-kelembagaan/share-links` | SpamKelembagaanShareController@indexLinks | auth:sanctum | rust |
+| 2 | POST | `/api/spam-kelembagaan/share-links` | SpamKelembagaanShareController@storeLink | auth:sanctum | rust |
+| 3 | PUT | `/api/spam-kelembagaan/share-links/{shareLink}` | SpamKelembagaanShareController@updateLink | auth:sanctum | rust |
+| 4 | DELETE | `/api/spam-kelembagaan/share-links/{shareLink}` | SpamKelembagaanShareController@destroyLink | auth:sanctum | rust |
+| 5 | GET | `/api/spam-kelembagaan/submissions` | SpamKelembagaanShareController@indexSubmissions | auth:sanctum | rust |
+| 6 | GET | `/api/spam-kelembagaan/submissions/{submission}` | SpamKelembagaanShareController@showSubmission | auth:sanctum | rust |
+| 7 | POST | `/api/spam-kelembagaan/submissions/{submission}/approve` | SpamKelembagaanShareController@approveSubmission | auth:sanctum | rust |
+| 8 | POST | `/api/spam-kelembagaan/submissions/{submission}/reject` | SpamKelembagaanShareController@rejectSubmission | auth:sanctum | rust |
 
 ### spm-sanitasi (15)
 
@@ -369,12 +369,12 @@ Kolom **Status** diisi saat modul dipindah ke Rust. Awalnya semua `belum`.
 
 | No | Method | Path | Controller@action | Middleware | Status |
 | --- | --- | --- | --- | --- | --- |
-| 1 | GET | `/api/survey-tugas` | SurveyTugasController@index | auth:sanctum | belum |
-| 2 | GET | `/api/survey-tugas/{id}` | SurveyTugasController@show | auth:sanctum | belum |
-| 3 | POST | `/api/survey-tugas` | SurveyTugasController@store | auth:sanctum,role:admin | belum |
-| 4 | PUT | `/api/survey-tugas/{survey_tugas}` | SurveyTugasController@update | auth:sanctum,role:admin | belum |
-| 5 | PATCH | `/api/survey-tugas/{survey_tugas}` | SurveyTugasController@update | auth:sanctum,role:admin | belum |
-| 6 | DELETE | `/api/survey-tugas/{survey_tugas}` | SurveyTugasController@destroy | auth:sanctum,role:admin | belum |
+| 1 | GET | `/api/survey-tugas` | SurveyTugasController@index | auth:sanctum | rust |
+| 2 | GET | `/api/survey-tugas/{id}` | SurveyTugasController@show | auth:sanctum | rust |
+| 3 | POST | `/api/survey-tugas` | SurveyTugasController@store | auth:sanctum,role:admin | rust |
+| 4 | PUT | `/api/survey-tugas/{survey_tugas}` | SurveyTugasController@update | auth:sanctum,role:admin | rust |
+| 5 | PATCH | `/api/survey-tugas/{survey_tugas}` | SurveyTugasController@update | auth:sanctum,role:admin | rust |
+| 6 | DELETE | `/api/survey-tugas/{survey_tugas}` | SurveyTugasController@destroy | auth:sanctum,role:admin | rust |
 
 ### kecamatan (5)
 
@@ -540,14 +540,14 @@ Kolom **Status** diisi saat modul dipindah ke Rust. Awalnya semua `belum`.
 
 | No | Method | Path | Controller@action | Middleware | Status |
 | --- | --- | --- | --- | --- | --- |
-| 1 | GET | `/api/user-drive` | UserDriveController@index | auth:sanctum | belum |
-| 2 | POST | `/api/user-drive/folders` | UserDriveController@storeFolder | auth:sanctum | belum |
-| 3 | POST | `/api/user-drive/files` | UserDriveController@storeFile | auth:sanctum | belum |
-| 4 | DELETE | `/api/user-drive/bulk` | UserDriveController@bulkDestroy | auth:sanctum | belum |
-| 5 | POST | `/api/user-drive/{userDriveItem}/share` | UserDriveController@share | auth:sanctum | belum |
-| 6 | GET | `/api/user-drive/{userDriveItem}` | UserDriveController@show | auth:sanctum | belum |
-| 7 | PUT | `/api/user-drive/{userDriveItem}` | UserDriveController@rename | auth:sanctum | belum |
-| 8 | DELETE | `/api/user-drive/{userDriveItem}` | UserDriveController@destroy | auth:sanctum | belum |
+| 1 | GET | `/api/user-drive` | UserDriveController@index | auth:sanctum | rust |
+| 2 | POST | `/api/user-drive/folders` | UserDriveController@storeFolder | auth:sanctum | rust |
+| 3 | POST | `/api/user-drive/files` | UserDriveController@storeFile | auth:sanctum | rust |
+| 4 | DELETE | `/api/user-drive/bulk` | UserDriveController@bulkDestroy | auth:sanctum | rust |
+| 5 | POST | `/api/user-drive/{userDriveItem}/share` | UserDriveController@share | auth:sanctum | rust |
+| 6 | GET | `/api/user-drive/{userDriveItem}` | UserDriveController@show | auth:sanctum | rust |
+| 7 | PUT | `/api/user-drive/{userDriveItem}` | UserDriveController@rename | auth:sanctum | rust |
+| 8 | DELETE | `/api/user-drive/{userDriveItem}` | UserDriveController@destroy | auth:sanctum | rust |
 
 ### users (5)
 
@@ -672,12 +672,12 @@ Kolom **Status** diisi saat modul dipindah ke Rust. Awalnya semua `belum`.
 
 | No | Method | Path | Controller@action | Middleware | Status |
 | --- | --- | --- | --- | --- | --- |
-| 1 | GET | `/api/kanban/board` | KanbanController@board | auth:sanctum | belum |
-| 2 | POST | `/api/kanban/cards` | KanbanController@storeCard | auth:sanctum | belum |
-| 3 | POST | `/api/kanban/cards/from-tiket` | KanbanController@importFromTiket | auth:sanctum | belum |
-| 4 | PUT | `/api/kanban/cards/{card}` | KanbanController@updateCard | auth:sanctum | belum |
-| 5 | PATCH | `/api/kanban/cards/{card}/move` | KanbanController@moveCard | auth:sanctum | belum |
-| 6 | DELETE | `/api/kanban/cards/{card}` | KanbanController@destroyCard | auth:sanctum | belum |
+| 1 | GET | `/api/kanban/board` | KanbanController@board | auth:sanctum | rust |
+| 2 | POST | `/api/kanban/cards` | KanbanController@storeCard | auth:sanctum | rust |
+| 3 | POST | `/api/kanban/cards/from-tiket` | KanbanController@importFromTiket | auth:sanctum | rust |
+| 4 | PUT | `/api/kanban/cards/{card}` | KanbanController@updateCard | auth:sanctum | rust |
+| 5 | PATCH | `/api/kanban/cards/{card}/move` | KanbanController@moveCard | auth:sanctum | rust |
+| 6 | DELETE | `/api/kanban/cards/{card}` | KanbanController@destroyCard | auth:sanctum | rust |
 
 ### tiket (7)
 
@@ -695,12 +695,12 @@ Kolom **Status** diisi saat modul dipindah ke Rust. Awalnya semua `belum`.
 
 | No | Method | Path | Controller@action | Middleware | Status |
 | --- | --- | --- | --- | --- | --- |
-| 1 | GET | `/api/usulan-kegiatan/export-excel` | UsulanKegiatanController@exportExcel | auth:sanctum | belum |
-| 2 | GET | `/api/usulan-kegiatan` | UsulanKegiatanController@index | auth:sanctum | belum |
-| 3 | POST | `/api/usulan-kegiatan` | UsulanKegiatanController@store | auth:sanctum | belum |
-| 4 | GET | `/api/usulan-kegiatan/{id}` | UsulanKegiatanController@show | auth:sanctum | belum |
-| 5 | PUT/PATCH | `/api/usulan-kegiatan/{id}` | UsulanKegiatanController@update | auth:sanctum | belum |
-| 6 | DELETE | `/api/usulan-kegiatan/{id}` | UsulanKegiatanController@destroy | auth:sanctum | belum |
+| 1 | GET | `/api/usulan-kegiatan/export-excel` | UsulanKegiatanController@exportExcel | auth:sanctum | rust |
+| 2 | GET | `/api/usulan-kegiatan` | UsulanKegiatanController@index | auth:sanctum | rust |
+| 3 | POST | `/api/usulan-kegiatan` | UsulanKegiatanController@store | auth:sanctum | rust |
+| 4 | GET | `/api/usulan-kegiatan/{id}` | UsulanKegiatanController@show | auth:sanctum | rust |
+| 5 | PUT/PATCH | `/api/usulan-kegiatan/{id}` | UsulanKegiatanController@update | auth:sanctum | rust |
+| 6 | DELETE | `/api/usulan-kegiatan/{id}` | UsulanKegiatanController@destroy | auth:sanctum | rust |
 
 ### progress (2)
 
@@ -777,12 +777,12 @@ Kolom **Status** diisi saat modul dipindah ke Rust. Awalnya semua `belum`.
 
 | No | Method | Path | Controller@action | Middleware | Status |
 | --- | --- | --- | --- | --- | --- |
-| 1 | POST | `/api/events/{event}/upload` | EventController@upload | auth:sanctum | belum |
-| 2 | GET | `/api/events` | EventController@index | auth:sanctum | belum |
-| 3 | POST | `/api/events` | EventController@store | auth:sanctum | belum |
-| 4 | GET | `/api/events/{id}` | EventController@show | auth:sanctum | belum |
-| 5 | PUT/PATCH | `/api/events/{id}` | EventController@update | auth:sanctum | belum |
-| 6 | DELETE | `/api/events/{id}` | EventController@destroy | auth:sanctum | belum |
+| 1 | POST | `/api/events/{event}/upload` | EventController@upload | auth:sanctum | rust |
+| 2 | GET | `/api/events` | EventController@index | auth:sanctum | rust |
+| 3 | POST | `/api/events` | EventController@store | auth:sanctum | rust |
+| 4 | GET | `/api/events/{id}` | EventController@show | auth:sanctum | rust |
+| 5 | PUT/PATCH | `/api/events/{id}` | EventController@update | auth:sanctum | rust |
+| 6 | DELETE | `/api/events/{id}` | EventController@destroy | auth:sanctum | rust |
 
 ### simulation-networks (11)
 
@@ -816,12 +816,12 @@ Kolom **Status** diisi saat modul dipindah ke Rust. Awalnya semua `belum`.
 
 | No | Method | Path | Controller@action | Middleware | Status |
 | --- | --- | --- | --- | --- | --- |
-| 1 | GET | `/api/tool-pdfs/{toolPdf}/download` | ToolPdfController@download | auth:sanctum | belum |
-| 2 | POST | `/api/tool-pdfs/bulk-download` | ToolPdfController@bulkDownload | auth:sanctum | belum |
-| 3 | POST | `/api/tool-pdfs/sign` | ToolPdfController@sign | auth:sanctum | belum |
-| 4 | GET | `/api/tool-pdfs` | ToolPdfController@index | auth:sanctum | belum |
-| 5 | POST | `/api/tool-pdfs` | ToolPdfController@store | auth:sanctum | belum |
-| 6 | DELETE | `/api/tool-pdfs/{id}` | ToolPdfController@destroy | auth:sanctum | belum |
+| 1 | GET | `/api/tool-pdfs/{toolPdf}/download` | ToolPdfController@download | auth:sanctum | rust |
+| 2 | POST | `/api/tool-pdfs/bulk-download` | ToolPdfController@bulkDownload | auth:sanctum | rust |
+| 3 | POST | `/api/tool-pdfs/sign` | ToolPdfController@sign | auth:sanctum | rust |
+| 4 | GET | `/api/tool-pdfs` | ToolPdfController@index | auth:sanctum | rust |
+| 5 | POST | `/api/tool-pdfs` | ToolPdfController@store | auth:sanctum | rust |
+| 6 | DELETE | `/api/tool-pdfs/{id}` | ToolPdfController@destroy | auth:sanctum | rust |
 
 ### signature-libraries (3)
 
