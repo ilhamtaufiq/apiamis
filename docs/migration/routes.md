@@ -590,7 +590,7 @@ Kolom **Status** diisi saat modul dipindah ke Rust. Awalnya semua `belum`.
 | 1 | POST | `/api/route-permissions/check-access` | RoutePermissionController@check | auth:sanctum | rust |
 | 2 | GET | `/api/route-permissions/rules` | RoutePermissionController@rules | auth:sanctum | rust |
 | 3 | GET | `/api/route-permissions/user/accessible` | RoutePermissionController@accessible | auth:sanctum | rust |
-| 4 | POST | `/api/route-permissions/sync` | RoutePermissionController@sync | auth:sanctum,role:admin | belum |
+| 4 | POST | `/api/route-permissions/sync` | RoutePermissionController@sync | auth:sanctum,role:admin | rust |
 | 5 | GET | `/api/route-permissions` | RoutePermissionController@index | auth:sanctum | rust |
 | 6 | POST | `/api/route-permissions` | RoutePermissionController@store | auth:sanctum | rust |
 | 7 | GET | `/api/route-permissions/{id}` | RoutePermissionController@show | auth:sanctum | rust |
