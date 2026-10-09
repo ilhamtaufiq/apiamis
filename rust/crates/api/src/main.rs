@@ -33,6 +33,10 @@ async fn main() {
             run_blog_assets_cleanup_orphans(&args[1..]).await;
             return;
         }
+        Some("regenerate-thumbs") => {
+            run_regenerate_thumbs(&args[1..]).await;
+            return;
+        }
         _ => {}
     }
 
@@ -191,6 +195,27 @@ async fn run_blog_assets_cleanup_orphans(args: &[String]) {
     match api::blog_write::cleanup_orphan_assets(&pool, hours).await {
         Ok(n) => println!("Deleted {n} orphan blog assets."),
         Err(e) => fail(&e.message),
+    }
+}
+
+/// Membuat ulang thumbnail foto yang hilang di disk (koleksi `foto/pekerjaan`).
+/// Aman dijalankan ulang: hanya menulis thumbnail yang belum ada, berkas asli tidak diubah.
+/// `--dry-run` hanya menghitung.
+async fn run_regenerate_thumbs(args: &[String]) {
+    let dry_run = has_flag(args, "dry-run");
+    let pool = connect_db().await;
+    match api::media::regenerate_missing_thumbs(&pool, "App\\Models\\Foto", "foto/pekerjaan", dry_run).await {
+        Ok(r) => println!(
+            "{}: diperiksa {}, sudah ada {}, {} {}, berkas asli hilang {}, gagal {}",
+            if dry_run { "DRY-RUN" } else { "SELESAI" },
+            r.checked,
+            r.present,
+            if dry_run { "akan dibuat" } else { "dibuat" },
+            r.created,
+            r.missing_original,
+            r.failed,
+        ),
+        Err(e) => fail(&e.to_string()),
     }
 }
 
