@@ -154,6 +154,9 @@ const ALLOWED_ORIGINS: &[&str] = &[
     "https://bun.cianjur.space",
     "https://apiamis.cianjur.space",
     "https://ami.cianjur.space",
+    "https://pengawasan.arumanis.cianjur.space",
+    "https://sipd-lite.cianjur.space",
+    "https://esurvey.cianjur.space",
 ];
 
 /// State bersama untuk handler yang butuh database.
