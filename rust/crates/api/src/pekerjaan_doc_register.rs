@@ -50,7 +50,7 @@ use crate::{
 const PER_PAGE_DEFAULT: i64 = 20;
 /// `Model::$perPage` (Pekerjaan tidak menimpanya). Dipakai `paginate()` bila nilai falsy (0).
 const PER_PAGE_MODEL: i64 = 15;
-const PHP_TRIM: &[char] = &[' ', '\t', '\n', '\r', '\0', '\x0B'];
+pub(crate) const PHP_TRIM: &[char] = &[' ', '\t', '\n', '\r', '\0', '\x0B'];
 
 /// `Pekerjaan::has('kontrak')`: relasi belongsToMany lewat `kontrak_pekerjaan` (bukan `id_pekerjaan`).
 const HAS_KONTRAK: &str = "EXISTS (SELECT 1 FROM kontrak_pekerjaan hkp INNER JOIN tbl_kontrak hk \
@@ -362,13 +362,14 @@ fn placeholders(n: usize) -> String {
 fn filters(query: &HashMap<String, String>) -> (String, Vec<String>) {
     let mut sql = String::new();
     let mut binds = Vec::new();
-    if let Some(t) = query.get("tahun").filter(|v| filled(v)) {
+    // TrimStrings Laravel: nilai dipangkas dulu, lalu kosong dianggap tidak diisi (`filled()`).
+    if let Some(t) = query.get("tahun").map(|v| v.trim_matches(PHP_TRIM)).filter(|v| !v.is_empty()) {
         sql.push_str(
             " AND EXISTS (SELECT 1 FROM tbl_kegiatan fg WHERE fg.id = p.kegiatan_id AND fg.tahun_anggaran = ?)",
         );
-        binds.push(t.clone());
+        binds.push(t.to_string());
     }
-    if let Some(s) = query.get("search").filter(|v| filled(v)) {
+    if let Some(s) = query.get("search").map(|v| v.trim_matches(PHP_TRIM)).filter(|v| !v.is_empty()) {
         let like = format!("%{s}%");
         sql.push_str(
             " AND (p.nama_paket LIKE ? OR p.kode_rekening LIKE ? OR EXISTS (SELECT 1 FROM kontrak_pekerjaan skp \

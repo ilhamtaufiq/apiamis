@@ -28,7 +28,7 @@ use crate::{
     lookup::{carbon_json, document_type_json, DocumentTypeRow},
     pagination::{self, PageParams},
     pekerjaan::{laravel_page_url, laravel_query_pairs},
-    pekerjaan_doc_register::{read, select_list, K, KONTRAK_COLS, PEKERJAAN_COLS, PENYEDIA_COLS},
+    pekerjaan_doc_register::{read, select_list, K, KONTRAK_COLS, PEKERJAAN_COLS, PENYEDIA_COLS, PHP_TRIM},
     require_auth,
     validation::Errors,
     AppState,
@@ -245,23 +245,31 @@ pub async fn index(
     Query(query): Query<HashMap<String, String>>,
 ) -> Result<Response, ApiError> {
     require_auth(&state, &headers).await?;
-    // `$request->has()` bernilai false untuk string kosong.
-    let has = |k: &str| query.get(k).filter(|v| !v.is_empty()).cloned();
+    // Middleware global Laravel: TrimStrings lalu ConvertEmptyStringsToNull. `$request->has()` hanya
+    // mengecek kunci ada, jadi kunci dengan nilai kosong (null) tetap memfilter: `where(kolom, null)`
+    // menjadi `IS NULL`, dan `search` kosong menjadi `LIKE '%%'`.
+    let trimmed = |k: &str| {
+        query
+            .get(k)
+            .map(|v| v.trim_matches(PHP_TRIM).to_string())
+            .filter(|v| !v.is_empty())
+    };
     let mut clauses: Vec<String> = Vec::new();
     let mut binds: Vec<String> = Vec::new();
-    if let Some(t) = has("tahun") {
-        clauses.push("r.year = ?".into());
-        binds.push(t);
+    for (key, col) in [("tahun", "r.year"), ("type_id", "r.type_id"), ("addendum_id", "r.addendum_id")] {
+        if !query.contains_key(key) {
+            continue;
+        }
+        match trimmed(key) {
+            Some(v) => {
+                clauses.push(format!("{col} = ?"));
+                binds.push(v);
+            }
+            None => clauses.push(format!("{col} IS NULL")),
+        }
     }
-    if let Some(t) = has("type_id") {
-        clauses.push("r.type_id = ?".into());
-        binds.push(t);
-    }
-    if let Some(a) = has("addendum_id") {
-        clauses.push("r.addendum_id = ?".into());
-        binds.push(a);
-    }
-    if let Some(s) = has("search") {
+    if query.contains_key("search") {
+        let s = trimmed("search").unwrap_or_default();
         let like = format!("%{s}%");
         clauses.push(
             "(r.nomor LIKE ? OR r.description LIKE ? OR EXISTS (SELECT 1 FROM tbl_kontrak k \
@@ -277,11 +285,17 @@ pub async fn index(
         format!(" WHERE {}", clauses.join(" AND "))
     };
 
+    // `get('per_page', 20)` lalu `paginate()`: nilai kosong atau 0 memakai `Model::$perPage` (15).
     let per: i64 = query
         .get("per_page")
-        .map(|v| v.trim().parse().unwrap_or(0))
+        .map(|v| v.trim_matches(PHP_TRIM).parse().unwrap_or(0))
         .unwrap_or(20);
-    let per_page = if per <= 0 { 20 } else { per as u64 };
+    // Negatif belum disamakan: Laravel mengambil semua baris (`take()` mengabaikan nilai negatif).
+    let per_page = match per {
+        0 => pagination::DEFAULT_PER_PAGE,
+        p if p < 0 => 20,
+        p => p as u64,
+    };
     let page = pagination::page_params(&query).page;
 
     let count_sql = format!("SELECT CAST(COUNT(*) AS SIGNED) FROM tbl_document_registers r{where_sql}");
