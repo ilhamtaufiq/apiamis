@@ -3,7 +3,7 @@
 //! Rute yang dipindahkan: `POST /api/route-permissions/check-access`, `GET /api/route-permissions/rules`,
 //! `GET /api/route-permissions/user/accessible`, `GET|POST /api/route-permissions`,
 //! `GET|PUT|PATCH|DELETE /api/route-permissions/{id}`.
-//! Tidak dipindahkan: `POST /api/route-permissions/sync` (lihat bagian "Dilewati").
+//! Sinkron `POST /api/route-permissions/sync` ada di `route_permissions_sync.rs`.
 //!
 //! Perilaku yang perlu diketahui:
 //! - Di Laravel semua rute ini hanya `auth:sanctum`. Pembatasan non-admin datang dari middleware
