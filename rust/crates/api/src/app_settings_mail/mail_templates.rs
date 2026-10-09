@@ -642,6 +642,50 @@ pub async fn resolve(
     })
 }
 
+/// `MailTemplateService::renderDeliverable` untuk pengiriman sistem. Format dan subjek dari entri tersimpan
+/// bila ada (format tidak valid jatuh ke default). Isi selalu dari default, supaya placeholder seperti
+/// `{{action_url}}` tidak tertinggal dari contoh lama. `overrides` menimpa contoh dengan urutan kunci
+/// `array_merge` (kunci baru ditambahkan di belakang).
+pub async fn render_deliverable(
+    pool: &MySqlPool,
+    brand: &Brand,
+    key: &str,
+    overrides: &[(&'static str, String)],
+) -> Result<Resolved, ApiError> {
+    if !is_valid_key(key) {
+        return Err(ApiError::new(
+            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+            format!("Unknown mail template key: {key}"),
+        ));
+    }
+    let default_format = template_def(key).map_or(FORMAT_HTML, TemplateDef::default_format);
+    let stored = stored_map(pool).await?;
+    let custom = stored.get(key).cloned().unwrap_or(Value::Null);
+
+    let format = match field(&custom, "format").as_deref() {
+        Some(f @ (FORMAT_PLAIN | FORMAT_MARKDOWN | FORMAT_HTML)) => f.to_string(),
+        _ => default_format.to_string(),
+    };
+    let subject = field(&custom, "subject")
+        .map(|s| mail_layout::php_trim(&s).to_string())
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| default_subject(key));
+    let body = default_body(brand, key, &format);
+
+    let mut vars = sample_variables(brand);
+    for (name, value) in overrides {
+        match vars.iter_mut().find(|(k, _)| k == name) {
+            Some(slot) => slot.1 = value.clone(),
+            None => vars.push((name, value.clone())),
+        }
+    }
+    Ok(Resolved {
+        subject: apply_placeholders(&subject, &vars),
+        body: apply_placeholders(&body, &vars),
+        format,
+    })
+}
+
 /// `MailTemplateService::saveMany`. Kunci tidak dikenal dan payload non-array dilewati.
 pub async fn save_many(
     pool: &MySqlPool,

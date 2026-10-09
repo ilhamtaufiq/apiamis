@@ -113,6 +113,7 @@ pub mod tiket;
 pub mod tiket_write;
 pub mod user_pekerjaan;
 pub mod user_pekerjaan_gaps;
+pub mod user_pekerjaan_broadcast;
 pub mod users;
 pub mod users_write;
 pub mod validation;
@@ -238,6 +239,10 @@ pub fn app(config: &Config, state: AppState) -> Router {
         .route(
             "/api/user-pekerjaan/completeness-gaps",
             get(user_pekerjaan::completeness_gaps),
+        )
+        .route(
+            "/api/user-pekerjaan/broadcast-reminders",
+            post(user_pekerjaan_broadcast::broadcast_reminders),
         )
         .route(
             "/api/pengawas",

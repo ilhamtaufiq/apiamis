@@ -16,8 +16,8 @@
 //! - Brand: lihat `app_settings_mail::brand_color` untuk perbedaan ekstraksi logo raster.
 
 mod brand_color;
-mod mail_layout;
-mod mail_templates;
+pub(crate) mod mail_layout;
+pub(crate) mod mail_templates;
 
 use std::{collections::BTreeMap, future::Future, pin::Pin};
 
@@ -124,7 +124,7 @@ fn render(brand: &Brand, body: &str, format: &str) -> Rendered {
 }
 
 /// `MailContentService::sendRendered` (tanpa nama penerima).
-async fn send_rendered(
+pub(crate) async fn send_rendered(
     brand: &Brand,
     sender: &dyn MailSender,
     settings: &SmtpSettings,
@@ -148,7 +148,7 @@ async fn send_rendered(
 
 /// `MailConfigService::applyFromSettings` dengan override dari permintaan. `None` bila email nonaktif
 /// atau host, username, atau password kosong.
-async fn mail_settings(
+pub(crate) async fn mail_settings(
     pool: &MySqlPool,
     ov: &BTreeMap<String, String>,
 ) -> Result<Option<SmtpSettings>, ApiError> {
@@ -367,7 +367,7 @@ fn coalesce(m: &Map<String, Value>, a: &str, b: &str) -> Option<String> {
     opt(m, a).or_else(|| opt(m, b))
 }
 
-fn normalize_json(v: Value) -> Value {
+pub(crate) fn normalize_json(v: Value) -> Value {
     match v {
         Value::String(s) => {
             let t = php_trim(&s);
