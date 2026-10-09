@@ -53,11 +53,13 @@ pub fn token_max_age_minutes() -> Option<i64> {
 pub async fn authenticate(pool: &MySqlPool, bearer: &str) -> Result<AuthUser, AuthError> {
     let (token_id, plain) = parse_token(bearer).ok_or(AuthError::Invalid)?;
 
+    // Laravel menyimpan `created_at`/`expires_at` dalam UTC (`app.timezone` = UTC), jadi
+    // pembandingan memakai UTC_TIMESTAMP(), bukan NOW() yang mengikuti zona server DB.
     let max_age = token_max_age_minutes();
     let row = sqlx::query(
         "SELECT token, tokenable_type, tokenable_id, abilities, \
-         CAST((expires_at IS NOT NULL AND expires_at < NOW()) \
-           OR (? IS NOT NULL AND created_at <= NOW() - INTERVAL ? MINUTE) AS SIGNED) AS expired \
+         CAST((expires_at IS NOT NULL AND expires_at < UTC_TIMESTAMP()) \
+           OR (? IS NOT NULL AND created_at <= UTC_TIMESTAMP() - INTERVAL ? MINUTE) AS SIGNED) AS expired \
          FROM personal_access_tokens WHERE id = ?",
     )
     .bind(max_age)

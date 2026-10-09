@@ -54,7 +54,7 @@ pub async fn create_token(
     let result = sqlx::query(
         "INSERT INTO personal_access_tokens \
          (tokenable_type, tokenable_id, name, token, abilities, created_at, updated_at) \
-         VALUES ('App\\\\Models\\\\User', ?, ?, ?, '[\"*\"]', NOW(), NOW())",
+         VALUES ('App\\\\Models\\\\User', ?, ?, ?, '[\"*\"]', UTC_TIMESTAMP(), UTC_TIMESTAMP())",
     )
     .bind(user_id)
     .bind(name)

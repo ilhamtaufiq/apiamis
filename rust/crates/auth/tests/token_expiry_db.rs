@@ -31,7 +31,7 @@ async fn token_baru_diterima_dan_token_lewat_umur_ditolak() {
     authenticate(&pool, &bearer).await.expect("token baru harus diterima");
 
     // Mundurkan umur token 721 menit: harus ditolak sebagai Expired.
-    sqlx::query("UPDATE personal_access_tokens SET created_at = NOW() - INTERVAL 721 MINUTE WHERE id = ?")
+    sqlx::query("UPDATE personal_access_tokens SET created_at = UTC_TIMESTAMP() - INTERVAL 721 MINUTE WHERE id = ?")
         .bind(token_id)
         .execute(&pool)
         .await
