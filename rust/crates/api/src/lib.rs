@@ -92,6 +92,7 @@ pub mod route_permission;
 pub mod route_permissions;
 pub mod session;
 pub mod sk;
+pub mod spam_import;
 pub mod spam_integration;
 pub mod spam_units;
 pub mod spm_sanitasi;
@@ -326,6 +327,10 @@ pub fn app(config: &Config, state: AppState) -> Router {
         )
         .route("/api/survey-lokasi/{id}/foto/{media_id}", delete(survey_lokasi::delete_foto))
         // Unit SPAM (SpamUnitController). `POST /api/spam-units/import` belum dipindah.
+        .route(
+            "/api/spam-units/import",
+            post(spam_import::import).layer(DefaultBodyLimit::max(spam_import::BODY_LIMIT)),
+        )
         .route("/api/public/spam-units/stats", get(spam_units::public_stats))
         .route("/api/public/spam-units/map-stats", get(spam_units::public_map_stats))
         .route(
