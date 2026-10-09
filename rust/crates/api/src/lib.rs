@@ -33,6 +33,7 @@ pub mod crypt;
 pub mod dashboard;
 pub mod desa;
 pub mod raw_model;
+pub mod desa_population;
 pub mod desa_write;
 pub mod docx_template;
 pub mod document_registers;

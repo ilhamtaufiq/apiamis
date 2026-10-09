@@ -341,6 +341,40 @@ pub async fn attach_referenced_video_assets(
     Ok(())
 }
 
+/// Setara `php artisan blog-assets:cleanup-orphans --hours=N` (`CleanupOrphanBlogAssets`).
+/// Menghapus aset yang belum tertaut ke blog (`blog_id IS NULL`) dan lebih tua dari `hours` jam,
+/// beserta media kedua koleksinya. Spatie menghapus semua media model saat model dihapus, dan
+/// aset blog hanya punya dua koleksi itu. Semua baris dihapus dalam satu transaksi, berkas media
+/// dihapus setelah commit. Mengembalikan jumlah aset yang dihapus.
+pub async fn cleanup_orphan_assets(pool: &sqlx::MySqlPool, hours: i64) -> Result<usize, ApiError> {
+    let mut tx = pool.begin().await.map_err(internal)?;
+    // FOR UPDATE supaya aset yang baru ditautkan ke blog di antara SELECT dan DELETE tidak ikut terhapus.
+    let ids: Vec<u64> = sqlx::query_scalar(
+        "SELECT id FROM tbl_blog_assets WHERE blog_id IS NULL AND created_at < DATE_SUB(NOW(), INTERVAL ? HOUR) ORDER BY id FOR UPDATE",
+    )
+    .bind(hours)
+    .fetch_all(&mut *tx)
+    .await
+    .map_err(internal)?;
+
+    let mut dirs = Vec::new();
+    for id in &ids {
+        for collection in [VIDEO_COLLECTION, POSTER_COLLECTION] {
+            dirs.extend(
+                media::delete_collection(&mut tx, ASSET_MODEL, *id, collection, None).await?,
+            );
+        }
+        sqlx::query("DELETE FROM tbl_blog_assets WHERE id = ?")
+            .bind(*id)
+            .execute(&mut *tx)
+            .await
+            .map_err(internal)?;
+    }
+    tx.commit().await.map_err(internal)?;
+    media::remove_dirs(&dirs).await;
+    Ok(ids.len())
+}
+
 /// `POST /api/blog`. Respons 201.
 pub async fn store(
     State(state): State<AppState>,
