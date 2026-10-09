@@ -10,13 +10,21 @@
 //! Tidak ada `addendum` di respons ini karena Laravel tidak memuatnya.
 //!
 //! Catatan paritas (daftar lengkap ada di laporan):
+//! - Datetime: `Carbon::toJSON()` (carbon 3.11.4, `Converter::toISOString`) memakai UTC dengan
+//!   `YYYY-MM-DDTHH:MM:SS.ffffffZ`, dan `date` cast memakai awal hari di zona aplikasi. Zona aplikasi
+//!   `config/app.php` adalah UTC, jadi bentuk `.000000Z` cocok untuk kolom `datetime` dan `date`.
 //! - Paket konsolidasi tambahan (berbagi kontrak dengan paket di halaman, di luar halaman) tetap memakai
 //!   scope `byUserRole()` (berbeda dari Laravel, agar non-admin tidak melihat paket di luar scope), dan
 //!   tidak memakai filter request, seperti Laravel.
 //! - Laravel tidak memakai `ORDER BY`. Di sini paket diurutkan `p.id`, dan relasi berurutan `id`.
-//! - Datetime memakai bentuk Carbon mentah (`.000000Z`), belum diverifikasi terhadap respons Laravel.
+//!   Ini celah yang tidak bisa ditutup: urutan Laravel tidak deterministik.
+//! - `per_page`: 0 atau kosong memakai `Model::$perPage` (15), seperti `paginate()`. Negatif selain -1
+//!   tidak dibatasi (semua baris), dengan `last_page` 1 dan `from`/`to` mengikuti rumus Laravel.
+//! - Kolom JSON (`array` cast) memakai `json_decode(..., true)` dengan urutan kunci dipertahankan, lalu
+//!   objek yang kuncinya 0..n-1 berurutan menjadi list, seperti `json_encode` PHP.
 
 use std::collections::{BTreeSet, HashMap};
+use std::fmt;
 
 use axum::{
     extract::{Query, State},
@@ -25,6 +33,7 @@ use axum::{
     Json,
 };
 use chrono::{DateTime, NaiveDate, Utc};
+use serde::de::{Deserialize, Deserializer, MapAccess, SeqAccess, Visitor};
 use serde_json::{json, Map, Value};
 use shared::ApiError;
 use sqlx::{mysql::MySqlRow, MySqlPool, Row};
@@ -37,7 +46,10 @@ use crate::{
     require_auth, AppState,
 };
 
+/// `$request->get('per_page', 20)` di controller (nilai saat parameter tidak dikirim).
 const PER_PAGE_DEFAULT: i64 = 20;
+/// `Model::$perPage` (Pekerjaan tidak menimpanya). Dipakai `paginate()` bila nilai falsy (0).
+const PER_PAGE_MODEL: i64 = 15;
 const PHP_TRIM: &[char] = &[' ', '\t', '\n', '\r', '\0', '\x0B'];
 
 /// `Pekerjaan::has('kontrak')`: relasi belongsToMany lewat `kontrak_pekerjaan` (bukan `id_pekerjaan`).
@@ -196,25 +208,102 @@ fn php_empty(v: &Value) -> bool {
     }
 }
 
-/// Hasil `json_decode(..., true)`: objek kosong menjadi array kosong PHP (`[]`).
-fn php_decoded(v: Value) -> Value {
-    match v {
-        Value::Object(m) if m.is_empty() => Value::Array(Vec::new()),
-        Value::Object(m) => {
-            Value::Object(m.into_iter().map(|(k, v)| (k, php_decoded(v))).collect())
+/// JSON seperti `json_decode($s, true)` PHP: objek menyimpan urutan kunci (serde_json tanpa
+/// `preserve_order` menyimpan kunci terurut abjad, sehingga urutan tidak bisa dibaca dari `Value`).
+enum PhpJson {
+    Scalar(Value),
+    Array(Vec<PhpJson>),
+    Object(Vec<(String, PhpJson)>),
+}
+
+impl<'de> Deserialize<'de> for PhpJson {
+    fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        struct V;
+        impl<'de> Visitor<'de> for V {
+            type Value = PhpJson;
+
+            fn expecting(&self, f: &mut fmt::Formatter) -> fmt::Result {
+                f.write_str("nilai JSON")
+            }
+
+            fn visit_unit<E>(self) -> Result<PhpJson, E> {
+                Ok(PhpJson::Scalar(Value::Null))
+            }
+            fn visit_bool<E>(self, v: bool) -> Result<PhpJson, E> {
+                Ok(PhpJson::Scalar(Value::Bool(v)))
+            }
+            fn visit_i64<E>(self, v: i64) -> Result<PhpJson, E> {
+                Ok(PhpJson::Scalar(json!(v)))
+            }
+            fn visit_u64<E>(self, v: u64) -> Result<PhpJson, E> {
+                Ok(PhpJson::Scalar(json!(v)))
+            }
+            fn visit_f64<E>(self, v: f64) -> Result<PhpJson, E> {
+                Ok(PhpJson::Scalar(json!(v)))
+            }
+            fn visit_str<E>(self, v: &str) -> Result<PhpJson, E> {
+                Ok(PhpJson::Scalar(Value::String(v.to_string())))
+            }
+            fn visit_string<E>(self, v: String) -> Result<PhpJson, E> {
+                Ok(PhpJson::Scalar(Value::String(v)))
+            }
+
+            fn visit_seq<A: SeqAccess<'de>>(self, mut seq: A) -> Result<PhpJson, A::Error> {
+                let mut out = Vec::new();
+                while let Some(v) = seq.next_element::<PhpJson>()? {
+                    out.push(v);
+                }
+                Ok(PhpJson::Array(out))
+            }
+
+            fn visit_map<A: MapAccess<'de>>(self, mut map: A) -> Result<PhpJson, A::Error> {
+                // Kunci ganda: PHP mempertahankan posisi kunci pertama dan nilai terakhir.
+                let mut entries: Vec<(String, PhpJson)> = Vec::new();
+                while let Some((k, v)) = map.next_entry::<String, PhpJson>()? {
+                    match entries.iter_mut().find(|(ek, _)| *ek == k) {
+                        Some(e) => e.1 = v,
+                        None => entries.push((k, v)),
+                    }
+                }
+                Ok(PhpJson::Object(entries))
+            }
         }
-        Value::Array(a) => Value::Array(a.into_iter().map(php_decoded).collect()),
-        other => other,
+        d.deserialize_any(V)
     }
 }
 
-fn json_column(raw: Option<String>) -> Value {
-    match raw {
-        Some(s) => serde_json::from_str::<Value>(&s)
-            .map(php_decoded)
-            .unwrap_or(Value::Null),
-        None => Value::Null,
+impl PhpJson {
+    /// Nilai PHP sebelum `json_encode`. Objek kosong menjadi `[]`. Objek yang kuncinya tepat
+    /// `"0"`, `"1"`, ... berurutan menjadi list, karena `json_encode` PHP menulis array dengan kunci
+    /// 0..n-1 berurutan sebagai list. Kunci seperti `"00"` atau `"-0"` tetap string.
+    fn into_value(self) -> Value {
+        match self {
+            PhpJson::Scalar(v) => v,
+            PhpJson::Array(a) => Value::Array(a.into_iter().map(PhpJson::into_value).collect()),
+            PhpJson::Object(entries) => {
+                let is_list = entries
+                    .iter()
+                    .enumerate()
+                    .all(|(i, (k, _))| *k == i.to_string());
+                if is_list {
+                    Value::Array(entries.into_iter().map(|(_, v)| v.into_value()).collect())
+                } else {
+                    Value::Object(
+                        entries
+                            .into_iter()
+                            .map(|(k, v)| (k, v.into_value()))
+                            .collect(),
+                    )
+                }
+            }
+        }
     }
+}
+
+/// Kolom dengan cast `array`: `Json::decode` (`json_decode`), null bila kosong atau tidak valid.
+fn json_column(raw: Option<String>) -> Value {
+    raw.and_then(|s| serde_json::from_str::<PhpJson>(&s).ok())
+        .map_or(Value::Null, PhpJson::into_value)
 }
 
 /// Cast `date` Laravel: Carbon tengah malam UTC.
@@ -586,7 +675,9 @@ pub async fn index(
     binds.extend(scope.binds.iter().map(u64::to_string));
 
     let summary = summary(pool, &where_sql, &binds).await?;
-    let per = php_int(query.get("per_page").map_or("20", String::as_str));
+    let per = query
+        .get("per_page")
+        .map_or(PER_PAGE_DEFAULT, |v| php_int(v));
 
     if per == -1 {
         let rows = fetch_rows(pool, &where_sql, &binds, None).await?;
@@ -602,27 +693,35 @@ pub async fn index(
         .into_response());
     }
 
-    // `paginate(0)` di Laravel gagal (DivisionByZero di lastPage); di sini dipakai 20.
-    let per_page: u64 = if per <= 0 {
-        PER_PAGE_DEFAULT as u64
-    } else {
-        per as u64
-    };
-    let page: u64 = query
+    // `paginate($perPage)`: nilai falsy (0) memakai `Model::$perPage`. Laravel tidak gagal di sini.
+    let per_page: i64 = if per == 0 { PER_PAGE_MODEL } else { per };
+    let page: i64 = query
         .get("page")
         .and_then(|v| v.trim().parse::<i64>().ok())
         .filter(|p| *p >= 1)
-        .map_or(1, |p| p as u64);
+        .unwrap_or(1);
     let total = count(pool, &where_sql, &binds).await?;
-    let offset = (page - 1).saturating_mul(per_page);
 
-    let page_rows = fetch_rows(pool, &where_sql, &binds, Some((per_page, offset))).await?;
+    // `forPage()` memakai `limit()` yang mengabaikan nilai negatif, dan `offset()` yang dibatasi 0.
+    // Akibatnya per_page negatif (selain -1) mengembalikan semua baris dari offset 0.
+    let page_rows = if per_page > 0 {
+        let offset = (page - 1).saturating_mul(per_page);
+        fetch_rows(
+            pool,
+            &where_sql,
+            &binds,
+            Some((per_page as u64, offset as u64)),
+        )
+        .await?
+    } else {
+        fetch_rows(pool, &where_sql, &binds, None).await?
+    };
     let page_ids: Vec<i64> = page_rows.iter().map(|(id, _)| *id).collect();
     let mut items = Vec::with_capacity(page_rows.len());
     for (_, attrs) in page_rows {
         items.push(item(pool, attrs).await?);
     }
-    let page_count = items.len();
+    let page_count = items.len() as i64;
 
     // Konsolidasi: paket lain yang berbagi kontrak dengan halaman ini ikut ditambahkan di akhir.
     // Berbeda dari Laravel: scope byUserRole() tetap dipakai, supaya pengguna tidak melihat paket
@@ -649,10 +748,16 @@ pub async fn index(
         }
     }
 
-    let last_page = total.div_ceil(per_page).max(1);
+    // `LengthAwarePaginator`: last_page = max(ceil(total / perPage), 1). Dengan perPage negatif hasilnya 1.
+    let last_page = if per_page > 0 {
+        total.div_ceil(per_page as u64).max(1)
+    } else {
+        1
+    };
+    // `firstItem()` / `lastItem()`: dari `(page - 1) * perPage + 1`, bisa negatif bila perPage negatif.
     let (from, to) = if page_count > 0 {
-        let first = (page - 1).saturating_mul(per_page) + 1;
-        (json!(first), json!(first + page_count as u64 - 1))
+        let first = (page - 1).saturating_mul(per_page).saturating_add(1);
+        (json!(first), json!(first + page_count - 1))
     } else {
         (Value::Null, Value::Null)
     };
@@ -697,10 +802,51 @@ mod tests {
         assert!(!php_empty(&json!(true)));
     }
 
+    fn php(s: &str) -> Value {
+        serde_json::from_str::<PhpJson>(s)
+            .expect("json valid")
+            .into_value()
+    }
+
     #[test]
     fn empty_json_object_decodes_to_php_empty_array() {
-        assert_eq!(php_decoded(json!({})), json!([]));
-        assert_eq!(php_decoded(json!({"a": {}})), json!({"a": []}));
+        assert_eq!(php("{}"), json!([]));
+        assert_eq!(php(r#"{"a": {}}"#), json!({"a": []}));
+    }
+
+    #[test]
+    fn numeric_keys_in_order_become_a_list() {
+        assert_eq!(php(r#"{"0": "a", "1": "b"}"#), json!(["a", "b"]));
+        assert_eq!(
+            php(r#"{"0": {"1": "x", "0": "y"}}"#),
+            json!([{"1": "x", "0": "y"}])
+        );
+    }
+
+    #[test]
+    fn numeric_keys_out_of_order_stay_an_object() {
+        // PHP: [1 => 'b', 0 => 'a'] tidak berurutan, jadi json_encode menulis objek.
+        assert!(php(r#"{"1": "b", "0": "a"}"#).is_object());
+        assert!(php(r#"{"0": "a", "2": "c"}"#).is_object());
+        assert!(php(r#"{"00": "a"}"#).is_object());
+        assert!(php(r#"{"-0": "a"}"#).is_object());
+        assert!(php(r#"{"1": "a"}"#).is_object());
+    }
+
+    #[test]
+    fn duplicate_keys_keep_first_position_and_last_value() {
+        assert_eq!(php(r#"{"0": "a", "1": "b", "0": "c"}"#), json!(["c", "b"]));
+    }
+
+    #[test]
+    fn scalars_and_nulls_pass_through() {
+        assert_eq!(php("null"), Value::Null);
+        assert_eq!(
+            php(r#"{"k": null, "n": 1.5, "b": true}"#),
+            json!({"k": null, "n": 1.5, "b": true})
+        );
+        assert_eq!(json_column(Some("not json".into())), Value::Null);
+        assert_eq!(json_column(None), Value::Null);
     }
 
     #[test]
