@@ -396,6 +396,48 @@ pub async fn stats(
     Ok(Json(json!({ "success": true, "data": data })).into_response())
 }
 
+/// `GET /api/spm-sanitasi/stats/series?years=2020,2021,...&kecamatan_id=` (auth).
+/// Sama dengan `statsSeries` Laravel: satu `build_stats` per tahun, tanpa filter jenis.
+pub async fn stats_series(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(q): Query<HashMap<String, String>>,
+) -> Result<Response, ApiError> {
+    require_auth(&state, &headers).await?;
+    let kecamatan = int_or_null(&q, "kecamatan_id");
+    let mut data = Map::new();
+    for y in years_param(q.get("years")) {
+        let scope = Scope {
+            kecamatan,
+            jenis: None,
+            tahun: Some(y.clone()),
+        };
+        let v = build_stats(&state.pool, &scope).await?;
+        data.insert(y, v);
+    }
+    let data = if data.is_empty() {
+        json!([])
+    } else {
+        Value::Object(data)
+    };
+    Ok(Json(json!({ "success": true, "data": data })).into_response())
+}
+
+/// Tahun dari `years=2020,2021,...`: 4 digit, unik, maksimal 20 (seperti `statsSeries`).
+fn years_param(raw: Option<&String>) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    for part in raw.map(String::as_str).unwrap_or("").split(',') {
+        let y = part.trim();
+        if y.len() == 4 && y.bytes().all(|b| b.is_ascii_digit()) && !out.iter().any(|x| x == y) {
+            out.push(y.to_string());
+        }
+        if out.len() >= 20 {
+            break;
+        }
+    }
+    out
+}
+
 /// `GET /api/spm-sanitasi`: paginator Laravel (`data` dan `meta`), terbaru dulu.
 pub async fn index(
     State(state): State<AppState>,

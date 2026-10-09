@@ -298,6 +298,14 @@ async fn spm_sanitasi_stats_capaian_and_public_match_laravel() {
     assert_eq!(data["iplt_count"], 1, "{body}");
     assert_eq!(data["mck_individu_count"], 1, "{body}");
     assert_eq!(data["total_count"], 4, "{body}");
+
+    // Series: satu tahun, sama dengan stats untuk tahun itu.
+    let uri = format!("/api/spm-sanitasi/stats/series?kecamatan_id={kec}&years={tahun}");
+    let (status, body) = send(&pool, Method::GET, &uri, Some(&token), None).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let key = tahun.to_string();
+    assert_eq!(body["data"][key.as_str()]["total_count"], 4, "{body}");
+    assert_eq!(body["data"][key.as_str()]["iplt_count"], 1, "{body}");
     assert_eq!(data["berfungsi_count"], 2, "{body}");
     // `array_merge` memakai nilai capaian untuk kunci yang sama, sehingga 160 (bukan 167 dari statistik).
     assert_eq!(data["total_pemanfaat_kk"], 160, "{body}");

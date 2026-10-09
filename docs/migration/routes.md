@@ -349,6 +349,7 @@ Kolom **Status** diisi saat modul dipindah ke Rust. Awalnya semua `belum`.
 | 13 | GET | `/api/spm-sanitasi/{id}` | SpmSanitasiController@show | auth:sanctum | rust |
 | 14 | PUT/PATCH | `/api/spm-sanitasi/{id}` | SpmSanitasiController@update | auth:sanctum | rust |
 | 15 | DELETE | `/api/spm-sanitasi/{id}` | SpmSanitasiController@destroy | auth:sanctum | rust |
+| 16 | GET | `/api/spm-sanitasi/stats/series` | SpmSanitasiController@statsSeries | auth:sanctum | rust |
 
 ### survey-lokasi (9)
 

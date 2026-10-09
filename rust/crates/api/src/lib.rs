@@ -865,6 +865,7 @@ pub fn app(config: &Config, state: AppState) -> Router {
         .route("/api/public/spm-sanitasi/stats", get(spm_sanitasi::public_stats))
         .route("/api/public/spm-sanitasi/map-stats", get(spm_sanitasi::public_map_stats))
         .route("/api/spm-sanitasi/stats", get(spm_sanitasi::stats))
+        .route("/api/spm-sanitasi/stats/series", get(spm_sanitasi::stats_series))
         .route("/api/spm-sanitasi/capaian", get(spm_sanitasi_capaian::capaian))
         // Integrasi SPM dengan paket pekerjaan (`SpmSanitasiPekerjaanIntegrationService`).
         .route("/api/spm-sanitasi/integration", get(spm_sanitasi_integration::integration))
