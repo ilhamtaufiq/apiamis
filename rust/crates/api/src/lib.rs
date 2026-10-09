@@ -64,6 +64,7 @@ pub mod pagination;
 pub mod php;
 pub mod pekerjaan;
 pub mod pekerjaan_by;
+pub mod pekerjaan_checklist_pdf;
 pub mod pekerjaan_checklist_write;
 pub mod pekerjaan_estimasi;
 pub mod pekerjaan_download;
@@ -685,6 +686,10 @@ pub fn app(config: &Config, state: AppState) -> Router {
                 .delete(checklist_items_write::destroy),
         )
         .route("/api/pekerjaan-checklist", get(checklist::pekerjaan_index))
+        .route(
+            "/api/pekerjaan-checklist/export/pdf",
+            get(pekerjaan_checklist_pdf::export_pdf),
+        )
         .route(
             "/api/pekerjaan-checklist/toggle",
             post(pekerjaan_checklist_write::toggle),

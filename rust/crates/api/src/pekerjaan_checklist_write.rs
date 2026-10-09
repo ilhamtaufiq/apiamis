@@ -1,7 +1,7 @@
 //! Centang checklist pekerjaan (`PekerjaanChecklistController::toggle`) dan ekspor Excel
 //! (`exportExcel`, `PekerjaanChecklistExport`). Baca dan riwayat ada di `checklist.rs`.
 //!
-//! Ekspor PDF (Dompdf) belum dipindah: belum ada mesin HTML ke PDF di Rust.
+//! Ekspor PDF ada di `pekerjaan_checklist_pdf.rs`; tabelnya memakai `checklist_table` di sini.
 
 use std::collections::HashMap;
 
@@ -222,22 +222,26 @@ fn fmt_dt(raw: &str) -> String {
         .unwrap_or_else(|_| raw.to_string())
 }
 
-/// `GET /api/pekerjaan-checklist/export/excel`: filter sama dengan daftar (`tahun`, `kegiatan_id`, `search`).
-pub async fn export_excel(
-    State(state): State<AppState>,
-    headers: HeaderMap,
-    Query(query): Query<HashMap<String, String>>,
-) -> Result<Response, ApiError> {
-    require_auth(&state, &headers).await?;
-    require_full_access(&state, &headers).await?;
-    let filter = PekerjaanFilter::from_query(&query);
-    let columns = items_in_context(&state.pool, "pekerjaan").await.map_err(internal)?;
+/// Tabel ekspor checklist (`PekerjaanChecklistExport`: `headings` dan `map`). Sel sudah berupa teks,
+/// dipakai bersama oleh ekspor Excel dan PDF.
+pub(crate) struct ChecklistTable {
+    pub headings: Vec<String>,
+    pub rows: Vec<Vec<String>>,
+}
+
+/// Susun tabel checklist dengan filter sama dengan daftar (`tahun`, `kegiatan_id`, `search`).
+pub(crate) async fn checklist_table(
+    pool: &MySqlPool,
+    query: &HashMap<String, String>,
+) -> Result<ChecklistTable, ApiError> {
+    let filter = PekerjaanFilter::from_query(query);
+    let columns = items_in_context(pool, "pekerjaan").await.map_err(internal)?;
 
     // Semua pekerjaan yang cocok, dibaca per halaman besar.
     let mut pekerjaan = Vec::new();
     let mut page = 1u64;
     loop {
-        let (rows, total) = pekerjaan_page(&state.pool, &filter, page, 1000)
+        let (rows, total) = pekerjaan_page(pool, &filter, page, 1000)
             .await
             .map_err(internal)?;
         let got = rows.len() as u64;
@@ -248,34 +252,24 @@ pub async fn export_excel(
         page += 1;
     }
 
-    let bold = Format::new().set_bold();
-    let mut wb = Workbook::new();
-    let ws = wb.add_worksheet();
     let mut headings: Vec<String> = vec!["No".into(), "Nama Paket".into(), "Kegiatan".into()];
     headings.extend(columns.iter().map(|c| c.name.clone()));
     headings.push("Tanggal Update Terakhir".into());
     headings.push("Diubah Oleh".into());
-    for (col, h) in headings.iter().enumerate() {
-        ws.write_string_with_format(0, col as u16, h.as_str(), &bold)
-            .map_err(internal)?;
-    }
 
+    let mut rows = Vec::with_capacity(pekerjaan.len());
     for (i, p) in pekerjaan.iter().enumerate() {
-        let row = (i + 1) as u32;
-        let checks = checks_for(&state.pool, p.id).await.map_err(internal)?;
+        let checks = checks_for(pool, p.id).await.map_err(internal)?;
         // Baris terbaru: `sortByDesc(updated_at ?? checked_at)->first()`.
         let latest = checks
             .iter()
             .max_by_key(|c| c.updated_at.clone().or_else(|| c.checked_at.clone()));
-        let mut col: u16 = 0;
-        ws.write_number(row, col, (i + 1) as f64).map_err(internal)?;
-        col += 1;
-        ws.write_string(row, col, p.nama_paket.as_deref().unwrap_or(""))
-            .map_err(internal)?;
-        col += 1;
         let kegiatan = p.kegiatan.as_ref().and_then(|(_, n)| n.clone()).unwrap_or_else(|| "-".into());
-        ws.write_string(row, col, kegiatan.as_str()).map_err(internal)?;
-        col += 1;
+        let mut row = vec![
+            (i + 1).to_string(),
+            p.nama_paket.clone().unwrap_or_default(),
+            kegiatan,
+        ];
 
         for item in &columns {
             let data = checks.iter().find(|c| c.item_id == item.id);
@@ -283,7 +277,7 @@ pub async fn export_excel(
                 Some(d) if d.is_checked => {
                     let at = d.updated_at.clone().or_else(|| d.checked_at.clone());
                     let by = match d.checked_by {
-                        Some(uid) => user_name(&state.pool, uid).await.map_err(internal)?.unwrap_or_else(|| "-".into()),
+                        Some(uid) => user_name(pool, uid).await.map_err(internal)?.unwrap_or_else(|| "-".into()),
                         None => "-".into(),
                     };
                     match at {
@@ -296,19 +290,48 @@ pub async fn export_excel(
                 }
                 _ => "Tidak".into(),
             };
-            ws.write_string(row, col, text.as_str()).map_err(internal)?;
-            col += 1;
+            row.push(text);
         }
 
         let at = latest.and_then(|c| c.updated_at.clone().or_else(|| c.checked_at.clone()));
-        let tanggal = at.as_deref().map(fmt_dt).unwrap_or_else(|| "-".into());
-        ws.write_string(row, col, tanggal.as_str()).map_err(internal)?;
-        col += 1;
+        row.push(at.as_deref().map(fmt_dt).unwrap_or_else(|| "-".into()));
         let diubah = match latest.and_then(|c| c.checked_by) {
-            Some(uid) => user_name(&state.pool, uid).await.map_err(internal)?.unwrap_or_else(|| "-".into()),
+            Some(uid) => user_name(pool, uid).await.map_err(internal)?.unwrap_or_else(|| "-".into()),
             None => "-".into(),
         };
-        ws.write_string(row, col, diubah.as_str()).map_err(internal)?;
+        row.push(diubah);
+        rows.push(row);
+    }
+
+    Ok(ChecklistTable { headings, rows })
+}
+
+/// `GET /api/pekerjaan-checklist/export/excel`: filter sama dengan daftar (`tahun`, `kegiatan_id`, `search`).
+pub async fn export_excel(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(query): Query<HashMap<String, String>>,
+) -> Result<Response, ApiError> {
+    require_auth(&state, &headers).await?;
+    require_full_access(&state, &headers).await?;
+    let table = checklist_table(&state.pool, &query).await?;
+
+    let bold = Format::new().set_bold();
+    let mut wb = Workbook::new();
+    let ws = wb.add_worksheet();
+    for (col, h) in table.headings.iter().enumerate() {
+        ws.write_string_with_format(0, col as u16, h.as_str(), &bold)
+            .map_err(internal)?;
+    }
+    for (i, row) in table.rows.iter().enumerate() {
+        let r = (i + 1) as u32;
+        for (col, cell) in row.iter().enumerate() {
+            if col == 0 {
+                ws.write_number(r, 0, (i + 1) as f64).map_err(internal)?;
+            } else {
+                ws.write_string(r, col as u16, cell.as_str()).map_err(internal)?;
+            }
+        }
     }
 
     let bytes = wb.save_to_buffer().map_err(internal)?;
