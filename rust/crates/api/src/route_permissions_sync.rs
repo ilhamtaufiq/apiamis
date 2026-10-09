@@ -2165,10 +2165,10 @@ struct Options {
 }
 
 #[derive(Default)]
-struct Summary {
-    scanned: u64,
-    created: u64,
-    removed: u64,
+pub struct Summary {
+    pub scanned: u64,
+    pub created: u64,
+    pub removed: u64,
 }
 
 /// `POST /api/route-permissions/sync`.
@@ -2183,7 +2183,7 @@ pub async fn sync(
     let opts = validate(&state.pool, &input).await?;
 
     let mut tx = state.pool.begin().await.map_err(internal)?;
-    let sum = run(&mut tx, user.user_id, &opts, &headers).await?;
+    let sum = run(&mut tx, Some(user.user_id), &opts, &headers).await?;
     tx.commit().await.map_err(internal)?;
 
     let body = json!({
@@ -2197,6 +2197,37 @@ pub async fn sync(
         },
     });
     Ok((StatusCode::OK, Json(body)).into_response())
+}
+
+/// Setara `php artisan app:sync-route-permissions` (`SyncRoutePermissions`), dipanggil dari
+/// `apiamis-api sync-route-permissions`. Tanpa request HTTP, jadi tidak ada audit.
+pub async fn sync_cli(
+    pool: &MySqlPool,
+    prefix: &str,
+    default_role: &str,
+    clean: bool,
+) -> Result<Summary, ApiError> {
+    let n: i64 = sqlx::query_scalar("SELECT CAST(COUNT(*) AS SIGNED) FROM roles WHERE name = ?")
+        .bind(default_role)
+        .fetch_one(pool)
+        .await
+        .map_err(internal)?;
+    if n == 0 {
+        return Err(ApiError::new(
+            StatusCode::UNPROCESSABLE_ENTITY,
+            format!("Role '{default_role}' tidak ada di tabel roles."),
+        ));
+    }
+
+    let opts = Options {
+        prefix: prefix.to_string(),
+        default_role: default_role.to_string(),
+        clean,
+    };
+    let mut tx = pool.begin().await.map_err(internal)?;
+    let sum = run(&mut tx, None, &opts, &axum::http::HeaderMap::new()).await?;
+    tx.commit().await.map_err(internal)?;
+    Ok(sum)
 }
 
 /// Aturan Laravel: `prefix` string maks 50, `default_role` string dan ada di `roles.name`,
@@ -2260,9 +2291,11 @@ async fn validate(pool: &MySqlPool, input: &Map<String, Value>) -> Result<Option
     })
 }
 
+/// Sinkron rule dari daftar rute. `actor = None` dipakai command CLI: tidak ada audit, sama dengan
+/// Laravel yang melewati `Auditable` saat `runningInConsole()`.
 async fn run(
     tx: &mut Transaction<'_, MySql>,
-    actor: u64,
+    actor: Option<u64>,
     o: &Options,
     headers: &HeaderMap,
 ) -> Result<Summary, ApiError> {
@@ -2307,8 +2340,10 @@ async fn run(
                 .map_err(internal)?
                 .last_insert_id();
 
-                let row = load_map(tx, id).await?;
-                write_audit(tx, actor, "created", id, None, Some(row), headers).await?;
+                if let Some(actor) = actor {
+                    let row = load_map(tx, id).await?;
+                    write_audit(tx, actor, "created", id, None, Some(row), headers).await?;
+                }
                 sum.created += 1;
             }
             sum.scanned += 1;
@@ -2325,7 +2360,9 @@ async fn run(
             if processed.contains(&(path.clone(), method.clone())) {
                 continue;
             }
-            write_audit(tx, actor, "deleted", id, Some(map), None, headers).await?;
+            if let Some(actor) = actor {
+                write_audit(tx, actor, "deleted", id, Some(map), None, headers).await?;
+            }
             sqlx::query("DELETE FROM route_permissions WHERE id = ?")
                 .bind(id)
                 .execute(&mut **tx)

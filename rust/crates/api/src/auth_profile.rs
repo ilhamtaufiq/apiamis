@@ -28,7 +28,8 @@ use auth::login::{self, UserRow};
 use axum::{
     body::Bytes,
     extract::{Multipart, Path, State},
-    http::{HeaderMap, StatusCode},
+    http::{header, HeaderMap, StatusCode},
+    response::{IntoResponse, Response},
     Json,
 };
 use chrono::{DateTime, Utc};
@@ -526,9 +527,13 @@ pub async fn delete_avatar(
 /// 3. Pemanggil punya role `admin` (`role:admin`, Spatie): 403 dengan pesan Spatie.
 /// 4. Pemanggil bukan target (`AuthController`): 422 `Cannot impersonate yourself`.
 ///
-/// Respon: `user` (UserResource target), `token` (`id|plain`, token baru bernama `impersonation-token`),
-/// dan `message`. Token hanya dikirim di body, tidak di cookie. Audit `impersonation_started`
-/// dicatat dengan IP dan user agent pemanggil.
+/// Respon: `user` (UserResource target) dan `message`. Field `token` tidak lagi dikirim di body.
+/// Token baru (`id|plain`, bernama `impersonation-token`) hanya ditulis ke cookie httpOnly:
+/// - `arumanis_token` dan `arumanis_session` diganti ke token target;
+/// - `arumanis_impersonator` menyimpan token pemanggil saat ini (admin asli), kecuali cookie itu
+///   sudah ada (tidak ada impersonasi bertingkat).
+///
+/// Audit `impersonation_started` dicatat dengan IP dan user agent pemanggil.
 ///
 /// Catatan: `route_permission` menganggap `/api/auth/impersonate/{id}` bukan admin-only (hanya cocok
 /// `/auth/impersonate` persis), jadi bisa lolos bila ada rule `route_permissions` untuk role lain.
@@ -537,7 +542,7 @@ pub async fn impersonate(
     State(state): State<AppState>,
     headers: HeaderMap,
     Path(raw_user): Path<String>,
-) -> Result<Json<Value>, ApiError> {
+) -> Result<Response, ApiError> {
     let found = match raw_user.parse::<u64>() {
         Ok(id) => login::find_by_id(&state.pool, id).await.map_err(internal)?,
         Err(_) => None,
@@ -547,6 +552,9 @@ pub async fn impersonate(
     };
 
     let actor = require_auth(&state, &headers).await?;
+    // Token yang dipakai untuk autentikasi saat ini; akan disimpan sebagai token admin asli.
+    let current_token = crate::session::token_from_headers(&headers, &state.session)
+        .ok_or_else(ApiError::unauthenticated)?;
 
     // `role:admin` (Spatie `RoleMiddleware`). Pesan default karena `display_role_in_exception` false.
     let roles = login::roles_of(&state.pool, actor.user_id)
@@ -608,11 +616,60 @@ pub async fn impersonate(
         .await
         .map_err(internal)?
         .ok_or_else(ApiError::not_found)?;
-    Ok(Json(json!({
+    let mut response = Json(json!({
         "user": user,
-        "token": token,
         "message": format!("Now impersonating {}", target.name),
-    })))
+    }))
+    .into_response();
+
+    // Tidak menumpuk impersonasi: token admin asli hanya disimpan bila cookie belum ada.
+    if crate::session::cookie_value(&headers, &state.session.impersonator_name).is_none() {
+        if let Some(cookie) = state.session.impersonator_set_header(&current_token) {
+            response.headers_mut().append(header::SET_COOKIE, cookie);
+        }
+    }
+    // `arumanis_session` ikut diganti: `token_from_headers` membacanya sebelum `arumanis_token`.
+    if let Some(cookie) = state.session.set_header(&token) {
+        response.headers_mut().append(header::SET_COOKIE, cookie);
+    }
+    if let Some(cookie) = state.session.auth_set_header(&token) {
+        response.headers_mut().append(header::SET_COOKIE, cookie);
+    }
+    Ok(response)
+}
+
+/// `POST /api/auth/impersonate/stop`: kembali ke sesi admin asli dari cookie `arumanis_impersonator`.
+/// Cookie itu divalidasi seperti bearer token (termasuk kedaluwarsa). Tanpa cookie atau token
+/// tidak valid: 401. Tidak memakai header `Authorization`.
+pub async fn stop_impersonation(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> Result<Response, ApiError> {
+    let admin_token = crate::session::cookie_value(&headers, &state.session.impersonator_name)
+        .ok_or_else(ApiError::unauthenticated)?;
+    let admin = auth::authenticate(&state.pool, &admin_token)
+        .await
+        .map_err(|_| ApiError::unauthenticated())?;
+    let user = users::resource(&state.pool, &state.app_url, admin.user_id)
+        .await
+        .map_err(internal)?
+        .ok_or_else(ApiError::unauthenticated)?;
+
+    let mut response = Json(json!({
+        "user": user,
+        "message": "Impersonation stopped",
+    }))
+    .into_response();
+    if let Some(cookie) = state.session.set_header(&admin_token) {
+        response.headers_mut().append(header::SET_COOKIE, cookie);
+    }
+    if let Some(cookie) = state.session.auth_set_header(&admin_token) {
+        response.headers_mut().append(header::SET_COOKIE, cookie);
+    }
+    if let Some(cookie) = state.session.impersonator_clear_header() {
+        response.headers_mut().append(header::SET_COOKIE, cookie);
+    }
+    Ok(response)
 }
 
 #[cfg(test)]

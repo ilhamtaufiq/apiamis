@@ -33,6 +33,7 @@ pub mod crypt;
 pub mod dashboard;
 pub mod desa;
 pub mod raw_model;
+pub mod desa_population;
 pub mod desa_write;
 pub mod docx_template;
 pub mod document_registers;
@@ -153,6 +154,9 @@ const ALLOWED_ORIGINS: &[&str] = &[
     "https://bun.cianjur.space",
     "https://apiamis.cianjur.space",
     "https://ami.cianjur.space",
+    "https://pengawasan.arumanis.cianjur.space",
+    "https://sipd-lite.cianjur.space",
+    "https://esurvey.cianjur.space",
 ];
 
 /// State bersama untuk handler yang butuh database.
@@ -182,7 +186,7 @@ pub async fn require_auth(
     state: &AppState,
     headers: &axum::http::HeaderMap,
 ) -> Result<auth::AuthUser, ApiError> {
-    let token = session::token_from_headers(headers, &state.session.name)
+    let token = session::token_from_headers(headers, &state.session)
         .ok_or_else(ApiError::unauthenticated)?;
     auth::authenticate(&state.pool, &token)
         .await
@@ -193,6 +197,7 @@ pub async fn require_auth(
 pub fn app(config: &Config, state: AppState) -> Router {
     let permission_state = state.clone();
     let maintenance_state = state.clone();
+    let csrf_state = state.clone();
     Router::new()
         // Sama seperti `health: '/up'` di bootstrap/app.php (Laravel).
         .route("/up", get(up))
@@ -497,6 +502,11 @@ pub fn app(config: &Config, state: AppState) -> Router {
             post(auth_profile::upload_avatar)
                 .layer(DefaultBodyLimit::max(auth_profile::AVATAR_BODY_LIMIT))
                 .delete(auth_profile::delete_avatar),
+        )
+        // `stop` harus didaftarkan sebelum `{user}` agar tidak diurai sebagai id user.
+        .route(
+            "/api/auth/impersonate/stop",
+            post(auth_profile::stop_impersonation),
         )
         .route(
             "/api/auth/impersonate/{user}",
@@ -1133,6 +1143,11 @@ pub fn app(config: &Config, state: AppState) -> Router {
             Duration::from_secs(config.request_timeout_secs),
         ))
         .layer(DefaultBodyLimit::max(config.body_limit_bytes))
+        // CSRF untuk cookie `arumanis_token`. Di dalam CORS agar 401 tetap membawa header CORS.
+        .layer(axum::middleware::from_fn_with_state(
+            csrf_state,
+            session::reject_cookie_csrf,
+        ))
         .layer(cors_layer())
         .layer(TraceLayer::new_for_http())
         .layer(PropagateRequestIdLayer::x_request_id())

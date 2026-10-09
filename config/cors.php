@@ -34,6 +34,9 @@ return [
         'https://bun.cianjur.space',
         'https://apiamis.cianjur.space',
         'https://ami.cianjur.space',
+        'https://pengawasan.arumanis.cianjur.space',
+        'https://sipd-lite.cianjur.space',
+        'https://esurvey.cianjur.space',
     ],
 
     'allowed_origins_patterns' => [

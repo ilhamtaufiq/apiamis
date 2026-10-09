@@ -34,7 +34,7 @@ pub(crate) fn internal(e: impl std::fmt::Display) -> ApiError {
 
 /// Pengguna dari token bila valid, `None` bila tamu. Setara `auth('sanctum')->check()`.
 pub async fn optional_user(state: &AppState, headers: &HeaderMap) -> Option<auth::AuthUser> {
-    let token = session::token_from_headers(headers, &state.session.name)?;
+    let token = session::token_from_headers(headers, &state.session)?;
     auth::authenticate(&state.pool, &token).await.ok()
 }
 

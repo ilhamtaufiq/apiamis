@@ -200,6 +200,9 @@ pub async fn login(
     if let Some(cookie) = state.session.set_header(&token) {
         response.headers_mut().append(header::SET_COOKIE, cookie);
     }
+    if let Some(cookie) = state.session.auth_set_header(&token) {
+        response.headers_mut().append(header::SET_COOKIE, cookie);
+    }
     response
 }
 
@@ -249,6 +252,10 @@ pub async fn sync_token(
     if let Some(cookie) = state.session.set_header(&token) {
         response.headers_mut().append(header::SET_COOKIE, cookie);
     }
+    // Token browser (httpOnly) untuk `arumanis_token`; kontrak frontend bergantung pada cookie ini.
+    if let Some(cookie) = state.session.auth_set_header(&token) {
+        response.headers_mut().append(header::SET_COOKIE, cookie);
+    }
     Ok(response)
 }
 
@@ -271,6 +278,13 @@ pub async fn logout(
         if let Some(cookie) = state.session.clear_header(name) {
             response.headers_mut().append(header::SET_COOKIE, cookie);
         }
+    }
+    if let Some(cookie) = state.session.auth_clear_header() {
+        response.headers_mut().append(header::SET_COOKIE, cookie);
+    }
+    // Cookie token admin asli saat impersonasi ikut dihapus.
+    if let Some(cookie) = state.session.impersonator_clear_header() {
+        response.headers_mut().append(header::SET_COOKIE, cookie);
     }
     Ok(response)
 }
