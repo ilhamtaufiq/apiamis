@@ -4,7 +4,7 @@ Dokumen ini menjelaskan urutan kerja untuk menghapus Laravel dari apiamis, sehin
 
 ## Kondisi sekarang
 
-- Route API: 301 baris `Route::` di `routes/api.php`. Di `routes.md`, sudah `rust` 345, `dihapus` 77, `parsial` 3, dan `belum` 61.
+- Route API: 487 route (termasuk expand `apiResource`). Di `routes.md`: `rust` 404, `parsial` 3, `dihapus` 79, dan `belum` 0.
 - Kode Laravel: 63 controller, 34 service, 7 command artisan, 133 migrasi. Tidak ada job dan event, dan tidak ada jadwal di `routes/console.php`.
 - Dependensi Laravel yang masih dipakai, dan pengganti Rust-nya:
 
@@ -28,7 +28,7 @@ Dokumen ini menjelaskan urutan kerja untuk menghapus Laravel dari apiamis, sehin
 
 Target: `routes.md` tidak lagi berisi `belum`, atau sisanya dicatat sebagai "tetap di Laravel" dengan alasan.
 
-- Kerjakan 61 route `belum`: user-drive, spam-kelembagaan, usulan-kegiatan, tool-pdfs, survey-tugas, menu-permissions, kanban, events, auth, public, dan sisa kecil. Sebagian sudah ditulis tapi belum dibuild.
+- Route `belum` sudah 0 (lihat `routes.md`). Yang tersisa: 3 `parsial` (`GET /api/pekerjaan/document-register`, `GET /api/document-registers`, dan `POST /api/procurement/spse/kontrak/push`), serta verifikasi paritas runtime terhadap Laravel yang berjalan. Inventaris `routes.md` dibuat secara statis, jadi perlu dicocokkan dengan `php artisan route:list --json`.
 - Route yang sengaja tidak dipindah diputuskan satu per satu: procurement kontrak/push (WIP, sudah lolos tes stub), desa profile, dan document-register (parsial).
 - Setiap route selesai: tes DB lulus, aturan Apache ditambahkan, `routes.md` dan `log.md` diperbarui.
 
