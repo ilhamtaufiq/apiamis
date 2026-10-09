@@ -14,9 +14,9 @@
 //! - Audit: setting bertipe `secret` dicatat tanpa nilainya. Laravel menulis nilai plain ke `tbl_audit_logs`.
 //!   Audit hanya memuat field yang berubah (tanpa `updated_at`).
 //! - Backup: daftar, unduh, dan hapus hanya untuk berkas lokal di `system-backups`. Bila
-//!   `s3_backup_enabled = 1`, daftar tidak memuat berkas S3, unduh berkas yang tidak lokal dan hapus
-//!   menjawab 501 (tidak mengubah apa pun). Backup create, restore, cancel job, uji S3, dan Google
-//!   Drive belum dipindah.
+//!   `s3_backup_enabled = 1`, daftar tidak memuat berkas S3 dan unduh berkas yang tidak lokal
+//!   menjawab 501. Hapus berkas S3 sudah di Rust (lokal dihapus, objek S3 dihapus, galat S3 hanya
+//!   dicatat). Backup create, restore, cancel job, uji S3, dan Google Drive ada di `app_settings_backup`.
 //! - Validasi berkas: ekstensi dan tanda awal isi berkas (magic number), bukan `finfo` penuh.
 //!   SVG hanya diperiksa ada tag `<svg`.
 //! - Batas body route `store` 12 MB (template kontrak 10 MB ditambah overhead multipart).
@@ -42,7 +42,7 @@ use sqlx::{MySql, MySqlPool, Row, Transaction};
 use tokio::io::AsyncReadExt;
 
 use crate::{
-    audit, format::iso8601_utc, kontrak_document, lookup, mailer, media,
+    app_settings_backup, audit, format::iso8601_utc, kontrak_document, lookup, mailer, media,
     notifications::require_admin, notify::new_uuid, require_auth, AppState,
 };
 
@@ -1182,10 +1182,11 @@ pub async fn backup_destroy(
     require_admin(&state.pool, user.user_id).await?;
     guard_filename(&name)?;
     if s3_backup_enabled(&state.pool).await? {
-        return Err(ApiError::new(
-            StatusCode::NOT_IMPLEMENTED,
-            "Menghapus backup di S3 belum didukung di layanan Rust.",
-        ));
+        // `deleteBackup` Laravel: salinan lokal dihapus bila ada, lalu objek S3. Galat S3 hanya dicatat,
+        // sehingga respons selalu sukses selama S3 aktif.
+        let _ = tokio::fs::remove_file(backup_dir().join(&name)).await;
+        app_settings_backup::s3_delete_backup(&state.pool, &name).await;
+        return Ok(Json(json!({ "message": "Backup berhasil dihapus" })));
     }
     match tokio::fs::remove_file(backup_dir().join(&name)).await {
         Ok(()) => Ok(Json(json!({ "message": "Backup berhasil dihapus" }))),
