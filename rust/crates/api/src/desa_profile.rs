@@ -13,7 +13,7 @@
 //! - `pekerjaan` memakai `pekerjaan::to_resource` dengan relasi yang dimuat `pekerjaan::load`.
 //!   Himpunan key bisa berbeda dari `PekerjaanResource` dengan `load(['kecamatan','kegiatan'])`.
 //! - Baris `spm_sanitasi`, `unit_spam`, dan pekerjaan diurutkan `id`. Laravel tanpa urutan.
-//! - Perbandingan status (`active`, `completed`, `Berfungsi`) tidak peka huruf, seperti collation MySQL.
+//! - Perbandingan status (`active`, `completed`, `Berfungsi`) peka huruf, seperti `Collection::where` di PHP.
 
 use std::collections::HashMap;
 
@@ -187,13 +187,14 @@ pub async fn profile(
     headers: HeaderMap,
     Path(id): Path<String>,
 ) -> Result<Json<Value>, ApiError> {
-    // Binding model dulu (404), lalu auth:sanctum, seperti urutan middleware Laravel.
+    // auth:sanctum lebih dulu, lalu binding model (404). Laravel mengurutkan Authenticate sebelum
+    // SubstituteBindings, sama seperti `show`.
+    let user = require_auth(&state, &headers).await?;
     let desa_id: u64 = id.parse().map_err(|_| ApiError::not_found())?;
     let desa_row = desa::find(&state.pool, desa_id)
         .await
         .map_err(internal)?
         .ok_or_else(ApiError::not_found)?;
-    let user = require_auth(&state, &headers).await?;
 
     // `Pekerjaan::where('desa_id', ...)->get()`: tanpa scope byUserRole, seperti Laravel.
     let filter = pekerjaan::PekerjaanFilter::from_query(&HashMap::from([(
@@ -248,10 +249,11 @@ pub async fn profile(
         _ => Value::Null,
     };
     let total_pagu: f64 = pekerjaan_rows.iter().filter_map(|p| p.pagu).sum();
+    // `Collection::where` di PHP memakai `==` pada nilai di memori: case-sensitive, bukan collation MySQL.
     let status_count = |status: &str| {
         pekerjaan_rows
             .iter()
-            .filter(|p| p.status.as_deref().is_some_and(|s| s.eq_ignore_ascii_case(status)))
+            .filter(|p| p.status.as_deref() == Some(status))
             .count()
     };
     let sum_int = |rows: &[Value], key: &str| -> i64 {
@@ -265,7 +267,7 @@ pub async fn profile(
         .count();
     let berfungsi = spm
         .iter()
-        .filter(|s| text_of(s, "status_keberfungsian").eq_ignore_ascii_case("Berfungsi"))
+        .filter(|s| text_of(s, "status_keberfungsian") == "Berfungsi")
         .count();
 
     Ok(Json(json!({
