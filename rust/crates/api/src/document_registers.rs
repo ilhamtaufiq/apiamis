@@ -298,12 +298,6 @@ pub async fn index(
         .get("per_page")
         .map(|v| v.trim_matches(PHP_TRIM).parse().unwrap_or(0))
         .unwrap_or(20);
-    // Negatif belum disamakan: Laravel mengambil semua baris (`take()` mengabaikan nilai negatif).
-    let per_page = match per {
-        0 => pagination::DEFAULT_PER_PAGE,
-        p if p < 0 => 20,
-        p => p as u64,
-    };
     let page = pagination::page_params(&query).page;
 
     let count_sql = format!("SELECT CAST(COUNT(*) AS SIGNED) FROM tbl_document_registers r{where_sql}");
@@ -313,10 +307,19 @@ pub async fn index(
     }
     let total = cq.fetch_one(&state.pool).await.map_err(internal)?;
 
-    let sql = format!(
-        "{SELECT_REG} r{where_sql} ORDER BY r.created_at DESC, r.id DESC LIMIT {per_page} OFFSET {}",
-        (page - 1) * per_page
-    );
+    // Negatif: `take()` Laravel mengabaikan nilai negatif, jadi semua baris ikut dalam satu halaman
+    // (`last_page` 1). Nilai `per_page` di respons tetap negatif, lihat di bawah.
+    let per_page = match per {
+        0 => pagination::DEFAULT_PER_PAGE,
+        p if p < 0 => total.max(1) as u64,
+        p => p as u64,
+    };
+    let limit = if per < 0 {
+        String::new()
+    } else {
+        format!(" LIMIT {per_page} OFFSET {}", (page - 1) * per_page)
+    };
+    let sql = format!("{SELECT_REG} r{where_sql} ORDER BY r.created_at DESC, r.id DESC{limit}");
     let mut q = sqlx::query(&sql);
     for b in &binds {
         q = q.bind(b);
@@ -341,14 +344,17 @@ pub async fn index(
     let params = PageParams { page, per_page };
     // Paginator Laravel mentah (`paginate()` lalu `response()->json`), tanpa pembungkus `meta`.
     let pairs = laravel_query_pairs(raw.as_deref());
-    Ok(Json(pagination::paginate_flat(
+    let mut body = pagination::paginate_flat(
         data,
         total as u64,
         params,
         &base,
         &|p| laravel_page_url(&base, &pairs, p),
-    ))
-    .into_response())
+    );
+    if per < 0 {
+        body["per_page"] = json!(per);
+    }
+    Ok(Json(body).into_response())
 }
 
 async fn addendum_json(pool: &MySqlPool, id: i64) -> Result<Value, ApiError> {
