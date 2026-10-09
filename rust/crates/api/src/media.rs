@@ -316,6 +316,37 @@ pub async fn regenerate_missing_thumbs(
     Ok(report)
 }
 
+/// Media yang berkas aslinya hilang di disk: `(media_id, model_id, file_name)`.
+pub async fn missing_originals(
+    pool: &MySqlPool,
+    model_type: &str,
+    collection: &str,
+) -> Result<Vec<(u64, u64, String)>, sqlx::Error> {
+    let rows = sqlx::query(
+        "SELECT CAST(id AS SIGNED) AS id, CAST(model_id AS SIGNED) AS model_id, file_name, mime_type \
+         FROM media WHERE model_type = ? AND collection_name = ? ORDER BY id",
+    )
+    .bind(model_type)
+    .bind(collection)
+    .fetch_all(pool)
+    .await?;
+
+    let mut out = Vec::new();
+    for row in rows {
+        let mime: String = row.try_get("mime_type")?;
+        if !mime.starts_with("image/") {
+            continue;
+        }
+        let id = row.try_get::<i64, _>("id")? as u64;
+        let model_id = row.try_get::<i64, _>("model_id")? as u64;
+        let file_name: String = row.try_get("file_name")?;
+        if !tokio::fs::try_exists(media_dir(id).join(&file_name)).await.unwrap_or(false) {
+            out.push((id, model_id, file_name));
+        }
+    }
+    Ok(out)
+}
+
 /// Hapus semua media satu koleksi: baris `media` dalam transaksi, direktori berkasnya dikembalikan
 /// untuk dihapus setelah commit. `keep` tidak ikut dihapus (dipakai saat mengganti berkas).
 pub async fn delete_collection(
