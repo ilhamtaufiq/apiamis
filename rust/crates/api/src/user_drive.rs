@@ -50,7 +50,7 @@ const MAX_UPLOAD_KB: usize = 204_800;
 pub const BODY_LIMIT: usize = MAX_UPLOAD_KB * 1024 + 1024 * 1024;
 
 const SELECT_ITEM: &str = "SELECT CAST(id AS SIGNED) AS id, CAST(user_id AS SIGNED) AS user_id, \
-     CAST(parent_id AS SIGNED) AS parent_id, name, kind, original_filename, created_at, updated_at, deleted_at \
+     CAST(parent_id AS SIGNED) AS parent_id, name, kind, original_filename, created_at, updated_at \
      FROM user_drive_items";
 
 /// Baris `user_drive_items`. Kolom id dibaca sebagai `i64` (lihat `CAST ... AS SIGNED`).
@@ -64,7 +64,6 @@ struct Item {
     original_filename: Option<String>,
     created_at: Option<DateTime<Utc>>,
     updated_at: Option<DateTime<Utc>>,
-    deleted_at: Option<DateTime<Utc>>,
 }
 
 impl Item {
@@ -83,7 +82,6 @@ fn map_item(r: &MySqlRow) -> Result<Item, sqlx::Error> {
         original_filename: r.try_get("original_filename")?,
         created_at: r.try_get("created_at")?,
         updated_at: r.try_get("updated_at")?,
-        deleted_at: r.try_get("deleted_at")?,
     })
 }
 
@@ -539,7 +537,6 @@ pub async fn store_folder(
         original_filename: None,
         created_at: Some(now),
         updated_at: Some(now),
-        deleted_at: None,
     };
     changes::audit_only(
         &mut tx,
@@ -645,7 +642,6 @@ pub async fn store_file(
         original_filename: Some(upload.original_name.clone()),
         created_at: Some(now),
         updated_at: Some(now),
-        deleted_at: None,
     };
     changes::audit_only(
         &mut tx,

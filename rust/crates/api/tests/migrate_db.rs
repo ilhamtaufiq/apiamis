@@ -3,7 +3,7 @@
 //!     DATABASE_URL=mysql://root@localhost/apiamis?socket=/run/mysqld/mysqld.sock \
 //!         cargo test -p api --test migrate_db -- --include-ignored
 
-use sqlx::{mysql::MySqlConnectOptions, ConnectOptions, Connection, MySqlConnection, MySqlPool, Row};
+use sqlx::{mysql::MySqlConnectOptions, Connection, MySqlConnection, MySqlPool, Row};
 use std::str::FromStr;
 
 fn base_options() -> MySqlConnectOptions {

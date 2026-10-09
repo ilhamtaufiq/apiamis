@@ -378,7 +378,7 @@ where
 }
 
 #[derive(Debug, Clone, PartialEq)]
-struct Card {
+pub(crate) struct Card {
     id: i64,
     board_id: i64,
     column_id: i64,
