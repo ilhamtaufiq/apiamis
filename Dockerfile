@@ -23,6 +23,17 @@ COPY vite.config.js ./
 COPY resources ./resources
 RUN npm run build
 
+# Stage 3: Binary Rust (apiamis-api). Dibangun di bookworm agar glibc cocok dengan image runtime.
+FROM rust:1-bookworm AS rust-build
+RUN apt-get update && apt-get install -y --no-install-recommends cmake clang \
+    && rm -rf /var/lib/apt/lists/*
+WORKDIR /app/rust
+COPY rust/ ./
+RUN --mount=type=cache,target=/usr/local/cargo/registry \
+    --mount=type=cache,target=/app/rust/target \
+    cargo build --release -p api --locked \
+    && cp target/release/api /usr/local/bin/apiamis-api
+
 # Stage 4: Final production image
 FROM php:8.3-apache-bookworm
 WORKDIR /var/www/html
@@ -63,6 +74,8 @@ RUN rm -rf bootstrap/cache/*.php \
 COPY docker/000-default.conf /etc/apache2/sites-available/000-default.conf
 
 # Copy and make entrypoint executable
+# Binary Rust (API yang sudah dipindah). Belum ada aturan proxy Apache ke :8000.
+COPY --from=rust-build /usr/local/bin/apiamis-api /usr/local/bin/apiamis-api
 COPY docker-entrypoint.sh /usr/local/bin/
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 

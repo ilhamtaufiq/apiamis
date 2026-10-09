@@ -42,6 +42,7 @@ if [ -f "scripts/index_knowledge.py" ] && [ -x "venv/bin/python" ]; then
 fi
 
 REVERB_PID=""
+RUST_PID=""
 
 start_reverb() {
     if [ "${DISABLE_REVERB:-false}" = "true" ]; then
@@ -80,7 +81,27 @@ start_reverb() {
     fi
 }
 
+start_rust() {
+    if [ -z "${DATABASE_URL:-}" ]; then
+        log "Skipping Rust API: DATABASE_URL is not set"
+        return
+    fi
+
+    log "Starting Rust API on port ${APP_PORT:-8000}..."
+    /usr/local/bin/apiamis-api >> /proc/1/fd/2 2>&1 &
+    RUST_PID=$!
+
+    sleep 2
+    if kill -0 "$RUST_PID" 2>/dev/null; then
+        log "Rust API started (pid ${RUST_PID})"
+    else
+        log "ERROR: Rust API exited immediately — check DATABASE_URL, APP_KEY, and logs"
+        RUST_PID=""
+    fi
+}
+
 start_reverb
+start_rust
 
 apache2-foreground &
 APACHE_PID=$!
@@ -89,6 +110,9 @@ shutdown() {
     kill "$APACHE_PID" 2>/dev/null || true
     if [ -n "$REVERB_PID" ]; then
         kill "$REVERB_PID" 2>/dev/null || true
+    fi
+    if [ -n "$RUST_PID" ]; then
+        kill "$RUST_PID" 2>/dev/null || true
     fi
     wait "$APACHE_PID" 2>/dev/null || true
     exit 0

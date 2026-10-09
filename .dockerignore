@@ -9,6 +9,7 @@ __pycache__/
 /scripts/venv
 
 # ============ Build outputs (dibangun ulang di dalam image) ============
+/rust/target
 /public/build
 /public/hot
 /public/storage
