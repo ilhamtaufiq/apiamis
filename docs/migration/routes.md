@@ -310,7 +310,7 @@ Kolom **Status** diisi saat modul dipindah ke Rust. Awalnya semua `belum`.
 | 9 | POST | `/api/spam-units/{unitSpam}/achievements` | SpamUnitController@addAchievement | auth:sanctum | rust |
 | 10 | POST | `/api/spam-units/{unitSpam}/budgets` | SpamUnitController@addBudget | auth:sanctum | rust |
 | 11 | DELETE | `/api/spam-units/{unitSpam}/budgets/{budgetId}` | SpamUnitController@deleteBudget | auth:sanctum | rust |
-| 12 | POST | `/api/spam-units/import` | SpamUnitController@import | auth:sanctum | belum |
+| 12 | POST | `/api/spam-units/import` | SpamUnitController@import | auth:sanctum | rust |
 | 13 | GET | `/api/spam-units` | SpamUnitController@index | auth:sanctum | rust |
 | 14 | POST | `/api/spam-units` | SpamUnitController@store | auth:sanctum | rust |
 | 15 | GET | `/api/spam-units/{id}` | SpamUnitController@show | auth:sanctum | rust |
