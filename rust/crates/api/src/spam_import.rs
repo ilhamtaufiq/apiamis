@@ -587,6 +587,7 @@ fn failed(detail: String) -> Response {
 
 /// `POST /api/spam-units/import` (multipart, field `file`).
 pub async fn import(State(state): State<AppState>, request: Request) -> Result<Response, ApiError> {
+    crate::spam_units::bump_spam_generation();
     // Auth dijalankan lebih dulu (middleware `auth:sanctum` di Laravel), baru body multipart dibaca.
     let headers = request.headers().clone();
     let user = require_auth(&state, &headers).await?;

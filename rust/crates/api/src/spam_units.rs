@@ -13,6 +13,9 @@
 //! - `stats/series` dan `public/.../map-stats/series` memakai tahun dari `years` (4 digit, unik, maks 20).
 
 use std::collections::HashMap;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Mutex, OnceLock};
+use std::time::{Duration, Instant};
 
 use axum::{
     body::Bytes,
@@ -871,6 +874,7 @@ pub async fn store(
     headers: HeaderMap,
     body: Bytes,
 ) -> Result<Response, ApiError> {
+    bump_spam_generation();
     let user = require_auth(&state, &headers).await?;
     let input = validate_unit(&state.pool, &parse_body(&body)).await?;
     let url = format!("{}/api/spam-units", base_url(&state));
@@ -978,6 +982,7 @@ pub async fn update(
     Path(id): Path<String>,
     body: Bytes,
 ) -> Result<Response, ApiError> {
+    bump_spam_generation();
     let unit_id = parse_id(&id)?;
     {
         let mut conn = state.pool.acquire().await.map_err(sql_err)?;
@@ -1069,6 +1074,7 @@ pub async fn destroy(
     headers: HeaderMap,
     Path(id): Path<String>,
 ) -> Result<Response, ApiError> {
+    bump_spam_generation();
     let unit_id = parse_id(&id)?;
     let old = {
         let mut conn = state.pool.acquire().await.map_err(sql_err)?;
@@ -1128,6 +1134,7 @@ pub async fn add_achievement(
     Path(unit): Path<String>,
     body: Bytes,
 ) -> Result<Response, ApiError> {
+    bump_spam_generation();
     let unit_id = bind_unit(&state, &unit).await?;
     let user = require_auth(&state, &headers).await?;
     let input = parse_body(&body);
@@ -1294,6 +1301,7 @@ pub async fn add_budget(
     Path(unit): Path<String>,
     body: Bytes,
 ) -> Result<Response, ApiError> {
+    bump_spam_generation();
     let unit_id = bind_unit(&state, &unit).await?;
     let user = require_auth(&state, &headers).await?;
     let input = parse_body(&body);
@@ -1366,6 +1374,7 @@ pub async fn delete_budget(
     headers: HeaderMap,
     Path((unit, budget)): Path<(String, String)>,
 ) -> Result<Response, ApiError> {
+    bump_spam_generation();
     let unit_id = bind_unit(&state, &unit).await?;
     let user = require_auth(&state, &headers).await?;
     let budget_id = parse_id(&budget)?;
@@ -1441,6 +1450,7 @@ pub async fn attach_pekerjaan(
     Path(unit): Path<String>,
     body: Bytes,
 ) -> Result<Response, ApiError> {
+    bump_spam_generation();
     let unit_id = bind_unit(&state, &unit).await?;
     let user = require_auth(&state, &headers).await?;
     let input = parse_body(&body);
@@ -1567,6 +1577,7 @@ pub async fn detach_pekerjaan(
     headers: HeaderMap,
     Path((unit, pekerjaan)): Path<(String, String)>,
 ) -> Result<Response, ApiError> {
+    bump_spam_generation();
     let unit_id = bind_unit(&state, &unit).await?;
     let user = require_auth(&state, &headers).await?;
     let pekerjaan_id = parse_id(&pekerjaan)?;
@@ -1600,6 +1611,7 @@ pub async fn sync_pekerjaan(
     Path(unit): Path<String>,
     body: Bytes,
 ) -> Result<Response, ApiError> {
+    bump_spam_generation();
     let unit_id = bind_unit(&state, &unit).await?;
     let user = require_auth(&state, &headers).await?;
     let input = parse_body(&body);
@@ -1917,6 +1929,60 @@ fn stats_tahun(raw: Option<&String>) -> Option<String> {
     raw.map(|s| s.trim().to_string()).filter(|s| !s.is_empty())
 }
 
+/// Generasi cache statistik spam. Dinaikkan di setiap handler tulis spam-units dan impor.
+static SPAM_GENERATION: AtomicU64 = AtomicU64::new(0);
+/// Umur maksimum entri cache. Perubahan dari modul lain (mis. pekerjaan) baru terlihat setelah ini.
+const STATS_CACHE_TTL: Duration = Duration::from_secs(60);
+const STATS_CACHE_MAX: usize = 512;
+
+type StatsCache = Mutex<HashMap<String, (Instant, Value)>>;
+
+fn stats_cache() -> &'static StatsCache {
+    static CACHE: OnceLock<StatsCache> = OnceLock::new();
+    CACHE.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+/// Dipanggil di awal setiap handler yang menulis data spam, supaya statistik lama tidak dipakai lagi.
+pub(crate) fn bump_spam_generation() {
+    SPAM_GENERATION.fetch_add(1, Ordering::SeqCst);
+}
+
+/// Statistik per scope pengguna (tamu, atau user dengan role-nya), per tahun dan kecamatan.
+async fn cached_stats_payload(
+    state: &AppState,
+    ctx: &Ctx<'_>,
+    tahun: Option<String>,
+    kecamatan: Option<i64>,
+) -> Result<Value, ApiError> {
+    let mut role_ids: Vec<u64> = ctx.roles.iter().map(|(id, _)| *id).collect();
+    role_ids.sort_unstable();
+    let key = format!(
+        "{}|{:?}|{:?}|{}|{}",
+        SPAM_GENERATION.load(Ordering::SeqCst),
+        ctx.user,
+        role_ids,
+        tahun.as_deref().unwrap_or("*"),
+        kecamatan.map_or("*".to_string(), |k| k.to_string()),
+    );
+    if let Ok(cache) = stats_cache().lock() {
+        if let Some((at, v)) = cache.get(&key) {
+            if at.elapsed() < STATS_CACHE_TTL {
+                return Ok(v.clone());
+            }
+        }
+    }
+    let value = stats_payload(state, ctx, tahun, kecamatan).await?;
+    if let Ok(mut cache) = stats_cache().lock() {
+        if cache.len() >= STATS_CACHE_MAX {
+            cache.retain(|_, (at, _)| at.elapsed() < STATS_CACHE_TTL);
+        }
+        if cache.len() < STATS_CACHE_MAX {
+            cache.insert(key, (Instant::now(), value.clone()));
+        }
+    }
+    Ok(value)
+}
+
 async fn stats_payload(
     state: &AppState,
     ctx: &Ctx<'_>,
@@ -1947,7 +2013,7 @@ pub async fn stats(
         .map_err(sql_err)?;
     let url = String::new();
     let ctx = ctx_for(user.user_id, &roles, &url, &headers);
-    let data = stats_payload(
+    let data = cached_stats_payload(
         &state,
         &ctx,
         stats_tahun(query.get("tahun")),
@@ -1965,7 +2031,7 @@ pub async fn public_stats(
 ) -> Result<Response, ApiError> {
     let url = String::new();
     let ctx = guest_ctx(&url, &headers);
-    let data = stats_payload(
+    let data = cached_stats_payload(
         &state,
         &ctx,
         stats_tahun(query.get("tahun")),
@@ -2005,7 +2071,7 @@ pub async fn stats_series(
     let kec = kecamatan_param(&query);
     let mut data = Map::new();
     for y in years_param(query.get("years")) {
-        let v = stats_payload(&state, &ctx, Some(y.clone()), kec).await?;
+        let v = cached_stats_payload(&state, &ctx, Some(y.clone()), kec).await?;
         data.insert(y, v);
     }
     Ok(Json(json!({ "success": true, "data": if data.is_empty() { json!([]) } else { Value::Object(data) } })).into_response())
