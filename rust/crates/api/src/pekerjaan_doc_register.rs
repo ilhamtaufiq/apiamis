@@ -10,8 +10,9 @@
 //! Tidak ada `addendum` di respons ini karena Laravel tidak memuatnya.
 //!
 //! Catatan paritas (daftar lengkap ada di laporan):
-//! - Paket konsolidasi tambahan (berbagi kontrak dengan paket di halaman, di luar halaman) diambil tanpa
-//!   `byUserRole()` dan tanpa filter, seperti Laravel.
+//! - Paket konsolidasi tambahan (berbagi kontrak dengan paket di halaman, di luar halaman) tetap memakai
+//!   scope `byUserRole()` (berbeda dari Laravel, agar non-admin tidak melihat paket di luar scope), dan
+//!   tidak memakai filter request, seperti Laravel.
 //! - Laravel tidak memakai `ORDER BY`. Di sini paket diurutkan `p.id`, dan relasi berurutan `id`.
 //! - Datetime memakai bentuk Carbon mentah (`.000000Z`), belum diverifikasi terhadap respons Laravel.
 
@@ -624,7 +625,8 @@ pub async fn index(
     let page_count = items.len();
 
     // Konsolidasi: paket lain yang berbagi kontrak dengan halaman ini ikut ditambahkan di akhir.
-    // Laravel tidak memakai byUserRole() atau filter di sini, dan begitu juga port ini.
+    // Berbeda dari Laravel: scope byUserRole() tetap dipakai, supaya pengguna tidak melihat paket
+    // di luar scope-nya lewat kontrak bersama. Filter request tidak dipakai, seperti Laravel.
     let shared_kontrak: BTreeSet<i64> = items.iter().flat_map(kontrak_ids).collect();
     if !shared_kontrak.is_empty() {
         let mut extra_sql = format!(
@@ -640,6 +642,8 @@ pub async fn index(
             ));
             extra_binds.extend(page_ids.iter().map(i64::to_string));
         }
+        extra_sql.push_str(&scope.sql);
+        extra_binds.extend(scope.binds.iter().map(u64::to_string));
         for (_, attrs) in fetch_rows(pool, &extra_sql, &extra_binds, None).await? {
             items.push(item(pool, attrs).await?);
         }
