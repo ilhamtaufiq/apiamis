@@ -11,6 +11,7 @@ use serde_json::{json, Value};
 use shared::{ApiError, Config};
 pub mod access;
 pub mod app_settings;
+pub mod app_settings_backup;
 pub mod analytics;
 pub mod audit;
 pub mod audit_logs;
@@ -466,6 +467,23 @@ pub fn app(config: &Config, state: AppState) -> Router {
             get(app_settings::download_kontrak_template),
         )
         .route("/api/app-settings/backups", get(app_settings::backups_index))
+        .route(
+            "/api/app-settings/backups",
+            post(app_settings_backup::backup_store),
+        )
+        .route(
+            "/api/app-settings/backups/jobs/{job_id}",
+            axum::routing::delete(app_settings_backup::backup_cancel_job),
+        )
+        .route(
+            "/api/app-settings/backups/restore",
+            post(app_settings_backup::backup_restore)
+                .layer(DefaultBodyLimit::max(app_settings_backup::RESTORE_BODY_LIMIT)),
+        )
+        .route(
+            "/api/app-settings/backups/s3/test",
+            post(app_settings_backup::backup_test_s3),
+        )
         .route(
             "/api/app-settings/backups/jobs/{job_id}",
             get(app_settings::backup_show_job),
