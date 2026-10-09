@@ -14,8 +14,8 @@ Sumber: `routes/api.php` (branch `rust`, dari `main` SHA `c19fd06`). Dibuat deng
 
 - Sudah di Rust: **405** (termasuk dokumen kontrak SPK, cover, ZIP cover, BAP, dan bap-context, serta PDF SPK lewat ONLYOFFICE; termasuk auth, lookup, kecamatan, desa, kegiatan, penyedia, tiket GET, checklist GET, foto dan penerima seluruh rute, berkas kecuali export-pdf dan upload-from-url, kontrak CRUD, relasi pekerjaan/kegiatan/penyedia, excel export, template, dan impor kontrak, addendum dan register-gaps GET, sk, notifikasi, dan master fase pekerjaan)
 - Parsial di Rust: **3** (`GET /api/pekerjaan/document-register` dan `GET /api/document-registers`: bentuk respons sudah sama dengan Laravel, tetapi isi item belum dibandingkan karena data uji kosong; `POST /api/procurement/spse/kontrak/push`: lihat log)
-- Belum: **1** (`GET /api/`, closure welcome Laravel; belum diputuskan, hapus atau biarkan sampai Laravel dihapus). Angka ini dihitung dari kolom Status di tabel di bawah.
-- Dihapus (tidak dimigrasi): **77** (termasuk desa sync-kk, chat AI dan live-chat, panduan CMS, presence, search ai-summary, dan pengaturan AI di app-settings, sesuai keputusan user)
+- Belum: **0**. Angka ini dihitung dari kolom Status di tabel di bawah.
+- Dihapus (tidak dimigrasi): **78** (termasuk `GET /api/`, closure welcome, dihapus dari `routes/api.php`) (termasuk desa sync-kk, chat AI dan live-chat, panduan CMS, presence, search ai-summary, dan pengaturan AI di app-settings, sesuai keputusan user)
 
 Cara menghitung: cocokkan method dan path (`{param}` dinormalisasi) dengan route yang terdaftar di `rust/crates/api/src/lib.rs`.
 
@@ -136,7 +136,7 @@ Kolom **Status** diisi saat modul dipindah ke Rust. Awalnya semua `belum`.
 
 | No | Method | Path | Controller@action | Middleware | Status |
 | --- | --- | --- | --- | --- | --- |
-| 1 | GET | `/api/` | closure | auth:sanctum | belum |
+| 1 | GET | `/api/` | closure | auth:sanctum | dihapus |
 
 ### client-error-reports (1)
 

@@ -115,9 +115,6 @@ Route::get('onlyoffice/temp/{file}', [OnlyOfficeController::class, 'tempDownload
 
 Route::middleware('auth:sanctum')->group(function () {
     Broadcast::routes();
-    Route::get('/', function () {
-        return view('welcome');
-    });
     Route::post('auth/logout', [AuthController::class, 'logout']);
     Route::get('auth/me', [AuthController::class, 'me']);
     // Self-service profil & avatar (semua user pada datanya sendiri)
