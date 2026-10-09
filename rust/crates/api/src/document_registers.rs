@@ -260,7 +260,15 @@ pub async fn index(
         if !query.contains_key(key) {
             continue;
         }
-        match trimmed(key) {
+        // `tahun` kosong memakai tahun berjalan (UTC, zona aplikasi), bukan `IS NULL`.
+        let value = match trimmed(key) {
+            None if key == "tahun" => {
+                use chrono::Datelike;
+                Some(chrono::Utc::now().year().to_string())
+            }
+            other => other,
+        };
+        match value {
             Some(v) => {
                 clauses.push(format!("{col} = ?"));
                 binds.push(v);

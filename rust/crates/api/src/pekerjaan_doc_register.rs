@@ -13,9 +13,9 @@
 //! - Datetime: `Carbon::toJSON()` (carbon 3.11.4, `Converter::toISOString`) memakai UTC dengan
 //!   `YYYY-MM-DDTHH:MM:SS.ffffffZ`, dan `date` cast memakai awal hari di zona aplikasi. Zona aplikasi
 //!   `config/app.php` adalah UTC, jadi bentuk `.000000Z` cocok untuk kolom `datetime` dan `date`.
-//! - Paket konsolidasi tambahan (berbagi kontrak dengan paket di halaman, di luar halaman) tetap memakai
-//!   scope `byUserRole()` (berbeda dari Laravel, agar non-admin tidak melihat paket di luar scope), dan
-//!   tidak memakai filter request, seperti Laravel.
+//! - Paket konsolidasi tambahan (berbagi kontrak dengan paket di halaman, di luar halaman) hanya
+//!   ditampilkan untuk admin dan super-admin. Ini berbeda dari Laravel, yang menampilkannya ke semua
+//!   pengguna. Paket tambahan tidak memakai filter request, seperti Laravel.
 //! - Laravel tidak memakai `ORDER BY`. Di sini paket diurutkan `p.id`, dan relasi berurutan `id`.
 //!   Ini celah yang tidak bisa ditutup: urutan Laravel tidak deterministik.
 //! - `per_page`: 0 atau kosong memakai `Model::$perPage` (15), seperti `paginate()`. Negatif selain -1
@@ -362,12 +362,25 @@ fn placeholders(n: usize) -> String {
 fn filters(query: &HashMap<String, String>) -> (String, Vec<String>) {
     let mut sql = String::new();
     let mut binds = Vec::new();
-    // TrimStrings Laravel: nilai dipangkas dulu, lalu kosong dianggap tidak diisi (`filled()`).
-    if let Some(t) = query.get("tahun").map(|v| v.trim_matches(PHP_TRIM)).filter(|v| !v.is_empty()) {
+    // TrimStrings Laravel: nilai dipangkas dulu. `tahun` yang dikirim tapi kosong memakai tahun
+    // berjalan (UTC, zona aplikasi). Kalau `tahun` tidak dikirim sama sekali, tidak ada filter tahun.
+    let tahun = match query.get("tahun") {
+        None => None,
+        Some(v) => {
+            let t = v.trim_matches(PHP_TRIM);
+            if t.is_empty() {
+                use chrono::Datelike;
+                Some(Utc::now().year().to_string())
+            } else {
+                Some(t.to_string())
+            }
+        }
+    };
+    if let Some(t) = tahun {
         sql.push_str(
             " AND EXISTS (SELECT 1 FROM tbl_kegiatan fg WHERE fg.id = p.kegiatan_id AND fg.tahun_anggaran = ?)",
         );
-        binds.push(t.to_string());
+        binds.push(t);
     }
     if let Some(s) = query.get("search").map(|v| v.trim_matches(PHP_TRIM)).filter(|v| !v.is_empty()) {
         let like = format!("%{s}%");
@@ -724,11 +737,11 @@ pub async fn index(
     }
     let page_count = items.len() as i64;
 
-    // Konsolidasi: paket lain yang berbagi kontrak dengan halaman ini ikut ditambahkan di akhir.
-    // Berbeda dari Laravel: scope byUserRole() tetap dipakai, supaya pengguna tidak melihat paket
-    // di luar scope-nya lewat kontrak bersama. Filter request tidak dipakai, seperti Laravel.
+    // Konsolidasi: paket lain yang berbagi kontrak dengan halaman ini ikut ditambahkan di akhir,
+    // hanya untuk admin dan super-admin. Filter request tidak dipakai, seperti Laravel.
+    let is_admin = roles.iter().any(|(_, n)| matches!(n.as_str(), "admin" | "super-admin"));
     let shared_kontrak: BTreeSet<i64> = items.iter().flat_map(kontrak_ids).collect();
-    if !shared_kontrak.is_empty() {
+    if is_admin && !shared_kontrak.is_empty() {
         let mut extra_sql = format!(
             " WHERE {HAS_KONTRAK} AND p.id IN (SELECT kp.pekerjaan_id FROM kontrak_pekerjaan kp \
              WHERE kp.kontrak_id IN ({}))",
@@ -877,11 +890,19 @@ mod tests {
     }
 
     #[test]
-    fn blank_filters_are_ignored() {
+    fn blank_tahun_defaults_to_current_year_and_blank_search_is_ignored() {
+        use chrono::Datelike;
         let mut q = HashMap::new();
         q.insert("tahun".to_string(), "  ".to_string());
         q.insert("search".to_string(), String::new());
         let (sql, binds) = filters(&q);
+        assert_eq!(binds, vec![Utc::now().year().to_string()]);
+        assert_eq!(sql.matches('?').count(), 1);
+    }
+
+    #[test]
+    fn missing_tahun_adds_no_year_filter() {
+        let (sql, binds) = filters(&HashMap::new());
         assert!(sql.is_empty());
         assert!(binds.is_empty());
     }
