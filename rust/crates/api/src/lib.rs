@@ -686,7 +686,7 @@ pub fn app(config: &Config, state: AppState) -> Router {
                 .layer(DefaultBodyLimit::max(foto::BODY_LIMIT)),
         )
         // Rute statis (summary, rekap, pekerjaan/...) didaftarkan sebelum `/api/penerima/{id}`.
-        // Berkas: `export-pdf`, `upload-from-url`, dan `quick-share` masih di Laravel.
+        // Berkas: `quick-share` masih di Laravel. `export-pdf` memakai ONLYOFFICE.
         .route("/api/berkas/jenis-dokumen", get(berkas::jenis_dokumen))
         .route("/api/berkas/upload-from-url", post(berkas_upload_url::upload_from_url))
         .route("/api/berkas/bulk", delete(berkas::bulk_destroy))

@@ -17,7 +17,7 @@ Sumber: `app/Http/Controllers/FotoController.php`, `BerkasController.php`, `app/
 
 ## Berkas (`/api/berkas`)
 
-- `convertToPdf` (`export-pdf`): konversi Word/PDF. Bergantung keputusan K2 (tooling dokumen). Belum dipindah.
+- `convertToPdf` (`export-pdf`): sudah di Rust (`onlyoffice::berkas_export_pdf`), lewat ONLYOFFICE Document Server yang sudah dipakai Laravel. Diuji dengan Document Server palsu (`onlyoffice_db`). Belum diuji dengan ONLYOFFICE sungguhan (`real_document_server_converts_public_docx`, butuh `ONLYOFFICE_TEST_SOURCE`).
 - `download-all-berkas`: sudah di Rust (`pekerjaan_download::download_all_berkas`). ZIP masih disusun di memori (`Cursor<Vec<u8>>`), tidak distream. Laravel memakai ZipStream. Perlu streaming sebelum dipakai untuk pekerjaan dengan banyak berkas besar.
 - `upload-from-url`: sudah di Rust (`berkas_upload_url.rs`). Daftar host yang diizinkan perlu dicek ulang.
 - `quick-share`: belum dipindah, masih di Laravel.
@@ -26,7 +26,7 @@ Sumber: `app/Http/Controllers/FotoController.php`, `BerkasController.php`, `app/
 
 1. Foto CRUD di Rust selesai: daftar, show, store, update, destroy, dan bulk destroy (`foto.rs`, `media.rs`). Thumbnail dibuat saat upload.
 2. Berkas CRUD di Rust selesai, termasuk ZIP dan upload-from-URL. Sisa: `quick-share`.
-3. Setelah K2 diputuskan: konversi PDF. ZIP perlu dibuat streaming.
+3. ZIP perlu dibuat streaming. Keputusan K2 sudah diambil: ONLYOFFICE.
 
 ## Keputusan yang dibutuhkan
 
