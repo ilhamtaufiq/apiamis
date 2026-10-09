@@ -120,7 +120,13 @@ struct PushLock(i64);
 impl PushLock {
     fn acquire(id: i64) -> Option<Self> {
         let mut set = in_flight().lock().unwrap_or_else(|e| e.into_inner());
-        set.insert(id).then_some(Self(id))
+        // Jangan pakai then_some(Self(id)): Self dibuat walau insert gagal, lalu di-drop
+        // saat guard masih dipegang, dan Drop mengunci mutex yang sama (deadlock).
+        if set.insert(id) {
+            Some(Self(id))
+        } else {
+            None
+        }
     }
 }
 
