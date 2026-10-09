@@ -16,7 +16,7 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry \
 # Stage 2: runtime tanpa PHP
 FROM debian:bookworm-slim
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        apache2 ca-certificates libssl3 \
+        apache2 ca-certificates libssl3 curl util-linux \
     && a2enmod proxy proxy_http headers alias \
     && rm -rf /var/lib/apt/lists/*
 
@@ -26,6 +26,11 @@ COPY --from=rust-build /usr/local/bin/apiamis-api /usr/local/bin/apiamis-api
 COPY docker-entrypoint.rust.sh /usr/local/bin/docker-entrypoint.sh
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh \
     && mkdir -p /var/www/html/public /var/www/html/storage/app/public
+
+# Healthcheck memeriksa API Rust langsung (bukan Apache), supaya container dianggap siap
+# hanya bila /api/health di binary Rust menjawab.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
+    CMD curl -fsS http://127.0.0.1:8000/api/health || exit 1
 
 EXPOSE 80
 CMD ["/usr/local/bin/docker-entrypoint.sh"]

@@ -10,13 +10,23 @@ if [ -z "${DATABASE_URL:-}" ]; then
     exit 1
 fi
 
-mkdir -p /var/www/html/storage/app/public
+STORAGE=/var/www/html/storage/app/public
+mkdir -p "$STORAGE"
+
+# Berkas upload dibaca Apache (www-data) dan ditulis API. Jalankan API sebagai www-data
+# dengan umask 0002, supaya berkas baru bisa dibaca dan ditulis user yang sama.
+# Berkas lama yang dimiliki user lain (mis. root) dibetulkan kepemilikannya di sini.
+find "$STORAGE" ! -user www-data -exec chown www-data:www-data {} + 2>/dev/null || true
+API_RUN() {
+    umask 0002
+    exec setpriv --reuid=www-data --regid=www-data --init-groups "$@"
+}
 
 log "Menjalankan migrasi schema..."
-/usr/local/bin/apiamis-api migrate || { log "ERROR: migrasi gagal, API tidak dijalankan"; exit 1; }
+(API_RUN /usr/local/bin/apiamis-api migrate) || { log "ERROR: migrasi gagal, API tidak dijalankan"; exit 1; }
 
 log "Menjalankan API Rust di port ${APP_PORT:-8000}..."
-/usr/local/bin/apiamis-api &
+(API_RUN /usr/local/bin/apiamis-api) &
 API_PID=$!
 
 # Pengganti jadwal Laravel (routes/console.php): hapus aset blog yatim setiap 24 jam.
@@ -24,7 +34,7 @@ API_PID=$!
     while true; do
         sleep 86400
         log "cron: blog-assets-cleanup-orphans --hours=24"
-        /usr/local/bin/apiamis-api blog-assets-cleanup-orphans --hours=24 --yes \
+        (API_RUN /usr/local/bin/apiamis-api blog-assets-cleanup-orphans --hours=24 --yes) \
             || log "cron: cleanup gagal, akan dicoba lagi besok"
     done
 ) &
