@@ -7,10 +7,19 @@
 //!
 //! Berbeda dari Laravel:
 //! - Pekerjaan di luar scope `byUserRole()` mendapat 403 (seperti `media`).
-//! - Zip disusun di memori, bukan distream. Laravel memakai ZipStream dengan batas memori 512M.
+//! - Zip didistream ke klien saat disusun (tanpa menampung seluruh arsip di memori). Penulis zip berjalan di
+//!   thread blocking dan mengirim potongan lewat channel terbatas. Laravel memakai ZipStream dengan batas 512M.
 //! - Preflight dan pesan 404 sama. Format selain `pdf` dianggap `original`, seperti Laravel.
 
-use std::{collections::HashSet, io::Cursor, path::PathBuf};
+use std::{
+    collections::{HashMap, HashSet},
+    io::{self, Cursor, Read, Write},
+    path::{Path as FsPath, PathBuf},
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc,
+    },
+};
 
 use axum::{
     body::Body,
@@ -19,14 +28,23 @@ use axum::{
     response::{IntoResponse, Response},
     Json,
 };
+use futures_util::stream;
 use regex::Regex;
 use serde_json::json;
 use shared::ApiError;
-use sqlx::Row;
-use std::collections::HashMap;
-use zip::{write::SimpleFileOptions, CompressionMethod, ZipWriter};
+use sqlx::{MySqlPool, Row};
+use tokio::sync::mpsc;
+use zip::{
+    write::{SimpleFileOptions, StreamWriter},
+    CompressionMethod, ZipWriter,
+};
 
 use crate::{access, media, media::internal, onlyoffice, pekerjaan, require_auth, AppState};
+
+/// Ukuran potongan yang dikirim ke klien.
+const CHUNK_BYTES: usize = 64 * 1024;
+/// Jumlah potongan yang boleh antre sebelum penulis menunggu klien membaca.
+const CHANNEL_CAPACITY: usize = 4;
 
 const COLLECTION: &str = "berkas/dokumen";
 const BERKAS_MODEL: &str = "App\\Models\\Berkas";
@@ -117,7 +135,38 @@ pub async fn download_all_berkas(
     let suffix = if want_pdf { "_PDF" } else { "" };
     let file_name = format!("{base}{suffix}.zip");
 
-    let archive = build_zip(&state, &items, want_pdf, &unsafe_chars).await?;
+    // Penulisan zip berjalan di thread blocking dan mengirim potongan lewat channel terbatas.
+    // Bila klien memutus koneksi, `rx` di-drop dan penulisan berhenti pada pengiriman berikutnya.
+    let (tx, rx) = mpsc::channel::<Result<Vec<u8>, io::Error>>(CHANNEL_CAPACITY);
+    let job = ZipJob {
+        pool: state.pool.clone(),
+        app_url: state.app_url.clone(),
+        items,
+        want_pdf,
+        unsafe_chars,
+    };
+    let handle = tokio::runtime::Handle::current();
+    let worker_tx = tx.clone();
+    let worker = tokio::task::spawn_blocking(move || {
+        if let Err(e) = stream_zip(&handle, &worker_tx, &job) {
+            if e.kind() != io::ErrorKind::BrokenPipe {
+                tracing::warn!(pekerjaan_id = id, error = %e, "unduh semua berkas berhenti");
+            }
+            // Gagal mengirim berarti klien sudah pergi, dan tidak ada yang perlu diberi tahu.
+            let _ = worker_tx.blocking_send(Err(e));
+        }
+    });
+    // Bila thread penulis panik, kirim error agar respons tidak tampak lengkap.
+    tokio::spawn(async move {
+        if worker.await.is_err() {
+            let _ = tx
+                .send(Err(io::Error::other("penulisan zip berhenti tak terduga")))
+                .await;
+        }
+    });
+    let chunks = stream::unfold(rx, |mut rx| async move {
+        rx.recv().await.map(|item| (item, rx))
+    });
 
     Ok((
         [
@@ -132,23 +181,128 @@ pub async fn download_all_berkas(
                 "no".to_string(),
             ),
         ],
-        Body::from(archive),
+        Body::from_stream(chunks),
     )
         .into_response())
 }
 
-/// Isi zip: satu entri per berkas, STORE, dengan nama yang tidak bentrok.
-async fn build_zip(
-    state: &AppState,
-    items: &[Item],
+/// Isi pekerjaan untuk penulis zip yang berjalan di thread blocking.
+struct ZipJob {
+    pool: MySqlPool,
+    app_url: String,
+    items: Vec<Item>,
     want_pdf: bool,
-    unsafe_chars: &Regex,
-) -> Result<Vec<u8>, ApiError> {
-    let mut zip = ZipWriter::new(Cursor::new(Vec::new()));
-    let mut used: HashSet<String> = HashSet::new();
-    let options = SimpleFileOptions::default().compression_method(CompressionMethod::Stored);
+    unsafe_chars: Regex,
+}
 
-    for item in items {
+/// `Write` yang mengumpulkan byte menjadi potongan dan mengirimnya ke channel respons.
+///
+/// Setelah penerima tertutup atau setelah error, `aborted` menjadi true dan setiap penulisan gagal.
+/// Dengan begitu `ZipWriter` yang di-drop saat error tidak bisa mengirim sisa arsip yang tampak lengkap.
+struct ChunkSender {
+    tx: mpsc::Sender<Result<Vec<u8>, io::Error>>,
+    buf: Vec<u8>,
+    aborted: Arc<AtomicBool>,
+}
+
+impl ChunkSender {
+    fn aborted_error() -> io::Error {
+        io::Error::new(io::ErrorKind::BrokenPipe, "unduhan dihentikan")
+    }
+
+    /// Mengirim isi `buf` sebagai satu potongan. Blocking bila channel penuh.
+    fn send_pending(&mut self) -> io::Result<()> {
+        if self.aborted.load(Ordering::Relaxed) {
+            return Err(Self::aborted_error());
+        }
+        if self.buf.is_empty() {
+            return Ok(());
+        }
+        let chunk = std::mem::replace(&mut self.buf, Vec::with_capacity(CHUNK_BYTES));
+        self.tx.blocking_send(Ok(chunk)).map_err(|_| {
+            self.aborted.store(true, Ordering::Relaxed);
+            io::Error::new(io::ErrorKind::BrokenPipe, "klien memutus unduhan")
+        })
+    }
+}
+
+impl Write for ChunkSender {
+    fn write(&mut self, mut data: &[u8]) -> io::Result<usize> {
+        if self.aborted.load(Ordering::Relaxed) {
+            return Err(Self::aborted_error());
+        }
+        let total = data.len();
+        // `buf` selalu kurang dari CHUNK_BYTES di awal iterasi, jadi setiap potongan berukuran tetap.
+        while !data.is_empty() {
+            let take = (CHUNK_BYTES - self.buf.len()).min(data.len());
+            self.buf.extend_from_slice(&data[..take]);
+            data = &data[take..];
+            if self.buf.len() == CHUNK_BYTES {
+                self.send_pending()?;
+            }
+        }
+        Ok(total)
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        Ok(())
+    }
+}
+
+/// Membuka berkas untuk dibaca beserta ukurannya. `None` bila tidak terbaca atau bukan berkas biasa.
+fn open_readable(path: &FsPath) -> Option<(std::fs::File, u64)> {
+    let file = std::fs::File::open(path).ok()?;
+    let meta = file.metadata().ok()?;
+    meta.is_file().then_some((file, meta.len()))
+}
+
+/// Menulis seluruh zip ke `tx`. Dipanggil di thread blocking.
+fn stream_zip(
+    handle: &tokio::runtime::Handle,
+    tx: &mpsc::Sender<Result<Vec<u8>, io::Error>>,
+    job: &ZipJob,
+) -> io::Result<()> {
+    let aborted = Arc::new(AtomicBool::new(false));
+    let sink = ChunkSender {
+        tx: tx.clone(),
+        buf: Vec::with_capacity(CHUNK_BYTES),
+        aborted: Arc::clone(&aborted),
+    };
+    let mut zip = ZipWriter::new_stream(sink);
+    match write_entries(handle, tx, &mut zip, job) {
+        Ok(()) => {
+            let sink = zip.finish().map_err(|e| {
+                aborted.store(true, Ordering::Relaxed);
+                io::Error::from(e)
+            })?;
+            let mut sink = sink.into_inner();
+            sink.send_pending()
+        }
+        Err(e) => {
+            // Ditandai sebelum `zip` di-drop: Drop akan mencoba menutup arsip, dan itu tidak boleh terkirim.
+            aborted.store(true, Ordering::Relaxed);
+            Err(e)
+        }
+    }
+}
+
+/// Menulis setiap entri. Berkas dibaca dan ditulis per potongan, sehingga memori hanya memuat satu potongan.
+fn write_entries(
+    handle: &tokio::runtime::Handle,
+    tx: &mpsc::Sender<Result<Vec<u8>, io::Error>>,
+    zip: &mut ZipWriter<StreamWriter<ChunkSender>>,
+    job: &ZipJob,
+) -> io::Result<()> {
+    let mut used: HashSet<String> = HashSet::new();
+
+    for item in &job.items {
+        // Klien sudah pergi: berhenti sebelum konversi ONLYOFFICE berikutnya.
+        if tx.is_closed() {
+            return Err(io::Error::new(
+                io::ErrorKind::BrokenPipe,
+                "klien memutus unduhan",
+            ));
+        }
         let original: PathBuf = media::media_dir(item.media.id).join(&item.media.file_name);
         let mut extension = item
             .media
@@ -157,32 +311,32 @@ async fn build_zip(
             .map(|(_, e)| e.to_lowercase())
             .unwrap_or_default();
 
-        let bytes = if want_pdf {
-            match onlyoffice::media_pdf(
-                &state.pool,
-                &state.app_url,
+        let pdf = if job.want_pdf {
+            handle.block_on(onlyoffice::media_pdf(
+                &job.pool,
+                &job.app_url,
                 item.media.id,
                 &item.media.file_name,
                 &original,
-            )
-            .await
-            {
-                Some(pdf) => {
-                    extension = "pdf".to_string();
-                    Some(pdf)
-                }
-                None => tokio::fs::read(&original).await.ok(),
-            }
+            ))
         } else {
-            tokio::fs::read(&original).await.ok()
+            None
         };
-        let Some(bytes) = bytes else {
-            // File tidak terbaca: dilewati, seperti `is_readable` di Laravel.
-            continue;
+        let (mut source, size): (Box<dyn Read>, u64) = match pdf {
+            Some(pdf) => {
+                extension = "pdf".to_string();
+                let len = pdf.len() as u64;
+                (Box::new(Cursor::new(pdf)), len)
+            }
+            None => match open_readable(&original) {
+                Some((file, len)) => (Box::new(file), len),
+                // File tidak terbaca: dilewati, seperti `is_readable` di Laravel.
+                None => continue,
+            },
         };
 
         let label = {
-            let s = sanitize(&item.jenis_dokumen, unsafe_chars);
+            let s = sanitize(&item.jenis_dokumen, &job.unsafe_chars);
             if s.is_empty() {
                 "berkas".to_string()
             } else {
@@ -202,15 +356,20 @@ async fn build_zip(
         }
         used.insert(inner.clone());
 
-        // Gagal menulis satu entri tidak menghentikan entri lain, seperti `report($e)` di Laravel.
-        if zip.start_file(inner, options).is_ok() {
-            use std::io::Write;
-            let _ = zip.write_all(&bytes);
+        // Berkas di atas 4 GiB memerlukan ZIP64. Opsi ini hanya dinyalakan untuk entri tersebut.
+        let options = SimpleFileOptions::default()
+            .compression_method(CompressionMethod::Stored)
+            .large_file(size > zip::ZIP64_BYTES_THR);
+        // Gagal membuka entri (misalnya nama tidak valid) melewati entri ini, seperti sebelumnya.
+        if zip.start_file(inner, options).is_err() {
+            continue;
         }
+        // Gagal membaca di tengah berkas tidak bisa dipulihkan karena entri sudah mulai ditulis.
+        // Unduhan dihentikan dengan error, supaya klien tidak menerima arsip yang tampak lengkap.
+        io::copy(&mut source, zip)?;
     }
 
-    let archive = zip.finish().map_err(internal)?.into_inner();
-    Ok(archive)
+    Ok(())
 }
 
 fn not_found(message: &str) -> Response {
@@ -230,5 +389,44 @@ mod tests {
         );
         assert_eq!(sanitize("SPK-2025.v2", &re), "SPK-2025.v2");
         assert_eq!(sanitize("", &re), "");
+    }
+
+    fn sink(tx: mpsc::Sender<Result<Vec<u8>, io::Error>>) -> ChunkSender {
+        ChunkSender {
+            tx,
+            buf: Vec::new(),
+            aborted: Arc::new(AtomicBool::new(false)),
+        }
+    }
+
+    #[test]
+    fn chunk_sender_sends_fixed_size_chunks_and_remainder() {
+        let (tx, mut rx) = mpsc::channel(CHANNEL_CAPACITY);
+        let mut out = sink(tx);
+        let data: Vec<u8> = (0..CHUNK_BYTES * 2 + 10).map(|i| (i % 251) as u8).collect();
+        out.write_all(&data).unwrap();
+        out.send_pending().unwrap();
+
+        let mut sizes = Vec::new();
+        let mut joined = Vec::new();
+        while let Ok(chunk) = rx.try_recv() {
+            let chunk = chunk.unwrap();
+            sizes.push(chunk.len());
+            joined.extend_from_slice(&chunk);
+        }
+        assert_eq!(sizes, vec![CHUNK_BYTES, CHUNK_BYTES, 10]);
+        assert_eq!(joined, data);
+    }
+
+    #[test]
+    fn chunk_sender_fails_once_receiver_is_dropped() {
+        let (tx, rx) = mpsc::channel(CHANNEL_CAPACITY);
+        drop(rx);
+        let mut out = sink(tx);
+        let err = out.write_all(&vec![1u8; CHUNK_BYTES]).unwrap_err();
+        assert_eq!(err.kind(), io::ErrorKind::BrokenPipe);
+        // Setelah gagal, penulisan berikutnya langsung gagal tanpa mencoba mengirim lagi.
+        assert!(out.write(b"x").is_err());
+        assert!(out.aborted.load(Ordering::Relaxed));
     }
 }

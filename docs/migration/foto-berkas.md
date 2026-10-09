@@ -18,7 +18,7 @@ Sumber: `app/Http/Controllers/FotoController.php`, `BerkasController.php`, `app/
 ## Berkas (`/api/berkas`)
 
 - `convertToPdf`: konversi Word/PDF. Bergantung keputusan K2 (tooling dokumen). Belum dipindah.
-- `download-all-berkas`: membuat ZIP. Berisiko memori untuk banyak berkas. Perlu streaming.
+- `download-all-berkas`: ZIP sudah distream ke klien (`ZipWriter::new_stream` di thread blocking, potongan 64 KiB lewat channel terbatas). Memori tidak lagi tumbuh mengikuti total ukuran berkas.
 - `upload-from-url`: mengambil berkas dari URL luar. Perlu daftar host yang diizinkan (SSRF).
 - `quick-share`: membuat tautan berbagi.
 
