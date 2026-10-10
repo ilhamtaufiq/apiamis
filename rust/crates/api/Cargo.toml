@@ -32,6 +32,7 @@ lettre = { version = "0.11", default-features = false, features = ["builder", "h
 calamine = "0.36"
 csv = "1"
 zip = { version = "8", default-features = false, features = ["deflate"] }
+quick-xml = "0.41"
 regex = "1"
 md-5 = "0.10"
 futures-util = "0.3"

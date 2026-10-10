@@ -80,6 +80,7 @@ pub mod pekerjaan_download;
 pub mod pekerjaan_import;
 pub mod menu_permissions;
 pub mod peripaan;
+pub mod peripaan_kml;
 pub mod permissions;
 pub mod pekerjaan_detail;
 pub mod pekerjaan_doc_register;
@@ -329,7 +330,10 @@ pub fn app(config: &Config, state: AppState) -> Router {
                 .post(peripaan::store)
                 .layer(DefaultBodyLimit::max(foto::BODY_LIMIT)),
         )
-        .route("/api/peripaan/{id}", delete(peripaan::destroy))
+        .route(
+            "/api/peripaan/{id}",
+            get(peripaan::show).delete(peripaan::destroy),
+        )
         // Survei lokasi (SurveyLokasiController). `stats` statis, jadi tidak tertangkap `{id}`.
         .route("/api/survey-lokasi/stats", get(survey_lokasi::stats))
         .route(

@@ -19,7 +19,8 @@ const ADMIN: &str = "uji-peri-admin@example.test";
 const PLAIN: &str = "uji-peri-plain@example.test";
 const NAMA: &str = "uji-peri-peta";
 const BOUNDARY: &str = "ujiPeripaanBoundary";
-const KML: &str = "<kml><Document><name>uji</name></Document></kml>";
+const KML: &str = "<kml><Document><Placemark><name>uji</name><Point><coordinates>107.1,-6.8</coordinates></Point></Placemark></Document></kml>";
+const KML_RUSAK: &str = "<kml><Document><Placemark></Document></kml>";
 
 fn config() -> Config {
     Config {
@@ -68,22 +69,36 @@ async fn send(
     if let Some(ct) = content_type {
         req = req.header(header::CONTENT_TYPE, ct);
     }
-    let res = app(&config(), AppState::new(pool.clone(), "http://localhost".to_string()))
-        .oneshot(req.body(body).unwrap())
+    let res = app(
+        &config(),
+        AppState::new(pool.clone(), "http://localhost".to_string()),
+    )
+    .oneshot(req.body(body).unwrap())
+    .await
+    .unwrap();
+    let status = res.status();
+    let bytes = axum::body::to_bytes(res.into_body(), usize::MAX)
         .await
         .unwrap();
-    let status = res.status();
-    let bytes = axum::body::to_bytes(res.into_body(), usize::MAX).await.unwrap();
-    (status, serde_json::from_slice(&bytes).unwrap_or(Value::Null))
+    (
+        status,
+        serde_json::from_slice(&bytes).unwrap_or(Value::Null),
+    )
 }
 
-async fn user_token(pool: &MySqlPool, email: &str, admin: bool) -> String {
-    sqlx::query("DELETE FROM model_has_roles WHERE model_id IN (SELECT id FROM users WHERE email = ?)")
+async fn user_token(pool: &MySqlPool, email: &str, role: Option<&str>) -> String {
+    sqlx::query(
+        "DELETE FROM model_has_roles WHERE model_id IN (SELECT id FROM users WHERE email = ?)",
+    )
+    .bind(email)
+    .execute(pool)
+    .await
+    .unwrap();
+    sqlx::query("DELETE FROM users WHERE email = ?")
         .bind(email)
         .execute(pool)
         .await
         .unwrap();
-    sqlx::query("DELETE FROM users WHERE email = ?").bind(email).execute(pool).await.unwrap();
     sqlx::query("INSERT INTO users (name, email, password, created_at, updated_at) VALUES ('Uji Peri', ?, 'x', NOW(), NOW())")
         .bind(email)
         .execute(pool)
@@ -94,24 +109,29 @@ async fn user_token(pool: &MySqlPool, email: &str, admin: bool) -> String {
         .fetch_one(pool)
         .await
         .unwrap();
-    if admin {
-        sqlx::query("INSERT IGNORE INTO roles (name, guard_name, created_at, updated_at) VALUES ('admin', 'web', NOW(), NOW())")
+    if let Some(name) = role {
+        sqlx::query("INSERT IGNORE INTO roles (name, guard_name, created_at, updated_at) VALUES (?, 'web', NOW(), NOW())")
+            .bind(name)
             .execute(pool)
             .await
             .unwrap();
-        let role: u64 =
-            sqlx::query_scalar("SELECT id FROM roles WHERE name = 'admin' AND guard_name = 'web' LIMIT 1")
-                .fetch_one(pool)
-                .await
-                .unwrap();
+        let role_id: u64 = sqlx::query_scalar(
+            "SELECT id FROM roles WHERE name = ? AND guard_name = 'web' LIMIT 1",
+        )
+        .bind(name)
+        .fetch_one(pool)
+        .await
+        .unwrap();
         sqlx::query("INSERT IGNORE INTO model_has_roles (role_id, model_type, model_id) VALUES (?, 'App\\\\Models\\\\User', ?)")
-            .bind(role)
+            .bind(role_id)
             .bind(uid)
             .execute(pool)
             .await
             .unwrap();
     }
-    auth::login::create_token(pool, uid, "uji-peri").await.unwrap()
+    auth::login::create_token(pool, uid, "uji-peri")
+        .await
+        .unwrap()
 }
 
 async fn cleanup(pool: &MySqlPool) {
@@ -137,8 +157,8 @@ async fn peripaan_store_index_destroy() {
     let url = std::env::var("DATABASE_URL").expect("DATABASE_URL belum di-set");
     let pool = sqlx::MySqlPool::connect(&url).await.unwrap();
     cleanup(&pool).await;
-    let admin = user_token(&pool, ADMIN, true).await;
-    let plain = user_token(&pool, PLAIN, false).await;
+    let admin = user_token(&pool, ADMIN, Some("admin")).await;
+    let plain = user_token(&pool, PLAIN, None).await;
     let pekerjaan: i64 = sqlx::query_scalar("SELECT CAST(MIN(id) AS SIGNED) FROM tbl_pekerjaan")
         .fetch_one(&pool)
         .await
@@ -150,7 +170,10 @@ async fn peripaan_store_index_destroy() {
         Method::POST,
         "/api/peripaan",
         Some(&plain),
-        Body::from(multipart(&[("nama", NAMA)], Some(("peta.kml", KML.as_bytes())))),
+        Body::from(multipart(
+            &[("nama", NAMA)],
+            Some(("peta.kml", KML.as_bytes())),
+        )),
         ct(),
     )
     .await;
@@ -181,8 +204,43 @@ async fn peripaan_store_index_destroy() {
     assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY, "{body}");
     assert_eq!(body["message"], "The nama field is required.", "{body}");
 
-    // Simpan dengan geojson dan pekerjaan: 200, berkas tersimpan sebagai media.
-    let geojson = r#"{"type":"FeatureCollection","features":[]}"#;
+    // Ekstensi selain KML/KMZ ditolak.
+    let (status, body) = send(
+        &pool,
+        Method::POST,
+        "/api/peripaan",
+        Some(&admin),
+        Body::from(multipart(
+            &[("nama", NAMA)],
+            Some(("skrip.html", b"<script>x</script>")),
+        )),
+        ct(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY, "{body}");
+    assert_eq!(
+        body["message"], "The file must be a file of type: kml, kmz.",
+        "{body}"
+    );
+
+    // KML rusak ditolak dengan pesan validasi, bukan disimpan.
+    let (status, body) = send(
+        &pool,
+        Method::POST,
+        "/api/peripaan",
+        Some(&admin),
+        Body::from(multipart(
+            &[("nama", NAMA)],
+            Some(("rusak.kml", KML_RUSAK.as_bytes())),
+        )),
+        ct(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY, "{body}");
+    assert!(body["message"].as_str().unwrap().contains("KML"), "{body}");
+
+    // Simpan dengan pekerjaan. Field geojson dari client diabaikan: GeoJSON dibuat dari berkas.
+    let geojson_palsu = r#"{"type":"Palsu","features":"bukan-array"}"#;
     let (status, body) = send(
         &pool,
         Method::POST,
@@ -192,7 +250,7 @@ async fn peripaan_store_index_destroy() {
             &[
                 ("nama", NAMA),
                 ("pekerjaan_id", &pekerjaan.to_string()),
-                ("geojson", geojson),
+                ("geojson", geojson_palsu),
             ],
             Some(("peta uji.kml", KML.as_bytes())),
         )),
@@ -202,9 +260,28 @@ async fn peripaan_store_index_destroy() {
     assert_eq!(status, StatusCode::OK, "{body}");
     let data = &body["data"];
     assert_eq!(data["nama"], NAMA);
-    assert_eq!(data["geojson"]["type"], "FeatureCollection");
-    assert_eq!(data["file_name"].as_str().unwrap().ends_with(".kml"), true, "{body}");
-    assert!(data["file_url"].as_str().unwrap().starts_with("http://localhost/storage/"), "{body}");
+    assert_eq!(data["geojson"]["type"], "FeatureCollection", "{body}");
+    assert_eq!(
+        data["geojson"]["features"].as_array().unwrap().len(),
+        1,
+        "{body}"
+    );
+    assert_eq!(
+        data["geojson"]["features"][0]["geometry"]["type"], "Point",
+        "{body}"
+    );
+    assert_eq!(
+        data["file_name"].as_str().unwrap().ends_with(".kml"),
+        true,
+        "{body}"
+    );
+    assert!(
+        data["file_url"]
+            .as_str()
+            .unwrap()
+            .starts_with("http://localhost/storage/"),
+        "{body}"
+    );
     assert_eq!(data["size"], KML.len() as u64);
     let id = data["id"].as_i64().unwrap();
 
@@ -219,8 +296,70 @@ async fn peripaan_store_index_destroy() {
     )
     .await;
     assert_eq!(status, StatusCode::OK, "{body}");
-    assert!(body["data"].as_array().unwrap().iter().any(|d| d["id"] == json!(id)), "{body}");
+    assert!(
+        body["data"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|d| d["id"] == json!(id)),
+        "{body}"
+    );
     assert_eq!(body["meta"]["per_page"], 50);
+    let item = body["data"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|d| d["id"] == json!(id))
+        .unwrap();
+    assert!(
+        item["geojson"].is_null(),
+        "daftar tidak memuat geojson: {body}"
+    );
+
+    let (status, body) = send(
+        &pool,
+        Method::GET,
+        &format!("/api/peripaan?include=geojson&pekerjaan_id={pekerjaan}"),
+        Some(&admin),
+        Body::empty(),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let item = body["data"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|d| d["id"] == json!(id))
+        .unwrap();
+    assert_eq!(item["geojson"]["type"], "FeatureCollection", "{body}");
+
+    let (status, body) = send(
+        &pool,
+        Method::GET,
+        "/api/peripaan?pekerjaan_id=abc",
+        Some(&admin),
+        Body::empty(),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY, "{body}");
+
+    // Satu berkas dengan geojson lengkap.
+    let (status, body) = send(
+        &pool,
+        Method::GET,
+        &format!("/api/peripaan/{id}"),
+        Some(&admin),
+        Body::empty(),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(
+        body["data"]["geojson"]["type"], "FeatureCollection",
+        "{body}"
+    );
 
     let (status, body) = send(
         &pool,
@@ -235,6 +374,17 @@ async fn peripaan_store_index_destroy() {
     assert!(body.get("meta").is_none(), "{body}");
 
     // Hapus: 200, baris dan media hilang.
+    let (status, body) = send(
+        &pool,
+        Method::DELETE,
+        &format!("/api/peripaan/{id}"),
+        Some(&plain),
+        Body::empty(),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::FORBIDDEN, "{body}");
+
     let (status, body) = send(
         &pool,
         Method::DELETE,
@@ -254,7 +404,15 @@ async fn peripaan_store_index_destroy() {
     .await
     .unwrap();
     assert_eq!(media, 0);
-    let (status, _) = send(&pool, Method::DELETE, &format!("/api/peripaan/{id}"), Some(&admin), Body::empty(), None).await;
+    let (status, _) = send(
+        &pool,
+        Method::DELETE,
+        &format!("/api/peripaan/{id}"),
+        Some(&admin),
+        Body::empty(),
+        None,
+    )
+    .await;
     assert_eq!(status, StatusCode::NOT_FOUND);
 
     cleanup(&pool).await;
