@@ -128,27 +128,36 @@ async fn load_pekerjaan(
         .collect()
 }
 
+/// Penugasan pengawas dan konsultan pengawas per paket. Sumbernya kolom `pengawas_id` (pengawas)
+/// dan `pendamping_id` (konsultan pengawas) di `tbl_pekerjaan`, yang merujuk ke tabel `pengawas`.
+/// `user_id` berisi id di tabel `pengawas`.
 pub(crate) async fn load_assignments(
     pool: &sqlx::MySqlPool,
     cond: &Cond,
 ) -> Result<Vec<Assignment>, sqlx::Error> {
-    let sql = format!(
-        "SELECT CAST(up.pekerjaan_id AS SIGNED) AS pekerjaan_id, CAST(u.id AS SIGNED) AS user_id, \
-         u.name AS nama, r.name AS role \
-         FROM user_pekerjaan up \
-         JOIN users u ON u.id = up.user_id \
-         JOIN model_has_roles m ON m.model_id = u.id AND m.model_type = 'App\\\\Models\\\\User' \
-         JOIN roles r ON r.id = m.role_id \
-         WHERE r.name IN ('{ROLE_PENGAWAS}', '{ROLE_KONSULTAN}') \
-         AND up.pekerjaan_id IN (SELECT tbl_pekerjaan.id FROM tbl_pekerjaan WHERE {})",
+    let scope = format!(
+        "tbl_pekerjaan.id IN (SELECT tbl_pekerjaan.id FROM tbl_pekerjaan WHERE {})",
         cond.clause()
     );
+    let sql = format!(
+        "SELECT CAST(tbl_pekerjaan.id AS SIGNED) AS pekerjaan_id, \
+         CAST(tbl_pekerjaan.pengawas_id AS SIGNED) AS user_id, pg.nama AS nama, '{ROLE_PENGAWAS}' AS role \
+         FROM tbl_pekerjaan LEFT JOIN pengawas pg ON pg.id = tbl_pekerjaan.pengawas_id \
+         WHERE tbl_pekerjaan.pengawas_id IS NOT NULL AND {scope} \
+         UNION ALL \
+         SELECT CAST(tbl_pekerjaan.id AS SIGNED), CAST(tbl_pekerjaan.pendamping_id AS SIGNED), pg.nama, '{ROLE_KONSULTAN}' \
+         FROM tbl_pekerjaan LEFT JOIN pengawas pg ON pg.id = tbl_pekerjaan.pendamping_id \
+         WHERE tbl_pekerjaan.pendamping_id IS NOT NULL AND {scope}"
+    );
+    // Kondisi cakupan dipakai dua kali (dua subquery), jadi bind-nya juga dua kali.
     let mut q = sqlx::query(&sql);
-    for b in &cond.binds {
-        q = match b {
-            Bind::Text(t) => q.bind(t.clone()),
-            Bind::Int(i) => q.bind(*i),
-        };
+    for _ in 0..2 {
+        for b in &cond.binds {
+            q = match b {
+                Bind::Text(t) => q.bind(t.clone()),
+                Bind::Int(i) => q.bind(*i),
+            };
+        }
     }
     let rows = q.fetch_all(pool).await?;
     rows.iter()
@@ -156,7 +165,9 @@ pub(crate) async fn load_assignments(
             Ok(Assignment {
                 pekerjaan_id: r.try_get("pekerjaan_id")?,
                 user_id: r.try_get("user_id")?,
-                nama: r.try_get::<Option<String>, _>("nama")?.unwrap_or_default(),
+                nama: r
+                    .try_get::<Option<String>, _>("nama")?
+                    .unwrap_or_else(|| "Tanpa nama".to_string()),
                 role: r.try_get("role")?,
             })
         })
