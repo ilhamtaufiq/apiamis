@@ -91,3 +91,18 @@ Ini prasyarat paling penting. Selama Laravel masih mengurus token dan role, Lara
 - Tes DB hanya berjalan di MariaDB lokal, belum di production.
 - Satu tes handoff pernah gagal sekali saat paralel, penyebabnya belum diketahui.
 - Impor spam-units menghapus semua anggaran sebelum mengisi ulang, jadi harus dites dengan data yang benar sebelum dipakai.
+
+## Status pelaksanaan
+
+Diperbarui setelah pengerjaan lanjutan (2026-10-10).
+
+| Fase | Status | Bukti |
+|---|---|---|
+| 1. Route | Sebagian: 405 `rust`, 3 `parsial` | `routes.md` |
+| 2. Autentikasi dan permission | Selesai di kode, verifikasi staging belum | Token 720 menit lulus `token_expiry_db`. Cache Spatie disegarkan saat role berubah (PR #28). Perbandingan dengan Laravel belum dilakukan. |
+| 3. Schema | Selesai untuk DB kosong | `api migrate` pada DB kosong membuat 110 tabel dan mencatat `migrations`. Jalankan kedua kalinya tidak mengubah apa pun. |
+| 4. Operasional tanpa PHP | Belum | `Dockerfile` produksi masih stage PHP dan `docker-entrypoint.sh` masih memanggil artisan. `Dockerfile.rust` sudah Rust-only, tapi belum dipakai produksi. |
+| 5. Uji paralel dan cutover | Belum | Butuh staging dengan Laravel dan Rust berjalan bersamaan. |
+| 6. Hapus Laravel | Belum | Menunggu fase 4 dan 5. |
+
+Catatan: database dev lokal memiliki 80 tabel, berbeda dari baseline 110. Dev lokal dibuat dengan cara lain, jadi tidak dipakai sebagai acuan schema.
