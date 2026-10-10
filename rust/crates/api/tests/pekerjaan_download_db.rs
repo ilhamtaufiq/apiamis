@@ -141,7 +141,23 @@ async fn add_berkas(
 }
 
 async fn cleanup(pool: &MySqlPool, pekerjaan: &[u64], users: &[u64]) {
+    // Hanya folder media milik pekerjaan ini yang dihapus. Folder penyimpanan bersama dipakai tes lain
+    // yang berjalan paralel, jadi tidak boleh dihapus di sini.
+    let storage = std::env::var("PUBLIC_STORAGE_PATH").ok();
     for p in pekerjaan {
+        if let Some(dir) = &storage {
+            let media: Vec<u64> = sqlx::query_scalar(
+                "SELECT m.id FROM media m JOIN tbl_berkas b ON m.model_id = b.id \
+                 WHERE m.model_type = 'App\\\\Models\\\\Berkas' AND b.pekerjaan_id = ?",
+            )
+            .bind(p)
+            .fetch_all(pool)
+            .await
+            .unwrap();
+            for m in media {
+                let _ = std::fs::remove_dir_all(std::path::Path::new(dir).join(m.to_string()));
+            }
+        }
         let berkas: Vec<u64> =
             sqlx::query_scalar("SELECT id FROM tbl_berkas WHERE pekerjaan_id = ?")
                 .bind(p)
@@ -266,7 +282,6 @@ async fn zips_every_berkas_with_stored_entries_and_sanitized_name() {
         .ends_with("_PDF.zip\""));
 
     cleanup(&pool, &[p], &[admin]).await;
-    let _ = std::fs::remove_dir_all(&storage);
 }
 
 #[tokio::test]
@@ -333,5 +348,37 @@ async fn empty_or_unreadable_berkas_return_laravel_messages_and_scope_is_enforce
     assert_eq!(status, StatusCode::NOT_FOUND);
 
     cleanup(&pool, &[kosong, hilang], &[admin, user]).await;
-    let _ = std::fs::remove_dir_all(&storage);
+}
+
+#[tokio::test]
+#[ignore = "butuh DATABASE_URL"]
+async fn large_berkas_streams_intact_across_chunks() {
+    let url = std::env::var("DATABASE_URL").expect("DATABASE_URL belum di-set");
+    let pool = MySqlPool::connect(&url).await.unwrap();
+    let storage = storage_dir();
+    let admin = make_user(&pool, "uji-pdl-c1@example.test", "admin").await;
+    let token = auth::login::create_token(&pool, admin, "uji-pdl")
+        .await
+        .unwrap();
+    let p = new_pekerjaan(&pool, "Besar").await;
+    // Lebih besar dari beberapa potongan streaming, dengan pola yang bisa diverifikasi per byte.
+    let big: Vec<u8> = (0..300 * 1024).map(|i| (i % 251) as u8).collect();
+    let (_, m1) = add_berkas(&pool, &storage, p, "Besar", "besar.bin", &big, true).await;
+
+    let (status, _, bytes) = get_raw(
+        &pool,
+        &format!("/api/pekerjaan/{p}/download-all-berkas"),
+        &token,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let mut zip = zip::ZipArchive::new(Cursor::new(bytes)).unwrap();
+    assert_eq!(zip.len(), 1);
+    let mut f = zip.by_index(0).unwrap();
+    assert_eq!(f.name(), format!("Besar_{m1}.bin"));
+    let mut content = Vec::new();
+    f.read_to_end(&mut content).unwrap();
+    assert!(content == big, "isi berkas berbeda setelah streaming");
+
+    cleanup(&pool, &[p], &[admin]).await;
 }

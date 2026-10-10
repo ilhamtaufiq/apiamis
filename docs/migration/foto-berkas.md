@@ -18,7 +18,7 @@ Sumber: `app/Http/Controllers/FotoController.php`, `BerkasController.php`, `app/
 ## Berkas (`/api/berkas`)
 
 - `convertToPdf` (`export-pdf`): sudah di Rust (`onlyoffice::berkas_export_pdf`), lewat ONLYOFFICE Document Server yang sudah dipakai Laravel. Diuji dengan Document Server palsu (`onlyoffice_db`). Belum diuji dengan ONLYOFFICE sungguhan (`real_document_server_converts_public_docx`, butuh `ONLYOFFICE_TEST_SOURCE`).
-- `download-all-berkas`: sudah di Rust (`pekerjaan_download::download_all_berkas`). ZIP masih disusun di memori (`Cursor<Vec<u8>>`), tidak distream. Laravel memakai ZipStream. Perlu streaming sebelum dipakai untuk pekerjaan dengan banyak berkas besar.
+- `download-all-berkas`: sudah di Rust (`pekerjaan_download::download_all_berkas`). ZIP distream ke klien lewat `ZipWriter::new_stream` di thread blocking, potongan 64 KiB lewat channel terbatas. Memori tidak lagi tumbuh mengikuti total ukuran berkas.
 - `upload-from-url`: sudah di Rust (`berkas_upload_url.rs`). Daftar host yang diizinkan perlu dicek ulang.
 - `quick-share`: belum dipindah, masih di Laravel.
 
