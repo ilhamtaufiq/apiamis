@@ -1,7 +1,7 @@
 //! `/api/berkas`: port `BerkasController` untuk daftar, jenis dokumen, store, show, update, destroy, dan bulk.
 //!
-//! Belum dipindah (tetap di Laravel): `export-pdf` (menunggu K2, tooling dokumen), `upload-from-url`
-//! (menunggu daftar host yang diizinkan), dan `quick-share`.
+//! Belum dipindah (tetap di Laravel): `quick-share`. `export-pdf` ada di `onlyoffice.rs`, lewat
+//! ONLYOFFICE Document Server. `upload-from-url` ada di `berkas_upload_url.rs`.
 //!
 //! Pengawas dan konsultan pengawas melihat berkas miliknya plus berkas berjudul yang diaktifkan
 //! di pengaturan (`AppSetting::applyPengawasSharedBerkasJudulFilter`, lihat `shared_clause`).

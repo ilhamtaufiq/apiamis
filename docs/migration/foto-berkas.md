@@ -12,21 +12,21 @@ Sumber: `app/Http/Controllers/FotoController.php`, `BerkasController.php`, `app/
 ## Foto (`/api/foto`)
 
 - Store: validasi `pekerjaan_id`, `komponen_id`, `penerima_id`, `koordinat` (wajib), `file` (jpg/jpeg/png, maks 50 MB). Berkas disimpan ke disk lalu satu baris `media`.
-- Konversi `thumb` dibuat sinkron saat upload (`->nonQueued()` di `Foto::registerMediaConversions`), bukan lewat queue. Di Rust thumbnail tidak dibuat (T34). `foto_thumb_url` jatuh ke URL asli, jadi bentuk JSON sama, hanya berkas yang diunduh lebih besar.
+- Konversi `thumb` dibuat sinkron saat upload (`->nonQueued()` di `Foto::registerMediaConversions`), bukan lewat queue. Di Rust thumbnail dibuat saat upload (`media::make_thumb`, crop 120×120 dengan `resize_to_fill`, diuji di `foto_db`). Selisih kecil: `sharpen(10)` dari Laravel belum ditiru.
 - Update dan destroy juga menulis media dan menghapus berkas.
 
 ## Berkas (`/api/berkas`)
 
-- `convertToPdf`: konversi Word/PDF. Bergantung keputusan K2 (tooling dokumen). Belum dipindah.
-- `download-all-berkas`: membuat ZIP. Berisiko memori untuk banyak berkas. Perlu streaming.
-- `upload-from-url`: mengambil berkas dari URL luar. Perlu daftar host yang diizinkan (SSRF).
-- `quick-share`: membuat tautan berbagi.
+- `convertToPdf` (`export-pdf`): sudah di Rust (`onlyoffice::berkas_export_pdf`), lewat ONLYOFFICE Document Server yang sudah dipakai Laravel. Diuji dengan Document Server palsu (`onlyoffice_db`). Belum diuji dengan ONLYOFFICE sungguhan (`real_document_server_converts_public_docx`, butuh `ONLYOFFICE_TEST_SOURCE`).
+- `download-all-berkas`: sudah di Rust (`pekerjaan_download::download_all_berkas`). ZIP masih disusun di memori (`Cursor<Vec<u8>>`), tidak distream. Laravel memakai ZipStream. Perlu streaming sebelum dipakai untuk pekerjaan dengan banyak berkas besar.
+- `upload-from-url`: sudah di Rust (`berkas_upload_url.rs`). Daftar host yang diizinkan perlu dicek ulang.
+- `quick-share`: belum dipindah, masih di Laravel.
 
 ## Rencana
 
-1. Foto CRUD di Rust selesai: daftar, show, store, update, destroy, dan bulk destroy (`foto.rs`, `media.rs`). Thumbnail dibuat (T34).
-2. Berkas CRUD (tanpa konversi PDF, ZIP, dan upload-from-URL) di Rust.
-3. Konversi PDF, ZIP streaming, dan upload-from-URL setelah K2 diputuskan.
+1. Foto CRUD di Rust selesai: daftar, show, store, update, destroy, dan bulk destroy (`foto.rs`, `media.rs`). Thumbnail dibuat saat upload.
+2. Berkas CRUD di Rust selesai, termasuk ZIP dan upload-from-URL. Sisa: `quick-share`.
+3. ZIP perlu dibuat streaming. Keputusan K2 sudah diambil: ONLYOFFICE.
 
 ## Keputusan yang dibutuhkan
 
