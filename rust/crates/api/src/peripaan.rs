@@ -271,22 +271,28 @@ fn has_kml_extension(name: &str) -> bool {
     lower.ends_with(".kml") || lower.ends_with(".kmz")
 }
 
-/// Ubah berkas menjadi GeoJSON di thread blocking (parsing bisa berat untuk berkas besar).
-async fn kml_to_geojson_json(file: &media::Upload) -> Result<String, ApiError> {
+/// Ubah berkas menjadi GeoJSON di thread blocking. Byte berkas dipindah (bukan disalin) ke
+/// thread itu lalu dikembalikan, supaya tidak ada salinan 50 MB tambahan di heap.
+async fn kml_to_geojson_json(file: &mut media::Upload) -> Result<String, ApiError> {
     let name = file.original_name.clone();
-    let bytes = file.bytes.clone();
-    let parsed = tokio::task::spawn_blocking(move || {
-        let text = peripaan_kml::kml_text(&name, &bytes)?;
-        peripaan_kml::kml_to_geojson(&text)
+    let bytes = std::mem::take(&mut file.bytes);
+    let (bytes, parsed) = tokio::task::spawn_blocking(move || {
+        let parsed =
+            peripaan_kml::kml_text(&name, &bytes).and_then(|t| peripaan_kml::kml_to_geojson(&t));
+        (bytes, parsed)
     })
     .await
     .map_err(internal)?;
+    file.bytes = bytes;
     match parsed {
         Ok(v) => Ok(v.to_string()),
         Err(msg) => {
             let mut e = crate::validation::Errors::default();
             e.add("file", format!("Berkas KML/KMZ tidak valid: {msg}"));
-            e.finish().map(|_| String::new())
+            Err(e
+                .finish()
+                .err()
+                .unwrap_or_else(|| internal("validasi tidak lengkap")))
         }
     }
 }
@@ -299,9 +305,9 @@ pub async fn store(
 ) -> Result<Response, ApiError> {
     let user = require_auth(&state, &headers).await?;
     let mut raw = read_form(multipart).await?;
-    let (pekerjaan, nama, file) = validate_store(&state.pool, &mut raw).await?;
+    let (pekerjaan, nama, mut file) = validate_store(&state.pool, &mut raw).await?;
     let mime = media::mime_for_name(&file.original_name);
-    let geojson_text = Some(kml_to_geojson_json(&file).await?);
+    let geojson_text = Some(kml_to_geojson_json(&mut file).await?);
 
     let mut tx: Transaction<'_, MySql> = state.pool.begin().await.map_err(internal)?;
     let res = sqlx::query(
