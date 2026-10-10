@@ -746,6 +746,9 @@ async fn archive_inner(
 }
 
 /// Tulis `database.sql` ke `path`. Setiap tabel diawali `DROP` dan `CREATE`, lalu `INSERT` per 100 baris.
+/// Tabel yang strukturnya ikut dibackup tapi datanya tidak (isinya sementara).
+const DATA_SKIP_TABLES: &[&str] = &["cache"];
+
 async fn dump_database(
     pool: &MySqlPool,
     db_name: &str,
@@ -781,6 +784,12 @@ async fn dump_database(
             "{};\n{SQL_MARKER}",
             String::from_utf8_lossy(&create_sql)
         )?;
+
+        // Tabel sementara (state OAuth, kode handoff): struktur dibackup, isinya tidak. Mengurangi
+        // beban dump yang membaca seluruh tabel ke memori.
+        if DATA_SKIP_TABLES.contains(&table.as_str()) {
+            continue;
+        }
 
         let column_rows = sqlx::query(&format!("SHOW COLUMNS FROM `{esc}`"))
             .fetch_all(&mut *conn)
