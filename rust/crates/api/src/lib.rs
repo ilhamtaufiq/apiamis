@@ -32,6 +32,7 @@ pub mod checklist_items_write;
 pub mod crypt;
 pub mod dashboard;
 pub mod desa;
+pub mod desa_profile;
 pub mod raw_model;
 pub mod desa_population;
 pub mod desa_write;
@@ -220,6 +221,7 @@ pub fn app(config: &Config, state: AppState) -> Router {
                 .patch(desa_write::update)
                 .delete(desa_write::destroy),
         )
+        .route("/api/desa/{id}/profile", get(desa_profile::profile))
         .route("/api/desa/kecamatan/{id}", get(desa_write::by_kecamatan))
         .route("/api/kegiatan", get(kegiatan::index))
         .route("/api/kegiatan", post(kegiatan_write::store))

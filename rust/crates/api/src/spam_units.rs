@@ -44,7 +44,7 @@ use crate::{
 
 const MODEL_PENGELOLA: &str = "App\\Models\\Pengelola";
 
-const UNIT_CASTS: &[(&str, Cast)] = &[("is_simspam", Cast::Bool)];
+pub(crate) const UNIT_CASTS: &[(&str, Cast)] = &[("is_simspam", Cast::Bool)];
 const DESA_CASTS: &[(&str, Cast)] = &[
     ("luas", Cast::Float),
     ("jumlah_penduduk", Cast::Int),
