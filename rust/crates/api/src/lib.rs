@@ -31,6 +31,7 @@ pub mod checklist;
 pub mod checklist_items_write;
 pub mod crypt;
 pub mod dashboard;
+pub mod dashboard_progres;
 pub mod desa;
 pub mod desa_profile;
 pub mod raw_model;
@@ -994,6 +995,7 @@ pub fn app(config: &Config, state: AppState) -> Router {
         )
         .route("/api/dashboard/stats", get(dashboard::stats))
         .route("/api/dashboard/analytics", get(analytics::stats))
+        .route("/api/dashboard/progres-mvp", get(dashboard_progres::progres_mvp))
         .route(
             "/api/dashboard/executive-progress",
             get(dashboard::executive_progress),

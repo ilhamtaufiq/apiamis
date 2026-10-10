@@ -307,10 +307,14 @@ async fn load_settings(pool: &MySqlPool) -> Result<DocSettings, ApiError> {
         masa_pemeliharaan_hari: read("kontrak_masa_pemeliharaan_hari").await?,
         cara_pembayaran: read("kontrak_cara_pembayaran").await?,
     };
-    let default_ppk = (
-        env_or("SPSE_PPK_NAMA", "AGUNG DELI SAHPUTRA, ST"),
-        env_or("SPSE_PPK_NIP", "197711212006041010"),
-    );
+    // Nama dan NIP PPK tidak punya nilai bawaan di kode. Sumbernya app_settings, lalu env yang sama
+    // dengan push SPSE (`SPSE_PPK_*`), supaya dokumen dan data yang dikirim ke SPSE selalu cocok.
+    let default_ppk = (env_or("SPSE_PPK_NAMA", ""), env_or("SPSE_PPK_NIP", ""));
+    if default_ppk.0.is_empty() || default_ppk.1.is_empty() {
+        tracing::warn!(
+            "SPSE_PPK_NAMA/SPSE_PPK_NIP belum di-set dan pengaturan dokumen kontrak kosong"
+        );
+    }
     let default_cara = env_or("SPSE_CARA_PEMBAYARAN", "Sekaligus");
     Ok(DocSettings::from_raw(raw, default_ppk, &default_cara))
 }
