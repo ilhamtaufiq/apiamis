@@ -340,6 +340,9 @@ fn push_document(
     });
 }
 
+/// Jenis untuk semua dokumen yang diunduh dari SPSE.
+const JENIS_DOKUMEN_SPSE: &str = "SPSE Dokumen";
+
 async fn try_fetch(s: &Session, path: &str, referer: &str) -> Option<String> {
     fetch_page(s, path, Some(referer)).await.ok()
 }
@@ -665,13 +668,25 @@ pub async fn import_documents(
 
     for (index, doc) in documents.iter().enumerate() {
         let url = doc.url.clone();
+        // Semua dokumen dari SPSE berjenis sama. Nilai lain ditolak supaya daftar jenis tidak membengkak.
         let jenis = doc.jenis_dokumen.clone().unwrap_or_default();
         let jenis = jenis.trim().to_string();
-        if url.is_empty() || jenis.is_empty() {
+        if url.is_empty() {
             failed += 1;
-            results.push(json!({ "index": index, "status": "failed", "url": url, "reason": "url atau jenis_dokumen kosong" }));
+            results.push(json!({ "index": index, "status": "failed", "url": url, "reason": "url kosong" }));
             continue;
         }
+        if !jenis.eq_ignore_ascii_case(JENIS_DOKUMEN_SPSE) {
+            failed += 1;
+            results.push(json!({
+                "index": index,
+                "status": "failed",
+                "url": url,
+                "reason": format!("jenis_dokumen '{jenis}' tidak dikenal. Dokumen SPSE harus memakai '{JENIS_DOKUMEN_SPSE}'."),
+            }));
+            continue;
+        }
+        let jenis = JENIS_DOKUMEN_SPSE.to_string();
         if regex_once!(LEGACY_SECTION_PATTERN).is_match(&url) {
             failed += 1;
             results.push(json!({

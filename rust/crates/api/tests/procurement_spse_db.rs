@@ -897,28 +897,31 @@ async fn dokumen_impor_dan_zip() {
             "pekerjaan_id": pekerjaan,
             "kode_paket": "UJI-PS-KODE-1",
             "documents": [
-                { "url": format!("{base}/uji-ok/dl/rab-uji.pdf"), "jenis_dokumen": "RAB", "label": "RAB Uji" },
-                { "url": format!("{base}/uji-ok/dl/rusak.pdf"), "jenis_dokumen": "Rusak" },
-                { "url": format!("{base}/uji-ok/nontender/77/pengumumanlelang"), "jenis_dokumen": "Summary" },
+                { "url": format!("{base}/uji-ok/dl/rab-uji.pdf"), "jenis_dokumen": "SPSE Dokumen", "label": "RAB Uji" },
+                { "url": format!("{base}/uji-ok/dl/rusak.pdf"), "jenis_dokumen": "SPSE Dokumen" },
+                { "url": format!("{base}/uji-ok/nontender/77/pengumumanlelang"), "jenis_dokumen": "SPSE Dokumen" },
+                { "url": format!("{base}/uji-ok/dl/rab-uji.pdf"), "jenis_dokumen": "RAB" },
             ],
         })),
     )
     .await;
     assert_eq!(s, StatusCode::OK, "{b}");
     assert_eq!(b["imported"], 1);
-    assert_eq!(b["failed"], 2);
-    assert_eq!(b["message"], "Import selesai: 1 berhasil, 2 gagal.");
+    assert_eq!(b["failed"], 3);
+    assert_eq!(b["message"], "Import selesai: 1 berhasil, 3 gagal.");
     let results = b["results"].as_array().unwrap();
     assert_eq!(results[0]["status"], "imported");
     assert_eq!(results[1]["reason"], "SPSE unduh gagal: HTTP 404 (URL tidak ada atau butuh sesi berbeda).");
     assert!(results[2]["reason"].as_str().unwrap().starts_with("URL section SPSE"));
+    // Jenis selain "SPSE Dokumen" ditolak, tidak masuk ke tbl_berkas.
+    assert!(results[3]["reason"].as_str().unwrap().contains("tidak dikenal"));
 
     let jenis: String = sqlx::query_scalar("SELECT jenis_dokumen FROM tbl_berkas WHERE pekerjaan_id = ?")
         .bind(pekerjaan)
         .fetch_one(&pool)
         .await
         .unwrap();
-    assert_eq!(jenis, "RAB", "hanya unduhan yang berhasil yang tersimpan");
+    assert_eq!(jenis, "SPSE Dokumen", "hanya unduhan yang berhasil yang tersimpan, berjenis SPSE Dokumen");
     let media: i64 = sqlx::query_scalar(
         "SELECT CAST(COUNT(*) AS SIGNED) FROM media m JOIN tbl_berkas bk ON bk.id = m.model_id \
          WHERE m.model_type = 'App\\\\Models\\\\Berkas' AND m.collection_name = 'berkas/dokumen' AND bk.pekerjaan_id = ?",
