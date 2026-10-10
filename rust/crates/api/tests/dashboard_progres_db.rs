@@ -192,3 +192,32 @@ async fn progres_mvp_cakupan_admin_dan_pengawas() {
         .await
         .unwrap();
 }
+
+#[tokio::test]
+#[ignore = "butuh DATABASE_URL"]
+async fn penilaian_pengawas_bentuk_respons() {
+    let url = std::env::var("DATABASE_URL").expect("DATABASE_URL belum di-set");
+    let pool = sqlx::MySqlPool::connect(&url).await.unwrap();
+    let admin = user_token(&pool, "uji-nilai-admin@example.test", Some("admin")).await;
+
+    let (status, body) = send(
+        &pool,
+        Method::GET,
+        "/api/dashboard/penilaian-pengawas",
+        Some(&admin),
+        Body::empty(),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let data = &body["data"];
+    let parameter = data["parameter"].as_array().unwrap();
+    assert_eq!(parameter.len(), 6, "{body}");
+    let bobot: f64 = parameter.iter().map(|p| p["bobot"].as_f64().unwrap()).sum();
+    assert!((bobot - 100.0).abs() < 1e-9, "bobot harus 100: {body}");
+    assert!(data["pengawas"].is_array(), "{body}");
+    for orang in data["pengawas"].as_array().unwrap() {
+        assert!(orang["breakdown"].is_object(), "{body}");
+        assert!(orang["kategori"].is_string(), "{body}");
+    }
+}
