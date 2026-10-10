@@ -49,7 +49,7 @@ async fn main() {
     tracing::info!(%addr, env = %config.app_env, "apiamis rust listening");
 
     let database_url = std::env::var("DATABASE_URL").expect("DATABASE_URL belum di-set");
-    let pool = sqlx::MySqlPool::connect_lazy(&database_url).expect("DATABASE_URL tidak valid");
+    let pool = db_pool_lazy(&database_url);
 
     axum::serve(
         listener,
@@ -72,6 +72,26 @@ async fn run_migrate() {
             std::process::exit(1);
         }
     }
+}
+
+/// Pool untuk server HTTP. Ukuran dan waktu idle bisa diatur lewat env agar RAM tidak
+/// membengkak: setiap koneksi MySQL menyimpan buffer di proses ini dan di server database.
+fn db_pool_lazy(database_url: &str) -> sqlx::MySqlPool {
+    let max = parse_env("DB_MAX_CONNECTIONS", 5u32).max(1);
+    let idle_secs = parse_env("DB_IDLE_TIMEOUT_SECS", 60u64);
+    sqlx::mysql::MySqlPoolOptions::new()
+        .max_connections(max)
+        .min_connections(0)
+        .idle_timeout(std::time::Duration::from_secs(idle_secs))
+        .connect_lazy(database_url)
+        .expect("DATABASE_URL tidak valid")
+}
+
+fn parse_env<T: std::str::FromStr>(key: &str, default: T) -> T {
+    std::env::var(key)
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(default)
 }
 
 /// Koneksi untuk subcommand CLI. Sama dengan `run_migrate`: `DATABASE_URL` wajib.
