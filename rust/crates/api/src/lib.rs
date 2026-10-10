@@ -110,6 +110,7 @@ pub mod route_permissions;
 pub mod route_permissions_sync;
 pub mod session;
 pub mod sk;
+pub mod skp_jurnal;
 pub mod spam_import;
 pub mod spam_integration;
 pub mod spam_kelembagaan;
@@ -204,6 +205,7 @@ pub fn app(config: &Config, state: AppState) -> Router {
     let csrf_state = state.clone();
     Router::new()
         // Sama seperti `health: '/up'` di bootstrap/app.php (Laravel).
+        .route("/", get(root))
         .route("/up", get(up))
         .route("/api/health", get(health))
         .route("/api/kecamatan", get(kecamatan::index))
@@ -372,6 +374,20 @@ pub fn app(config: &Config, state: AppState) -> Router {
                 .put(survey_tugas::update)
                 .patch(survey_tugas::update)
                 .delete(survey_tugas::destroy),
+        )
+        // Jurnal kegiatan SKP (modul baru, tidak ada di Laravel). Data selalu milik pengguna yang login.
+        .route("/api/skp/jurnal", get(skp_jurnal::index).post(skp_jurnal::store))
+        .route(
+            "/api/skp/jurnal/{id}",
+            put(skp_jurnal::update).delete(skp_jurnal::destroy),
+        )
+        .route(
+            "/api/skp/jurnal/{id}/foto",
+            post(skp_jurnal::upload_foto).layer(DefaultBodyLimit::max(skp_jurnal::BODY_LIMIT)),
+        )
+        .route(
+            "/api/skp/jurnal/{id}/foto/{media_id}",
+            delete(skp_jurnal::delete_foto),
         )
         // Unit SPAM (SpamUnitController). `POST /api/spam-units/import` belum dipindah.
         .route(
@@ -1205,6 +1221,12 @@ async fn up() -> Json<Value> {
     Json(json!({ "status": "ok" }))
 }
 
+/// `GET /`: pengganti `routes/web.php` Laravel (layanan dan tautan API, tanpa data sensitif).
+async fn root() -> Json<Value> {
+    let name = std::env::var("APP_NAME").ok().filter(|v| !v.trim().is_empty()).unwrap_or_else(|| "Arumanis API".to_string());
+    Json(json!({ "service": name, "status": "ok", "health": "/up", "api": "/api" }))
+}
+
 async fn health() -> Json<Value> {
     Json(json!({ "status": "ok", "service": "apiamis", "runtime": "rust" }))
 }
@@ -1255,6 +1277,15 @@ mod tests {
         let res = send(Request::builder().uri(path).body(Body::empty()).unwrap()).await;
         let status = res.status();
         (status, body_json(res).await)
+    }
+
+    #[tokio::test]
+    async fn root_matches_laravel_web_route() {
+        let (status, body) = get_json("/").await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(body["status"], "ok");
+        assert_eq!(body["health"], "/up");
+        assert_eq!(body["api"], "/api");
     }
 
     #[tokio::test]

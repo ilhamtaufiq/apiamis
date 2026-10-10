@@ -473,16 +473,20 @@ pub async fn first_urls(
     let media_id: u64 = r.try_get("id")?;
     let file_name: String = r.try_get("file_name")?;
     let generated: String = r.try_get("generated_conversions")?;
+    Ok(public_urls(app_url, media_id, &file_name, &generated))
+}
+
+/// URL asli dan thumbnail satu media di disk `public`. `generated` adalah kolom `generated_conversions`.
+/// Thumbnail kosong bila konversi `thumb` belum dibuat.
+pub fn public_urls(app_url: &str, media_id: u64, file_name: &str, generated: &str) -> (String, String) {
     let base = app_url.trim_end_matches('/');
     let original = format!("{base}/storage/{media_id}/{file_name}");
     let thumb = if generated.contains("\"thumb\"") {
-        let ext = Path::new(&file_name)
+        let ext = Path::new(file_name)
             .extension()
             .and_then(|e| e.to_str())
             .unwrap_or("jpg");
-        let stem = file_name
-            .strip_suffix(&format!(".{ext}"))
-            .unwrap_or(&file_name);
+        let stem = file_name.strip_suffix(&format!(".{ext}")).unwrap_or(file_name);
         format!(
             "{base}/storage/{media_id}/conversions/{}",
             thumb_file_name(stem, ext)
@@ -490,7 +494,7 @@ pub async fn first_urls(
     } else {
         String::new()
     };
-    Ok((original, thumb))
+    (original, thumb)
 }
 
 #[cfg(test)]

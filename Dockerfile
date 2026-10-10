@@ -1,29 +1,8 @@
 # syntax=docker/dockerfile:1.7
-# Catatan build cepat:
-# - Ekstensi PHP via prebuilt binary (mlocati), BUKAN docker-php-ext-install
-#   yang mengkompilasi gd/intl dari source (hemat ~4-7 menit di VPS kecil).
-# - Di Coolify aktifkan Docker Build Cache agar stage yang tidak berubah
-#   tidak dibangun ulang tiap deploy.
+# Image Rust-only (Fase 4 migrasi Laravel): tanpa PHP. Apache hanya melayani /storage dan
+# meneruskan /, /up, dan /api ke binary Rust.
 
-# Stage 1: PHP dependencies (cache bertahan selama composer.* tidak berubah)
-FROM composer:2 AS vendor
-WORKDIR /app
-COPY composer.json composer.lock ./
-ENV COMPOSER_CACHE_DIR=/tmp/composer-cache
-RUN --mount=type=cache,target=/tmp/composer-cache \
-    composer install --no-dev --no-interaction --no-scripts --prefer-dist --no-progress --ignore-platform-reqs
-
-# Stage 2: Frontend assets (vite+tailwind sudah prebuilt; tanpa python/make/g++)
-FROM node:20-alpine AS asset-builder
-WORKDIR /app
-COPY package.json package-lock.json ./
-RUN --mount=type=cache,target=/root/.npm \
-    npm ci --no-audit --no-fund
-COPY vite.config.js ./
-COPY resources ./resources
-RUN npm run build
-
-# Stage 3: Binary Rust (apiamis-api). Dibangun di bookworm agar glibc cocok dengan image runtime.
+# Stage 1: binary Rust (apiamis-api)
 FROM rust:1-bookworm AS rust-build
 RUN apt-get update && apt-get install -y --no-install-recommends cmake clang \
     && rm -rf /var/lib/apt/lists/*
@@ -34,51 +13,33 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry \
     cargo build --release -p api --locked \
     && cp target/release/api /usr/local/bin/apiamis-api
 
-# Stage 4: Final production image
-FROM php:8.3-apache-bookworm
+# Stage 2: runtime tanpa PHP
+FROM debian:bookworm-slim
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        apache2 ca-certificates libssl3 curl util-linux \
+    && a2enmod proxy proxy_http headers alias \
+    && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /var/www/html
-
-# Enable Apache rewrite and headers
-RUN a2enmod rewrite headers
-
-# Ekstensi PHP sebagai binary prebuilt (detik, bukan menit).
-COPY --from=mlocati/php-extension-installer /usr/bin/install-php-extensions /usr/local/bin/
-RUN install-php-extensions pdo_mysql mbstring exif pcntl bcmath gd zip intl
-
-# Set PHP configuration for file uploads
-RUN echo "upload_max_filesize = 50M" > /usr/local/etc/php/conf.d/uploads.ini \
-    && echo "post_max_size = 50M" >> /usr/local/etc/php/conf.d/uploads.ini
-
-# Copy the application code
-COPY --chown=www-data:www-data . .
-
-# Copy vendor and built assets from previous stages
-COPY --from=vendor --chown=www-data:www-data /app/vendor /var/www/html/vendor
-COPY --from=asset-builder --chown=www-data:www-data /app/public/build /var/www/html/public/build
-
-# Finalize setup
-RUN mkdir -p storage/framework/{cache/data,sessions,views} \
-    && mkdir -p storage/logs \
-    && mkdir -p bootstrap/cache \
-    && mkdir -p storage/ai \
-    && chown -R www-data:www-data storage bootstrap/cache \
-    && chmod -R 775 storage bootstrap/cache
-
-# Clear any cached files
-RUN rm -rf bootstrap/cache/*.php \
-    && rm -rf storage/framework/cache/data/* \
-    && rm -rf storage/framework/sessions/* \
-    && rm -rf storage/framework/views/*
-
-# Apache vhost: Laravel public/
-COPY docker/000-default.conf /etc/apache2/sites-available/000-default.conf
-
-# Copy and make entrypoint executable
-# Binary Rust (API yang sudah dipindah). Belum ada aturan proxy Apache ke :8000.
+COPY docker/000-rust.conf /etc/apache2/sites-available/000-default.conf
 COPY --from=rust-build /usr/local/bin/apiamis-api /usr/local/bin/apiamis-api
-COPY docker-entrypoint.sh /usr/local/bin/
-RUN chmod +x /usr/local/bin/docker-entrypoint.sh
+COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+
+# Aset repo yang dibaca binary Rust saat berjalan: template dokumen kontrak dan GeoJSON desa.
+# Lokasinya diberikan lewat env, karena path bawaan di kode mengacu ke folder sumber saat build.
+COPY storage/app/templates /var/www/html/storage/app/templates
+COPY resources/geojson /var/www/html/resources/geojson
+ENV KONTRAK_TEMPLATE_DIR=/var/www/html/storage/app/templates \
+    VILLAGE_GEOJSON_PATH=/var/www/html/resources/geojson/id3203_cianjur_simplified.geojson \
+    SPAM_IMPORT_DIR=/var/www/html/storage/app/temp
+
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh \
+    && mkdir -p /var/www/html/public /var/www/html/storage/app/public /var/www/html/storage/app/temp
+
+# Healthcheck memeriksa API Rust langsung (bukan Apache), supaya container dianggap siap
+# hanya bila /api/health di binary Rust menjawab.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
+    CMD curl -fsS http://127.0.0.1:8000/api/health || exit 1
 
 EXPOSE 80
-
 CMD ["/usr/local/bin/docker-entrypoint.sh"]

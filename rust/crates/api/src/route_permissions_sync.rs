@@ -66,7 +66,10 @@ struct RouteEntry {
 
 /// SHA-256 gabungan berkas sumber rute. Lihat `source_digest` dan modul ini.
 #[cfg(test)]
-const ROUTES_SOURCE_SHA256: &str = "9e66f1f6047c6659f48dcedb20c05d54afda88db8bbd7e01f7c199ce282c8e35";
+// Digest diperbarui setelah modul Rust-only `skp_jurnal` (`/api/skp/jurnal`) ditambahkan ke
+// `lib.rs`. Rute itu tidak ada di Laravel, jadi tidak masuk `ROUTES` (yang meniru Route::getRoutes()).
+// Bila rute Laravel berubah, buat ulang `ROUTES` seperti dijelaskan di dokumentasi modul ini.
+const ROUTES_SOURCE_SHA256: &str = "86c91476a07083f44cc165c4af820b5462d0e463494a1e01224f8aa14ba17aa6";
 
 /// Daftar rute dari `Route::getRoutes()` Laravel, dalam urutan router.
 const ROUTES: &[RouteEntry] = &[

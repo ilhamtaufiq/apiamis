@@ -75,6 +75,8 @@ pub const MUTATION_RESOURCE_PREFIXES: &[&str] = &[
     "/route-permissions/check-access",
     "/dashboard",
     "/app-settings",
+    // Jurnal SKP: setiap pengguna hanya mengelola datanya sendiri (dijaga di handler `skp_jurnal`).
+    "/skp",
 ];
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -318,6 +320,17 @@ mod tests {
             decide(false, &roles(&["pengawas"]), "/api/roles", "GET", &[]),
             Decision::DenyAdminOnly
         );
+    }
+
+    #[test]
+    fn jurnal_skp_mutation_allowed_without_rule() {
+        for method in ["POST", "PUT", "DELETE"] {
+            assert_eq!(
+                decide(false, &roles(&[]), "/api/skp/jurnal/12", method, &[]),
+                Decision::Allow,
+                "{method} /api/skp/jurnal harus lolos, pemilik dijaga di handler"
+            );
+        }
     }
 
     #[test]
