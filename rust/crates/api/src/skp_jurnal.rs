@@ -6,13 +6,16 @@
 //! - `PUT /api/skp/jurnal/{id}`: ubah kegiatan, 200. Id milik pengguna lain dianggap tidak ada (404).
 //! - `DELETE /api/skp/jurnal/{id}`: hapus, 204.
 //!
+//! - `POST /api/skp/jurnal/{id}/foto`: unggah foto bukti (multipart `foto` atau `foto[]`), JPG/PNG.
+//! - `DELETE /api/skp/jurnal/{id}/foto/{media_id}`: hapus satu foto.
+//!
 //! Setiap pengguna yang login mengelola jurnalnya sendiri. Tidak ada role khusus.
-//! Foto bukti belum termasuk di sini.
+//! Foto disimpan lewat tabel `media` (model `App\Models\SkpJurnalKegiatan`, koleksi `foto`).
 
 use std::collections::{BTreeMap, HashMap};
 
 use axum::{
-    extract::{Path, Query, State},
+    extract::{FromRequest, Multipart, Path, Query, Request, State},
     http::{HeaderMap, StatusCode},
     response::{IntoResponse, Response},
     Json,
@@ -22,7 +25,11 @@ use serde_json::{json, Value};
 use shared::ApiError;
 use sqlx::{mysql::MySqlRow, MySqlPool, Row};
 
-use crate::{format::iso8601_utc, media::internal, require_auth, AppState};
+use crate::{
+    format::iso8601_utc,
+    media::{self, internal},
+    require_auth, AppState,
+};
 
 const TABLE: &str = "skp_jurnal_kegiatan";
 /// `CAST` pada `rhk` karena kolom SMALLINT UNSIGNED.
@@ -32,6 +39,14 @@ const MAX_SATUAN: usize = 50;
 const MAX_KETERANGAN: usize = 500;
 const MAX_RHK: i64 = 99;
 const VALIDATION_MESSAGE: &str = "The given data was invalid.";
+const MODEL: &str = "App\\Models\\SkpJurnalKegiatan";
+const COLLECTION: &str = "foto";
+/// Foto per kegiatan.
+const MAX_FOTO: usize = 10;
+const MAX_FOTO_BYTES: usize = 10 * 1024 * 1024;
+const FOTO_EXT: &[&str] = &["jpg", "jpeg", "png"];
+/// Batas body satu request unggah (beberapa foto sekaligus), sama dengan modul foto lain.
+pub const BODY_LIMIT: usize = media::MAX_FILE_BYTES + 1024 * 1024;
 
 #[derive(Debug, Clone)]
 struct Entry {
@@ -44,6 +59,14 @@ struct Entry {
     keterangan: Option<String>,
     created_at: Option<DateTime<Utc>>,
     updated_at: Option<DateTime<Utc>>,
+    fotos: Vec<Foto>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+struct Foto {
+    id: u64,
+    url: String,
+    thumb: String,
 }
 
 /// Input yang sudah lolos validasi.
@@ -281,6 +304,7 @@ fn from_row(r: &MySqlRow) -> Result<Entry, sqlx::Error> {
         keterangan: r.try_get("keterangan")?,
         created_at: r.try_get("created_at")?,
         updated_at: r.try_get("updated_at")?,
+        fotos: Vec::new(),
     })
 }
 
@@ -295,6 +319,11 @@ fn to_json(e: &Entry) -> Value {
         "keterangan": e.keterangan,
         "created_at": iso8601_utc(e.created_at),
         "updated_at": iso8601_utc(e.updated_at),
+        "foto": e
+            .fotos
+            .iter()
+            .map(|f| json!({ "id": f.id, "url": f.url, "thumb": f.thumb }))
+            .collect::<Vec<_>>(),
     })
 }
 
@@ -337,6 +366,103 @@ async fn find(pool: &MySqlPool, user_id: u64, id: u64) -> Result<Option<Entry>, 
     row.as_ref().map(from_row).transpose().map_err(internal)
 }
 
+/// Isi `fotos` semua entri dengan satu query ke `media`.
+async fn isi_foto(pool: &MySqlPool, app_url: &str, entries: &mut [Entry]) -> Result<(), ApiError> {
+    if entries.is_empty() {
+        return Ok(());
+    }
+    let marks = vec!["?"; entries.len()].join(", ");
+    let sql = format!(
+        "SELECT CAST(id AS UNSIGNED) AS id, CAST(model_id AS UNSIGNED) AS model_id, file_name, \
+         CAST(generated_conversions AS CHAR) AS generated_conversions FROM media \
+         WHERE model_type = ? AND collection_name = ? AND model_id IN ({marks}) ORDER BY order_column, id"
+    );
+    let mut q = sqlx::query(&sql).bind(MODEL).bind(COLLECTION);
+    for e in entries.iter() {
+        q = q.bind(e.id);
+    }
+    let rows = q.fetch_all(pool).await.map_err(internal)?;
+    for r in rows {
+        let model_id: u64 = r.try_get("model_id").map_err(internal)?;
+        let id: u64 = r.try_get("id").map_err(internal)?;
+        let file_name: String = r.try_get("file_name").map_err(internal)?;
+        let generated: String = r.try_get("generated_conversions").map_err(internal)?;
+        let (url, thumb) = media::public_urls(app_url, id, &file_name, &generated);
+        if let Some(e) = entries.iter_mut().find(|e| e.id == model_id) {
+            e.fotos.push(Foto { id, url, thumb });
+        }
+    }
+    Ok(())
+}
+
+/// Satu kegiatan milik pengguna, lengkap dengan foto. 404 bila bukan miliknya.
+async fn muat(state: &AppState, user_id: u64, id: u64) -> Result<Entry, ApiError> {
+    let mut entry = find(&state.pool, user_id, id)
+        .await?
+        .ok_or_else(ApiError::not_found)?;
+    isi_foto(
+        &state.pool,
+        &state.app_url,
+        std::slice::from_mut(&mut entry),
+    )
+    .await?;
+    Ok(entry)
+}
+
+fn bad_request(e: impl std::fmt::Display) -> ApiError {
+    ApiError::new(StatusCode::BAD_REQUEST, e.to_string())
+}
+
+/// Berkas `foto` atau `foto[]` dari multipart. Berkas kosong diabaikan.
+async fn baca_foto(state: &AppState, req: Request) -> Result<Vec<media::Upload>, ApiError> {
+    let mut files = Vec::new();
+    let mut mp = Multipart::from_request(req, state)
+        .await
+        .map_err(bad_request)?;
+    while let Some(field) = mp.next_field().await.map_err(bad_request)? {
+        let name = field.name().unwrap_or_default().to_string();
+        if name != "foto" && name != "foto[]" {
+            continue;
+        }
+        let original_name = field.file_name().unwrap_or_default().to_string();
+        let bytes = field.bytes().await.map_err(bad_request)?;
+        if !bytes.is_empty() {
+            files.push(media::Upload {
+                original_name,
+                bytes: bytes.to_vec(),
+            });
+        }
+    }
+    Ok(files)
+}
+
+/// Aturan foto: JPG/PNG, maksimal 10 MB per berkas, dan maksimal 10 foto per kegiatan.
+fn validate_foto(files: &[media::Upload], sudah_ada: usize) -> Result<(), ApiError> {
+    let mut errors = BTreeMap::new();
+    if files.is_empty() {
+        gagal(&mut errors, "foto", "Pilih minimal satu foto.");
+    } else if sudah_ada + files.len() > MAX_FOTO {
+        gagal(&mut errors, "foto", "Satu kegiatan maksimal 10 foto.");
+    }
+    for f in files {
+        let ext = f.extension().to_ascii_lowercase();
+        if !FOTO_EXT.contains(&ext.as_str()) || media::image_mime(&f.bytes).is_none() {
+            gagal(
+                &mut errors,
+                "foto",
+                "Foto harus berupa gambar JPG atau PNG.",
+            );
+        }
+        if f.bytes.len() > MAX_FOTO_BYTES {
+            gagal(&mut errors, "foto", "Ukuran foto maksimal 10 MB.");
+        }
+    }
+    if !errors.is_empty() {
+        return Err(ApiError::validation(VALIDATION_MESSAGE, errors));
+    }
+    Ok(())
+}
+
 // ---------------------------------------------------------------------------
 // Handler
 // ---------------------------------------------------------------------------
@@ -361,11 +487,12 @@ pub async fn index(
         .fetch_all(&state.pool)
         .await
         .map_err(internal)?;
-    let entries = rows
+    let mut entries = rows
         .iter()
         .map(from_row)
         .collect::<Result<Vec<_>, _>>()
         .map_err(internal)?;
+    isi_foto(&state.pool, &state.app_url, &mut entries).await?;
 
     Ok(Json(json!({
         "data": entries.iter().map(to_json).collect::<Vec<_>>(),
@@ -398,9 +525,7 @@ pub async fn store(
     .map_err(internal)?;
 
     let id = res.last_insert_id();
-    let created = find(&state.pool, user.user_id, id)
-        .await?
-        .ok_or_else(|| internal("kegiatan baru tidak terbaca"))?;
+    let created = muat(&state, user.user_id, id).await?;
     Ok((
         StatusCode::CREATED,
         Json(json!({ "data": to_json(&created) })),
@@ -437,9 +562,7 @@ pub async fn update(
     .await
     .map_err(internal)?;
 
-    let updated = find(&state.pool, user.user_id, id)
-        .await?
-        .ok_or_else(ApiError::not_found)?;
+    let updated = muat(&state, user.user_id, id).await?;
     Ok(Json(json!({ "data": to_json(&updated) })))
 }
 
@@ -450,16 +573,94 @@ pub async fn destroy(
 ) -> Result<Response, ApiError> {
     let id = parse_id(&id)?;
     let user = require_auth(&state, &headers).await?;
+    let mut tx = state.pool.begin().await.map_err(internal)?;
     let res = sqlx::query("DELETE FROM skp_jurnal_kegiatan WHERE id = ? AND user_id = ?")
         .bind(id)
         .bind(user.user_id)
-        .execute(&state.pool)
+        .execute(&mut *tx)
         .await
         .map_err(internal)?;
     if res.rows_affected() == 0 {
         return Err(ApiError::not_found());
     }
+    let dirs = media::delete_collection(&mut tx, MODEL, id, COLLECTION, None).await?;
+    tx.commit().await.map_err(internal)?;
+    media::remove_dirs(&dirs).await;
     Ok(StatusCode::NO_CONTENT.into_response())
+}
+
+/// `POST /api/skp/jurnal/{id}/foto`. Respons: kegiatan lengkap dengan foto terbaru.
+pub async fn upload_foto(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+    req: Request,
+) -> Result<Json<Value>, ApiError> {
+    let id = parse_id(&id)?;
+    let user = require_auth(&state, &headers).await?;
+    let entry = muat(&state, user.user_id, id).await?;
+    let files = baca_foto(&state, req).await?;
+    validate_foto(&files, entry.fotos.len())?;
+
+    let mut tx = state.pool.begin().await.map_err(internal)?;
+    let mut dirs = Vec::new();
+    for file in &files {
+        let mime = media::image_mime(&file.bytes).unwrap_or("image/jpeg");
+        match media::attach(&mut tx, MODEL, id, COLLECTION, file, mime, true).await {
+            Ok(stored) => dirs.push(stored.dir),
+            Err(e) => {
+                media::remove_dirs(&dirs).await;
+                return Err(e);
+            }
+        }
+    }
+    if let Err(e) = tx.commit().await {
+        media::remove_dirs(&dirs).await;
+        return Err(internal(e));
+    }
+
+    let updated = muat(&state, user.user_id, id).await?;
+    Ok(Json(json!({ "data": to_json(&updated) })))
+}
+
+/// `DELETE /api/skp/jurnal/{id}/foto/{media_id}`. Respons: kegiatan lengkap dengan foto terbaru.
+pub async fn delete_foto(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path((id, media_id)): Path<(String, String)>,
+) -> Result<Json<Value>, ApiError> {
+    let id = parse_id(&id)?;
+    let media_id = parse_id(&media_id)?;
+    let user = require_auth(&state, &headers).await?;
+    muat(&state, user.user_id, id).await?;
+
+    let mut tx = state.pool.begin().await.map_err(internal)?;
+    let found: Option<u64> = sqlx::query_scalar(
+        "SELECT CAST(id AS UNSIGNED) FROM media WHERE id = ? AND model_type = ? AND model_id = ? AND collection_name = ?",
+    )
+    .bind(media_id)
+    .bind(MODEL)
+    .bind(id)
+    .bind(COLLECTION)
+    .fetch_optional(&mut *tx)
+    .await
+    .map_err(internal)?;
+    if found.is_none() {
+        return Err(ApiError::new(
+            StatusCode::NOT_FOUND,
+            "Foto tidak ditemukan.",
+        ));
+    }
+    sqlx::query("DELETE FROM media WHERE id = ?")
+        .bind(media_id)
+        .execute(&mut *tx)
+        .await
+        .map_err(internal)?;
+    tx.commit().await.map_err(internal)?;
+    media::remove_dirs(&[media::media_dir(media_id)]).await;
+
+    let updated = muat(&state, user.user_id, id).await?;
+    Ok(Json(json!({ "data": to_json(&updated) })))
 }
 
 #[cfg(test)]
@@ -580,6 +781,7 @@ mod tests {
             keterangan: None,
             created_at: None,
             updated_at: None,
+            fotos: Vec::new(),
         }
     }
 

@@ -381,6 +381,14 @@ pub fn app(config: &Config, state: AppState) -> Router {
             "/api/skp/jurnal/{id}",
             put(skp_jurnal::update).delete(skp_jurnal::destroy),
         )
+        .route(
+            "/api/skp/jurnal/{id}/foto",
+            post(skp_jurnal::upload_foto).layer(DefaultBodyLimit::max(skp_jurnal::BODY_LIMIT)),
+        )
+        .route(
+            "/api/skp/jurnal/{id}/foto/{media_id}",
+            delete(skp_jurnal::delete_foto),
+        )
         // Unit SPAM (SpamUnitController). `POST /api/spam-units/import` belum dipindah.
         .route(
             "/api/spam-units/import",
