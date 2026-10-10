@@ -20,7 +20,10 @@ pub const BASELINE: &str = "0000_baseline";
 
 /// Daftar migrasi, berurutan. Tiap file SQL disisipkan saat build, sehingga binary tidak butuh
 /// folder `migrations/` saat berjalan. Tambahkan file baru di sini.
-pub const MIGRATIONS: &[(&str, &str)] = &[(BASELINE, include_str!("../../../migrations/0000_baseline.sql"))];
+pub const MIGRATIONS: &[(&str, &str)] = &[
+    (BASELINE, include_str!("../../../migrations/0000_baseline.sql")),
+    ("0001_skp_jurnal_kegiatan", include_str!("../../../migrations/0001_skp_jurnal_kegiatan.sql")),
+];
 
 const LOCK_NAME: &str = "apiamis_migrate";
 

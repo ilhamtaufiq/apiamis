@@ -110,6 +110,7 @@ pub mod route_permissions;
 pub mod route_permissions_sync;
 pub mod session;
 pub mod sk;
+pub mod skp_jurnal;
 pub mod spam_import;
 pub mod spam_integration;
 pub mod spam_kelembagaan;
@@ -373,6 +374,12 @@ pub fn app(config: &Config, state: AppState) -> Router {
                 .put(survey_tugas::update)
                 .patch(survey_tugas::update)
                 .delete(survey_tugas::destroy),
+        )
+        // Jurnal kegiatan SKP (modul baru, tidak ada di Laravel). Data selalu milik pengguna yang login.
+        .route("/api/skp/jurnal", get(skp_jurnal::index).post(skp_jurnal::store))
+        .route(
+            "/api/skp/jurnal/{id}",
+            put(skp_jurnal::update).delete(skp_jurnal::destroy),
         )
         // Unit SPAM (SpamUnitController). `POST /api/spam-units/import` belum dipindah.
         .route(
