@@ -29,8 +29,6 @@ use crate::{
 
 const ROLE_PENGAWAS: &str = "pengawas";
 const ROLE_KONSULTAN: &str = "konsultan_pengawas";
-/// Batas baris per orang di `per_pengawas`.
-const MAX_PER_PENGAWAS: usize = 50;
 
 /// Satu pekerjaan dalam cakupan.
 #[derive(Debug, Clone, PartialEq)]
@@ -271,7 +269,6 @@ pub fn summarize(
             .as_u64()
             .cmp(&a["jumlah_pekerjaan"].as_u64())
     });
-    orang.truncate(MAX_PER_PENGAWAS);
 
     json!({
         "kpi": {
