@@ -204,6 +204,7 @@ pub fn app(config: &Config, state: AppState) -> Router {
     let csrf_state = state.clone();
     Router::new()
         // Sama seperti `health: '/up'` di bootstrap/app.php (Laravel).
+        .route("/", get(root))
         .route("/up", get(up))
         .route("/api/health", get(health))
         .route("/api/kecamatan", get(kecamatan::index))
@@ -1205,6 +1206,12 @@ async fn up() -> Json<Value> {
     Json(json!({ "status": "ok" }))
 }
 
+/// `GET /`: pengganti `routes/web.php` Laravel (layanan dan tautan API, tanpa data sensitif).
+async fn root() -> Json<Value> {
+    let name = std::env::var("APP_NAME").ok().filter(|v| !v.trim().is_empty()).unwrap_or_else(|| "Arumanis API".to_string());
+    Json(json!({ "service": name, "status": "ok", "health": "/up", "api": "/api" }))
+}
+
 async fn health() -> Json<Value> {
     Json(json!({ "status": "ok", "service": "apiamis", "runtime": "rust" }))
 }
@@ -1255,6 +1262,15 @@ mod tests {
         let res = send(Request::builder().uri(path).body(Body::empty()).unwrap()).await;
         let status = res.status();
         (status, body_json(res).await)
+    }
+
+    #[tokio::test]
+    async fn root_matches_laravel_web_route() {
+        let (status, body) = get_json("/").await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(body["status"], "ok");
+        assert_eq!(body["health"], "/up");
+        assert_eq!(body["api"], "/api");
     }
 
     #[tokio::test]
