@@ -128,7 +128,7 @@ async fn load_pekerjaan(
         .collect()
 }
 
-async fn load_assignments(
+pub(crate) async fn load_assignments(
     pool: &sqlx::MySqlPool,
     cond: &Cond,
 ) -> Result<Vec<Assignment>, sqlx::Error> {
