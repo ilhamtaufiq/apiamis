@@ -98,7 +98,7 @@ async fn load_or_404(pool: &MySqlPool, id: &str) -> Result<PermissionRow, ApiErr
 }
 
 /// `Cache::forget` untuk kunci izin Spatie. Dipanggil setelah setiap penulisan yang berhasil.
-async fn forget_permission_cache(pool: &MySqlPool) -> Result<(), ApiError> {
+pub(crate) async fn forget_permission_cache(pool: &MySqlPool) -> Result<(), ApiError> {
     let key = format!("{}{SPATIE_CACHE_KEY}", cache_prefix());
     sqlx::query("DELETE FROM `cache` WHERE `key` = ?")
         .bind(key)
