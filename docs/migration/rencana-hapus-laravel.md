@@ -101,7 +101,7 @@ Diperbarui setelah pengerjaan lanjutan (2026-10-10).
 | 1. Route | Sebagian: 405 `rust`, 3 `parsial` | `routes.md` |
 | 2. Autentikasi dan permission | Selesai di kode, verifikasi staging belum | Token 720 menit lulus `token_expiry_db`. Cache Spatie disegarkan saat role berubah (PR #28). Perbandingan dengan Laravel belum dilakukan. |
 | 3. Schema | Selesai untuk DB kosong | `api migrate` pada DB kosong membuat 110 tabel dan mencatat `migrations`. Jalankan kedua kalinya tidak mengubah apa pun. |
-| 4. Operasional tanpa PHP | Belum | `Dockerfile` produksi masih stage PHP dan `docker-entrypoint.sh` masih memanggil artisan. `Dockerfile.rust` sudah Rust-only, tapi belum dipakai produksi. |
+| 4. Operasional tanpa PHP | Kode selesai, build image belum diuji | `Dockerfile` sekarang Rust-only (dari `Dockerfile.rust`). `docker-entrypoint.sh` tanpa artisan. Apache meneruskan `/`, `/up`, dan `/api` ke Rust, `/storage` dari disk. `GET /` ditambahkan di Rust sebagai pengganti `routes/web.php`. Aset `storage/app/templates` dan `resources/geojson` disalin ke image, dengan env lokasinya. Belum diuji dengan `docker build`. |
 | 5. Uji paralel dan cutover | Belum | Butuh staging dengan Laravel dan Rust berjalan bersamaan. |
 | 6. Hapus Laravel | Belum | Menunggu fase 4 dan 5. |
 
