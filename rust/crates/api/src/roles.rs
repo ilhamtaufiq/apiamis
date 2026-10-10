@@ -286,6 +286,7 @@ pub async fn store(
     if let Some(perms) = permissions {
         sync_permissions(&state.pool, role_id, &perms).await?;
     }
+    crate::permissions::forget_permission_cache(&state.pool).await?;
     let role = load(&state.pool, role_id).await?.unwrap_or(Value::Null);
     Ok((StatusCode::CREATED, Json(role)).into_response())
 }
@@ -358,6 +359,7 @@ pub async fn update(
     if let Some(perms) = permissions {
         sync_permissions(&state.pool, role_id, &perms).await?;
     }
+    crate::permissions::forget_permission_cache(&state.pool).await?;
     let role = load(&state.pool, role_id).await?.unwrap_or(Value::Null);
     Ok(Json(role).into_response())
 }
@@ -387,5 +389,6 @@ pub async fn destroy(
         .execute(&state.pool)
         .await
         .map_err(internal)?;
+    crate::permissions::forget_permission_cache(&state.pool).await?;
     Ok(Json(json!({ "message": "Role deleted" })).into_response())
 }

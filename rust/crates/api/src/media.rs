@@ -220,6 +220,133 @@ pub fn make_thumb(source: &[u8]) -> Result<Vec<u8>, image::ImageError> {
     Ok(out.into_inner())
 }
 
+/// Ringkasan `regenerate_missing_thumbs`.
+#[derive(Debug, Default, Clone, Copy)]
+pub struct ThumbReport {
+    /// Baris media gambar yang diperiksa.
+    pub checked: u64,
+    /// Thumbnail sudah ada.
+    pub present: u64,
+    /// Thumbnail dibuat (atau akan dibuat, pada dry-run).
+    pub created: u64,
+    /// Berkas asli tidak ada di disk, jadi tidak bisa dibuatkan thumbnail.
+    pub missing_original: u64,
+    /// Gagal membaca atau men-decode berkas asli.
+    pub failed: u64,
+}
+
+/// Membuat ulang thumbnail yang hilang untuk satu koleksi (`model_type` + `collection`).
+/// Hanya menulis berkas thumbnail yang belum ada. Berkas asli tidak diubah.
+/// Dengan `dry_run`, tidak ada yang ditulis: hanya dihitung.
+pub async fn regenerate_missing_thumbs(
+    pool: &MySqlPool,
+    model_type: &str,
+    collection: &str,
+    dry_run: bool,
+) -> Result<ThumbReport, sqlx::Error> {
+    let rows = sqlx::query(
+        "SELECT CAST(id AS SIGNED) AS id, file_name, mime_type FROM media \
+         WHERE model_type = ? AND collection_name = ? ORDER BY id",
+    )
+    .bind(model_type)
+    .bind(collection)
+    .fetch_all(pool)
+    .await?;
+
+    let mut report = ThumbReport::default();
+    for row in rows {
+        let mime: String = row.try_get("mime_type")?;
+        if !mime.starts_with("image/") {
+            continue;
+        }
+        report.checked += 1;
+        let id = row.try_get::<i64, _>("id")? as u64;
+        let file_name: String = row.try_get("file_name")?;
+
+        let dir = media_dir(id);
+        let original = dir.join(&file_name);
+        if !tokio::fs::try_exists(&original).await.unwrap_or(false) {
+            report.missing_original += 1;
+            continue;
+        }
+
+        let ext = Path::new(&file_name)
+            .extension()
+            .and_then(|e| e.to_str())
+            .unwrap_or("jpg")
+            .to_string();
+        let stem = file_name
+            .strip_suffix(&format!(".{ext}"))
+            .unwrap_or(&file_name)
+            .to_string();
+        let thumb_path = dir.join("conversions").join(thumb_file_name(&stem, &ext));
+        if tokio::fs::try_exists(&thumb_path).await.unwrap_or(false) {
+            report.present += 1;
+            continue;
+        }
+        if dry_run {
+            report.created += 1;
+            continue;
+        }
+
+        let made = match tokio::fs::read(&original).await {
+            Ok(bytes) => tokio::task::spawn_blocking(move || make_thumb(&bytes))
+                .await
+                .ok()
+                .and_then(Result::ok),
+            Err(_) => None,
+        };
+        let Some(thumb) = made else {
+            tracing::warn!(media_id = id, file = %file_name, "gagal membuat thumbnail");
+            report.failed += 1;
+            continue;
+        };
+
+        tokio::fs::create_dir_all(thumb_path.parent().unwrap_or(&dir)).await.ok();
+        if tokio::fs::write(&thumb_path, thumb).await.is_err() {
+            report.failed += 1;
+            continue;
+        }
+        sqlx::query("UPDATE media SET generated_conversions = '{\"thumb\": true}' WHERE id = ?")
+            .bind(id as i64)
+            .execute(pool)
+            .await?;
+        report.created += 1;
+    }
+    Ok(report)
+}
+
+/// Media yang berkas aslinya hilang di disk: `(media_id, model_id, file_name)`.
+pub async fn missing_originals(
+    pool: &MySqlPool,
+    model_type: &str,
+    collection: &str,
+) -> Result<Vec<(u64, u64, String)>, sqlx::Error> {
+    let rows = sqlx::query(
+        "SELECT CAST(id AS SIGNED) AS id, CAST(model_id AS SIGNED) AS model_id, file_name, mime_type \
+         FROM media WHERE model_type = ? AND collection_name = ? ORDER BY id",
+    )
+    .bind(model_type)
+    .bind(collection)
+    .fetch_all(pool)
+    .await?;
+
+    let mut out = Vec::new();
+    for row in rows {
+        let mime: String = row.try_get("mime_type")?;
+        if !mime.starts_with("image/") {
+            continue;
+        }
+        let id = row.try_get::<i64, _>("id")? as u64;
+        let model_id = row.try_get::<i64, _>("model_id")? as u64;
+        let file_name: String = row.try_get("file_name")?;
+        if !tokio::fs::try_exists(media_dir(id).join(&file_name)).await.unwrap_or(false) {
+            out.push((id, model_id, file_name));
+        }
+    }
+    Ok(out)
+}
+
 /// Hapus semua media satu koleksi: baris `media` dalam transaksi, direktori berkasnya dikembalikan
 /// untuk dihapus setelah commit. `keep` tidak ikut dihapus (dipakai saat mengganti berkas).
 pub async fn delete_collection(

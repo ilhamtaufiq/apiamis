@@ -31,7 +31,10 @@ pub mod checklist;
 pub mod checklist_items_write;
 pub mod crypt;
 pub mod dashboard;
+pub mod dashboard_progres;
+pub mod penilaian_pengawas;
 pub mod desa;
+pub mod desa_profile;
 pub mod raw_model;
 pub mod desa_population;
 pub mod desa_write;
@@ -79,6 +82,7 @@ pub mod pekerjaan_download;
 pub mod pekerjaan_import;
 pub mod menu_permissions;
 pub mod peripaan;
+pub mod peripaan_kml;
 pub mod permissions;
 pub mod pekerjaan_detail;
 pub mod pekerjaan_doc_register;
@@ -220,6 +224,7 @@ pub fn app(config: &Config, state: AppState) -> Router {
                 .patch(desa_write::update)
                 .delete(desa_write::destroy),
         )
+        .route("/api/desa/{id}/profile", get(desa_profile::profile))
         .route("/api/desa/kecamatan/{id}", get(desa_write::by_kecamatan))
         .route("/api/kegiatan", get(kegiatan::index))
         .route("/api/kegiatan", post(kegiatan_write::store))
@@ -327,7 +332,10 @@ pub fn app(config: &Config, state: AppState) -> Router {
                 .post(peripaan::store)
                 .layer(DefaultBodyLimit::max(foto::BODY_LIMIT)),
         )
-        .route("/api/peripaan/{id}", delete(peripaan::destroy))
+        .route(
+            "/api/peripaan/{id}",
+            get(peripaan::show).delete(peripaan::destroy),
+        )
         // Survei lokasi (SurveyLokasiController). `stats` statis, jadi tidak tertangkap `{id}`.
         .route("/api/survey-lokasi/stats", get(survey_lokasi::stats))
         .route(
@@ -686,7 +694,7 @@ pub fn app(config: &Config, state: AppState) -> Router {
                 .layer(DefaultBodyLimit::max(foto::BODY_LIMIT)),
         )
         // Rute statis (summary, rekap, pekerjaan/...) didaftarkan sebelum `/api/penerima/{id}`.
-        // Berkas: `export-pdf`, `upload-from-url`, dan `quick-share` masih di Laravel.
+        // Berkas: `quick-share` masih di Laravel. `export-pdf` memakai ONLYOFFICE.
         .route("/api/berkas/jenis-dokumen", get(berkas::jenis_dokumen))
         .route("/api/berkas/upload-from-url", post(berkas_upload_url::upload_from_url))
         .route("/api/berkas/bulk", delete(berkas::bulk_destroy))
@@ -988,6 +996,8 @@ pub fn app(config: &Config, state: AppState) -> Router {
         )
         .route("/api/dashboard/stats", get(dashboard::stats))
         .route("/api/dashboard/analytics", get(analytics::stats))
+        .route("/api/dashboard/progres-mvp", get(dashboard_progres::progres_mvp))
+        .route("/api/dashboard/penilaian-pengawas", get(penilaian_pengawas::penilaian))
         .route(
             "/api/dashboard/executive-progress",
             get(dashboard::executive_progress),

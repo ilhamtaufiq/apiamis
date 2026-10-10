@@ -12,10 +12,10 @@ Sumber: `routes/api.php` (branch `rust`, dari `main` SHA `c19fd06`). Dibuat deng
 
 ### Status paritas (diperbarui)
 
-- Sudah di Rust: **404** (termasuk dokumen kontrak SPK, cover, ZIP cover, BAP, dan bap-context, serta PDF SPK lewat ONLYOFFICE; termasuk auth, lookup, kecamatan, desa, kegiatan, penyedia, tiket GET, checklist GET, foto dan penerima seluruh rute, berkas kecuali export-pdf dan upload-from-url, kontrak CRUD, relasi pekerjaan/kegiatan/penyedia, excel export, template, dan impor kontrak, addendum dan register-gaps GET, sk, notifikasi, dan master fase pekerjaan)
+- Sudah di Rust: **407** (termasuk dokumen kontrak SPK, cover, ZIP cover, BAP, dan bap-context, serta PDF SPK lewat ONLYOFFICE; termasuk auth, lookup, kecamatan, desa, kegiatan, penyedia, tiket GET, checklist GET, foto dan penerima seluruh rute, berkas kecuali export-pdf dan upload-from-url, kontrak CRUD, relasi pekerjaan/kegiatan/penyedia, excel export, template, dan impor kontrak, addendum dan register-gaps GET, sk, notifikasi, dan master fase pekerjaan)
 - Parsial di Rust: **3** (`GET /api/pekerjaan/document-register` dan `GET /api/document-registers`: bentuk respons sudah sama dengan Laravel, tetapi isi item belum dibandingkan karena data uji kosong; `POST /api/procurement/spse/kontrak/push`: lihat log)
 - Belum: **0**. Angka ini dihitung dari kolom Status di tabel di bawah.
-- Dihapus (tidak dimigrasi): **79** (termasuk `GET /api/`, closure welcome, dan `GET /api/desa/{desa}/profile`, keduanya dihapus atas keputusan user) (termasuk desa sync-kk, chat AI dan live-chat, panduan CMS, presence, search ai-summary, dan pengaturan AI di app-settings, sesuai keputusan user)
+- Dihapus (tidak dimigrasi): **78** (termasuk `GET /api/` dan closure welcome, dihapus atas keputusan user) (termasuk desa sync-kk, chat AI dan live-chat, panduan CMS, presence, search ai-summary, dan pengaturan AI di app-settings, sesuai keputusan user)
 
 Cara menghitung: cocokkan method dan path (`{param}` dinormalisasi) dengan route yang terdaftar di `rust/crates/api/src/lib.rs`.
 
@@ -26,6 +26,7 @@ Cara menghitung: cocokkan method dan path (`{param}` dinormalisasi) dengan route
 3. **Route Blade di `routes/web.php`** (`GET /`) memberi info service dan `docs` Swagger. Tidak termasuk API, tapi perlu dipindah karena dipakai sebagai landing/health.
 4. **Route publik (tanpa `auth:sanctum`)** perlu audit validasi dan rate limit satu per satu sebelum dipindah (lihat kolom Middleware).
 5. Route `Broadcast::routes()` (channel Reverb) juga ada di grup `auth:sanctum`. Channel didefinisikan di `routes/channels.php` (lihat bagian Lain-lain).
+6. **`GET /api/desa/{desa}/profile`**: method `DesaController@profile` (`app/Http/Controllers/DesaController.php` baris 202-248) masih ada, tetapi tidak ada rute untuknya di `routes/api.php` (pencarian `profile` hanya menemukan `auth/profile`). Di Laravel rute ini saat ini tidak terjangkau. Sesuai keputusan user, rute dipindah ke Rust dengan bentuk respons mengikuti method tersebut.
 
 ## Daftar route per modul
 
@@ -391,7 +392,7 @@ Kolom **Status** diisi saat modul dipindah ke Rust. Awalnya semua `belum`.
 | No | Method | Path | Controller@action | Middleware | Status |
 | --- | --- | --- | --- | --- | --- |
 | 1 | POST | `/api/desa/sync-kk` | DesaController@syncKk | auth:sanctum | dihapus |
-| 2 | GET | `/api/desa/{desa}/profile` | DesaController@profile | auth:sanctum | dihapus |
+| 2 | GET | `/api/desa/{desa}/profile` | DesaController@profile | auth:sanctum | rust |
 | 3 | GET | `/api/desa` | DesaController@index | auth:sanctum | rust |
 | 4 | POST | `/api/desa` | DesaController@store | auth:sanctum | rust |
 | 5 | GET | `/api/desa/{id}` | DesaController@show | auth:sanctum | rust |

@@ -224,7 +224,7 @@ pub fn kecamatan_raw(p: &php::Params) -> Vec<String> {
     }
 }
 
-fn stats_scope(p: &php::Params) -> Scope {
+pub(crate) fn stats_scope(p: &php::Params) -> Scope {
     let tahun = p
         .get("tahun")
         .filter(|t| php::truthy(Some(t)))
@@ -957,7 +957,7 @@ async fn group_named(
     Ok(out)
 }
 
-async fn kecamatan_map(pool: &MySqlPool) -> Result<HashMap<i64, String>, sqlx::Error> {
+pub(crate) async fn kecamatan_map(pool: &MySqlPool) -> Result<HashMap<i64, String>, sqlx::Error> {
     let mut out = HashMap::new();
     for r in rows(
         pool,

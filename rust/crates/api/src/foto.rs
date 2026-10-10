@@ -654,36 +654,32 @@ pub async fn index(
     let binds: Vec<String> = clauses.into_iter().flat_map(|(_, b)| b).collect();
     let select = SELECT_FOTO.replace(" FROM tbl_foto", " FROM tbl_foto f");
 
-    let sql = format!("{select}{where_sql} ORDER BY f.id");
-    let mut q = sqlx::query(&sql);
-    for b in &binds {
-        q = q.bind(b);
-    }
-    let all = q
-        .fetch_all(&state.pool)
-        .await
-        .map_err(media::internal)?
-        .iter()
-        .map(map_row)
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(media::internal)?;
-
-    if by_pekerjaan {
-        let mut data = Vec::with_capacity(all.len());
-        for row in &all {
-            data.push(resource(&state.pool, &state.app_url, row).await?);
-        }
-        return Ok(Json(json!({ "data": data })).into_response());
-    }
-
     let per_page_raw = query.get("per_page").map(String::as_str).unwrap_or("20");
-    if per_page_raw.trim() == "-1" {
+    // Mode per-pekerjaan dan `per_page=-1` tetap mengambil semua baris (dipakai halaman detail dan ekspor).
+    // Mode lain dipaginasi di SQL, supaya tidak memuat seluruh foto ke memori per request.
+    let fetch_all_rows = by_pekerjaan || per_page_raw.trim() == "-1";
+
+    if fetch_all_rows {
+        let all_sql = format!("{select}{where_sql} ORDER BY f.id");
+        let mut q = sqlx::query(&all_sql);
+        for b in &binds {
+            q = q.bind(b);
+        }
+        let all = q
+            .fetch_all(&state.pool)
+            .await
+            .map_err(media::internal)?
+            .iter()
+            .map(map_row)
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(media::internal)?;
         let mut data = Vec::with_capacity(all.len());
         for row in &all {
             data.push(resource(&state.pool, &state.app_url, row).await?);
         }
         return Ok(Json(json!({ "data": data })).into_response());
     }
+
     let per_page = per_page_raw
         .parse::<u64>()
         .ok()
@@ -694,12 +690,35 @@ pub async fn index(
         .and_then(|v| v.parse::<u64>().ok())
         .filter(|v| *v >= 1)
         .unwrap_or(1);
-    let total = all.len() as u64;
-    let offset = ((page - 1) * per_page) as usize;
-    let mut data = Vec::new();
-    for row in all.iter().skip(offset).take(per_page as usize) {
+
+    let count_sql = format!("SELECT CAST(COUNT(*) AS SIGNED) FROM tbl_foto f{where_sql}");
+    let mut cq = sqlx::query_scalar::<_, i64>(&count_sql);
+    for b in &binds {
+        cq = cq.bind(b);
+    }
+    let total = cq.fetch_one(&state.pool).await.map_err(media::internal)? as u64;
+
+    let offset = (page - 1).saturating_mul(per_page);
+    let page_sql = format!(
+        "{select}{where_sql} ORDER BY f.id LIMIT {per_page} OFFSET {offset}"
+    );
+    let mut pq = sqlx::query(&page_sql);
+    for b in &binds {
+        pq = pq.bind(b);
+    }
+    let rows = pq
+        .fetch_all(&state.pool)
+        .await
+        .map_err(media::internal)?
+        .iter()
+        .map(map_row)
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(media::internal)?;
+    let mut data = Vec::with_capacity(rows.len());
+    for row in &rows {
         data.push(resource(&state.pool, &state.app_url, row).await?);
     }
+
     let base = format!("{}/api/foto", state.app_url.trim_end_matches('/'));
     let body = pagination::paginate_with_query(
         data,

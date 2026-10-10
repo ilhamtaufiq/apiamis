@@ -269,9 +269,24 @@ class SpseHttpClient
             $headers['Referer'] = $this->absoluteUrl($session, $refererPath);
         }
 
-        $response = $this->pageRequest($session)
-            ->withHeaders($headers)
-            ->get($url);
+        // GET bersifat idempoten: aman diulang saat SPSE lambat / handshake SSL timeout.
+        try {
+            $response = $this->pageRequest($session)
+                ->retry(
+                    [1000, 3000, 8000],
+                    fn (\Throwable $e) => $e instanceof ConnectionException
+                        || ($e instanceof RequestException && $e->response->serverError()),
+                    throw: false,
+                )
+                ->withHeaders($headers)
+                ->get($url);
+        } catch (ConnectionException $e) {
+            throw new \RuntimeException(
+                'SPSE tidak merespons (timeout koneksi) saat membuka '.$path.'. Server SPSE sedang lambat; tunggu sebentar lalu push ulang — langkah yang sudah tersimpan akan dilewati.',
+                0,
+                $e,
+            );
+        }
 
         $this->assertAuthenticated($response);
 
@@ -449,7 +464,8 @@ class SpseHttpClient
         $cookies = $session->encrypted_cookies ?? [];
         $header = $this->cookieParser->toHeader($cookies);
 
-        return Http::timeout(120)
+        return Http::connectTimeout(30)
+            ->timeout(120)
             ->withHeaders([
                 'User-Agent' => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
                 'Cookie' => $header,

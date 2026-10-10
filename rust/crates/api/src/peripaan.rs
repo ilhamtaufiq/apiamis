@@ -1,9 +1,11 @@
 //! Peta peripaan (`PetaPeripaanController`, tabel `tbl_peta_peripaan`, berkas KML/KMZ di koleksi
 //! media `peripaan/kml`). Model `App\Models\PetaPeripaan`.
 //!
-//! `index` memakai paginator (`per_page`, default 50; `-1` berarti semua tanpa paginasi).
-//! `store` menjawab 200 (bukan 201), karena `PetaPeripaanResource` dikembalikan langsung.
-//! `destroy` menghapus baris dan media-nya, dan mencatat audit `deleted` seperti trait `Auditable`.
+//! `index` memakai paginator (`per_page`, default 50; `-1` berarti semua tanpa paginasi). Daftar
+//! tidak memuat `geojson` (berat); ambil per berkas lewat `show`, atau minta `?include=geojson`.
+//! `store` hanya menerima berkas KML/KMZ. GeoJSON dibuat di server dari berkas itu, bukan dari
+//! field `geojson` kiriman client. Respons 200 (bukan 201), karena `PetaPeripaanResource` dikembalikan langsung.
+//! `destroy` hanya untuk role `admin` dan `operator`. Menghapus baris dan media-nya, dan mencatat audit `deleted`.
 
 use std::collections::HashMap;
 
@@ -20,17 +22,19 @@ use sqlx::{MySql, MySqlPool, Row, Transaction};
 
 use crate::{
     audit,
-    foto::{self, read_form},
     format::iso8601_utc,
+    foto::{self, read_form},
     media,
     pagination::{self, PageParams},
-    require_auth, AppState,
+    peripaan_kml, require_auth, AppState,
 };
 
 const MODEL: &str = "App\\Models\\PetaPeripaan";
 const COLLECTION: &str = "peripaan/kml";
 /// `file|max:51200` (KB).
 const MAX_KB: usize = 51_200;
+/// Role yang boleh menghapus peta peripaan (selain itu 403).
+const ROLE_CAN_DELETE: &[&str] = &["admin", "operator"];
 
 fn internal(e: impl std::fmt::Display) -> ApiError {
     ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, e.to_string())
@@ -68,16 +72,25 @@ fn map_row(r: &sqlx::mysql::MySqlRow) -> Result<Row0, sqlx::Error> {
 }
 
 /// Bentuk `PetaPeripaanResource`. `pekerjaan` dan `uploader` selalu dimuat (`whenLoaded`).
-async fn resource(pool: &MySqlPool, app_url: &str, r: &Row0) -> Result<Value, ApiError> {
+/// `with_geojson = false` membuang `geojson` dari respons (dipakai daftar).
+async fn resource(
+    pool: &MySqlPool,
+    app_url: &str,
+    r: &Row0,
+    with_geojson: bool,
+) -> Result<Value, ApiError> {
     let media = media::first_media(pool, MODEL, r.id as u64, COLLECTION)
         .await
         .map_err(internal)?;
     let base = app_url.trim_end_matches('/');
-    let geojson: Value = r
-        .geojson
-        .as_deref()
-        .and_then(|s| serde_json::from_str(s).ok())
-        .unwrap_or(Value::Null);
+    let geojson: Value = if with_geojson {
+        r.geojson
+            .as_deref()
+            .and_then(|s| serde_json::from_str(s).ok())
+            .unwrap_or(Value::Null)
+    } else {
+        Value::Null
+    };
     Ok(json!({
         "id": r.id,
         "nama": r.nama,
@@ -118,12 +131,28 @@ pub async fn index(
     Query(query): Query<HashMap<String, String>>,
 ) -> Result<Response, ApiError> {
     require_auth(&state, &headers).await?;
-    // `$request->filled('pekerjaan_id')`: teks yang bukan angka dibaca MySQL sebagai 0.
-    let filter: Option<i64> = query
-        .get("pekerjaan_id")
-        .filter(|v| !v.is_empty())
-        .map(|v| v.trim().parse::<i64>().unwrap_or(0));
-    let where_sql = if filter.is_some() { " WHERE p.pekerjaan_id = ?" } else { "" };
+    // `$request->filled('pekerjaan_id')`. Nilai yang bukan angka ditolak (422), bukan diam-diam jadi 0.
+    let filter: Option<i64> = match query.get("pekerjaan_id").filter(|v| !v.is_empty()) {
+        None => None,
+        Some(v) => match v.trim().parse::<i64>() {
+            Ok(id) if id > 0 => Some(id),
+            _ => {
+                let mut e = crate::validation::Errors::default();
+                e.add(
+                    "pekerjaan_id",
+                    "The pekerjaan_id must be a positive integer.",
+                );
+                e.finish()?;
+                None
+            }
+        },
+    };
+    let with_geojson = query.get("include").is_some_and(|v| v == "geojson");
+    let where_sql = if filter.is_some() {
+        " WHERE p.pekerjaan_id = ?"
+    } else {
+        ""
+    };
 
     let per_raw = query.get("per_page").map(String::as_str).unwrap_or("50");
     let per: i64 = per_raw.trim().parse().unwrap_or(0);
@@ -140,7 +169,10 @@ pub async fn index(
 
     let mut sql = format!("{SELECT_PERI}{where_sql} ORDER BY p.created_at DESC, p.id DESC");
     if !all {
-        sql.push_str(&format!(" LIMIT {per_page} OFFSET {}", (params.page - 1) * per_page));
+        sql.push_str(&format!(
+            " LIMIT {per_page} OFFSET {}",
+            (params.page - 1) * per_page
+        ));
     }
     let mut q = sqlx::query(&sql);
     if let Some(id) = filter {
@@ -150,7 +182,7 @@ pub async fn index(
     let mut data = Vec::with_capacity(rows.len());
     for row in &rows {
         let r = map_row(row).map_err(internal)?;
-        data.push(resource(&state.pool, &state.app_url, &r).await?);
+        data.push(resource(&state.pool, &state.app_url, &r, with_geojson).await?);
     }
     if all {
         return Ok(Json(json!({ "data": data })).into_response());
@@ -163,11 +195,12 @@ pub async fn index(
     Ok(Json(pagination::paginate(data, total as u64, params, &base)).into_response())
 }
 
-/// Validasi `store` (diurutkan seperti Laravel). Mengembalikan `(pekerjaan_id, nama, geojson, file)`.
+/// Validasi `store` (diurutkan seperti Laravel). Mengembalikan `(pekerjaan_id, nama, file)`.
+/// Field `geojson` dari client sengaja diabaikan: GeoJSON dibuat dari berkas di `store`.
 async fn validate_store(
     pool: &MySqlPool,
     raw: &mut foto::RawForm,
-) -> Result<(Option<i64>, String, Option<Value>, media::Upload), ApiError> {
+) -> Result<(Option<i64>, String, media::Upload), ApiError> {
     let mut e = crate::validation::Errors::default();
     let pekerjaan = match raw.fields.get("pekerjaan_id").cloned().flatten() {
         None => None,
@@ -175,11 +208,13 @@ async fn validate_store(
             let id: Option<i64> = text.parse().ok();
             let ok = match id {
                 Some(id) => {
-                    sqlx::query_scalar::<_, i64>("SELECT CAST(COUNT(*) AS SIGNED) FROM tbl_pekerjaan WHERE id = ?")
-                        .bind(id)
-                        .fetch_one(pool)
-                        .await
-                        .map_err(internal)?
+                    sqlx::query_scalar::<_, i64>(
+                        "SELECT CAST(COUNT(*) AS SIGNED) FROM tbl_pekerjaan WHERE id = ?",
+                    )
+                    .bind(id)
+                    .fetch_one(pool)
+                    .await
+                    .map_err(internal)?
                         > 0
                 }
                 None => false,
@@ -198,28 +233,28 @@ async fn validate_store(
             None
         }
         Some(s) if s.chars().count() > 255 => {
-            e.add("nama", "The nama field must not be greater than 255 characters.");
+            e.add(
+                "nama",
+                "The nama field must not be greater than 255 characters.",
+            );
             None
         }
         Some(s) => Some(s),
-    };
-    let geojson = match raw.fields.get("geojson").cloned().flatten() {
-        None => None,
-        Some(text) => match serde_json::from_str::<Value>(&text) {
-            Ok(v) => Some(v),
-            Err(_) => {
-                e.add("geojson", "The geojson field must be a valid JSON string.");
-                None
-            }
-        },
     };
     let file = match raw.file.take() {
         None => {
             e.add("file", "The file field is required.");
             None
         }
+        Some(f) if !has_kml_extension(&f.original_name) => {
+            e.add("file", "The file must be a file of type: kml, kmz.");
+            None
+        }
         Some(f) if f.bytes.len() > MAX_KB * 1024 => {
-            e.add("file", format!("The file field must not be greater than {MAX_KB} kilobytes."));
+            e.add(
+                "file",
+                format!("The file field must not be greater than {MAX_KB} kilobytes."),
+            );
             None
         }
         Some(f) => Some(f),
@@ -228,10 +263,41 @@ async fn validate_store(
     let (Some(nama), Some(file)) = (nama, file) else {
         return Err(internal("validasi tidak lengkap"));
     };
-    Ok((pekerjaan, nama, geojson, file))
+    Ok((pekerjaan, nama, file))
 }
 
-/// `POST /api/peripaan` (multipart: `pekerjaan_id`, `nama`, `geojson`, `file`). Respons 200.
+fn has_kml_extension(name: &str) -> bool {
+    let lower = name.to_ascii_lowercase();
+    lower.ends_with(".kml") || lower.ends_with(".kmz")
+}
+
+/// Ubah berkas menjadi GeoJSON di thread blocking. Byte berkas dipindah (bukan disalin) ke
+/// thread itu lalu dikembalikan, supaya tidak ada salinan 50 MB tambahan di heap.
+async fn kml_to_geojson_json(file: &mut media::Upload) -> Result<String, ApiError> {
+    let name = file.original_name.clone();
+    let bytes = std::mem::take(&mut file.bytes);
+    let (bytes, parsed) = tokio::task::spawn_blocking(move || {
+        let parsed =
+            peripaan_kml::kml_text(&name, &bytes).and_then(|t| peripaan_kml::kml_to_geojson(&t));
+        (bytes, parsed)
+    })
+    .await
+    .map_err(internal)?;
+    file.bytes = bytes;
+    match parsed {
+        Ok(v) => Ok(v.to_string()),
+        Err(msg) => {
+            let mut e = crate::validation::Errors::default();
+            e.add("file", format!("Berkas KML/KMZ tidak valid: {msg}"));
+            Err(e
+                .finish()
+                .err()
+                .unwrap_or_else(|| internal("validasi tidak lengkap")))
+        }
+    }
+}
+
+/// `POST /api/peripaan` (multipart: `pekerjaan_id`, `nama`, `file`). Respons 200.
 pub async fn store(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -239,9 +305,9 @@ pub async fn store(
 ) -> Result<Response, ApiError> {
     let user = require_auth(&state, &headers).await?;
     let mut raw = read_form(multipart).await?;
-    let (pekerjaan, nama, geojson, file) = validate_store(&state.pool, &mut raw).await?;
+    let (pekerjaan, nama, mut file) = validate_store(&state.pool, &mut raw).await?;
     let mime = media::mime_for_name(&file.original_name);
-    let geojson_text = geojson.as_ref().map(Value::to_string);
+    let geojson_text = Some(kml_to_geojson_json(&mut file).await?);
 
     let mut tx: Transaction<'_, MySql> = state.pool.begin().await.map_err(internal)?;
     let res = sqlx::query(
@@ -282,7 +348,20 @@ pub async fn store(
     }
 
     let row = find(&state.pool, id).await?;
-    let data = resource(&state.pool, &state.app_url, &row).await?;
+    let data = resource(&state.pool, &state.app_url, &row, true).await?;
+    Ok(Json(json!({ "data": data })).into_response())
+}
+
+/// `GET /api/peripaan/{id}`: satu berkas dengan `geojson` lengkap.
+pub async fn show(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+) -> Result<Response, ApiError> {
+    require_auth(&state, &headers).await?;
+    let id = foto::parse_id(&id)?;
+    let row = find(&state.pool, id).await?;
+    let data = resource(&state.pool, &state.app_url, &row, true).await?;
     Ok(Json(json!({ "data": data })).into_response())
 }
 
@@ -310,11 +389,29 @@ pub async fn destroy(
     Path(id): Path<String>,
 ) -> Result<Response, ApiError> {
     let user = require_auth(&state, &headers).await?;
+    let roles = auth::login::roles_of(&state.pool, user.user_id)
+        .await
+        .map_err(internal)?;
+    let allowed = roles
+        .iter()
+        .any(|(_, n)| ROLE_CAN_DELETE.contains(&n.as_str()));
+    if !allowed {
+        return Err(ApiError::new(
+            StatusCode::FORBIDDEN,
+            "Hanya admin atau operator yang dapat menghapus peta peripaan",
+        ));
+    }
     let id = foto::parse_id(&id)?;
     let row = find(&state.pool, id).await?;
 
     let url = format!("{}/api/peripaan/{id}", foto::base_url(&state));
-    let old = attributes(row.id, row.pekerjaan_id, &row.nama, &row.geojson, row.uploaded_by.unwrap_or(0));
+    let old = attributes(
+        row.id,
+        row.pekerjaan_id,
+        &row.nama,
+        &row.geojson,
+        row.uploaded_by.unwrap_or(0),
+    );
     let mut tx = state.pool.begin().await.map_err(internal)?;
     audit::write(
         &mut tx,

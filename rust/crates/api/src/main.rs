@@ -33,6 +33,10 @@ async fn main() {
             run_blog_assets_cleanup_orphans(&args[1..]).await;
             return;
         }
+        Some("regenerate-thumbs") => {
+            run_regenerate_thumbs(&args[1..]).await;
+            return;
+        }
         _ => {}
     }
 
@@ -45,7 +49,7 @@ async fn main() {
     tracing::info!(%addr, env = %config.app_env, "apiamis rust listening");
 
     let database_url = std::env::var("DATABASE_URL").expect("DATABASE_URL belum di-set");
-    let pool = sqlx::MySqlPool::connect_lazy(&database_url).expect("DATABASE_URL tidak valid");
+    let pool = db_pool_lazy(&database_url);
 
     axum::serve(
         listener,
@@ -68,6 +72,26 @@ async fn run_migrate() {
             std::process::exit(1);
         }
     }
+}
+
+/// Pool untuk server HTTP. Ukuran dan waktu idle bisa diatur lewat env agar RAM tidak
+/// membengkak: setiap koneksi MySQL menyimpan buffer di proses ini dan di server database.
+fn db_pool_lazy(database_url: &str) -> sqlx::MySqlPool {
+    let max = parse_env("DB_MAX_CONNECTIONS", 5u32).max(1);
+    let idle_secs = parse_env("DB_IDLE_TIMEOUT_SECS", 60u64);
+    sqlx::mysql::MySqlPoolOptions::new()
+        .max_connections(max)
+        .min_connections(0)
+        .idle_timeout(std::time::Duration::from_secs(idle_secs))
+        .connect_lazy(database_url)
+        .expect("DATABASE_URL tidak valid")
+}
+
+fn parse_env<T: std::str::FromStr>(key: &str, default: T) -> T {
+    std::env::var(key)
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(default)
 }
 
 /// Koneksi untuk subcommand CLI. Sama dengan `run_migrate`: `DATABASE_URL` wajib.
@@ -192,6 +216,67 @@ async fn run_blog_assets_cleanup_orphans(args: &[String]) {
         Ok(n) => println!("Deleted {n} orphan blog assets."),
         Err(e) => fail(&e.message),
     }
+}
+
+/// Membuat ulang thumbnail foto yang hilang di disk (koleksi `foto/pekerjaan`).
+/// Aman dijalankan ulang: hanya menulis thumbnail yang belum ada, berkas asli tidak diubah.
+/// `--dry-run` hanya menghitung.
+async fn run_regenerate_thumbs(args: &[String]) {
+    let pool = connect_db().await;
+    if has_flag(args, "list-missing") {
+        list_missing_thumb_originals(&pool).await;
+        return;
+    }
+    let dry_run = has_flag(args, "dry-run");
+    match api::media::regenerate_missing_thumbs(&pool, "App\\Models\\Foto", "foto/pekerjaan", dry_run).await {
+        Ok(r) => println!(
+            "{}: diperiksa {}, sudah ada {}, {} {}, berkas asli hilang {}, gagal {}",
+            if dry_run { "DRY-RUN" } else { "SELESAI" },
+            r.checked,
+            r.present,
+            if dry_run { "akan dibuat" } else { "dibuat" },
+            r.created,
+            r.missing_original,
+            r.failed,
+        ),
+        Err(e) => fail(&e.to_string()),
+    }
+}
+
+/// `--list-missing`: foto yang berkas aslinya hilang, dengan pekerjaan dan tahun anggaran.
+/// Hanya membaca. Tidak menulis apa pun.
+async fn list_missing_thumb_originals(pool: &sqlx::MySqlPool) {
+    use sqlx::Row;
+    let missing = match api::media::missing_originals(pool, "App\\Models\\Foto", "foto/pekerjaan").await {
+        Ok(m) => m,
+        Err(e) => fail(&e.to_string()),
+    };
+    println!("media_id\tfoto_id\tpekerjaan_id\tnama_paket\ttahun_anggaran\tfile");
+    for (media_id, foto_id, file_name) in &missing {
+        let info = sqlx::query(
+            "SELECT CAST(f.pekerjaan_id AS SIGNED) AS pekerjaan_id, p.nama_paket, \
+             CAST(k.tahun_anggaran AS SIGNED) AS tahun_anggaran \
+             FROM tbl_foto f \
+             LEFT JOIN tbl_pekerjaan p ON p.id = f.pekerjaan_id \
+             LEFT JOIN tbl_kegiatan k ON k.id = p.kegiatan_id \
+             WHERE f.id = ?",
+        )
+        .bind(*foto_id as i64)
+        .fetch_optional(pool)
+        .await
+        .ok()
+        .flatten();
+        let (pek, nama, tahun) = match info {
+            Some(r) => (
+                r.try_get::<Option<i64>, _>("pekerjaan_id").ok().flatten().map(|v| v.to_string()).unwrap_or_default(),
+                r.try_get::<Option<String>, _>("nama_paket").ok().flatten().unwrap_or_default(),
+                r.try_get::<Option<i64>, _>("tahun_anggaran").ok().flatten().map(|v| v.to_string()).unwrap_or_default(),
+            ),
+            None => (String::new(), "(foto tidak ditemukan)".to_string(), String::new()),
+        };
+        println!("{media_id}\t{foto_id}\t{pek}\t{nama}\t{tahun}\t{file_name}");
+    }
+    println!("TOTAL: {} berkas asli hilang", missing.len());
 }
 
 async fn shutdown_signal() {

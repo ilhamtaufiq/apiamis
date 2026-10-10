@@ -1,7 +1,6 @@
 //! Pembentuk JSON dari baris mentah MySQL dengan `$casts` model Laravel.
 //!
-//! Dipakai oleh `spam_units` dan `spam_integration` (sebelumnya modul `desa_profile`, yang endpoint
-//! profilnya sudah dihapus).
+//! Dipakai oleh `spam_units`, `spam_integration`, dan `desa_profile` (`spm_sanitasi` dan `unit_spam`).
 //!
 //! Pertimbangan: tipe kolom MySQL dibaca dari metadata baris, lalu di-cast sesuai `Cast`.
 
