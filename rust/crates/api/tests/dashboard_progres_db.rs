@@ -130,29 +130,6 @@ async fn progres_mvp_cakupan_admin_dan_pengawas() {
         .execute(&pool)
         .await
         .unwrap();
-    // Penugasan pengawas untuk penilaian dan peringkat: pekerjaan.pengawas_id → tabel pengawas.
-    let original_pengawas: Option<u64> =
-        sqlx::query_scalar("SELECT pengawas_id FROM tbl_pekerjaan WHERE id = ?")
-            .bind(pekerjaan)
-            .fetch_one(&pool)
-            .await
-            .unwrap();
-    sqlx::query("INSERT INTO pengawas (nama, created_at, updated_at) VALUES ('Uji Pengawas Progres', NOW(), NOW())")
-        .execute(&pool)
-        .await
-        .unwrap();
-    let master: u64 = sqlx::query_scalar(
-        "SELECT CAST(MAX(id) AS UNSIGNED) FROM pengawas WHERE nama = 'Uji Pengawas Progres'",
-    )
-    .fetch_one(&pool)
-    .await
-    .unwrap();
-    sqlx::query("UPDATE tbl_pekerjaan SET pengawas_id = ? WHERE id = ?")
-        .bind(master)
-        .bind(pekerjaan)
-        .execute(&pool)
-        .await
-        .unwrap();
 
     // Admin: cakupan penuh, struktur respons lengkap.
     let (status, body) = send(
@@ -211,17 +188,6 @@ async fn progres_mvp_cakupan_admin_dan_pengawas() {
     sqlx::query("DELETE FROM user_pekerjaan WHERE user_id = ? AND pekerjaan_id = ?")
         .bind(pengawas_id)
         .bind(pekerjaan)
-        .execute(&pool)
-        .await
-        .unwrap();
-    sqlx::query("UPDATE tbl_pekerjaan SET pengawas_id = ? WHERE id = ?")
-        .bind(original_pengawas)
-        .bind(pekerjaan)
-        .execute(&pool)
-        .await
-        .unwrap();
-    sqlx::query("DELETE FROM pengawas WHERE id = ?")
-        .bind(master)
         .execute(&pool)
         .await
         .unwrap();
