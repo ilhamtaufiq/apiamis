@@ -3,8 +3,8 @@
 //! Data diambil dari master RHK (`skp_rhk`), realisasi per bulan (jumlah output jurnal per RHK),
 //! kegiatan jurnal bulan laporan, dan foto jurnal dari disk. Penyusunan deck ada di `skp_pptx`.
 //!
-//! Aturan foto: foto kegiatan ber-RHK masuk ke bukti RHK tersebut. Foto kegiatan tanpa RHK (atau
-//! RHK yang sudah dihapus dari master) masuk ke lampiran jurnal. Tidak ada foto yang dobel.
+//! Foto bukti: diambil dari slot bukti per RHK per bulan (`skp_bukti`), seperti folder
+//! `bukti/<BULAN>/rhkN*.jpg` di generator Python. Foto kegiatan jurnal tampil di lampiran.
 //!
 //! Pegawai diambil dari tabel `users` (nama, NIP, jabatan). Pangkat, unit kerja, dan data atasan
 //! belum tersimpan di database, jadi dikosongkan. Nama instansi dari env `SKP_INSTANSI`.
@@ -25,7 +25,7 @@ use crate::{
     require_auth,
     skp_jurnal::{self, gagal, COLLECTION, MODEL, VALIDATION_MESSAGE},
     skp_pptx::{self, Gambar, JurnalLaporan, Laporan, Orang, RhkLaporan},
-    skp_rhk, AppState,
+    skp_bukti, skp_rhk, AppState,
 };
 
 const MAX_FEEDBACK: usize = 2000;
@@ -132,16 +132,35 @@ async fn foto_kegiatan(pool: &MySqlPool, ids: &[u64]) -> Result<HashMap<u64, Vec
         let media_id: u64 = r.try_get("id").map_err(crate::media::internal)?;
         let kegiatan_id: u64 = r.try_get("model_id").map_err(crate::media::internal)?;
         let file_name: String = r.try_get("file_name").map_err(crate::media::internal)?;
-        let Ok(bytes) = tokio::fs::read(media::media_dir(media_id).join(&file_name)).await else {
-            continue;
-        };
-        let Some(mime) = media::image_mime(&bytes) else {
-            continue;
-        };
-        hasil.entry(kegiatan_id).or_default().push(Gambar {
-            bytes,
-            png: mime == "image/png",
-        });
+        if let Some(g) = gambar_disk(media_id, &file_name).await {
+            hasil.entry(kegiatan_id).or_default().push(g);
+        }
+    }
+    Ok(hasil)
+}
+
+/// Gambar dari disk. `None` bila berkas hilang atau bukan JPEG/PNG.
+async fn gambar_disk(media_id: u64, file_name: &str) -> Option<Gambar> {
+    let bytes = tokio::fs::read(media::media_dir(media_id).join(file_name)).await.ok()?;
+    let mime = media::image_mime(&bytes)?;
+    Some(Gambar {
+        bytes,
+        png: mime == "image/png",
+    })
+}
+
+/// Foto bukti per RHK pada bulan laporan. Foto yang tidak terbaca dilewati.
+async fn bukti_per_rhk(
+    pool: &MySqlPool,
+    user_id: u64,
+    tahun: i32,
+    bulan: u32,
+) -> Result<HashMap<i64, Vec<Gambar>>, ApiError> {
+    let mut hasil: HashMap<i64, Vec<Gambar>> = HashMap::new();
+    for b in skp_bukti::baris_bulan(pool, user_id, tahun, bulan).await? {
+        if let Some(g) = gambar_disk(b.media_id, &b.file_name).await {
+            hasil.entry(b.rhk).or_default().push(g);
+        }
     }
     Ok(hasil)
 }
@@ -233,17 +252,15 @@ pub async fn export(
         })
         .collect();
 
+    // Bukti per RHK: foto slot bukti bulan ini (setara bukti/<BULAN>/rhkN*.jpg di Python).
+    let mut bukti = bukti_per_rhk(&state.pool, user.user_id, tahun, bulan).await?;
+    for r in rhk.iter_mut() {
+        r.bukti = bukti.remove(&r.no).unwrap_or_default();
+    }
+
+    // Lampiran jurnal: semua foto kegiatan bulan ini (setara galeri di Python).
     let mut jurnal = Vec::with_capacity(kegiatan.len());
     for k in kegiatan {
-        let mut berkas = foto.remove(&k.id).unwrap_or_default();
-        // Foto kegiatan ber-RHK hanya masuk ke bukti RHK itu; sisanya ke lampiran jurnal.
-        let lampiran = match k.rhk.and_then(|n| rhk.iter_mut().find(|r| r.no == n)) {
-            Some(r) => {
-                r.bukti.append(&mut berkas);
-                Vec::new()
-            }
-            None => berkas,
-        };
         jurnal.push(JurnalLaporan {
             tgl: k.tgl,
             rhk: k.rhk,
@@ -251,7 +268,7 @@ pub async fn export(
             output: k.output,
             satuan: k.satuan,
             keterangan: k.keterangan,
-            foto: lampiran,
+            foto: foto.remove(&k.id).unwrap_or_default(),
         });
     }
 
