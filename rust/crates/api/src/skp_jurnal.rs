@@ -31,16 +31,16 @@ use crate::{
     require_auth, AppState,
 };
 
-const TABLE: &str = "skp_jurnal_kegiatan";
+pub(crate) const TABLE: &str = "skp_jurnal_kegiatan";
 /// `CAST` pada `rhk` karena kolom SMALLINT UNSIGNED.
 const COLS: &str = "id, tanggal, CAST(rhk AS SIGNED) AS rhk, kegiatan, output, satuan, keterangan, created_at, updated_at";
 const MAX_KEGIATAN: usize = 1000;
 const MAX_SATUAN: usize = 50;
 const MAX_KETERANGAN: usize = 500;
 const MAX_RHK: i64 = 99;
-const VALIDATION_MESSAGE: &str = "The given data was invalid.";
-const MODEL: &str = "App\\Models\\SkpJurnalKegiatan";
-const COLLECTION: &str = "foto";
+pub(crate) const VALIDATION_MESSAGE: &str = "The given data was invalid.";
+pub(crate) const MODEL: &str = "App\\Models\\SkpJurnalKegiatan";
+pub(crate) const COLLECTION: &str = "foto";
 /// Foto per kegiatan.
 const MAX_FOTO: usize = 10;
 const MAX_FOTO_BYTES: usize = 10 * 1024 * 1024;
@@ -89,7 +89,7 @@ fn parse_id(raw: &str) -> Result<u64, ApiError> {
 }
 
 /// `TrimStrings` dan `ConvertEmptyStringsToNull`: string kosong dianggap tidak diisi.
-fn normalize(v: Value) -> Value {
+pub(crate) fn normalize(v: Value) -> Value {
     match v {
         Value::String(s) => {
             let t = s.trim();
@@ -103,7 +103,7 @@ fn normalize(v: Value) -> Value {
     }
 }
 
-fn gagal(errors: &mut BTreeMap<String, Vec<String>>, field: &str, message: &str) {
+pub(crate) fn gagal(errors: &mut BTreeMap<String, Vec<String>>, field: &str, message: &str) {
     errors
         .entry(field.to_string())
         .or_default()
@@ -111,7 +111,7 @@ fn gagal(errors: &mut BTreeMap<String, Vec<String>>, field: &str, message: &str)
 }
 
 /// Bilangan bulat dari JSON, termasuk `2.0`. Pecahan ditolak.
-fn as_int(v: &Value) -> Option<i64> {
+pub(crate) fn as_int(v: &Value) -> Option<i64> {
     if let Some(i) = v.as_i64() {
         return Some(i);
     }
@@ -121,7 +121,7 @@ fn as_int(v: &Value) -> Option<i64> {
 }
 
 /// Angka dari JSON. Terima juga string dengan koma desimal (`"2,5"`) seperti input di formulir.
-fn as_number(v: &Value) -> Option<f64> {
+pub(crate) fn as_number(v: &Value) -> Option<f64> {
     let n = match v {
         Value::Number(n) => n.as_f64()?,
         Value::String(s) => s.replace(',', ".").parse::<f64>().ok()?,
@@ -255,7 +255,7 @@ fn optional_text(
 }
 
 /// Periode dari query `tahun` dan `bulan`. Keduanya wajib.
-fn periode(query: &HashMap<String, String>) -> Result<(i32, u32), ApiError> {
+pub(crate) fn periode(query: &HashMap<String, String>) -> Result<(i32, u32), ApiError> {
     let mut errors = BTreeMap::new();
     let tahun = query
         .get("tahun")
