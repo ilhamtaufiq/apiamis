@@ -25,9 +25,11 @@ use crate::{
     require_auth,
     skp_jurnal::{self, gagal, COLLECTION, MODEL, VALIDATION_MESSAGE},
     skp_pptx::{self, Gambar, JurnalLaporan, Laporan, Orang, RhkLaporan},
-    skp_bukti, skp_rhk, AppState,
+    skp_atasan, skp_bukti, skp_rhk, AppState,
 };
 
+/// Nama instansi di cover dan footer, tetap untuk seluruh laporan.
+const INSTANSI: &str = "Dinas Perumahan dan Kawasan Permukiman - Kabupaten Cianjur";
 const MAX_FEEDBACK: usize = 2000;
 const MAX_STRATEGI: usize = 10;
 const PPTX_MIME: &str = "application/vnd.openxmlformats-officedocument.presentationml.presentation";
@@ -180,6 +182,28 @@ fn rentang_bulan(tahun: i32, bulan: u32) -> Result<(NaiveDate, NaiveDate), ApiEr
     }
 }
 
+/// Data pegawai dari tabel users. Pangkat dan unit kerja dari profil.
+async fn pegawai(pool: &MySqlPool, user_id: u64) -> Result<Orang, ApiError> {
+    let row = sqlx::query("SELECT name, nip, jabatan, unit_kerja, pangkat_golongan FROM users WHERE id = ?")
+        .bind(user_id)
+        .fetch_optional(pool)
+        .await
+        .map_err(crate::media::internal)?;
+    let Some(r) = row else {
+        return Ok(Orang::default());
+    };
+    let teks = |kolom: &str| -> Result<String, ApiError> {
+        Ok(r.try_get::<Option<String>, _>(kolom).map_err(crate::media::internal)?.unwrap_or_default())
+    };
+    Ok(Orang {
+        nama: r.try_get::<String, _>("name").map_err(crate::media::internal)?,
+        nip: teks("nip")?,
+        pangkat: teks("pangkat_golongan")?,
+        jabatan: teks("jabatan")?,
+        unit: teks("unit_kerja")?,
+    })
+}
+
 /// Feedback dan strategi dari query. Strategi dipisah dengan `;`.
 fn input_teks(query: &HashMap<String, String>) -> Result<(String, Vec<String>), ApiError> {
     let mut errors = BTreeMap::new();
@@ -272,32 +296,15 @@ pub async fn export(
         });
     }
 
-    let pengguna = sqlx::query("SELECT name, nip, jabatan FROM users WHERE id = ?")
-        .bind(user.user_id)
-        .fetch_optional(&state.pool)
-        .await
-        .map_err(crate::media::internal)?;
-    let (nama, nip, jabatan) = match pengguna {
-        Some(r) => (
-            r.try_get::<String, _>("name").unwrap_or_default(),
-            r.try_get::<Option<String>, _>("nip").ok().flatten().unwrap_or_default(),
-            r.try_get::<Option<String>, _>("jabatan").ok().flatten().unwrap_or_default(),
-        ),
-        None => (String::new(), String::new(), String::new()),
-    };
+    let pegawai = pegawai(&state.pool, user.user_id).await?;
+    let atasan = skp_atasan::ambil(&state.pool, user.user_id).await?;
 
     let laporan = Laporan {
-        instansi: std::env::var("SKP_INSTANSI").unwrap_or_default().trim().to_string(),
+        instansi: INSTANSI.to_string(),
         tahun,
         bulan,
-        pegawai: Orang {
-            nama,
-            nip,
-            pangkat: String::new(),
-            jabatan,
-            unit: String::new(),
-        },
-        atasan: Orang::default(),
+        pegawai,
+        atasan,
         rhk,
         jurnal,
         feedback,

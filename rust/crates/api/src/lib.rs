@@ -110,6 +110,7 @@ pub mod route_permissions;
 pub mod route_permissions_sync;
 pub mod session;
 pub mod sk;
+pub mod skp_atasan;
 pub mod skp_bukti;
 pub mod skp_jurnal;
 pub mod skp_laporan;
@@ -395,6 +396,7 @@ pub fn app(config: &Config, state: AppState) -> Router {
         )
         .route("/api/skp/rhk", get(skp_rhk::index).put(skp_rhk::update))
         .route("/api/skp/laporan.pptx", get(skp_laporan::export))
+        .route("/api/skp/atasan", get(skp_atasan::index).put(skp_atasan::update))
         .route(
             "/api/skp/bukti",
             get(skp_bukti::index).post(skp_bukti::upload).layer(DefaultBodyLimit::max(skp_bukti::BODY_LIMIT)),
