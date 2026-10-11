@@ -50,7 +50,9 @@ async fn realisasi_tahun(
 ) -> Result<HashMap<(i64, i64), f64>, ApiError> {
     let (awal, akhir) = rentang_tahun(tahun)?;
     let rows = sqlx::query(
-        "SELECT CAST(rhk AS SIGNED) AS rhk, CAST(MONTH(tanggal) AS SIGNED) AS bulan, \
+        // `MONTH(tanggal)` di SELECT harus persis sama dengan ekspresi di GROUP BY. Dengan CAST
+        // di SELECT, ONLY_FULL_GROUP_BY (default MySQL 8) menolak query: error 1055.
+        "SELECT CAST(rhk AS SIGNED) AS rhk, MONTH(tanggal) AS bulan, \
          COALESCE(SUM(output), 0) AS total FROM skp_jurnal_kegiatan \
          WHERE user_id = ? AND tanggal >= ? AND tanggal < ? AND rhk IS NOT NULL \
          GROUP BY rhk, MONTH(tanggal)",
