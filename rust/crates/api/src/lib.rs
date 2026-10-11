@@ -110,6 +110,7 @@ pub mod route_permissions;
 pub mod route_permissions_sync;
 pub mod session;
 pub mod sk;
+pub mod skp_bukti;
 pub mod skp_jurnal;
 pub mod skp_laporan;
 pub mod skp_rhk;
@@ -394,6 +395,11 @@ pub fn app(config: &Config, state: AppState) -> Router {
         )
         .route("/api/skp/rhk", get(skp_rhk::index).put(skp_rhk::update))
         .route("/api/skp/laporan.pptx", get(skp_laporan::export))
+        .route(
+            "/api/skp/bukti",
+            get(skp_bukti::index).post(skp_bukti::upload).layer(DefaultBodyLimit::max(skp_bukti::BODY_LIMIT)),
+        )
+        .route("/api/skp/bukti/foto/{media_id}", delete(skp_bukti::delete_foto))
         // Unit SPAM (SpamUnitController). `POST /api/spam-units/import` belum dipindah.
         .route(
             "/api/spam-units/import",

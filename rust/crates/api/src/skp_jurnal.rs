@@ -409,12 +409,12 @@ async fn muat(state: &AppState, user_id: u64, id: u64) -> Result<Entry, ApiError
     Ok(entry)
 }
 
-fn bad_request(e: impl std::fmt::Display) -> ApiError {
+pub(crate) fn bad_request(e: impl std::fmt::Display) -> ApiError {
     ApiError::new(StatusCode::BAD_REQUEST, e.to_string())
 }
 
 /// Berkas `foto` atau `foto[]` dari multipart. Berkas kosong diabaikan.
-async fn baca_foto(state: &AppState, req: Request) -> Result<Vec<media::Upload>, ApiError> {
+pub(crate) async fn baca_foto(state: &AppState, req: Request) -> Result<Vec<media::Upload>, ApiError> {
     let mut files = Vec::new();
     let mut mp = Multipart::from_request(req, state)
         .await
