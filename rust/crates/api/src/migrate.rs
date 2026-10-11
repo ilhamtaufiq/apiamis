@@ -23,6 +23,7 @@ pub const BASELINE: &str = "0000_baseline";
 pub const MIGRATIONS: &[(&str, &str)] = &[
     (BASELINE, include_str!("../../../migrations/0000_baseline.sql")),
     ("0001_skp_jurnal_kegiatan", include_str!("../../../migrations/0001_skp_jurnal_kegiatan.sql")),
+    ("0002_skp_rhk", include_str!("../../../migrations/0002_skp_rhk.sql")),
 ];
 
 const LOCK_NAME: &str = "apiamis_migrate";
