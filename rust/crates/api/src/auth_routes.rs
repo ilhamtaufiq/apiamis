@@ -42,6 +42,8 @@ pub fn user_resource(
         "email_verified_at": carbon_json(user.email_verified_at),
         "nip": user.nip,
         "jabatan": user.jabatan,
+        "unit_kerja": user.unit_kerja,
+        "pangkat_golongan": user.pangkat_golongan,
         "roles": named(roles),
         "permissions": named(permissions),
         "is_protected_from_deletion": is_protected_from_deletion(&user.email),
@@ -302,6 +304,8 @@ mod tests {
             gender: None,
             nip: None,
             jabatan: Some("Pengawas".to_string()),
+            unit_kerja: None,
+            pangkat_golongan: None,
             email_verified_at: None,
             password: None,
             created_at: None,
@@ -328,8 +332,10 @@ mod tests {
                 "jabatan",
                 "name",
                 "nip",
+                "pangkat_golongan",
                 "permissions",
                 "roles",
+                "unit_kerja",
                 "updated_at",
             ]
         );

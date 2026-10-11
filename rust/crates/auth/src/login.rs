@@ -19,6 +19,8 @@ pub struct UserRow {
     pub gender: Option<String>,
     pub nip: Option<String>,
     pub jabatan: Option<String>,
+    pub unit_kerja: Option<String>,
+    pub pangkat_golongan: Option<String>,
     pub email_verified_at: Option<DateTime<Utc>>,
     pub password: Option<String>,
     pub created_at: Option<DateTime<Utc>>,
@@ -66,7 +68,7 @@ pub async fn create_token(
 
 pub async fn find_by_email(pool: &MySqlPool, email: &str) -> Result<Option<UserRow>, sqlx::Error> {
     let row = sqlx::query(
-        "SELECT id, name, email, avatar, gender, nip, jabatan, email_verified_at, password, \
+        "SELECT id, name, email, avatar, gender, nip, jabatan, unit_kerja, pangkat_golongan, email_verified_at, password, \
          created_at, updated_at FROM users WHERE email = ? LIMIT 1",
     )
     .bind(email)
@@ -81,6 +83,8 @@ pub async fn find_by_email(pool: &MySqlPool, email: &str) -> Result<Option<UserR
             gender: r.try_get("gender")?,
             nip: r.try_get("nip")?,
             jabatan: r.try_get("jabatan")?,
+            unit_kerja: r.try_get("unit_kerja")?,
+            pangkat_golongan: r.try_get("pangkat_golongan")?,
             email_verified_at: r.try_get("email_verified_at")?,
             password: r.try_get("password")?,
             created_at: r.try_get("created_at")?,
@@ -93,7 +97,7 @@ pub async fn find_by_email(pool: &MySqlPool, email: &str) -> Result<Option<UserR
 /// Satu user berdasarkan id, dengan kolom yang sama seperti `find_by_email`.
 pub async fn find_by_id(pool: &MySqlPool, id: u64) -> Result<Option<UserRow>, sqlx::Error> {
     let row = sqlx::query(
-        "SELECT id, name, email, avatar, gender, nip, jabatan, email_verified_at, password, \
+        "SELECT id, name, email, avatar, gender, nip, jabatan, unit_kerja, pangkat_golongan, email_verified_at, password, \
          created_at, updated_at FROM users WHERE id = ? LIMIT 1",
     )
     .bind(id)
@@ -108,6 +112,8 @@ pub async fn find_by_id(pool: &MySqlPool, id: u64) -> Result<Option<UserRow>, sq
             gender: r.try_get("gender")?,
             nip: r.try_get("nip")?,
             jabatan: r.try_get("jabatan")?,
+            unit_kerja: r.try_get("unit_kerja")?,
+            pangkat_golongan: r.try_get("pangkat_golongan")?,
             email_verified_at: r.try_get("email_verified_at")?,
             password: r.try_get("password")?,
             created_at: r.try_get("created_at")?,

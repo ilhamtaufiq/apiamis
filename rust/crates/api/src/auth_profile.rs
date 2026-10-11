@@ -98,6 +98,8 @@ fn current(col: &str, user: &UserRow) -> Option<String> {
         "gender" => user.gender.clone(),
         "nip" => user.nip.clone(),
         "jabatan" => user.jabatan.clone(),
+        "unit_kerja" => user.unit_kerja.clone(),
+        "pangkat_golongan" => user.pangkat_golongan.clone(),
         _ => None,
     }
 }
@@ -252,6 +254,12 @@ pub async fn update_profile(
     }
     if let Some(v) = nullable_string(&input, "jabatan", 255, &mut errs) {
         sets.push(("jabatan", v));
+    }
+    if let Some(v) = nullable_string(&input, "unit_kerja", 255, &mut errs) {
+        sets.push(("unit_kerja", v));
+    }
+    if let Some(v) = nullable_string(&input, "pangkat_golongan", 255, &mut errs) {
+        sets.push(("pangkat_golongan", v));
     }
     match input.get("gender") {
         None => {}
