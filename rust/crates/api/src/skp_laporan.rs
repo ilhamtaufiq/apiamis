@@ -320,6 +320,7 @@ pub async fn export(
                 header::CONTENT_DISPOSITION,
                 format!("attachment; filename=\"{}\"", nama_berkas(tahun, bulan)),
             ),
+            (header::CACHE_CONTROL, "no-store".to_string()),
         ],
         bytes,
     )

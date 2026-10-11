@@ -1205,7 +1205,10 @@ fn cors_layer() -> CorsLayer {
         }))
         .allow_headers(AllowHeaders::mirror_request())
         .allow_credentials(true)
-        .expose_headers([header::HeaderName::from_static("x-request-id")])
+        .expose_headers([
+            header::HeaderName::from_static("x-request-id"),
+            header::CONTENT_DISPOSITION,
+        ])
         .allow_methods(AllowMethods::list([
             Method::GET,
             Method::POST,
