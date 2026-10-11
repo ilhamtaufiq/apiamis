@@ -55,7 +55,7 @@ pub async fn baris_bulan(
 ) -> Result<Vec<FotoBukti>, ApiError> {
     let rows = sqlx::query(
         "SELECT CAST(b.rhk_no AS SIGNED) AS rhk, CAST(m.id AS UNSIGNED) AS media_id, m.file_name, \
-         CAST(m.generated_conversions AS CHAR) AS generated FROM skp_bukti b \
+         CAST(m.generated_conversions AS CHAR) AS konversi FROM skp_bukti b \
          JOIN media m ON m.model_id = b.id AND m.model_type = ? AND m.collection_name = ? \
          WHERE b.user_id = ? AND b.tahun = ? AND b.bulan = ? ORDER BY b.rhk_no, m.order_column, m.id",
     )
@@ -74,7 +74,7 @@ pub async fn baris_bulan(
                 rhk: r.try_get("rhk")?,
                 media_id: r.try_get("media_id")?,
                 file_name: r.try_get("file_name")?,
-                generated: r.try_get("generated")?,
+                generated: r.try_get("konversi")?,
             })
         })
         .collect::<Result<_, _>>()
