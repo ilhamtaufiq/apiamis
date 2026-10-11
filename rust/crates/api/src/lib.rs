@@ -111,6 +111,9 @@ pub mod route_permissions_sync;
 pub mod session;
 pub mod sk;
 pub mod skp_jurnal;
+pub mod skp_laporan;
+pub mod skp_rhk;
+pub mod skp_pptx;
 pub mod spam_import;
 pub mod spam_integration;
 pub mod spam_kelembagaan;
@@ -389,6 +392,8 @@ pub fn app(config: &Config, state: AppState) -> Router {
             "/api/skp/jurnal/{id}/foto/{media_id}",
             delete(skp_jurnal::delete_foto),
         )
+        .route("/api/skp/rhk", get(skp_rhk::index).put(skp_rhk::update))
+        .route("/api/skp/laporan.pptx", get(skp_laporan::export))
         // Unit SPAM (SpamUnitController). `POST /api/spam-units/import` belum dipindah.
         .route(
             "/api/spam-units/import",
