@@ -398,6 +398,7 @@ pub fn app(config: &Config, state: AppState) -> Router {
         .route("/api/skp/rhk", get(skp_rhk::index).put(skp_rhk::update))
         .route("/api/surat", get(surat::index).post(surat::store))
         .route("/api/surat/pratinjau", get(surat::pratinjau_nomor))
+        .route("/api/surat/jenis", post(surat::store_jenis))
         .route(
             "/api/surat/{id}",
             get(surat::show).put(surat::update).delete(surat::destroy),
