@@ -568,6 +568,103 @@ pub async fn destroy(
     Ok(StatusCode::NO_CONTENT.into_response())
 }
 
+/// Jenis dokumen baru dari halaman surat. Hanya membuat: ubah dan hapus jenis tetap lewat jalur lama.
+#[derive(Debug, Clone, PartialEq)]
+pub struct JenisBaru {
+    pub name: String,
+    pub code: String,
+    pub format_template: Option<String>,
+}
+
+const MAX_NAMA_JENIS: usize = 255;
+const MAX_KODE_JENIS: usize = 50;
+const MAX_TEMPLATE_JENIS: usize = 255;
+
+/// Validasi body `POST /api/surat/jenis`. Kode disimpan huruf besar.
+pub fn parse_jenis(body: &Value) -> Result<JenisBaru, ApiError> {
+    let mut errors = BTreeMap::new();
+    let name = match normalize(body.get("name").cloned().unwrap_or(Value::Null)) {
+        Value::String(s) if s.chars().count() <= MAX_NAMA_JENIS => Some(s),
+        Value::String(_) => {
+            gagal(&mut errors, "name", "Nama jenis maksimal 255 karakter.");
+            None
+        }
+        _ => {
+            gagal(&mut errors, "name", "Nama jenis wajib diisi.");
+            None
+        }
+    };
+    let code = match normalize(body.get("code").cloned().unwrap_or(Value::Null)) {
+        Value::String(s) if s.chars().count() <= MAX_KODE_JENIS => Some(s.to_uppercase()),
+        Value::String(_) => {
+            gagal(&mut errors, "code", "Kode maksimal 50 karakter.");
+            None
+        }
+        _ => {
+            gagal(&mut errors, "code", "Kode wajib diisi.");
+            None
+        }
+    };
+    let format_template = match normalize(body.get("format_template").cloned().unwrap_or(Value::Null)) {
+        Value::Null => None,
+        Value::String(s) if s.chars().count() <= MAX_TEMPLATE_JENIS => Some(s),
+        Value::String(_) => {
+            gagal(&mut errors, "format_template", "Template maksimal 255 karakter.");
+            None
+        }
+        _ => {
+            gagal(&mut errors, "format_template", "Template harus berupa teks.");
+            None
+        }
+    };
+    if !errors.is_empty() {
+        return Err(ApiError::validation(VALIDATION_MESSAGE, errors));
+    }
+    Ok(JenisBaru {
+        name: name.unwrap_or_default(),
+        code: code.unwrap_or_default(),
+        format_template,
+    })
+}
+
+/// `POST /api/surat/jenis`: menambah jenis dokumen. Kode harus unik (tanpa membedakan huruf besar kecil).
+pub async fn store_jenis(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(body): Json<Value>,
+) -> Result<Response, ApiError> {
+    require_auth(&state, &headers).await?;
+    let baru = parse_jenis(&body)?;
+
+    let ada: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM tbl_document_types WHERE code = ?")
+        .bind(&baru.code)
+        .fetch_one(&state.pool)
+        .await
+        .map_err(internal)?;
+    if ada > 0 {
+        let mut errors = BTreeMap::new();
+        gagal(&mut errors, "code", "Kode ini sudah dipakai jenis lain.");
+        return Err(ApiError::validation(VALIDATION_MESSAGE, errors));
+    }
+
+    let hasil = sqlx::query(
+        "INSERT INTO tbl_document_types (name, code, format_template, created_at, updated_at) VALUES (?, ?, ?, NOW(), NOW())",
+    )
+    .bind(&baru.name)
+    .bind(&baru.code)
+    .bind(&baru.format_template)
+    .execute(&state.pool)
+    .await
+    .map_err(internal)?;
+    let data = json!({
+        "id": hasil.last_insert_id() as i64,
+        "name": baru.name,
+        "code": baru.code,
+        "format_template": baru.format_template,
+    });
+    Ok((StatusCode::CREATED, Json(json!({ "data": data }))).into_response())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -630,5 +727,21 @@ mod tests {
         assert_eq!(m.tujuan.as_deref(), Some("Dinas"));
         assert_eq!(m.pekerjaan_id, None);
         assert_eq!(m.nomor.as_deref(), Some("001/SRT-AMIS/V/2026"));
+    }
+
+    #[test]
+    fn parse_jenis_membutuhkan_nama_dan_kode_dan_menyimpan_kode_huruf_besar() {
+        let ok = parse_jenis(&json!({ "name": " Surat Tugas ", "code": "st", "format_template": "{sequence}/{code}" })).unwrap();
+        assert_eq!(ok.name, "Surat Tugas");
+        assert_eq!(ok.code, "ST");
+        assert_eq!(ok.format_template.as_deref(), Some("{sequence}/{code}"));
+
+        let tanpa_template = parse_jenis(&json!({ "name": "Nota", "code": "NT", "format_template": "" })).unwrap();
+        assert_eq!(tanpa_template.format_template, None);
+
+        let err = parse_jenis(&json!({ "name": "", "code": null })).unwrap_err();
+        let errors = err.errors.expect("ada galat validasi");
+        assert!(errors.contains_key("name"));
+        assert!(errors.contains_key("code"));
     }
 }

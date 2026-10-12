@@ -404,6 +404,7 @@ pub fn app(config: &Config, state: AppState) -> Router {
             get(informasi::show).put(informasi::update).delete(informasi::destroy),
         )
         .route("/api/surat/pratinjau", get(surat::pratinjau_nomor))
+        .route("/api/surat/jenis", post(surat::store_jenis))
         .route(
             "/api/surat/{id}",
             get(surat::show).put(surat::update).delete(surat::destroy),
