@@ -113,6 +113,7 @@ pub mod sk;
 pub mod skp_atasan;
 pub mod skp_bukti;
 pub mod surat;
+pub mod informasi;
 pub mod skp_jurnal;
 pub mod skp_laporan;
 pub mod skp_rhk;
@@ -397,6 +398,11 @@ pub fn app(config: &Config, state: AppState) -> Router {
         )
         .route("/api/skp/rhk", get(skp_rhk::index).put(skp_rhk::update))
         .route("/api/surat", get(surat::index).post(surat::store))
+        .route("/api/informasi", get(informasi::index).post(informasi::store))
+        .route(
+            "/api/informasi/{id}",
+            get(informasi::show).put(informasi::update).delete(informasi::destroy),
+        )
         .route("/api/surat/pratinjau", get(surat::pratinjau_nomor))
         .route(
             "/api/surat/{id}",
