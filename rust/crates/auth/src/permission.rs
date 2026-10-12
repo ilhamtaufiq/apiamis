@@ -77,6 +77,8 @@ pub const MUTATION_RESOURCE_PREFIXES: &[&str] = &[
     "/app-settings",
     // Jurnal SKP: setiap pengguna hanya mengelola datanya sendiri (dijaga di handler `skp_jurnal`).
     "/skp",
+    // Penomoran surat terpusat: satu deret nomor untuk semua pengguna yang berwenang.
+    "/surat",
 ];
 
 #[derive(Debug, Clone, PartialEq, Eq)]
