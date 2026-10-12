@@ -112,6 +112,7 @@ pub mod session;
 pub mod sk;
 pub mod skp_atasan;
 pub mod skp_bukti;
+pub mod surat;
 pub mod skp_jurnal;
 pub mod skp_laporan;
 pub mod skp_rhk;
@@ -395,6 +396,12 @@ pub fn app(config: &Config, state: AppState) -> Router {
             delete(skp_jurnal::delete_foto),
         )
         .route("/api/skp/rhk", get(skp_rhk::index).put(skp_rhk::update))
+        .route("/api/surat", get(surat::index).post(surat::store))
+        .route("/api/surat/pratinjau", get(surat::pratinjau_nomor))
+        .route(
+            "/api/surat/{id}",
+            get(surat::show).put(surat::update).delete(surat::destroy),
+        )
         .route("/api/skp/laporan.pptx", get(skp_laporan::export))
         .route("/api/skp/atasan", get(skp_atasan::index).put(skp_atasan::update))
         .route(
