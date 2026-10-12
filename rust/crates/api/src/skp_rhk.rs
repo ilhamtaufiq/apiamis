@@ -214,6 +214,80 @@ pub fn validasi(body: &Value) -> Result<Vec<RhkItem>, ApiError> {
 // Handler
 // ---------------------------------------------------------------------------
 
+/// Realisasi satu RHK per bulan, dihitung dari jurnal kegiatan. Indeks 0 = Januari.
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
+pub struct Realisasi {
+    pub output: [f64; 12],
+    pub kegiatan: [i64; 12],
+}
+
+/// Menggabungkan baris agregat `(rhk, bulan, jumlah kegiatan, output)` menjadi realisasi per RHK.
+pub fn gabung_realisasi(rows: &[(i64, i64, i64, f64)]) -> BTreeMap<i64, Realisasi> {
+    let mut out: BTreeMap<i64, Realisasi> = BTreeMap::new();
+    for &(rhk, bulan, jumlah, output) in rows {
+        if !(1..=12).contains(&bulan) {
+            continue;
+        }
+        let slot = out.entry(rhk).or_default();
+        let i = (bulan - 1) as usize;
+        slot.output[i] += output;
+        slot.kegiatan[i] += jumlah;
+    }
+    out
+}
+
+/// Realisasi seluruh RHK satu tahun. Kegiatan tanpa RHK tidak dihitung.
+pub async fn realisasi_tahun(
+    pool: &MySqlPool,
+    user_id: u64,
+    tahun: i32,
+) -> Result<BTreeMap<i64, Realisasi>, ApiError> {
+    let sql = format!(
+        "SELECT CAST(rhk AS SIGNED) AS rhk, MONTH(tanggal) AS bulan, COUNT(*) AS jumlah, \
+         CAST(COALESCE(SUM(output), 0) AS DOUBLE) AS output \
+         FROM {} WHERE user_id = ? AND YEAR(tanggal) = ? AND rhk IS NOT NULL \
+         GROUP BY rhk, MONTH(tanggal)",
+        crate::skp_jurnal::TABLE
+    );
+    let rows = sqlx::query(&sql)
+        .bind(user_id)
+        .bind(tahun)
+        .fetch_all(pool)
+        .await
+        .map_err(internal)?;
+    let mut agregat = Vec::with_capacity(rows.len());
+    for r in &rows {
+        agregat.push((
+            r.try_get::<i64, _>("rhk").map_err(internal)?,
+            r.try_get::<i64, _>("bulan").map_err(internal)?,
+            r.try_get::<i64, _>("jumlah").map_err(internal)?,
+            r.try_get::<f64, _>("output").map_err(internal)?,
+        ));
+    }
+    Ok(gabung_realisasi(&agregat))
+}
+
+/// Daftar RHK dengan rencana dan realisasi bulanan (`realisasi` = output, `kegiatan` = jumlah kegiatan).
+fn ke_json_dengan_realisasi(items: &[RhkItem], realisasi: &BTreeMap<i64, Realisasi>) -> Value {
+    Value::Array(
+        items
+            .iter()
+            .map(|i| {
+                let r = realisasi.get(&i.no).copied().unwrap_or_default();
+                json!({
+                    "no": i.no,
+                    "rhk": i.rhk,
+                    "target": i.target,
+                    "satuan": i.satuan,
+                    "rencana": i.rencana,
+                    "realisasi": r.output,
+                    "kegiatan": r.kegiatan,
+                })
+            })
+            .collect(),
+    )
+}
+
 pub async fn index(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -222,7 +296,8 @@ pub async fn index(
     let user = require_auth(&state, &headers).await?;
     let tahun = tahun_dari_query(&query)?;
     let items = daftar(&state.pool, user.user_id, tahun).await?;
-    Ok(Json(json!({ "data": ke_json(&items) })))
+    let realisasi = realisasi_tahun(&state.pool, user.user_id, tahun).await?;
+    Ok(Json(json!({ "data": ke_json_dengan_realisasi(&items, &realisasi) })))
 }
 
 pub async fn update(
@@ -339,5 +414,20 @@ mod tests {
         assert!(tahun_dari_query(&q).is_err());
         q.insert("tahun".to_string(), "2026".to_string());
         assert_eq!(tahun_dari_query(&q).unwrap(), 2026);
+    }
+
+    #[test]
+    fn gabung_realisasi_menjumlah_per_rhk_dan_bulan() {
+        let rows = [(1, 1, 2, 5.0), (1, 1, 1, 2.5), (1, 3, 4, 10.0), (2, 12, 1, 1.0), (2, 13, 9, 9.0)];
+        let hasil = gabung_realisasi(&rows);
+        let satu = hasil.get(&1).expect("RHK 1 ada");
+        assert_eq!(satu.output[0], 7.5);
+        assert_eq!(satu.kegiatan[0], 3);
+        assert_eq!(satu.output[2], 10.0);
+        assert_eq!(satu.kegiatan[2], 4);
+        let dua = hasil.get(&2).expect("RHK 2 ada");
+        assert_eq!(dua.kegiatan[11], 1);
+        // Bulan di luar 1..=12 diabaikan.
+        assert_eq!(dua.kegiatan.iter().sum::<i64>(), 1);
     }
 }
