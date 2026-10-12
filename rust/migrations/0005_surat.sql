@@ -1,14 +1,5 @@
--- Penomoran surat terpusat: satu deret nomor per tahun untuk semua surat, dengan atau tanpa pekerjaan.
--- Deret nomor disimpan di surat_sequence (satu baris per tahun), diambil dengan UPDATE ... LAST_INSERT_ID(),
--- sehingga dua permintaan bersamaan tidak mendapat nomor urut yang sama.
-
-CREATE TABLE IF NOT EXISTS surat_sequence (
-  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
-  tahun SMALLINT UNSIGNED NOT NULL,
-  last_number INT UNSIGNED NOT NULL DEFAULT 0,
-  PRIMARY KEY (id),
-  UNIQUE KEY surat_sequence_tahun_unique (tahun)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+-- Penomoran surat terpusat. Nomor urut memakai deret bersama tbl_document_sequences (type 'berita-acara'),
+-- sama dengan Register Dokumen, sehingga surat dan register berbagi satu nomor urut per tahun.
 
 CREATE TABLE IF NOT EXISTS surat (
   id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,

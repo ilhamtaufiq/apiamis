@@ -1,5 +1,7 @@
 //! Penomoran surat terpusat: satu deret nomor per tahun untuk semua surat, dengan atau tanpa pekerjaan.
-//! Tabel `surat` dan `surat_sequence` (lihat migrasi 0005). Format nomor mengikuti template jenis dokumen
+//! Tabel `surat` (lihat migrasi 0005). Nomor urut memakai deret yang sama dengan Register Dokumen dan
+//! berita acara: baris `tbl_document_sequences` dengan `type = 'berita-acara'`. Jadi satu tahun hanya
+//! punya satu nomor urut, apa pun modulnya. Format nomor mengikuti template jenis dokumen
 //! (`tbl_document_types.format_template`), dengan token yang sama seperti di frontend Register Dokumen.
 //!
 //! Rute:
@@ -7,8 +9,8 @@
 //! - `GET /api/surat/pratinjau?tahun=&type_id=&tanggal=`: nomor yang akan dipakai, tanpa mengambil nomor urut.
 //! - `GET /api/surat/{id}`, `POST /api/surat`, `PUT /api/surat/{id}`, `DELETE /api/surat/{id}`.
 //!
-//! Nomor urut diambil di dalam transaksi lewat `surat_sequence`. Nomor yang diisi manual tetap memakai
-//! deret yang sama, dan dijaga unik per tahun oleh indeks di tabel.
+//! Nomor urut diambil di dalam transaksi dengan `FOR UPDATE` pada baris deret tahun itu, seperti register.
+//! Nomor yang diisi manual tidak mengambil nomor urut, dan dijaga unik per tahun oleh indeks di tabel.
 
 use std::collections::{BTreeMap, HashMap};
 
@@ -37,6 +39,8 @@ const MAX_PERIHAL: usize = 500;
 const MAX_TUJUAN: usize = 255;
 const MAX_NOMOR: usize = 255;
 const MAX_KETERANGAN: usize = 5000;
+/// Tipe deret nomor urut bersama. Sama dengan `SEQ_TYPE` di `document_registers` dan `berita_acara`.
+const SEQ_TYPE: &str = "berita-acara";
 
 /// Format nomor dengan token: `{sequence}` (3 digit), `{nomor_urut_surat}`, `{code}`, `{year}`/`{tahun}`,
 /// `{month}` (romawi), `{day}`.
@@ -365,9 +369,12 @@ pub async fn pratinjau_nomor(
     let (type_id, tanggal) = (type_id.unwrap_or_default(), tanggal.unwrap_or_default());
     let jenis = jenis_dari_id(&state.pool, type_id).await?;
     let tahun = tanggal.year() as i64;
-    let terakhir: Option<i64> = sqlx::query_scalar("SELECT CAST(last_number AS SIGNED) FROM surat_sequence WHERE tahun = ?")
-        .bind(tahun)
-        .fetch_optional(&state.pool)
+    let terakhir: Option<i64> = sqlx::query_scalar(
+        "SELECT CAST(last_number AS SIGNED) FROM tbl_document_sequences WHERE year = ? AND type = ?",
+    )
+    .bind(tahun)
+    .bind(SEQ_TYPE)
+    .fetch_optional(&state.pool)
         .await
         .map_err(internal)?;
     let nomor = pratinjau(jenis.1.as_deref(), &jenis.0, tanggal, terakhir.unwrap_or(0) as u64);
@@ -418,24 +425,31 @@ pub async fn store(
     let (code, template) = jenis_dari_id(&state.pool, masukan.type_id).await?;
 
     let mut tx = state.pool.begin().await.map_err(internal)?;
-    sqlx::query("INSERT INTO surat_sequence (tahun, last_number) VALUES (?, 0) ON DUPLICATE KEY UPDATE last_number = last_number")
-        .bind(tahun)
-        .execute(&mut *tx)
-        .await
-        .map_err(internal)?;
-    sqlx::query("UPDATE surat_sequence SET last_number = LAST_INSERT_ID(last_number + 1) WHERE tahun = ?")
-        .bind(tahun)
-        .execute(&mut *tx)
-        .await
-        .map_err(internal)?;
-    let seq: u64 = sqlx::query_scalar("SELECT CAST(LAST_INSERT_ID() AS UNSIGNED)")
-        .fetch_one(&mut *tx)
-        .await
-        .map_err(internal)?;
+    // Baris deret tahun ini dikunci sampai commit, sama seperti register: tidak ada dua nomor yang sama.
+    let terakhir: Option<Option<i64>> = sqlx::query_scalar(
+        "SELECT CAST(last_number AS SIGNED) FROM tbl_document_sequences WHERE year = ? AND type = ? FOR UPDATE",
+    )
+    .bind(tahun)
+    .bind(SEQ_TYPE)
+    .fetch_optional(&mut *tx)
+    .await
+    .map_err(internal)?;
+    let seq = terakhir.flatten().map_or(1, |l| l + 1);
+    sqlx::query(
+        "INSERT INTO tbl_document_sequences (year, type, last_number) VALUES (?, ?, ?) \
+         ON DUPLICATE KEY UPDATE last_number = VALUES(last_number)",
+    )
+    .bind(tahun)
+    .bind(SEQ_TYPE)
+    .bind(seq)
+    .execute(&mut *tx)
+    .await
+    .map_err(internal)?;
+    let seq = seq as u64;
 
     let nomor = match masukan.nomor.clone().filter(|n| !n.trim().is_empty()) {
         Some(n) => n.trim().to_string(),
-        None => pratinjau_nomor_dari(template.as_deref(), &code, masukan.tanggal, seq - 1),
+        None => pratinjau_nomor_dari(template.as_deref(), &code, masukan.tanggal, seq),
     };
     let dipakai: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM surat WHERE tahun = ? AND nomor = ?")
         .bind(tahun)
