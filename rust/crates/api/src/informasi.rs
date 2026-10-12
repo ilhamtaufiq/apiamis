@@ -31,7 +31,7 @@ use crate::{
 };
 
 const JUDUL_MAX: usize = 255;
-const ISI_MAX: usize = 10_000;
+const ISI_MAX: usize = 100_000;
 const LIMIT_DEFAULT: u32 = 100;
 const LIMIT_MAX: u32 = 200;
 /// Kategori yang dikenali frontend. Di luar daftar ini, nilai ditolak agar label tidak kacau.
@@ -202,7 +202,7 @@ pub async fn show(
     let admin = require_admin(&state.pool, user.user_id).await.is_ok();
     let id: i64 = id.parse().map_err(|_| ApiError::not_found())?;
     let data = ambil(&state.pool, id, admin).await?.ok_or_else(ApiError::not_found)?;
-    Ok(Json(json!({ "data": data })))
+    Ok(Json(json!({ "data": data, "is_admin": admin, "today": Utc::now().date_naive().to_string() })))
 }
 
 pub async fn store(
