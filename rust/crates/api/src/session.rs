@@ -38,6 +38,9 @@ pub struct SessionCookie {
     /// Nama cookie token admin asli saat impersonasi (`ARUMANIS_IMPERSONATOR_COOKIE`).
     /// Atributnya sama dengan `auth_name`.
     pub impersonator_name: String,
+    /// Atribut `Domain` untuk semua cookie sesi (`SESSION_COOKIE_DOMAIN`, mis. `.cianjur.space`).
+    /// Kosong berarti cookie hanya berlaku di host API, seperti sebelumnya.
+    pub domain: Option<String>,
 }
 
 impl Default for SessionCookie {
@@ -49,6 +52,7 @@ impl Default for SessionCookie {
             auth_secure: false,
             auth_max_age_secs: MAX_AGE_SECS,
             impersonator_name: DEFAULT_IMPERSONATOR_COOKIE_NAME.to_string(),
+            domain: None,
         }
     }
 }
@@ -72,6 +76,10 @@ impl SessionCookie {
                 .ok()
                 .filter(|v| !v.is_empty())
                 .unwrap_or_else(|| DEFAULT_IMPERSONATOR_COOKIE_NAME.to_string()),
+            domain: std::env::var("SESSION_COOKIE_DOMAIN")
+                .ok()
+                .map(|v| v.trim().to_string())
+                .filter(|v| valid_cookie_domain(v)),
             // Sama dengan config/sanctum.php: `SESSION_COOKIE_SECURE` lebih dulu, lalu APP_ENV.
             auth_secure: match std::env::var("SESSION_COOKIE_SECURE") {
                 Ok(v) => v.trim().eq_ignore_ascii_case("true"),
@@ -91,8 +99,17 @@ impl SessionCookie {
         }
     }
 
+    /// `; Domain=...` bila `SESSION_COOKIE_DOMAIN` diset, kosong bila tidak.
+    fn domain_attr(&self) -> String {
+        self.domain
+            .as_deref()
+            .map(|d| format!("; Domain={d}"))
+            .unwrap_or_default()
+    }
+
     fn auth_attrs(&self) -> String {
         let mut s = String::from("; Path=/; HttpOnly; SameSite=Lax");
+        s.push_str(&self.domain_attr());
         if self.auth_secure {
             s.push_str("; Secure");
         }
@@ -140,6 +157,7 @@ impl SessionCookie {
 
     fn attrs(&self) -> String {
         let mut s = String::from("; Path=/; HttpOnly; SameSite=Strict");
+        s.push_str(&self.domain_attr());
         if self.secure {
             s.push_str("; Secure");
         }
@@ -162,6 +180,20 @@ impl SessionCookie {
     pub fn clear_header(&self, name: &str) -> Option<HeaderValue> {
         HeaderValue::from_str(&format!("{name}={}; Max-Age=0", self.attrs())).ok()
     }
+}
+
+/// Domain cookie yang aman: huruf, angka, titik, dan tanda hubung saja. Titik awal boleh.
+fn valid_cookie_domain(domain: &str) -> bool {
+    let d = domain.strip_prefix('.').unwrap_or(domain);
+    !d.is_empty()
+        && d.len() <= 253
+        && d.split('.').all(|label| {
+            !label.is_empty()
+                && label.len() <= 63
+                && !label.starts_with('-')
+                && !label.ends_with('-')
+                && label.chars().all(|c| c.is_ascii_alphanumeric() || c == '-')
+        })
 }
 
 /// Token dari `Authorization: Bearer`, lalu cookie sesi, lalu cookie `arumanis_token`.
@@ -333,6 +365,30 @@ mod tests {
         let c = cfg.auth_clear_header().unwrap();
         assert!(c.to_str().unwrap().starts_with("arumanis_token=;"));
         assert!(c.to_str().unwrap().contains("Max-Age=0"));
+    }
+
+    #[test]
+    fn domain_attribute_added_only_when_configured() {
+        let plain = SessionCookie::default();
+        assert!(!plain.set_header("2|x").unwrap().to_str().unwrap().contains("Domain="));
+
+        let shared = SessionCookie { domain: Some(".cianjur.space".into()), ..SessionCookie::default() };
+        let set = shared.set_header("2|x").unwrap();
+        assert!(set.to_str().unwrap().contains("; Domain=.cianjur.space"));
+        let clear = shared.clear_header("arumanis_session").unwrap();
+        assert!(clear.to_str().unwrap().contains("; Domain=.cianjur.space"));
+        assert!(shared.auth_set_header("4|t").unwrap().to_str().unwrap().contains("; Domain=.cianjur.space"));
+    }
+
+    #[test]
+    fn rejects_unsafe_cookie_domain() {
+        assert!(valid_cookie_domain(".cianjur.space"));
+        assert!(valid_cookie_domain("arumanis.cianjur.space"));
+        assert!(!valid_cookie_domain(""));
+        assert!(!valid_cookie_domain("."));
+        assert!(!valid_cookie_domain("a;b.space"));
+        assert!(!valid_cookie_domain("-bad.space"));
+        assert!(!valid_cookie_domain("evil .space"));
     }
 
     #[test]
