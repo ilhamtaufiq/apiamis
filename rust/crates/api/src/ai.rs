@@ -12,9 +12,12 @@
 
 use std::time::{Duration, Instant};
 
+use std::convert::Infallible;
+
 use axum::{
     extract::State,
     http::{HeaderMap, StatusCode},
+    response::sse::{Event, KeepAlive, Sse},
     Json,
 };
 use serde_json::{json, Value};
@@ -781,6 +784,159 @@ pub async fn tanya(
     })))
 }
 
+/// Batas giliran chat yang dikirim ke model, batas panjang per pesan, dan batas pengambilan data per giliran.
+const CHAT_MAX_TURNS: usize = 10;
+const CHAT_MAX_CHARS: usize = 2_000;
+const CHAT_MAX_TOOL_STEPS: usize = 3;
+
+/// Riwayat chat dari klien. Hanya `CHAT_MAX_TURNS` pesan terakhir yang dipakai, dan pesan terakhir wajib dari pengguna.
+fn sanitize_riwayat(body: &Value) -> Result<Vec<(String, String)>, ApiError> {
+    let salah = || ApiError::new(StatusCode::BAD_REQUEST, "Riwayat chat tidak valid.");
+    let arr = body["messages"].as_array().ok_or_else(salah)?;
+    let mut out = Vec::new();
+    for m in arr.iter().rev().take(CHAT_MAX_TURNS).rev() {
+        let role = m["role"].as_str().unwrap_or("");
+        if role != "user" && role != "assistant" {
+            return Err(salah());
+        }
+        let content = m["content"].as_str().unwrap_or("").trim();
+        if content.is_empty() || content.chars().count() > CHAT_MAX_CHARS {
+            return Err(ApiError::new(StatusCode::BAD_REQUEST, "Pesan kosong atau terlalu panjang (maksimal 2.000 karakter)."));
+        }
+        out.push((role.to_string(), content.to_string()));
+    }
+    if out.last().map(|(r, _)| r.as_str()) != Some("user") {
+        return Err(ApiError::new(StatusCode::BAD_REQUEST, "Pesan terakhir harus dari pengguna."));
+    }
+    Ok(out)
+}
+
+/// Satu event SSE. Data selalu JSON.
+fn kirim(tx: &tokio::sync::mpsc::Sender<Event>, nama: &str, data: Value) {
+    let _ = tx.try_send(Event::default().event(nama).data(data.to_string()));
+}
+
+/// Loop chat: model boleh mengambil data beberapa kali (maks `CHAT_MAX_TOOL_STEPS`), lalu menjawab.
+/// Model yang tidak mengikuti format JSON, jawabannya dianggap jawaban akhir.
+async fn jalankan_chat(
+    state: &AppState,
+    cfg: &AiConfig,
+    user_id: u64,
+    roles: &[(u64, String)],
+    is_admin: bool,
+    tahun: &str,
+    riwayat: &[(String, String)],
+    tx: &tokio::sync::mpsc::Sender<Event>,
+) -> Result<(Value, Option<String>, Vec<Value>), ApiError> {
+    let system = format!(
+        "Anda asisten data pembangunan air minum dan sanitasi Kabupaten Cianjur di aplikasi Arumanis. \
+         Jawab dalam Bahasa Indonesia. Angka dan fakta hanya boleh berasal dari hasil tool. \
+         Untuk mengambil data, balas HANYA dengan JSON {{\"tool\": \"<nama>\", \"args\": {{...}}}}. \
+         Jika sudah cukup, balas HANYA dengan JSON {{\"jawaban\": \"<teks>\"}}. \
+         Bila data terpotong atau tidak menjawab pertanyaan, katakan itu dengan jujur. Tahun anggaran: {tahun}.\nTools:\n{}",
+        daftar_tool(is_admin)
+    );
+    let mut pesan = vec![json!({ "role": "system", "content": system })];
+    for (role, content) in riwayat {
+        pesan.push(json!({ "role": role, "content": content }));
+    }
+    let pertanyaan = riwayat.last().map(|(_, c)| c.clone());
+    let mut sumber: Vec<Value> = Vec::new();
+
+    for langkah in 0..=CHAT_MAX_TOOL_STEPS {
+        if langkah == CHAT_MAX_TOOL_STEPS {
+            pesan.push(json!({ "role": "user", "content": "Batas pengambilan data tercapai. Jawab sekarang dengan JSON {\"jawaban\": \"...\"}." }));
+        }
+        let balasan = panggil_model(cfg, Value::Array(pesan.clone()), 700).await?;
+        let parsed = parse_json_dari_model(&balasan);
+
+        let nama = parsed.as_ref().and_then(|p| p["tool"].as_str()).map(str::to_string);
+        let nama_valid = nama.as_deref().filter(|n| TOOLS.iter().any(|t| t.0 == *n && (is_admin || !t.3)));
+        let jawaban = parsed
+            .as_ref()
+            .and_then(|p| p["jawaban"].as_str())
+            .map(str::to_string)
+            .or_else(|| parsed.is_none().then(|| balasan.clone()));
+
+        if let (Some(nama), true) = (nama_valid, langkah < CHAT_MAX_TOOL_STEPS) {
+            kirim(tx, "status", json!({ "message": format!("Mengambil data: {nama}") }));
+            let args = parsed.as_ref().and_then(|p| p.get("args")).cloned().unwrap_or(json!({}));
+            let hasil = jalankan_tool(state, user_id, roles, nama, &args, tahun).await;
+            let (data, jumlah) = match hasil {
+                Ok((d, j)) => (d, j),
+                Err(e) => (json!({ "error": e.message }), None),
+            };
+            sumber.push(json!({ "tool": nama, "args": args, "jumlah_baris": jumlah }));
+            pesan.push(json!({ "role": "assistant", "content": balasan }));
+            let data_text: String = data.to_string().chars().take(DATA_MAX_CHARS).collect();
+            pesan.push(json!({ "role": "user", "content": format!("Hasil tool {nama}: {data_text}") }));
+            continue;
+        }
+
+        let teks = jawaban.filter(|t| !t.trim().is_empty()).unwrap_or_else(|| {
+            "Maaf, saya belum bisa menjawab dengan data yang tersedia. Coba ulangi pertanyaannya dengan lebih spesifik.".to_string()
+        });
+        return Ok((json!({ "jawaban": teks, "sumber": sumber, "model": cfg.model }), pertanyaan, sumber.clone()));
+    }
+    Err(ApiError::new(StatusCode::BAD_GATEWAY, "Chat tidak menghasilkan jawaban."))
+}
+
+/// `POST /api/ai/chat`: chat multi-giliran dengan event SSE: `status` (saat mengambil data), `done` (jawaban), `error`.
+/// Klien mengirim riwayat sendiri. Server tidak menyimpan percakapan, hanya mencatat tiap giliran di `ai_logs`.
+pub async fn chat(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(body): Json<Value>,
+) -> Result<Sse<impl futures_util::Stream<Item = Result<Event, Infallible>>>, ApiError> {
+    let user = require_auth(&state, &headers).await?;
+    let cfg = ai_config()?;
+    cek_batas(&state, user.user_id)?;
+
+    let tahun = body["tahun"].as_str().unwrap_or("").trim().to_string();
+    if tahun.len() != 4 || !tahun.chars().all(|c| c.is_ascii_digit()) {
+        return Err(ApiError::new(StatusCode::BAD_REQUEST, "Tahun anggaran tidak valid."));
+    }
+    let riwayat = sanitize_riwayat(&body)?;
+    let roles = auth::login::roles_of(&state.pool, user.user_id).await.map_err(internal)?;
+    let is_admin = crate::notifications::require_admin(&state.pool, user.user_id).await.is_ok();
+    let user_id = user.user_id;
+
+    let (tx, rx) = tokio::sync::mpsc::channel::<Event>(32);
+    tokio::spawn(async move {
+        let mulai = Instant::now();
+        let hasil = jalankan_chat(&state, &cfg, user_id, &roles, is_admin, &tahun, &riwayat, &tx).await;
+        match hasil {
+            Ok((done, pertanyaan, sumber)) => {
+                let tool = sumber.last().and_then(|s| s["tool"].as_str()).map(str::to_string);
+                let jumlah: i64 = sumber.iter().filter_map(|s| s["jumlah_baris"].as_i64()).sum();
+                catat(
+                    &state.pool,
+                    user_id,
+                    "chat",
+                    tool.as_deref(),
+                    &json!(sumber),
+                    pertanyaan.as_deref(),
+                    Some(jumlah),
+                    &cfg.model,
+                    mulai.elapsed().as_millis(),
+                    "ok",
+                )
+                .await;
+                kirim(&tx, "done", done);
+            }
+            Err(e) => {
+                catat(&state.pool, user_id, "chat", None, &Value::Null, riwayat.last().map(|(_, c)| c.as_str()), None, &cfg.model, mulai.elapsed().as_millis(), "gagal").await;
+                kirim(&tx, "error", json!({ "message": e.message }));
+            }
+        }
+    });
+
+    let stream = futures_util::stream::unfold(rx, |mut rx| async move {
+        rx.recv().await.map(|ev| (Ok::<Event, Infallible>(ev), rx))
+    });
+    Ok(Sse::new(stream).keep_alive(KeepAlive::default()))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -814,6 +970,24 @@ mod tests {
         assert_eq!(s["statistik"].as_object().unwrap().len(), 1);
         assert_eq!(s["pekerjaanPerluPerhatian"][0]["nama"].as_str().unwrap().chars().count(), 200);
         assert_eq!(s["pekerjaanPerluPerhatian"][0]["keuangan"], 0.0);
+    }
+
+    #[test]
+    fn sanitize_riwayat_ambil_sepuluh_terakhir_dan_wajib_diakhiri_pengguna() {
+        let msgs: Vec<Value> = (0..15)
+            .map(|i| json!({ "role": if i % 2 == 0 { "user" } else { "assistant" }, "content": format!("p{i}") }))
+            .collect();
+        let r = sanitize_riwayat(&json!({ "messages": msgs })).unwrap();
+        assert_eq!(r.len(), CHAT_MAX_TURNS);
+        assert_eq!(r.last().unwrap().0, "user");
+        assert_eq!(r[0].1, "p5");
+
+        let salah_akhir = json!({ "messages": [{ "role": "user", "content": "a" }, { "role": "assistant", "content": "b" }] });
+        assert!(sanitize_riwayat(&salah_akhir).is_err());
+        let role_asing = json!({ "messages": [{ "role": "system", "content": "x" }] });
+        assert!(sanitize_riwayat(&role_asing).is_err());
+        let kosong = json!({ "messages": [{ "role": "user", "content": "   " }] });
+        assert!(sanitize_riwayat(&kosong).is_err());
     }
 
     #[test]
