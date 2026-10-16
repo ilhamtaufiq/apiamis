@@ -248,6 +248,7 @@ const TOOLS: &[(&str, &str, &str, bool)] = &[
     ("kontrak_ringkasan", "Jumlah pekerjaan aktif yang sudah berkontrak, jumlah kontrak dan total nilainya, serta kontrak yang selesai dalam 90 hari ke depan (maksimal 10 daftar).", "{}", false),
     ("realisasi_keuangan", "Total realisasi keuangan (SP2D) dan 10 pekerjaan dengan realisasi terbesar, serta 10 SP2D terbaru lengkap dengan nomor dan tanggalnya. Bisa dibatasi periode tanggal.", "{\"dari\": \"YYYY-MM-DD opsional\", \"sampai\": \"YYYY-MM-DD opsional\"}", false),
     ("rekap_kecamatan", "Jumlah pekerjaan aktif dan pagu per kecamatan (maksimal 50 kecamatan).", "{}", false),
+    ("penerima_agregat", "Jumlah penerima dan jumlah jiwa per desa. Hanya agregat: nama, NIK, dan alamat tidak pernah ditampilkan, dan desa dengan kurang dari 5 penerima dirahasiakan.", "{}", false),
     ("rekap_desa", "Jumlah pekerjaan aktif dan pagu per desa (maksimal 50 desa), beserta berapa desa yang sudah tercakup dari total desa.", "{}", false),
     ("cari_surat", "Cari surat di tahun anggaran berdasarkan nomor atau perihal (maksimal 10), beserta jumlah surat tahun itu.", "{\"kata\": teks}", false),
     ("kualitas_data", "Ringkasan temuan kualitas data pekerjaan. Hanya untuk admin.", "{}", true),
@@ -540,6 +541,61 @@ async fn jalankan_tool(
                 .collect();
             let jumlah = hasil.len() as i64;
             Ok((json!({ "kecamatan": hasil }), Some(jumlah)))
+        }
+        "penerima_agregat" => {
+            const MIN_PENERIMA: i64 = 5;
+            let scope = access::restriction(user_id, roles, "p");
+            let (where_sql, mut binds) = f.where_clause();
+            binds.extend(scope.binds.iter().map(u64::to_string));
+            let kondisi = format!("pr.pekerjaan_id IN (SELECT p.id FROM tbl_pekerjaan p{where_sql}{})", scope.sql);
+
+            // Hanya kolom agregat yang di-select. Kolom identitas tidak disentuh sama sekali.
+            let total_sql = format!(
+                "SELECT CAST(COUNT(*) AS SIGNED) AS jumlah, CAST(COALESCE(SUM(pr.jumlah_jiwa), 0) AS SIGNED) AS jiwa FROM tbl_penerima pr WHERE {kondisi}"
+            );
+            let mut tq = sqlx::query(&total_sql);
+            for b in &binds {
+                tq = tq.bind(b);
+            }
+            let total = tq.fetch_one(pool).await.map_err(internal)?;
+            let total_penerima: i64 = total.try_get("jumlah").map_err(internal)?;
+            let total_jiwa: i64 = total.try_get("jiwa").map_err(internal)?;
+
+            let per_desa_sql = format!(
+                "SELECT COALESCE(d.n_desa, '(tanpa desa)') AS desa, CAST(COUNT(*) AS SIGNED) AS jumlah, \
+                 CAST(COALESCE(SUM(pr.jumlah_jiwa), 0) AS SIGNED) AS jiwa \
+                 FROM tbl_penerima pr JOIN tbl_pekerjaan p ON p.id = pr.pekerjaan_id LEFT JOIN tbl_desa d ON d.id = p.desa_id \
+                 WHERE {kondisi} GROUP BY p.desa_id, d.n_desa ORDER BY jiwa DESC LIMIT 100"
+            );
+            let mut dq = sqlx::query(&per_desa_sql);
+            for b in &binds {
+                dq = dq.bind(b);
+            }
+            let mut tampil: Vec<Value> = Vec::new();
+            let mut disembunyikan = 0_i64;
+            for r in dq.fetch_all(pool).await.map_err(internal)? {
+                let jumlah: i64 = r.try_get("jumlah").map_err(internal)?;
+                if jumlah < MIN_PENERIMA {
+                    disembunyikan += 1;
+                    continue;
+                }
+                tampil.push(json!({
+                    "desa": r.try_get::<Option<String>, _>("desa").ok().flatten(),
+                    "jumlahPenerima": jumlah,
+                    "jumlahJiwa": r.try_get::<i64, _>("jiwa").ok(),
+                }));
+            }
+            let jumlah_hasil = tampil.len() as i64;
+            Ok((
+                json!({
+                    "totalPenerima": total_penerima,
+                    "totalJiwa": total_jiwa,
+                    "perDesa": tampil,
+                    "desaDirahasiakan": disembunyikan,
+                    "catatan": "Desa dengan kurang dari 5 penerima dirahasiakan.",
+                }),
+                Some(jumlah_hasil),
+            ))
         }
         "rekap_desa" => {
             let scope = access::restriction(user_id, roles, "p");
