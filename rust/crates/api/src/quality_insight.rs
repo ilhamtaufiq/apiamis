@@ -163,7 +163,7 @@ async fn count_pekerjaan(pool: &MySqlPool, cond: &Cond) -> Result<i64, ApiError>
 }
 
 /// `getStats`: hitungan untuk kartu dashboard, sudah dengan filter tahun.
-async fn stats_value(
+pub(crate) async fn stats_value(
     pool: &MySqlPool,
     tahun: Option<&str>,
 ) -> Result<Map<String, Value>, ApiError> {

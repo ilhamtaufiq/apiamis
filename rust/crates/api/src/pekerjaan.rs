@@ -220,7 +220,7 @@ impl PekerjaanFilter {
     }
 
     /// WHERE dinamis dan nilai bind berurutan.
-    fn where_clause(&self) -> (String, Vec<String>) {
+    pub(crate) fn where_clause(&self) -> (String, Vec<String>) {
         let mut sql = String::from(" WHERE 1=1");
         let mut b: Vec<String> = Vec::new();
         if let Some(v) = &self.kecamatan_id {
