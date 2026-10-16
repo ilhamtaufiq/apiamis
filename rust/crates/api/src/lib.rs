@@ -112,6 +112,7 @@ pub mod session;
 pub mod sk;
 pub mod skp_atasan;
 pub mod skp_bukti;
+pub mod ai;
 pub mod surat;
 pub mod informasi;
 pub mod skp_jurnal;
@@ -397,6 +398,9 @@ pub fn app(config: &Config, state: AppState) -> Router {
             delete(skp_jurnal::delete_foto),
         )
         .route("/api/skp/rhk", get(skp_rhk::index).put(skp_rhk::update))
+        .route("/api/ai/status", get(ai::status))
+        .route("/api/ai/analyze", post(ai::analyze))
+        .route("/api/ai/tanya", post(ai::tanya))
         .route("/api/surat", get(surat::index).post(surat::store))
         .route("/api/informasi", get(informasi::index).post(informasi::store))
         .route(
