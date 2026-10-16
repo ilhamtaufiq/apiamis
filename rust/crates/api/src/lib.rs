@@ -401,6 +401,7 @@ pub fn app(config: &Config, state: AppState) -> Router {
         .route("/api/ai/status", get(ai::status))
         .route("/api/ai/analyze", post(ai::analyze))
         .route("/api/ai/tanya", post(ai::tanya))
+        .route("/api/ai/chat", post(ai::chat))
         .route("/api/surat", get(surat::index).post(surat::store))
         .route("/api/informasi", get(informasi::index).post(informasi::store))
         .route(
