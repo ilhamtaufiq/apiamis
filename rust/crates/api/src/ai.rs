@@ -239,10 +239,33 @@ pub async fn analyze(
     Ok(Json(json!({ "analisa": hasil?, "model": cfg.model })))
 }
 
-/// Daftar tool untuk prompt model. Nama dan parameter harus sama dengan `jalankan_tool`.
-const DAFTAR_TOOL: &str = "- statistik_dashboard: Jumlah pekerjaan aktif dan total pagu untuk tahun anggaran. Parameter: {}\n\
-- pekerjaan_progres_rendah: Pekerjaan aktif dengan progres realisasi di bawah batas, dari yang paling rendah (maksimal 20). Parameter: {\"batas\": angka 0 sampai 100, default 50}\n\
-- pekerjaan_cari: Cari pekerjaan aktif berdasarkan kata dalam nama paket (maksimal 10). Parameter: {\"kata\": teks}";
+/// Daftar tool yang boleh dipilih model: (nama, deskripsi untuk prompt, parameter, hanya admin).
+/// Nama dan parameter harus sama dengan dispatch di `jalankan_tool`.
+const TOOLS: &[(&str, &str, &str, bool)] = &[
+    ("statistik_dashboard", "Jumlah pekerjaan aktif dan total pagu untuk tahun anggaran.", "{}", false),
+    ("pekerjaan_progres_rendah", "Pekerjaan aktif dengan progres realisasi di bawah batas, dari yang paling rendah (maksimal 20).", "{\"batas\": angka 0 sampai 100, default 50}", false),
+    ("pekerjaan_cari", "Cari pekerjaan aktif berdasarkan kata dalam nama paket (maksimal 10).", "{\"kata\": teks}", false),
+    ("kontrak_ringkasan", "Jumlah dan total nilai kontrak dari pekerjaan aktif, serta kontrak yang selesai dalam 90 hari ke depan (maksimal 10 daftar).", "{}", false),
+    ("realisasi_keuangan", "Total realisasi keuangan dan 10 pekerjaan dengan realisasi terbesar.", "{}", false),
+    ("rekap_kecamatan", "Jumlah pekerjaan aktif dan pagu per kecamatan (maksimal 50 kecamatan).", "{}", false),
+    ("cari_surat", "Cari surat di tahun anggaran berdasarkan nomor atau perihal (maksimal 10), beserta jumlah surat tahun itu.", "{\"kata\": teks}", false),
+    ("kualitas_data", "Ringkasan temuan kualitas data pekerjaan. Hanya untuk admin.", "{}", true),
+];
+
+/// Daftar tool untuk prompt, tanpa tool admin bila pengguna bukan admin.
+fn daftar_tool(is_admin: bool) -> String {
+    TOOLS
+        .iter()
+        .filter(|t| is_admin || !t.3)
+        .map(|t| format!("- {}: {} Parameter: {}", t.0, t.1, t.2))
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+/// Escape wildcard LIKE agar kata pengguna dicari apa adanya.
+fn escape_like(kata: &str) -> String {
+    kata.replace('\\', "").replace('%', "").replace('_', "")
+}
 
 fn filter_tahun(tahun: &str) -> PekerjaanFilter {
     PekerjaanFilter {
@@ -324,6 +347,165 @@ async fn jalankan_tool(
                 Some(jumlah),
             ))
         }
+        "kontrak_ringkasan" => {
+            let scope = access::restriction(user_id, roles, "p");
+            let (where_sql, mut binds) = f.where_clause();
+            binds.extend(scope.binds.iter().map(u64::to_string));
+            let kondisi = format!("k.id_pekerjaan IN (SELECT p.id FROM tbl_pekerjaan p{where_sql}{})", scope.sql);
+            let sql = format!(
+                "SELECT CAST(COUNT(*) AS SIGNED) AS n, CAST(COALESCE(SUM(k.nilai_kontrak), 0) AS DOUBLE) AS total, \
+                 CAST(COALESCE(SUM(CASE WHEN k.tgl_selesai BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 90 DAY) THEN 1 ELSE 0 END), 0) AS SIGNED) AS berakhir \
+                 FROM tbl_kontrak k WHERE {kondisi}"
+            );
+            let mut q = sqlx::query(&sql);
+            for b in &binds {
+                q = q.bind(b);
+            }
+            let row = q.fetch_one(pool).await.map_err(internal)?;
+            let n: i64 = row.try_get("n").map_err(internal)?;
+            let total: f64 = row.try_get("total").map_err(internal)?;
+            let berakhir: i64 = row.try_get("berakhir").map_err(internal)?;
+
+            let daftar_sql = format!(
+                "SELECT k.kode_paket AS kode_paket, CAST(k.nilai_kontrak AS DOUBLE) AS nilai, DATE_FORMAT(k.tgl_selesai, '%Y-%m-%d') AS tgl_selesai \
+                 FROM tbl_kontrak k WHERE {kondisi} AND k.tgl_selesai BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 90 DAY) \
+                 ORDER BY k.tgl_selesai LIMIT 10"
+            );
+            let mut dq = sqlx::query(&daftar_sql);
+            for b in &binds {
+                dq = dq.bind(b);
+            }
+            let daftar: Vec<Value> = dq
+                .fetch_all(pool)
+                .await
+                .map_err(internal)?
+                .iter()
+                .map(|r| {
+                    json!({
+                        "kode_paket": r.try_get::<Option<String>, _>("kode_paket").ok().flatten(),
+                        "nilai": r.try_get::<Option<f64>, _>("nilai").ok().flatten(),
+                        "tgl_selesai": r.try_get::<Option<String>, _>("tgl_selesai").ok().flatten(),
+                    })
+                })
+                .collect();
+            Ok((
+                json!({ "jumlahKontrak": n, "totalNilaiKontrak": total, "berakhirDalam90Hari": berakhir, "daftarBerakhir": daftar }),
+                Some(n),
+            ))
+        }
+        "realisasi_keuangan" => {
+            let scope = access::restriction(user_id, roles, "p");
+            let (where_sql, mut binds) = f.where_clause();
+            binds.extend(scope.binds.iter().map(u64::to_string));
+            let kondisi = format!(
+                "h.tipe = 'realisasi' AND h.jenis = 'keuangan' AND h.pekerjaan_id IN (SELECT p.id FROM tbl_pekerjaan p{where_sql}{})",
+                scope.sql
+            );
+            let total_sql = format!(
+                "SELECT CAST(COALESCE(SUM(h.nilai), 0) AS DOUBLE) AS total FROM pekerjaan_progress_estimasi_history h WHERE {kondisi}"
+            );
+            let mut tq = sqlx::query(&total_sql);
+            for b in &binds {
+                tq = tq.bind(b);
+            }
+            let total: f64 = tq.fetch_one(pool).await.map_err(internal)?.try_get("total").map_err(internal)?;
+
+            let top_sql = format!(
+                "SELECT CAST(h.pekerjaan_id AS SIGNED) AS pid, p.nama_paket AS nama, CAST(SUM(h.nilai) AS DOUBLE) AS total \
+                 FROM pekerjaan_progress_estimasi_history h JOIN tbl_pekerjaan p ON p.id = h.pekerjaan_id \
+                 WHERE {kondisi} GROUP BY h.pekerjaan_id, p.nama_paket ORDER BY total DESC LIMIT 10"
+            );
+            let mut hq = sqlx::query(&top_sql);
+            for b in &binds {
+                hq = hq.bind(b);
+            }
+            let top: Vec<Value> = hq
+                .fetch_all(pool)
+                .await
+                .map_err(internal)?
+                .iter()
+                .map(|r| {
+                    json!({
+                        "id": r.try_get::<i64, _>("pid").ok(),
+                        "nama": r.try_get::<Option<String>, _>("nama").ok().flatten(),
+                        "realisasi": r.try_get::<f64, _>("total").ok(),
+                    })
+                })
+                .collect();
+            let jumlah = top.len() as i64;
+            Ok((json!({ "totalRealisasiKeuangan": total, "terbesar": top }), Some(jumlah)))
+        }
+        "rekap_kecamatan" => {
+            let scope = access::restriction(user_id, roles, "p");
+            let (where_sql, mut binds) = f.where_clause();
+            binds.extend(scope.binds.iter().map(u64::to_string));
+            let sql = format!(
+                "SELECT COALESCE(k.n_kec, '(tanpa kecamatan)') AS nama, CAST(COUNT(*) AS SIGNED) AS jumlah, \
+                 CAST(COALESCE(SUM(p.pagu), 0) AS DOUBLE) AS pagu \
+                 FROM tbl_pekerjaan p LEFT JOIN tbl_kecamatan k ON k.id = p.kecamatan_id{where_sql}{} \
+                 GROUP BY p.kecamatan_id, k.n_kec ORDER BY pagu DESC LIMIT 50",
+                scope.sql
+            );
+            let mut q = sqlx::query(&sql);
+            for b in &binds {
+                q = q.bind(b);
+            }
+            let rows = q.fetch_all(pool).await.map_err(internal)?;
+            let hasil: Vec<Value> = rows
+                .iter()
+                .map(|r| {
+                    json!({
+                        "kecamatan": r.try_get::<Option<String>, _>("nama").ok().flatten(),
+                        "jumlahPekerjaan": r.try_get::<i64, _>("jumlah").ok(),
+                        "pagu": r.try_get::<f64, _>("pagu").ok(),
+                    })
+                })
+                .collect();
+            let jumlah = hasil.len() as i64;
+            Ok((json!({ "kecamatan": hasil }), Some(jumlah)))
+        }
+        "cari_surat" => {
+            let kata = escape_like(args.get("kata").and_then(Value::as_str).unwrap_or("").trim());
+            let kata: String = kata.chars().take(100).collect();
+            let tahun_angka: i64 = tahun.parse().map_err(internal)?;
+            let jumlah_tahun: i64 = sqlx::query_scalar("SELECT CAST(COUNT(*) AS SIGNED) FROM surat WHERE tahun = ?")
+                .bind(tahun_angka)
+                .fetch_one(pool)
+                .await
+                .map_err(internal)?;
+            if kata.trim().is_empty() {
+                return Ok((json!({ "jumlahSuratTahunIni": jumlah_tahun, "hasil": [] }), Some(0)));
+            }
+            let pola = format!("%{kata}%");
+            let rows = sqlx::query(
+                "SELECT s.nomor AS nomor, s.perihal AS perihal, s.tujuan AS tujuan, DATE_FORMAT(s.tanggal, '%Y-%m-%d') AS tanggal \
+                 FROM surat s WHERE s.tahun = ? AND (s.nomor LIKE ? OR s.perihal LIKE ?) ORDER BY s.tanggal DESC, s.id DESC LIMIT 10",
+            )
+            .bind(tahun_angka)
+            .bind(&pola)
+            .bind(&pola)
+            .fetch_all(pool)
+            .await
+            .map_err(internal)?;
+            let hasil: Vec<Value> = rows
+                .iter()
+                .map(|r| {
+                    json!({
+                        "nomor": r.try_get::<Option<String>, _>("nomor").ok().flatten(),
+                        "perihal": r.try_get::<Option<String>, _>("perihal").ok().flatten(),
+                        "tujuan": r.try_get::<Option<String>, _>("tujuan").ok().flatten(),
+                        "tanggal": r.try_get::<Option<String>, _>("tanggal").ok().flatten(),
+                    })
+                })
+                .collect();
+            let jumlah = hasil.len() as i64;
+            Ok((json!({ "jumlahSuratTahunIni": jumlah_tahun, "hasil": hasil }), Some(jumlah)))
+        }
+        "kualitas_data" => {
+            crate::notifications::require_admin(pool, user_id).await?;
+            let stats = crate::quality_insight::stats_value(pool, Some(tahun)).await?;
+            Ok((Value::Object(stats), None))
+        }
         _ => Err(ApiError::new(StatusCode::BAD_REQUEST, "Tool tidak dikenal.")),
     }
 }
@@ -348,6 +530,7 @@ pub async fn tanya(
     }
 
     let roles = auth::login::roles_of(&state.pool, user.user_id).await.map_err(internal)?;
+    let is_admin = crate::notifications::require_admin(&state.pool, user.user_id).await.is_ok();
     let mulai = Instant::now();
 
     // Langkah 1: model memilih tool. Nama yang tidak ada di daftar ditolak.
@@ -358,7 +541,7 @@ pub async fn tanya(
                 "role": "system",
                 "content": format!(
                     "Pilih satu tool untuk menjawab pertanyaan tentang data pembangunan air minum dan sanitasi. \
-                     Balas HANYA dengan JSON: {{\"tool\": \"<nama>\", \"args\": {{...}}}} atau {{\"tool\": null, \"alasan\": \"<singkat>\"}} bila tidak ada yang cocok.\nTools:\n{DAFTAR_TOOL}", DAFTAR_TOOL = DAFTAR_TOOL
+                     Balas HANYA dengan JSON: {{\"tool\": \"<nama>\", \"args\": {{...}}}} atau {{\"tool\": null, \"alasan\": \"<singkat>\"}} bila tidak ada yang cocok.\nTools:\n{daftar}", daftar = daftar_tool(is_admin)
                 )
             },
             { "role": "user", "content": pertanyaan }
@@ -369,7 +552,9 @@ pub async fn tanya(
 
     let pilihan = parse_json_dari_model(&pilihan_text);
     let nama = pilihan.as_ref().and_then(|p| p["tool"].as_str()).map(str::to_string);
-    let nama_valid = matches!(nama.as_deref(), Some("statistik_dashboard" | "pekerjaan_progres_rendah" | "pekerjaan_cari"));
+    let nama_valid = TOOLS
+        .iter()
+        .any(|t| Some(t.0) == nama.as_deref() && (is_admin || !t.3));
     if !nama_valid {
         catat(&state.pool, user.user_id, "tanya", None, &Value::Null, Some(&pertanyaan), None, &cfg.model, mulai.elapsed().as_millis(), "tidak_cocok").await;
         return Ok(Json(json!({
