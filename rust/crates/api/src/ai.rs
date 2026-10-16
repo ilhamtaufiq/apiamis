@@ -245,9 +245,10 @@ const TOOLS: &[(&str, &str, &str, bool)] = &[
     ("statistik_dashboard", "Jumlah pekerjaan aktif dan total pagu untuk tahun anggaran.", "{}", false),
     ("pekerjaan_progres_rendah", "Pekerjaan aktif dengan progres realisasi di bawah batas, dari yang paling rendah (maksimal 20).", "{\"batas\": angka 0 sampai 100, default 50}", false),
     ("pekerjaan_cari", "Cari pekerjaan aktif berdasarkan kata dalam nama paket (maksimal 10).", "{\"kata\": teks}", false),
-    ("kontrak_ringkasan", "Jumlah dan total nilai kontrak dari pekerjaan aktif, serta kontrak yang selesai dalam 90 hari ke depan (maksimal 10 daftar).", "{}", false),
-    ("realisasi_keuangan", "Total realisasi keuangan dan 10 pekerjaan dengan realisasi terbesar.", "{}", false),
+    ("kontrak_ringkasan", "Jumlah pekerjaan aktif yang sudah berkontrak, jumlah kontrak dan total nilainya, serta kontrak yang selesai dalam 90 hari ke depan (maksimal 10 daftar).", "{}", false),
+    ("realisasi_keuangan", "Total realisasi keuangan (SP2D) dan 10 pekerjaan dengan realisasi terbesar, serta 10 SP2D terbaru lengkap dengan nomor dan tanggalnya. Bisa dibatasi periode tanggal.", "{\"dari\": \"YYYY-MM-DD opsional\", \"sampai\": \"YYYY-MM-DD opsional\"}", false),
     ("rekap_kecamatan", "Jumlah pekerjaan aktif dan pagu per kecamatan (maksimal 50 kecamatan).", "{}", false),
+    ("rekap_desa", "Jumlah pekerjaan aktif dan pagu per desa (maksimal 50 desa), beserta berapa desa yang sudah tercakup dari total desa.", "{}", false),
     ("cari_surat", "Cari surat di tahun anggaran berdasarkan nomor atau perihal (maksimal 10), beserta jumlah surat tahun itu.", "{\"kata\": teks}", false),
     ("kualitas_data", "Ringkasan temuan kualitas data pekerjaan. Hanya untuk admin.", "{}", true),
 ];
@@ -352,6 +353,19 @@ async fn jalankan_tool(
             let (where_sql, mut binds) = f.where_clause();
             binds.extend(scope.binds.iter().map(u64::to_string));
             let kondisi = format!("k.id_pekerjaan IN (SELECT p.id FROM tbl_pekerjaan p{where_sql}{})", scope.sql);
+            // Pekerjaan yang berkontrak: lewat kolom `id_pekerjaan` atau tabel penghubung `kontrak_pekerjaan`.
+            let berkontrak = format!(
+                "SELECT COUNT(*) FROM tbl_pekerjaan p{where_sql} AND p.id IN \
+                 (SELECT k.id_pekerjaan FROM tbl_kontrak k WHERE k.id_pekerjaan IS NOT NULL \
+                  UNION SELECT kp.pekerjaan_id FROM kontrak_pekerjaan kp){}",
+                scope.sql
+            );
+            let mut bq = sqlx::query_scalar::<_, i64>(&berkontrak);
+            for b in &binds {
+                bq = bq.bind(b);
+            }
+            let jumlah_pekerjaan: i64 = bq.fetch_one(pool).await.map_err(internal)?;
+
             let sql = format!(
                 "SELECT CAST(COUNT(*) AS SIGNED) AS n, CAST(COALESCE(SUM(k.nilai_kontrak), 0) AS DOUBLE) AS total, \
                  CAST(COALESCE(SUM(CASE WHEN k.tgl_selesai BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 90 DAY) THEN 1 ELSE 0 END), 0) AS SIGNED) AS berakhir \
@@ -389,21 +403,47 @@ async fn jalankan_tool(
                 })
                 .collect();
             Ok((
-                json!({ "jumlahKontrak": n, "totalNilaiKontrak": total, "berakhirDalam90Hari": berakhir, "daftarBerakhir": daftar }),
-                Some(n),
+                json!({
+                    "jumlahPekerjaanBerkontrak": jumlah_pekerjaan,
+                    "jumlahKontrak": n,
+                    "totalNilaiKontrak": total,
+                    "berakhirDalam90Hari": berakhir,
+                    "daftarBerakhir": daftar,
+                }),
+                Some(jumlah_pekerjaan),
             ))
         }
         "realisasi_keuangan" => {
             let scope = access::restriction(user_id, roles, "p");
-            let (where_sql, mut binds) = f.where_clause();
-            binds.extend(scope.binds.iter().map(u64::to_string));
-            let kondisi = format!(
-                "h.tipe = 'realisasi' AND h.jenis = 'keuangan' AND h.pekerjaan_id IN (SELECT p.id FROM tbl_pekerjaan p{where_sql}{})",
-                scope.sql
-            );
-            let total_sql = format!(
-                "SELECT CAST(COALESCE(SUM(h.nilai), 0) AS DOUBLE) AS total FROM pekerjaan_progress_estimasi_history h WHERE {kondisi}"
-            );
+            let (where_sql, mut where_binds) = f.where_clause();
+            where_binds.extend(scope.binds.iter().map(u64::to_string));
+
+            // Periode opsional, dicek sebagai tanggal agar input tidak sembarang teks.
+            let tanggal = |k: &str| -> Result<Option<String>, ApiError> {
+                match args.get(k).and_then(Value::as_str).map(str::trim).filter(|v| !v.is_empty()) {
+                    None => Ok(None),
+                    Some(v) => chrono::NaiveDate::parse_from_str(v, "%Y-%m-%d")
+                        .map(|d| Some(d.format("%Y-%m-%d").to_string()))
+                        .map_err(|_| ApiError::new(StatusCode::BAD_REQUEST, format!("Format {k} harus YYYY-MM-DD."))),
+                }
+            };
+            let dari = tanggal("dari")?;
+            let sampai = tanggal("sampai")?;
+
+            let mut kondisi = String::from("h.tipe = 'realisasi' AND h.jenis = 'keuangan' AND h.tahun_anggaran = ?");
+            let mut binds: Vec<String> = vec![tahun.to_string()];
+            if let Some(d) = &dari {
+                kondisi.push_str(" AND h.tanggal >= ?");
+                binds.push(d.clone());
+            }
+            if let Some(d) = &sampai {
+                kondisi.push_str(" AND h.tanggal <= ?");
+                binds.push(d.clone());
+            }
+            kondisi.push_str(&format!(" AND h.pekerjaan_id IN (SELECT p.id FROM tbl_pekerjaan p{where_sql}{})", scope.sql));
+            binds.extend(where_binds);
+
+            let total_sql = format!("SELECT CAST(COALESCE(SUM(h.nilai), 0) AS DOUBLE) AS total FROM pekerjaan_progress_estimasi_history h WHERE {kondisi}");
             let mut tq = sqlx::query(&total_sql);
             for b in &binds {
                 tq = tq.bind(b);
@@ -432,8 +472,45 @@ async fn jalankan_tool(
                     })
                 })
                 .collect();
-            let jumlah = top.len() as i64;
-            Ok((json!({ "totalRealisasiKeuangan": total, "terbesar": top }), Some(jumlah)))
+
+            let sp2d_sql = format!(
+                "SELECT h.nomor_sp2d AS nomor, DATE_FORMAT(h.tanggal, '%Y-%m-%d') AS tanggal, \
+                 DATE_FORMAT(h.tanggal_pencairan, '%Y-%m-%d') AS tanggal_pencairan, CAST(h.nilai AS DOUBLE) AS nilai, p.nama_paket AS nama \
+                 FROM pekerjaan_progress_estimasi_history h JOIN tbl_pekerjaan p ON p.id = h.pekerjaan_id \
+                 WHERE {kondisi} ORDER BY h.tanggal DESC, h.id DESC LIMIT 10"
+            );
+            let mut sq = sqlx::query(&sp2d_sql);
+            for b in &binds {
+                sq = sq.bind(b);
+            }
+            let sp2d: Vec<Value> = sq
+                .fetch_all(pool)
+                .await
+                .map_err(internal)?
+                .iter()
+                .map(|r| {
+                    json!({
+                        "nomor_sp2d": r.try_get::<Option<String>, _>("nomor").ok().flatten(),
+                        "tanggal": r.try_get::<Option<String>, _>("tanggal").ok().flatten(),
+                        "tanggal_pencairan": r.try_get::<Option<String>, _>("tanggal_pencairan").ok().flatten(),
+                        "nilai": r.try_get::<Option<f64>, _>("nilai").ok().flatten(),
+                        "pekerjaan": r.try_get::<Option<String>, _>("nama").ok().flatten(),
+                    })
+                })
+                .collect();
+
+            let jumlah = sp2d.len() as i64;
+            Ok((
+                json!({
+                    "tahun": tahun,
+                    "dari": dari,
+                    "sampai": sampai,
+                    "totalRealisasiKeuangan": total,
+                    "terbesar": top,
+                    "sp2dTerbaru": sp2d,
+                }),
+                Some(jumlah),
+            ))
         }
         "rekap_kecamatan" => {
             let scope = access::restriction(user_id, roles, "p");
@@ -463,6 +540,55 @@ async fn jalankan_tool(
                 .collect();
             let jumlah = hasil.len() as i64;
             Ok((json!({ "kecamatan": hasil }), Some(jumlah)))
+        }
+        "rekap_desa" => {
+            let scope = access::restriction(user_id, roles, "p");
+            let (where_sql, mut binds) = f.where_clause();
+            binds.extend(scope.binds.iter().map(u64::to_string));
+            let sql = format!(
+                "SELECT COALESCE(d.n_desa, '(tanpa desa)') AS desa, COALESCE(k.n_kec, '') AS kecamatan, \
+                 CAST(COUNT(*) AS SIGNED) AS jumlah, CAST(COALESCE(SUM(p.pagu), 0) AS DOUBLE) AS pagu \
+                 FROM tbl_pekerjaan p LEFT JOIN tbl_desa d ON d.id = p.desa_id LEFT JOIN tbl_kecamatan k ON k.id = d.kecamatan_id{where_sql}{} \
+                 GROUP BY p.desa_id, d.n_desa, k.n_kec ORDER BY pagu DESC LIMIT 50",
+                scope.sql
+            );
+            let mut q = sqlx::query(&sql);
+            for b in &binds {
+                q = q.bind(b);
+            }
+            let rows = q.fetch_all(pool).await.map_err(internal)?;
+            let hasil: Vec<Value> = rows
+                .iter()
+                .map(|r| {
+                    json!({
+                        "desa": r.try_get::<Option<String>, _>("desa").ok().flatten(),
+                        "kecamatan": r.try_get::<Option<String>, _>("kecamatan").ok().flatten(),
+                        "jumlahPekerjaan": r.try_get::<i64, _>("jumlah").ok(),
+                        "pagu": r.try_get::<f64, _>("pagu").ok(),
+                    })
+                })
+                .collect();
+
+            // Cakupan: desa yang punya pekerjaan aktif (dalam scope) dibanding seluruh desa.
+            let cakupan_sql = format!(
+                "SELECT CAST(COUNT(DISTINCT p.desa_id) AS SIGNED) FROM tbl_pekerjaan p{where_sql}{} AND p.desa_id IS NOT NULL",
+                scope.sql
+            );
+            let mut cq = sqlx::query_scalar::<_, i64>(&cakupan_sql);
+            for b in &binds {
+                cq = cq.bind(b);
+            }
+            let tercakup = cq.fetch_one(pool).await.map_err(internal)?;
+            let total_desa: i64 = sqlx::query_scalar("SELECT CAST(COUNT(*) AS SIGNED) FROM tbl_desa")
+                .fetch_one(pool)
+                .await
+                .map_err(internal)?;
+
+            let jumlah = hasil.len() as i64;
+            Ok((
+                json!({ "jumlahDesaTercakup": tercakup, "jumlahDesaTotal": total_desa, "desa": hasil }),
+                Some(jumlah),
+            ))
         }
         "cari_surat" => {
             let kata = escape_like(args.get("kata").and_then(Value::as_str).unwrap_or("").trim());
