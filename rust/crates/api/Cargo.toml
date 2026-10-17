@@ -37,6 +37,7 @@ regex = "1"
 md-5 = "0.10"
 futures-util = "0.3"
 pulldown-cmark = { version = "0.13", default-features = false, features = ["html"] }
+tantivy = "0.22"
 
 [dev-dependencies]
 tower.workspace = true
