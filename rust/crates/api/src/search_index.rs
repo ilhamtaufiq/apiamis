@@ -52,6 +52,90 @@ fn skema() -> (Schema, Bidang) {
     (b.build(), Bidang { id, nama_paket, kode_rekening, penyedia })
 }
 
+/// Membuang akhiran partikel, kata ganti milik, dan imbuhan turunan Bahasa Indonesia dari satu kata.
+/// Sederhana (tanpa kamus): cukup agar "pembangunan", "membangun", "dibangun", dan "bangunan" sama-sama
+/// menjadi "bangun". Dipakai sama untuk dokumen dan query, jadi kesalahan kecil tetap konsisten.
+pub fn stem(kata: &str) -> String {
+    let asli = kata.to_lowercase();
+    if asli.chars().count() <= 3 {
+        return asli;
+    }
+    let mut w = asli.clone();
+    for akhiran in ["lah", "kah", "tah", "pun", "nya", "ku", "mu"] {
+        if let Some(r) = w.strip_suffix(akhiran).filter(|r| r.chars().count() >= 3) {
+            w = r.to_string();
+            break;
+        }
+    }
+    for akhiran in ["kan", "an", "i"] {
+        // "perbaikan" berakhiran "kan" secara huruf, tetapi akhiran sebenarnya "an" (dari "baik").
+        if akhiran == "kan" && w.starts_with("per") {
+            continue;
+        }
+        if let Some(r) = w.strip_suffix(akhiran).filter(|r| r.chars().count() >= 3) {
+            w = r.to_string();
+            break;
+        }
+    }
+    for _ in 0..2 {
+        match lepas_awalan(&w) {
+            Some(r) => w = r,
+            None => break,
+        }
+    }
+    if w.chars().count() < 3 { asli } else { w }
+}
+
+/// Satu awalan dibuang bila sisanya cukup panjang. Nasal "meng-/peng-" + vokal dikembalikan menjadi "k",
+/// dan "meny-/peny-" + vokal menjadi "s". Mengembalikan None bila tidak ada awalan yang cocok.
+fn lepas_awalan(w: &str) -> Option<String> {
+    const VOKAL: &str = "aiueo";
+    let mulai_vokal = |r: &str| r.chars().next().is_some_and(|c| VOKAL.contains(c));
+    // (awalan, pengganti bila diikuti vokal, batas panjang sisa)
+    // Urutan penting: "per-" harus dicoba sebelum "pe-", dan "ber-"/"ter-" sebelum "be-"/"te-".
+    let aturan: [(&str, &str, usize); 12] = [
+        ("peng", "k", 3),
+        ("meng", "k", 3),
+        ("peny", "s", 3),
+        ("meny", "s", 3),
+        ("pem", "p", 3),
+        ("mem", "p", 3),
+        ("pen", "t", 3),
+        ("men", "t", 3),
+        ("per", "", 4),
+        ("ber", "", 3),
+        ("ter", "", 3),
+        ("pe", "", 3),
+    ];
+    for (awalan, pengganti, minimal) in aturan {
+        let Some(r) = w.strip_prefix(awalan) else { continue };
+        if r.chars().count() < minimal {
+            continue;
+        }
+        if mulai_vokal(r) {
+            return Some(format!("{pengganti}{r}"));
+        }
+        // Konsonan: awalan dibuang, misal "membangun" -> "bangun", "pekerjaan" -> "kerja".
+        return Some(r.to_string());
+    }
+    // "di-" dan "ke-" dibuang bila sisanya cukup panjang. "se-" sengaja tidak dipakai (merusak "sedia").
+    for awalan in ["di", "ke"] {
+        if let Some(r) = w.strip_prefix(awalan).filter(|r| r.chars().count() >= 4) {
+            return Some(r.to_string());
+        }
+    }
+    None
+}
+
+/// Teks dipecah menjadi kata, lalu tiap kata di-stem. Hasilnya dipakai untuk field TEXT.
+fn stem_teks(teks: &str) -> String {
+    teks.split(|c: char| !c.is_alphanumeric())
+        .filter(|k| !k.is_empty())
+        .map(stem)
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
 /// Membangun indeks dari dokumen. Dipanggil di luar runtime async karena CPU-bound.
 pub fn bangun(docs: &[Dokumen]) -> tantivy::Result<Index> {
     let (schema, f) = skema();
@@ -60,20 +144,20 @@ pub fn bangun(docs: &[Dokumen]) -> tantivy::Result<Index> {
     for d in docs {
         writer.add_document(doc!(
             f.id => d.id,
-            f.nama_paket => d.nama_paket.as_str(),
+            f.nama_paket => stem_teks(&d.nama_paket),
             f.kode_rekening => d.kode_rekening.as_str(),
-            f.penyedia => d.penyedia.as_str(),
+            f.penyedia => stem_teks(&d.penyedia),
         ))?;
     }
     writer.commit()?;
     Ok(index)
 }
 
-/// Kata dari query: huruf dan angka saja, huruf kecil, sesuai tokenizer TEXT.
+/// Kata dari query: huruf dan angka saja, lalu di-stem seperti dokumen.
 fn kata_query(q: &str) -> Vec<String> {
     q.split(|c: char| !c.is_alphanumeric())
         .filter(|k| !k.is_empty())
-        .map(str::to_lowercase)
+        .map(stem)
         .take(MAKS_KATA)
         .collect()
 }
@@ -213,6 +297,32 @@ mod tests {
                 penyedia: "PT Air Jernih".into(),
             },
         ]
+    }
+
+    #[test]
+    fn stem_menyatukan_bentuk_turunan() {
+        for (kata, akar) in [
+            ("bangun", "bangun"),
+            ("membangun", "bangun"),
+            ("dibangun", "bangun"),
+            ("bangunan", "bangun"),
+            ("pembangunan", "bangun"),
+            ("pekerjaan", "kerja"),
+            ("mengerjakan", "kerja"),
+            ("penyediaan", "sedia"),
+            ("perbaikan", "baik"),
+            ("mempertahankan", "tahan"),
+            ("air", "air"),
+        ] {
+            assert_eq!(stem(kata), akar, "stem({kata})");
+        }
+    }
+
+    #[test]
+    fn cari_bentuk_turunan_menemukan_dokumen() {
+        let index = bangun(&contoh()).unwrap();
+        assert_eq!(cari(&index, "membangun", 10).unwrap(), vec![1]);
+        assert_eq!(cari(&index, "pembangunan bendungan", 10).unwrap(), vec![1]);
     }
 
     #[test]
