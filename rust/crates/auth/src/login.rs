@@ -15,6 +15,7 @@ pub struct UserRow {
     pub id: u64,
     pub name: String,
     pub email: String,
+    pub whatsapp: Option<String>,
     pub avatar: Option<String>,
     pub gender: Option<String>,
     pub nip: Option<String>,
@@ -68,7 +69,7 @@ pub async fn create_token(
 
 pub async fn find_by_email(pool: &MySqlPool, email: &str) -> Result<Option<UserRow>, sqlx::Error> {
     let row = sqlx::query(
-        "SELECT id, name, email, avatar, gender, nip, jabatan, unit_kerja, pangkat_golongan, email_verified_at, password, \
+        "SELECT id, name, email, whatsapp, avatar, gender, nip, jabatan, unit_kerja, pangkat_golongan, email_verified_at, password, \
          created_at, updated_at FROM users WHERE email = ? LIMIT 1",
     )
     .bind(email)
@@ -79,6 +80,7 @@ pub async fn find_by_email(pool: &MySqlPool, email: &str) -> Result<Option<UserR
             id: r.try_get("id")?,
             name: r.try_get("name")?,
             email: r.try_get("email")?,
+            whatsapp: r.try_get("whatsapp")?,
             avatar: r.try_get("avatar")?,
             gender: r.try_get("gender")?,
             nip: r.try_get("nip")?,
@@ -97,7 +99,7 @@ pub async fn find_by_email(pool: &MySqlPool, email: &str) -> Result<Option<UserR
 /// Satu user berdasarkan id, dengan kolom yang sama seperti `find_by_email`.
 pub async fn find_by_id(pool: &MySqlPool, id: u64) -> Result<Option<UserRow>, sqlx::Error> {
     let row = sqlx::query(
-        "SELECT id, name, email, avatar, gender, nip, jabatan, unit_kerja, pangkat_golongan, email_verified_at, password, \
+        "SELECT id, name, email, whatsapp, avatar, gender, nip, jabatan, unit_kerja, pangkat_golongan, email_verified_at, password, \
          created_at, updated_at FROM users WHERE id = ? LIMIT 1",
     )
     .bind(id)
@@ -108,6 +110,7 @@ pub async fn find_by_id(pool: &MySqlPool, id: u64) -> Result<Option<UserRow>, sq
             id: r.try_get("id")?,
             name: r.try_get("name")?,
             email: r.try_get("email")?,
+            whatsapp: r.try_get("whatsapp")?,
             avatar: r.try_get("avatar")?,
             gender: r.try_get("gender")?,
             nip: r.try_get("nip")?,

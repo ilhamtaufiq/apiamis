@@ -36,6 +36,7 @@ pub fn user_resource(
         "id": user.id,
         "name": user.name,
         "email": user.email,
+        "whatsapp": user.whatsapp,
         "avatar": user.avatar,
         "avatar_url": avatar_url,
         "gender": user.gender,
@@ -297,6 +298,7 @@ mod tests {
 
     fn sample() -> UserRow {
         UserRow {
+            whatsapp: None,
             id: 7,
             name: "Uji".to_string(),
             email: "uji@example.test".to_string(),
@@ -337,6 +339,7 @@ mod tests {
                 "roles",
                 "unit_kerja",
                 "updated_at",
+                "whatsapp",
             ]
         );
         assert_eq!(v["roles"], json!([{ "id": 2, "name": "pengawas" }]));

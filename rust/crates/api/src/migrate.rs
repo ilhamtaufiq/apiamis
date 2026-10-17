@@ -30,6 +30,7 @@ pub const MIGRATIONS: &[(&str, &str)] = &[
     ("0006_informasi", include_str!("../../../migrations/0006_informasi.sql")),
     ("0007_informasi_isi_mediumtext", include_str!("../../../migrations/0007_informasi_isi_mediumtext.sql")),
     ("0008_ai_logs", include_str!("../../../migrations/0008_ai_logs.sql")),
+    ("0009_whatsapp_contacts", include_str!("../../../migrations/0009_whatsapp_contacts.sql")),
 ];
 
 const LOCK_NAME: &str = "apiamis_migrate";
