@@ -28,7 +28,7 @@ use crate::{
     access,
     media::internal,
     pekerjaan::{self, PekerjaanFilter},
-    require_auth, search_index, AppState,
+    analisa_tabel, require_auth, search_index, AppState,
 };
 
 /// Batas permintaan AI per pengguna per jam.
@@ -388,6 +388,8 @@ pub(crate) const TOOLS: &[(&str, &str, &str, bool)] = &[
     ("spam_ringkasan", "Ringkasan SPAM perdesaan pada tahun anggaran: jumlah unit SPAM, desa yang sudah punya unit, sambungan rumah (SR), jiwa terlayani, jiwa BJP, serta jumlah dan nilai paket budget SPAM.", "{}", false),
     ("sanitasi_capaian", "Ringkasan sanitasi air limbah per jenis (spaldt, spalds, iplt, mck_individu, mck_komunal): jumlah infrastruktur, pemanfaat KK, jiwa, dan pembiayaan. Tidak difilter tahun karena data sanitasi tidak punya tahun anggaran.", "{}", false),
     ("pengawas_paket", "Pengawas dan jumlah paket pekerjaan aktif yang diawasinya pada tahun anggaran (maksimal 20). Bisa dipersempit dengan nama pengawas.", "{\"kata\": nama pengawas opsional}", false),
+    ("katalog_data", "Daftar tabel yang bisa dianalisis lewat analisa_tabel beserta kolomnya. Panggil dulu bila belum tahu nama kolomnya. Hanya admin.", "{}", true),
+    ("analisa_tabel", "Agregasi satu tabel: jumlah baris (count), total (sum), atau rata-rata (avg) kolom angka, opsional dikelompokkan per kolom teks. Tahun anggaran diterapkan bila tabel punya tahun, kecuali semua=true. Maksimal 20 kelompok, urut dari nilai terbesar. Hanya admin.", "{\"tabel\": kode dari katalog_data, \"agregasi\": count|sum|avg, \"kolom\": kolom angka untuk sum atau avg, \"group_by\": kolom teks opsional, \"semua\": true opsional}", true),
     ("kualitas_data", "Ringkasan temuan kualitas data pekerjaan. Hanya untuk admin.", "{}", true),
 ];
 
@@ -927,6 +929,14 @@ pub(crate) async fn jalankan_tool(
             }
             let jumlah = hasil.len() as i64;
             Ok((json!({ "pengawas": hasil }), Some(jumlah)))
+        }
+        "katalog_data" => {
+            crate::notifications::require_admin(pool, user_id).await?;
+            Ok((analisa_tabel::katalog(), None))
+        }
+        "analisa_tabel" => {
+            crate::notifications::require_admin(pool, user_id).await?;
+            analisa_tabel::jalankan(pool, args, tahun).await
         }
         "kualitas_data" => {
             crate::notifications::require_admin(pool, user_id).await?;
