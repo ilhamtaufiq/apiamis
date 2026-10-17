@@ -99,6 +99,7 @@ fn current(col: &str, user: &UserRow) -> Option<String> {
         "nip" => user.nip.clone(),
         "jabatan" => user.jabatan.clone(),
         "unit_kerja" => user.unit_kerja.clone(),
+        "whatsapp" => user.whatsapp.clone(),
         "pangkat_golongan" => user.pangkat_golongan.clone(),
         _ => None,
     }
@@ -257,6 +258,18 @@ pub async fn update_profile(
     }
     if let Some(v) = nullable_string(&input, "unit_kerja", 255, &mut errs) {
         sets.push(("unit_kerja", v));
+    }
+
+    // Nomor WhatsApp: kosong menghapus nomor, selain itu harus lolos normalisasi.
+    match input.get("whatsapp") {
+        None => {}
+        Some(Value::Null) => sets.push(("whatsapp", None)),
+        Some(Value::String(s)) if s.trim().is_empty() => sets.push(("whatsapp", None)),
+        Some(Value::String(s)) => match crate::whatsapp::normalize(s) {
+            Ok(n) => sets.push(("whatsapp", Some(n))),
+            Err(pesan) => add(&mut errs, "whatsapp", &pesan),
+        },
+        Some(_) => add(&mut errs, "whatsapp", "The whatsapp field must be a string."),
     }
     if let Some(v) = nullable_string(&input, "pangkat_golongan", 255, &mut errs) {
         sets.push(("pangkat_golongan", v));

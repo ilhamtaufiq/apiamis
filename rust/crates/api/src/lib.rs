@@ -95,6 +95,8 @@ pub mod procurement_push;
 pub mod penerima;
 pub mod penyedia;
 pub mod penyedia_write;
+pub mod penyedia_whatsapp;
+pub mod whatsapp;
 pub mod progress_estimasi;
 pub mod progress_metrics;
 pub mod progress_write;
@@ -681,6 +683,8 @@ pub fn app(config: &Config, state: AppState) -> Router {
                 .delete(document_types_write::destroy_type),
         )
         .route("/api/penyedia", get(penyedia::index).post(penyedia_write::store))
+        .route("/api/penyedia/{id}/whatsapp", get(penyedia_whatsapp::index).post(penyedia_whatsapp::store))
+        .route("/api/penyedia/{id}/whatsapp/{wa_id}", axum::routing::delete(penyedia_whatsapp::destroy))
         .route(
             "/api/pekerjaan",
             get(pekerjaan::index).post(pekerjaan_write::store),

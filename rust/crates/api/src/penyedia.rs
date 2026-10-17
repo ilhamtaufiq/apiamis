@@ -227,7 +227,11 @@ pub async fn show(
         Err(_) => None,
     };
     let row = row.ok_or_else(ApiError::not_found)?;
-    let v = with_dokumen(&state, &row).await.map_err(internal)?;
+    let mut v = with_dokumen(&state, &row).await.map_err(internal)?;
+    let whatsapp = crate::penyedia_whatsapp::daftar(&state.pool, row.id).await.map_err(internal)?;
+    if let Some(obj) = v.as_object_mut() {
+        obj.insert("whatsapp".into(), Value::Array(whatsapp));
+    }
     Ok(Json(json!({ "data": v })))
 }
 
