@@ -28,7 +28,7 @@ use crate::{
     access,
     media::internal,
     pekerjaan::{self, PekerjaanFilter},
-    require_auth, AppState,
+    require_auth, search_index, AppState,
 };
 
 /// Batas permintaan AI per pengguna per jam.
@@ -372,7 +372,7 @@ pub async fn analyze(
 pub(crate) const TOOLS: &[(&str, &str, &str, bool)] = &[
     ("statistik_dashboard", "Jumlah pekerjaan aktif dan total pagu untuk tahun anggaran.", "{}", false),
     ("pekerjaan_progres_rendah", "Pekerjaan aktif dengan progres realisasi di bawah batas, dari yang paling rendah (maksimal 20).", "{\"batas\": angka 0 sampai 100, default 50}", false),
-    ("pekerjaan_cari", "Cari pekerjaan aktif berdasarkan kata dalam nama paket (maksimal 10).", "{\"kata\": teks}", false),
+    ("pekerjaan_cari", "Cari pekerjaan aktif berdasarkan kata dalam nama paket, kode rekening, penyedia, atau lokasi, diurutkan dari yang paling relevan (maksimal 10).", "{\"kata\": teks}", false),
     ("kontrak_ringkasan", "Jumlah pekerjaan aktif yang sudah berkontrak, jumlah kontrak dan total nilainya, serta kontrak yang selesai dalam 90 hari ke depan (maksimal 10 daftar).", "{}", false),
     ("realisasi_keuangan", "Total realisasi keuangan (SP2D) dan 10 pekerjaan dengan realisasi terbesar, serta 10 SP2D terbaru lengkap dengan nomor dan tanggalnya. Bisa dibatasi periode tanggal.", "{\"dari\": \"YYYY-MM-DD opsional\", \"sampai\": \"YYYY-MM-DD opsional\"}", false),
     ("rekap_kecamatan", "Jumlah pekerjaan aktif dan pagu per kecamatan (maksimal 50 kecamatan).", "{}", false),
@@ -439,9 +439,26 @@ pub(crate) async fn jalankan_tool(
             if kata.is_empty() {
                 return Ok((json!({ "hasil": [], "jumlahTotal": 0 }), Some(0)));
             }
-            f.search = Some(kata);
             let scope = access::restriction(user_id, roles, "p");
-            let (rows, total) = pekerjaan::list(pool, &f, &scope, None, Some(10)).await.map_err(internal)?;
+            // Peringkat dari indeks tantivy (toleran typo, bentuk turunan). Bila indeks gagal, pakai LIKE.
+            let (rows, total) = match search_index::kandidat_pekerjaan(pool, &kata).await {
+                Ok(ids) => {
+                    let peringkat: std::collections::HashMap<u64, usize> =
+                        ids.iter().enumerate().map(|(i, id)| (*id, i)).collect();
+                    f.id_in = Some(ids);
+                    let (mut rows, total) = pekerjaan::list(pool, &f, &scope, None, Some(search_index::MAKS_KANDIDAT as u64))
+                        .await
+                        .map_err(internal)?;
+                    rows.sort_by_key(|r| peringkat.get(&r.id).copied().unwrap_or(usize::MAX));
+                    rows.truncate(10);
+                    (rows, total)
+                }
+                Err(e) => {
+                    eprintln!("[AI] indeks pekerjaan gagal, memakai LIKE: {}", e.message);
+                    f.search = Some(kata);
+                    pekerjaan::list(pool, &f, &scope, None, Some(10)).await.map_err(internal)?
+                }
+            };
             let hasil: Vec<Value> = rows
                 .iter()
                 .map(|r| json!({ "id": r.id, "nama": r.nama_paket, "pagu": r.pagu, "status": r.status }))

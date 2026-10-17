@@ -173,6 +173,8 @@ pub fn php_filter_int(s: &str) -> Option<i64> {
 
 #[derive(Debug, Default, Clone)]
 pub struct PekerjaanFilter {
+    /// Batasi ke daftar id tertentu, misalnya kandidat dari indeks pencarian. `Some(vec![])` tidak cocok apa pun.
+    pub id_in: Option<Vec<u64>>,
     pub tahun: Option<String>,
     pub kecamatan_id: Option<String>,
     pub desa_id: Option<String>,
@@ -200,6 +202,7 @@ impl PekerjaanFilter {
         let sort_by = q.get("sort_by").cloned().unwrap_or_default();
         let sort_dir = q.get("sort_direction").map(|s| s.to_lowercase());
         Self {
+            id_in: None,
             tahun: nonempty("tahun"),
             kecamatan_id: nonempty("kecamatan_id"),
             desa_id: nonempty("desa_id"),
@@ -223,6 +226,14 @@ impl PekerjaanFilter {
     pub(crate) fn where_clause(&self) -> (String, Vec<String>) {
         let mut sql = String::from(" WHERE 1=1");
         let mut b: Vec<String> = Vec::new();
+        if let Some(ids) = &self.id_in {
+            if ids.is_empty() {
+                sql.push_str(" AND 1=0");
+            } else {
+                sql.push_str(&format!(" AND p.id IN ({})", vec!["?"; ids.len()].join(",")));
+                b.extend(ids.iter().map(u64::to_string));
+            }
+        }
         if let Some(v) = &self.kecamatan_id {
             sql.push_str(" AND p.kecamatan_id = ?");
             b.push(v.clone());

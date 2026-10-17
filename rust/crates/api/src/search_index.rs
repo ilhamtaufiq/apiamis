@@ -26,13 +26,14 @@ const MAKS_KATA: usize = 8;
 /// Jumlah kandidat dari indeks. Urutan final diambil dari SQL setelah difilter.
 pub const MAKS_KANDIDAT: usize = 200;
 
-/// Satu pekerjaan beserta nama penyedia dari seluruh kontraknya.
+/// Satu pekerjaan beserta nama penyedia dari seluruh kontraknya, dan lokasi (desa, kecamatan, pengawas).
 #[derive(Debug, Clone)]
 pub struct Dokumen {
     pub id: u64,
     pub nama_paket: String,
     pub kode_rekening: String,
     pub penyedia: String,
+    pub lokasi: String,
 }
 
 #[derive(Clone, Copy)]
@@ -41,7 +42,10 @@ struct Bidang {
     nama_paket: Field,
     kode_rekening: Field,
     penyedia: Field,
+    lokasi: Field,
 }
+
+const BIDANG_TEKS: usize = 4;
 
 fn skema() -> (Schema, Bidang) {
     let mut b = Schema::builder();
@@ -49,7 +53,8 @@ fn skema() -> (Schema, Bidang) {
     let nama_paket = b.add_text_field("nama_paket", TEXT);
     let kode_rekening = b.add_text_field("kode_rekening", TEXT);
     let penyedia = b.add_text_field("penyedia", TEXT);
-    (b.build(), Bidang { id, nama_paket, kode_rekening, penyedia })
+    let lokasi = b.add_text_field("lokasi", TEXT);
+    (b.build(), Bidang { id, nama_paket, kode_rekening, penyedia, lokasi })
 }
 
 /// Membuang akhiran partikel, kata ganti milik, dan imbuhan turunan Bahasa Indonesia dari satu kata.
@@ -147,6 +152,7 @@ pub fn bangun(docs: &[Dokumen]) -> tantivy::Result<Index> {
             f.nama_paket => stem_teks(&d.nama_paket),
             f.kode_rekening => d.kode_rekening.as_str(),
             f.penyedia => stem_teks(&d.penyedia),
+            f.lokasi => stem_teks(&d.lokasi),
         ))?;
     }
     writer.commit()?;
@@ -162,18 +168,18 @@ fn kata_query(q: &str) -> Vec<String> {
         .collect()
 }
 
-/// Setiap kata harus cocok (AND). Pada tiap bidang, kata cocok bila awalan atau mirip (typo satu huruf
-/// untuk kata lebih dari 4 karakter).
+/// Setiap kata harus cocok (AND). Pada tiap bidang (nama, kode, penyedia, lokasi), kata cocok bila awalan
+/// atau mirip (typo satu huruf untuk kata lebih dari 4 karakter).
 fn bangun_query(index_fields: Bidang, q: &str) -> Option<Box<dyn Query>> {
     let kata = kata_query(q);
     if kata.is_empty() {
         return None;
     }
-    let mut per_kata: Vec<(Occur, Box<dyn Query>)> = Vec::new();
+    let mut per_kata: Vec<(Occur, Box<dyn Query>)> = Vec::with_capacity(kata.len());
     for k in &kata {
         let distance = if k.chars().count() > 4 { 1 } else { 0 };
-        let mut pilihan: Vec<(Occur, Box<dyn Query>)> = Vec::new();
-        for field in [index_fields.nama_paket, index_fields.kode_rekening, index_fields.penyedia] {
+        let mut pilihan: Vec<(Occur, Box<dyn Query>)> = Vec::with_capacity(BIDANG_TEKS * 2);
+        for field in [index_fields.nama_paket, index_fields.kode_rekening, index_fields.penyedia, index_fields.lokasi] {
             let term = Term::from_field_text(field, k);
             pilihan.push((Occur::Should, Box::new(FuzzyTermQuery::new(term, distance, true))));
             if let Ok(prefix) = RegexQuery::from_pattern(&format!("{k}.*"), field) {
@@ -215,11 +221,14 @@ static CACHE: OnceLock<Mutex<Option<Snapshot>>> = OnceLock::new();
 async fn muat_dokumen(pool: &MySqlPool) -> Result<Vec<Dokumen>, ApiError> {
     let rows = sqlx::query(
         "SELECT CAST(p.id AS SIGNED) AS id, p.nama_paket AS nama_paket, p.kode_rekening AS kode_rekening, \
-         pen.nama AS penyedia \
+         pen.nama AS penyedia, d.n_desa AS desa, kc.n_kec AS kecamatan, pg.nama AS pengawas \
          FROM tbl_pekerjaan p \
          LEFT JOIN kontrak_pekerjaan kp ON kp.pekerjaan_id = p.id \
          LEFT JOIN tbl_kontrak k ON k.id = kp.kontrak_id \
-         LEFT JOIN tbl_penyedia pen ON pen.id = k.id_penyedia",
+         LEFT JOIN tbl_penyedia pen ON pen.id = k.id_penyedia \
+         LEFT JOIN tbl_desa d ON d.id = p.desa_id \
+         LEFT JOIN tbl_kecamatan kc ON kc.id = p.kecamatan_id \
+         LEFT JOIN pengawas pg ON pg.id = p.pengawas_id",
     )
     .fetch_all(pool)
     .await
@@ -234,7 +243,16 @@ async fn muat_dokumen(pool: &MySqlPool) -> Result<Vec<Dokumen>, ApiError> {
             nama_paket: String::new(),
             kode_rekening: String::new(),
             penyedia: String::new(),
+            lokasi: String::new(),
         });
+        for kolom in ["desa", "kecamatan", "pengawas"] {
+            if let Some(nama) = r.try_get::<Option<String>, _>(kolom).map_err(crate::media::internal)? {
+                if !entri.lokasi.contains(&nama) {
+                    entri.lokasi.push(' ');
+                    entri.lokasi.push_str(&nama);
+                }
+            }
+        }
         if entri.nama_paket.is_empty() {
             entri.nama_paket = r
                 .try_get::<Option<String>, _>("nama_paket")
@@ -246,10 +264,10 @@ async fn muat_dokumen(pool: &MySqlPool) -> Result<Vec<Dokumen>, ApiError> {
                 .unwrap_or_default();
         }
         if let Some(nama) = r.try_get::<Option<String>, _>("penyedia").map_err(crate::media::internal)? {
-            if !entri.penyedia.is_empty() {
+            if !entri.penyedia.contains(&nama) {
                 entri.penyedia.push(' ');
+                entri.penyedia.push_str(&nama);
             }
-            entri.penyedia.push_str(&nama);
         }
     }
     Ok(per_id.into_values().collect())
@@ -283,18 +301,21 @@ mod tests {
                 nama_paket: "Pembangunan Bendungan Cianjur Utara".into(),
                 kode_rekening: "5.02.01".into(),
                 penyedia: "PT Air Jernih".into(),
+                lokasi: "Desa Cibeber Kecamatan Cianjur".into(),
             },
             Dokumen {
                 id: 2,
                 nama_paket: "Rehabilitasi Jaringan Air Bersih Desa Sukamaju".into(),
                 kode_rekening: "5.02.02".into(),
                 penyedia: "CV Tirta Mandiri".into(),
+                lokasi: "Desa Sukamaju Kecamatan Sukaresmi".into(),
             },
             Dokumen {
                 id: 3,
                 nama_paket: "Pengadaan Pipa Distribusi".into(),
                 kode_rekening: "5.02.03".into(),
                 penyedia: "PT Air Jernih".into(),
+                lokasi: "Desa Cilaku Kecamatan Cianjur".into(),
             },
         ]
     }
@@ -344,6 +365,15 @@ mod tests {
         let mut ids = cari(&index, "jernih", 10).unwrap();
         ids.sort();
         assert_eq!(ids, vec![1, 3]);
+    }
+
+    #[test]
+    fn mencari_lewat_lokasi() {
+        let index = bangun(&contoh()).unwrap();
+        let mut ids = cari(&index, "cianjur", 10).unwrap();
+        ids.sort();
+        assert_eq!(ids, vec![1, 3]);
+        assert_eq!(cari(&index, "sukaresmi", 10).unwrap(), vec![2]);
     }
 
     #[test]
