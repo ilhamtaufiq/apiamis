@@ -462,13 +462,14 @@ const TOOL_MEMORI: &str = "- zoom: {\"id\": nomor, \"n\": pangkat 2}. Membuka ga
 - date: {\"id\": nomor}. Tanggal dan jam pesan id.";
 
 fn system_giliran(is_admin: bool, tahun: &str, native: bool) -> String {
+    let glosarium = ai::GLOSARIUM;
     let balasan = if native {
         "Untuk data, panggil tool lewat function calling. Bila sudah bisa menjawab, balas dengan teks biasa dalam Bahasa Indonesia, tanpa JSON.\n\n"
     } else {
         "Balas HANYA dengan JSON, tanpa teks lain:\n- untuk memanggil tool: {\"tool\": \"<nama>\", \"args\": {...}}\n- untuk menjawab: {\"jawaban\": \"<teks>\"}\n\n"
     };
     format!(
-        "You are Asisten Data, an AI assistant for the water and sanitation data of Kabupaten Cianjur in the Arumanis app. \
+        "You are Asisten Data, an AI assistant for the water and sanitation data of Kabupaten Cianjur in the Arumanis app. {glosarium} \
 You work for one user in a single chat that never ends. Reply in Bahasa Indonesia. Tahun anggaran: {tahun}.\n\n\
 # The view\n\
 The view is your memory: the whole chat, oldest first, inside <chat> tags, as one-line summaries:\n  id+n|text   the n messages from id on, summarized.\n\

@@ -369,6 +369,12 @@ pub async fn analyze(
 
 /// Daftar tool yang boleh dipilih model: (nama, deskripsi untuk prompt, parameter, hanya admin).
 /// Nama dan parameter harus sama dengan dispatch di `jalankan_tool`.
+/// Konteks domain untuk semua prompt AI: Bidang Air Minum dan Sanitasi, Dinas Perumahan dan Kawasan Permukiman Kabupaten Cianjur.
+pub(crate) const GLOSARIUM: &str = "Konteks: aplikasi Arumanis dipakai Bidang Air Minum dan Sanitasi, Dinas Perumahan dan Kawasan Permukiman Kabupaten Cianjur. \
+Istilah: SPAM perdesaan = sistem penyediaan air minum desa (unit SPAM; SR = sambungan rumah; BJP sebagaimana tercatat di data SPAM). \
+Sanitasi air limbah: MCK (individu dan komunal), IPAL, SPALD-S (setempat), SPALD-T (terpusat). Di data: mck_individu, mck_komunal, iplt (instalasi pengolahan lumpur tinja), spalds, spaldt. \
+Gunakan istilah ini dengan benar; SPAM dan sanitasi bukan jalan atau gedung.";
+
 pub(crate) const TOOLS: &[(&str, &str, &str, bool)] = &[
     ("statistik_dashboard", "Jumlah pekerjaan aktif dan total pagu untuk tahun anggaran.", "{}", false),
     ("pekerjaan_progres_rendah", "Pekerjaan aktif dengan progres realisasi di bawah batas, dari yang paling rendah (maksimal 20).", "{\"batas\": angka 0 sampai 100, default 50}", false),
@@ -379,6 +385,9 @@ pub(crate) const TOOLS: &[(&str, &str, &str, bool)] = &[
     ("penerima_agregat", "Jumlah penerima dan jumlah jiwa per desa. Hanya agregat: nama, NIK, dan alamat tidak pernah ditampilkan, dan desa dengan kurang dari 5 penerima dirahasiakan.", "{}", false),
     ("rekap_desa", "Jumlah pekerjaan aktif dan pagu per desa (maksimal 50 desa), beserta berapa desa yang sudah tercakup dari total desa.", "{}", false),
     ("cari_surat", "Cari surat di tahun anggaran berdasarkan nomor atau perihal (maksimal 10), beserta jumlah surat tahun itu.", "{\"kata\": teks}", false),
+    ("spam_ringkasan", "Ringkasan SPAM perdesaan pada tahun anggaran: jumlah unit SPAM, desa yang sudah punya unit, sambungan rumah (SR), jiwa terlayani, jiwa BJP, serta jumlah dan nilai paket budget SPAM.", "{}", false),
+    ("sanitasi_capaian", "Ringkasan sanitasi air limbah per jenis (spaldt, spalds, iplt, mck_individu, mck_komunal): jumlah infrastruktur, pemanfaat KK, jiwa, dan pembiayaan. Tidak difilter tahun karena data sanitasi tidak punya tahun anggaran.", "{}", false),
+    ("pengawas_paket", "Pengawas dan jumlah paket pekerjaan aktif yang diawasinya pada tahun anggaran (maksimal 20). Bisa dipersempit dengan nama pengawas.", "{\"kata\": nama pengawas opsional}", false),
     ("kualitas_data", "Ringkasan temuan kualitas data pekerjaan. Hanya untuk admin.", "{}", true),
 ];
 
@@ -828,6 +837,97 @@ pub(crate) async fn jalankan_tool(
             let jumlah = hasil.len() as i64;
             Ok((json!({ "jumlahSuratTahunIni": jumlah_tahun, "hasil": hasil }), Some(jumlah)))
         }
+        "spam_ringkasan" => {
+            let ach = sqlx::query(
+                "SELECT CAST(COALESCE(SUM(jumlah_sr), 0) AS SIGNED) AS sr, CAST(COALESCE(SUM(jumlah_jiwa), 0) AS SIGNED) AS jiwa, \
+                 CAST(COALESCE(SUM(jumlah_bjp_jiwa), 0) AS SIGNED) AS bjp FROM tbl_spam_achievements WHERE tahun = ?",
+            )
+            .bind(tahun)
+            .fetch_one(pool)
+            .await
+            .map_err(internal)?;
+            let unit = sqlx::query(
+                "SELECT CAST(COUNT(*) AS SIGNED) AS unit, CAST(COUNT(DISTINCT desa_id) AS SIGNED) AS desa FROM tbl_unit_spam",
+            )
+            .fetch_one(pool)
+            .await
+            .map_err(internal)?;
+            let budget = sqlx::query(
+                "SELECT CAST(COUNT(*) AS SIGNED) AS paket, CAST(COALESCE(SUM(nilai_kontrak), 0) AS DOUBLE) AS nilai \
+                 FROM tbl_spam_budgets WHERE tahun = ?",
+            )
+            .bind(tahun)
+            .fetch_one(pool)
+            .await
+            .map_err(internal)?;
+            Ok((
+                json!({
+                    "tahun": tahun,
+                    "jumlahUnitSpam": unit.try_get::<i64, _>("unit").map_err(internal)?,
+                    "desaBerunitSpam": unit.try_get::<i64, _>("desa").map_err(internal)?,
+                    "sambunganRumah": ach.try_get::<i64, _>("sr").map_err(internal)?,
+                    "jiwaTerlayani": ach.try_get::<i64, _>("jiwa").map_err(internal)?,
+                    "jiwaBjp": ach.try_get::<i64, _>("bjp").map_err(internal)?,
+                    "paketBudget": budget.try_get::<i64, _>("paket").map_err(internal)?,
+                    "nilaiBudget": budget.try_get::<f64, _>("nilai").map_err(internal)?,
+                }),
+                None,
+            ))
+        }
+        "sanitasi_capaian" => {
+            let rows = sqlx::query(
+                "SELECT s.jenis AS jenis, CAST(COUNT(*) AS SIGNED) AS jumlah, \
+                 CAST(COALESCE(SUM(s.jumlah_pemanfaat_kk), 0) AS SIGNED) AS kk, \
+                 CAST(COALESCE(SUM(s.jumlah_pemanfaat_jiwa), 0) AS SIGNED) AS jiwa, \
+                 CAST(COALESCE(SUM(s.pembiayaan_total), 0) AS DOUBLE) AS biaya \
+                 FROM tbl_spm_sanitasi s GROUP BY s.jenis ORDER BY s.jenis",
+            )
+            .fetch_all(pool)
+            .await
+            .map_err(internal)?;
+            let mut per_jenis = Vec::with_capacity(rows.len());
+            for r in &rows {
+                per_jenis.push(json!({
+                    "jenis": r.try_get::<String, _>("jenis").map_err(internal)?,
+                    "jumlahInfrastruktur": r.try_get::<i64, _>("jumlah").map_err(internal)?,
+                    "pemanfaatKk": r.try_get::<i64, _>("kk").map_err(internal)?,
+                    "pemanfaatJiwa": r.try_get::<i64, _>("jiwa").map_err(internal)?,
+                    "pembiayaan": r.try_get::<f64, _>("biaya").map_err(internal)?,
+                }));
+            }
+            let jumlah: i64 = rows.iter().map(|r| r.try_get::<i64, _>("jumlah").unwrap_or(0)).sum();
+            Ok((json!({ "jumlahInfrastruktur": jumlah, "perJenis": per_jenis }), Some(jumlah)))
+        }
+        "pengawas_paket" => {
+            let kata = args.get("kata").and_then(Value::as_str).unwrap_or("").trim().chars().take(100).collect::<String>();
+            let scope = access::restriction(user_id, roles, "p");
+            let (mut where_sql, mut binds) = f.where_clause();
+            where_sql.push_str(&scope.sql);
+            binds.extend(scope.binds.iter().map(u64::to_string));
+            if !kata.is_empty() {
+                where_sql.push_str(" AND pg.nama LIKE ?");
+                binds.push(format!("%{kata}%"));
+            }
+            let sql = format!(
+                "SELECT CAST(pg.id AS SIGNED) AS id, pg.nama AS nama, CAST(COUNT(*) AS SIGNED) AS jumlah \
+                 FROM tbl_pekerjaan p INNER JOIN pengawas pg ON pg.id = p.pengawas_id{where_sql} \
+                 GROUP BY pg.id, pg.nama ORDER BY jumlah DESC, pg.nama LIMIT 20"
+            );
+            let mut q = sqlx::query(&sql);
+            for b in &binds {
+                q = q.bind(b);
+            }
+            let rows = q.fetch_all(pool).await.map_err(internal)?;
+            let mut hasil = Vec::with_capacity(rows.len());
+            for r in &rows {
+                hasil.push(json!({
+                    "pengawas": r.try_get::<String, _>("nama").map_err(internal)?,
+                    "jumlahPaket": r.try_get::<i64, _>("jumlah").map_err(internal)?,
+                }));
+            }
+            let jumlah = hasil.len() as i64;
+            Ok((json!({ "pengawas": hasil }), Some(jumlah)))
+        }
         "kualitas_data" => {
             crate::notifications::require_admin(pool, user_id).await?;
             let stats = crate::quality_insight::stats_value(pool, Some(tahun)).await?;
@@ -909,7 +1009,7 @@ pub async fn tanya(
         json!([
             {
                 "role": "system",
-                "content": "Jawab pertanyaan dalam Bahasa Indonesia HANYA berdasarkan data JSON yang diberikan. Sebut angka persis seperti di data. Bila data bersifat terpotong (terpotong: true) atau tidak menjawab pertanyaan, katakan itu. Jangan mengarang."
+                "content": format!("{GLOSARIUM}\n\nJawab pertanyaan dalam Bahasa Indonesia HANYA berdasarkan data JSON yang diberikan. Sebut angka persis seperti di data. Bila data bersifat terpotong (terpotong: true) atau tidak menjawab pertanyaan, katakan itu. Jangan mengarang.")
             },
             { "role": "user", "content": format!("Pertanyaan: {pertanyaan}\n\nData ({nama}):\n{data_text}") }
         ]),
