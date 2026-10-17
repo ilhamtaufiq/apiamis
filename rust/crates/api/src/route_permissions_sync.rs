@@ -18,15 +18,8 @@
 //! - Semua langkah berjalan dalam satu transaksi. Laravel tidak memakai transaksi, jadi bila
 //!   gagal di tengah jalan Laravel meninggalkan sebagian rule, sedangkan Rust tidak menyisakan apa pun.
 //!
-//! Penjagaan drift: `ROUTES_SOURCE_SHA256` adalah SHA-256 berkas yang menentukan rute (lihat
-//! `source_digest`). Tes `route_table_matches_sources` gagal bila berkas itu berubah. Untuk membuat
-//! ulang `ROUTES` (perlu PHP dan `vendor/` lengkap), jalankan dari root repo:
-//! `php -r 'require "vendor/autoload.php"; $app = require "bootstrap/app.php";
-//! $app->make(Illuminate\Contracts\Console\Kernel::class)->bootstrap();
-//! foreach (\Illuminate\Support\Facades\Route::getRoutes() as $r) echo json_encode([$r->uri(),
-//! array_values($r->methods()), $r->getName()]), "\n";'`
-//! Lalu ubah tiap baris menjadi `RouteEntry` dan setel `ROUTES_SOURCE_SHA256` ke digest yang
-//! dilaporkan tes.
+//! `ROUTES` adalah salinan tetap dari tabel rute Laravel yang lama. Sumber PHP sudah dihapus dari repo,
+//! jadi tabel ini tidak lagi diperbarui otomatis.
 
 use std::{collections::HashSet, sync::OnceLock};
 
@@ -64,12 +57,6 @@ struct RouteEntry {
     name: Option<&'static str>,
 }
 
-/// SHA-256 gabungan berkas sumber rute. Lihat `source_digest` dan modul ini.
-#[cfg(test)]
-// Digest diperbarui setelah modul Rust-only `skp_jurnal` (`/api/skp/jurnal`) ditambahkan ke
-// `lib.rs`. Rute itu tidak ada di Laravel, jadi tidak masuk `ROUTES` (yang meniru Route::getRoutes()).
-// Bila rute Laravel berubah, buat ulang `ROUTES` seperti dijelaskan di dokumentasi modul ini.
-const ROUTES_SOURCE_SHA256: &str = "86c91476a07083f44cc165c4af820b5462d0e463494a1e01224f8aa14ba17aa6";
 
 /// Daftar rute dari `Route::getRoutes()` Laravel, dalam urutan router.
 const ROUTES: &[RouteEntry] = &[
@@ -2519,50 +2506,8 @@ async fn write_audit(
 /// `app/Providers/*.php`, `bootstrap/*.php`, dan `composer.lock`. Tiap berkas masuk sebagai
 /// `path NUL isi NUL`, diurutkan menurut path.
 #[cfg(test)]
-fn source_digest() -> String {
-    use sha2::{Digest, Sha256};
-    use std::path::{Path, PathBuf};
-
-    let root = Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../../.."));
-    let mut files: Vec<PathBuf> = Vec::new();
-    for dir in ["routes", "config", "app/Providers", "bootstrap"] {
-        let entries = std::fs::read_dir(root.join(dir)).expect("direktori sumber rute");
-        for e in entries {
-            let p = e.expect("entri direktori").path();
-            if p.is_file() && p.extension().is_some_and(|x| x == "php") {
-                files.push(p);
-            }
-        }
-    }
-    files.push(root.join("composer.lock"));
-    files.sort();
-
-    let mut h = Sha256::new();
-    for f in &files {
-        let rel = f
-            .strip_prefix(root)
-            .expect("di bawah root")
-            .to_string_lossy();
-        h.update(rel.as_bytes());
-        h.update([0u8]);
-        h.update(std::fs::read(f).expect("baca berkas sumber"));
-        h.update([0u8]);
-    }
-    format!("{:x}", h.finalize())
-}
-
-#[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn route_table_matches_sources() {
-        let actual = source_digest();
-        assert_eq!(
-            actual, ROUTES_SOURCE_SHA256,
-            "berkas sumber rute berubah. Buat ulang ROUTES (lihat dokumentasi modul), lalu setel ROUTES_SOURCE_SHA256 = \"{actual}\""
-        );
-    }
 
     #[test]
     fn route_path_matches_laravel_normalisation() {
