@@ -105,6 +105,7 @@ pub mod quality_insight;
 pub mod ratelimit;
 pub mod roles;
 pub mod search;
+pub mod search_index;
 pub mod signature_library;
 pub mod sipd_pekerjaan_links;
 pub mod route_permission;

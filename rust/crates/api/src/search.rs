@@ -168,7 +168,34 @@ fn opt_str(v: Option<String>) -> Value {
 async fn search_pekerjaan(ctx: &Ctx<'_>) -> Result<Vec<(&'static str, Value)>, sqlx::Error> {
     let r = ctx.restriction();
     let tahun = tahun_filter(&ctx.tahun);
-    let mut binds = vec![ctx.match_q(), Bind::Text(ctx.like())];
+
+    // Kandidat dan peringkat dari indeks tantivy. Bila indeks gagal, kembali ke MATCH/LIKE.
+    // Hak akses dan tahun tetap diterapkan di SQL, baik untuk indeks maupun LIKE.
+    let kandidat = match crate::search_index::kandidat_pekerjaan(ctx.pool, &ctx.q).await {
+        Ok(ids) => Some(ids),
+        Err(e) => {
+            eprintln!("[search] indeks pekerjaan gagal, memakai LIKE: {}", e.message);
+            None
+        }
+    };
+    if kandidat.as_ref().is_some_and(Vec::is_empty) {
+        return Ok(Vec::new());
+    }
+    let (filter_cari, mut binds) = match &kandidat {
+        Some(ids) => (
+            format!("tbl_pekerjaan.id IN ({})", vec!["?"; ids.len()].join(",")),
+            ids.iter().map(|id| Bind::Int(*id as i64)).collect::<Vec<_>>(),
+        ),
+        None => (
+            "(MATCH(tbl_pekerjaan.nama_paket, tbl_pekerjaan.kode_rekening) AGAINST(? IN BOOLEAN MODE) \
+             OR EXISTS (SELECT * FROM tbl_kontrak INNER JOIN kontrak_pekerjaan \
+             ON tbl_kontrak.id = kontrak_pekerjaan.kontrak_id \
+             WHERE tbl_pekerjaan.id = kontrak_pekerjaan.pekerjaan_id AND EXISTS \
+             (SELECT * FROM tbl_penyedia WHERE tbl_kontrak.id_penyedia = tbl_penyedia.id AND tbl_penyedia.nama LIKE ?)))"
+                .to_string(),
+            vec![ctx.match_q(), Bind::Text(ctx.like())],
+        ),
+    };
     binds.extend(to_binds(&r));
     let mut sql = format!(
         "SELECT CAST(tbl_pekerjaan.id AS SIGNED) AS id, tbl_pekerjaan.kode_rekening AS kode_rekening, \
@@ -177,11 +204,7 @@ async fn search_pekerjaan(ctx: &Ctx<'_>) -> Result<Vec<(&'static str, Value)>, s
          FROM tbl_pekerjaan \
          LEFT JOIN tbl_desa ON tbl_desa.id = tbl_pekerjaan.desa_id \
          INNER JOIN tbl_kegiatan ON tbl_kegiatan.id = tbl_pekerjaan.kegiatan_id \
-         WHERE (MATCH(tbl_pekerjaan.nama_paket, tbl_pekerjaan.kode_rekening) AGAINST(? IN BOOLEAN MODE) \
-         OR EXISTS (SELECT * FROM tbl_kontrak INNER JOIN kontrak_pekerjaan \
-         ON tbl_kontrak.id = kontrak_pekerjaan.kontrak_id \
-         WHERE tbl_pekerjaan.id = kontrak_pekerjaan.pekerjaan_id AND EXISTS \
-         (SELECT * FROM tbl_penyedia WHERE tbl_kontrak.id_penyedia = tbl_penyedia.id AND tbl_penyedia.nama LIKE ?))) \
+         WHERE {filter_cari} \
          {}",
         r.sql
     );
@@ -189,8 +212,22 @@ async fn search_pekerjaan(ctx: &Ctx<'_>) -> Result<Vec<(&'static str, Value)>, s
         sql.push_str(" AND tbl_kegiatan.tahun_anggaran = ?");
         binds.push(Bind::Text(t.to_string()));
     }
-    sql.push_str(" LIMIT 10");
-    let base = rows(ctx.pool, &sql, &binds).await?;
+    // Dengan indeks, urutan ditentukan di Rust setelah difilter, jadi LIMIT tidak boleh memotong dulu.
+    if kandidat.is_none() {
+        sql.push_str(" LIMIT 10");
+    }
+    let mut base = rows(ctx.pool, &sql, &binds).await?;
+    if let Some(ids) = &kandidat {
+        let peringkat: std::collections::HashMap<i64, usize> =
+            ids.iter().enumerate().map(|(i, id)| (*id as i64, i)).collect();
+        base.sort_by_key(|r| {
+            r.try_get::<i64, _>("id")
+                .ok()
+                .and_then(|id| peringkat.get(&id).copied())
+                .unwrap_or(usize::MAX)
+        });
+        base.truncate(10);
+    }
 
     let ids: Vec<i64> = base.iter().map(|r| r.try_get("id")).collect::<Result<_, _>>()?;
     // Kontrak pertama per paket (pivot), beserta nama penyedianya.
