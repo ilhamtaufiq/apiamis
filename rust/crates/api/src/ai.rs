@@ -42,10 +42,11 @@ const PINDAI_MAX: u64 = 500;
 /// Jumlah hasil maksimum yang ditampilkan tool pencarian dan progres.
 const HASIL_MAX: usize = 20;
 
-struct AiConfig {
-    base_url: String,
-    api_key: Option<String>,
-    model: String,
+#[derive(Clone)]
+pub(crate) struct AiConfig {
+    pub(crate) base_url: String,
+    pub(crate) api_key: Option<String>,
+    pub(crate) model: String,
 }
 
 fn valid_base_url(v: &str) -> bool {
@@ -53,7 +54,7 @@ fn valid_base_url(v: &str) -> bool {
 }
 
 /// Membaca konfigurasi dari env setiap permintaan, supaya perubahan env tidak perlu restart.
-fn ai_config() -> Result<AiConfig, ApiError> {
+pub(crate) fn ai_config() -> Result<AiConfig, ApiError> {
     let base_url = std::env::var("AI_BASE_URL").unwrap_or_default().trim().trim_end_matches('/').to_string();
     let model = std::env::var("AI_MODEL").unwrap_or_default().trim().to_string();
     let api_key = std::env::var("AI_API_KEY")
@@ -82,19 +83,103 @@ fn cek_batas(state: &AppState, user_id: u64) -> Result<(), ApiError> {
 }
 
 /// Chat completion ke layanan OpenAI-compatible. Pesan galat dari layanan dipotong agar tidak panjang.
-async fn panggil_model(cfg: &AiConfig, messages: Value, max_tokens: u32) -> Result<String, ApiError> {
+/// Konfigurasi untuk ringkasan memori: model murah dari `AI_COMPACT_MODEL` bila diset, selain itu model utama.
+pub(crate) fn compact_config(cfg: &AiConfig) -> AiConfig {
+    let model = std::env::var("AI_COMPACT_MODEL")
+        .ok()
+        .map(|v| v.trim().to_string())
+        .filter(|v| !v.is_empty())
+        .unwrap_or_else(|| cfg.model.clone());
+    AiConfig { base_url: cfg.base_url.clone(), api_key: cfg.api_key.clone(), model }
+}
+
+/// Pemakaian token satu giliran atau satu pemanggilan ringkasan, dari field `usage` layanan AI.
+#[derive(Debug, Default, Clone, Copy)]
+pub(crate) struct Pemakaian {
+    pub prompt: u64,
+    pub completion: u64,
+}
+
+impl Pemakaian {
+    pub(crate) fn tambah(&mut self, lain: Pemakaian) {
+        self.prompt += lain.prompt;
+        self.completion += lain.completion;
+    }
+}
+
+/// Satu permintaan tool dari model. `id` diisi bila layanan memakai function calling native.
+#[derive(Debug, Clone)]
+pub(crate) struct Panggilan {
+    pub id: Option<String>,
+    pub nama: String,
+    pub args: Value,
+}
+
+/// Balasan model: teks (boleh kosong bila hanya memanggil tool) dan daftar panggilan tool native.
+#[derive(Debug, Clone)]
+pub(crate) struct Balasan {
+    pub teks: String,
+    pub panggilan: Vec<Panggilan>,
+}
+
+/// Function calling native aktif bila `AI_NATIVE_TOOLS` diset ke `1` atau `true`. Nonaktif: model memakai JSON.
+pub(crate) fn native_tools_enabled() -> bool {
+    matches!(
+        std::env::var("AI_NATIVE_TOOLS").ok().as_deref().map(str::trim),
+        Some("1") | Some("true")
+    )
+}
+
+/// Definisi tool dalam format `tools` OpenAI. Parameter ditulis sebagai deskripsi karena skema di TOOLS berbentuk teks.
+pub(crate) fn skema_tools(is_admin: bool) -> Value {
+    Value::Array(
+        TOOLS
+            .iter()
+            .filter(|t| is_admin || !t.3)
+            .map(|t| {
+                json!({
+                    "type": "function",
+                    "function": {
+                        "name": t.0,
+                        "description": t.1,
+                        "parameters": {
+                            "type": "object",
+                            "properties": {},
+                            "additionalProperties": true,
+                            "description": t.2,
+                        },
+                    },
+                })
+            })
+            .collect(),
+    )
+}
+
+/// Memanggil model dan mengembalikan teks serta panggilan tool native. Pemakaian token ditambahkan ke `pemakaian`.
+pub(crate) async fn panggil_model_lengkap(
+    cfg: &AiConfig,
+    messages: Value,
+    max_tokens: u32,
+    tools: Option<&Value>,
+    pemakaian: &mut Pemakaian,
+) -> Result<Balasan, ApiError> {
     let client = reqwest::Client::builder()
         .timeout(Duration::from_secs(60))
         .build()
         .map_err(internal)?;
+    let mut body = json!({
+        "model": cfg.model,
+        "temperature": 0.1,
+        "max_tokens": max_tokens,
+        "messages": messages,
+    });
+    if let Some(tools) = tools {
+        body["tools"] = tools.clone();
+        body["tool_choice"] = json!("auto");
+    }
     let mut req = client
         .post(format!("{}/chat/completions", cfg.base_url))
-        .json(&json!({
-            "model": cfg.model,
-            "temperature": 0.1,
-            "max_tokens": max_tokens,
-            "messages": messages,
-        }));
+        .json(&body);
     if let Some(key) = &cfg.api_key {
         req = req.bearer_auth(key);
     }
@@ -112,15 +197,52 @@ async fn panggil_model(cfg: &AiConfig, messages: Value, max_tokens: u32) -> Resu
         let pesan: String = pesan.chars().take(200).collect();
         return Err(ApiError::new(StatusCode::BAD_GATEWAY, format!("Layanan AI gagal: {pesan}")));
     }
-    payload["choices"][0]["message"]["content"]
-        .as_str()
-        .map(|s| s.trim().to_string())
-        .filter(|s| !s.is_empty())
-        .ok_or_else(|| ApiError::new(StatusCode::BAD_GATEWAY, "Model tidak mengembalikan jawaban."))
+    pemakaian.tambah(Pemakaian {
+        prompt: payload["usage"]["prompt_tokens"].as_u64().unwrap_or(0),
+        completion: payload["usage"]["completion_tokens"].as_u64().unwrap_or(0),
+    });
+
+    let pesan = &payload["choices"][0]["message"];
+    let teks = pesan["content"].as_str().map(|s| s.trim().to_string()).unwrap_or_default();
+    let panggilan: Vec<Panggilan> = pesan["tool_calls"]
+        .as_array()
+        .map(|daftar| {
+            daftar
+                .iter()
+                .filter_map(|c| {
+                    let nama = c["function"]["name"].as_str()?.to_string();
+                    // Argumen dikirim sebagai string JSON. Bila rusak, dianggap tidak ada argumen.
+                    let args = c["function"]["arguments"]
+                        .as_str()
+                        .and_then(|s| serde_json::from_str::<Value>(s).ok())
+                        .unwrap_or_else(|| json!({}));
+                    Some(Panggilan { id: c["id"].as_str().map(str::to_string), nama, args })
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    if teks.is_empty() && panggilan.is_empty() {
+        return Err(ApiError::new(StatusCode::BAD_GATEWAY, "Model tidak mengembalikan jawaban."));
+    }
+    Ok(Balasan { teks, panggilan })
+}
+
+pub(crate) async fn panggil_model(cfg: &AiConfig, messages: Value, max_tokens: u32) -> Result<String, ApiError> {
+    let mut abaikan = Pemakaian::default();
+    panggil_model_lengkap(cfg, messages, max_tokens, None, &mut abaikan)
+        .await
+        .map(|b| b.teks)
+        .and_then(|t| {
+            if t.is_empty() {
+                Err(ApiError::new(StatusCode::BAD_GATEWAY, "Model tidak mengembalikan jawaban."))
+            } else {
+                Ok(t)
+            }
+        })
 }
 
 /// Ambil JSON dari balasan model, termasuk bila dibungkus pagar kode.
-fn parse_json_dari_model(text: &str) -> Option<Value> {
+pub(crate) fn parse_json_dari_model(text: &str) -> Option<Value> {
     let bersih = text
         .trim()
         .trim_start_matches("```json")
@@ -165,7 +287,7 @@ pub fn sanitize_ringkasan(raw: &Value) -> Option<Value> {
 
 /// Catat pemanggilan AI. Kegagalan mencatat tidak menggagalkan permintaan pengguna.
 #[allow(clippy::too_many_arguments)]
-async fn catat(
+pub(crate) async fn catat(
     pool: &MySqlPool,
     user_id: u64,
     fitur: &str,
@@ -176,10 +298,11 @@ async fn catat(
     model: &str,
     durasi_ms: u128,
     status: &str,
+    pemakaian: &Pemakaian,
 ) {
     let res = sqlx::query(
-        "INSERT INTO ai_logs (user_id, fitur, tool, args_json, pertanyaan, jumlah_baris, model, durasi_ms, status, created_at) \
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())",
+        "INSERT INTO ai_logs (user_id, fitur, tool, args_json, pertanyaan, jumlah_baris, model, durasi_ms, status, prompt_tokens, completion_tokens, created_at) \
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())",
     )
     .bind(user_id)
     .bind(fitur)
@@ -190,6 +313,8 @@ async fn catat(
     .bind(model)
     .bind(durasi_ms.min(u32::MAX as u128) as u32)
     .bind(status)
+    .bind(pemakaian.prompt)
+    .bind(pemakaian.completion)
     .execute(pool)
     .await;
     if let Err(e) = res {
@@ -237,14 +362,14 @@ pub async fn analyze(
     )
     .await;
     let status = if hasil.is_ok() { "ok" } else { "gagal" };
-    catat(&state.pool, user.user_id, "analisa", None, &Value::Null, None, None, &cfg.model, mulai.elapsed().as_millis(), status).await;
+    catat(&state.pool, user.user_id, "analisa", None, &Value::Null, None, None, &cfg.model, mulai.elapsed().as_millis(), status, &Pemakaian::default()).await;
 
     Ok(Json(json!({ "analisa": hasil?, "model": cfg.model })))
 }
 
 /// Daftar tool yang boleh dipilih model: (nama, deskripsi untuk prompt, parameter, hanya admin).
 /// Nama dan parameter harus sama dengan dispatch di `jalankan_tool`.
-const TOOLS: &[(&str, &str, &str, bool)] = &[
+pub(crate) const TOOLS: &[(&str, &str, &str, bool)] = &[
     ("statistik_dashboard", "Jumlah pekerjaan aktif dan total pagu untuk tahun anggaran.", "{}", false),
     ("pekerjaan_progres_rendah", "Pekerjaan aktif dengan progres realisasi di bawah batas, dari yang paling rendah (maksimal 20).", "{\"batas\": angka 0 sampai 100, default 50}", false),
     ("pekerjaan_cari", "Cari pekerjaan aktif berdasarkan kata dalam nama paket (maksimal 10).", "{\"kata\": teks}", false),
@@ -258,7 +383,7 @@ const TOOLS: &[(&str, &str, &str, bool)] = &[
 ];
 
 /// Daftar tool untuk prompt, tanpa tool admin bila pengguna bukan admin.
-fn daftar_tool(is_admin: bool) -> String {
+pub(crate) fn daftar_tool(is_admin: bool) -> String {
     TOOLS
         .iter()
         .filter(|t| is_admin || !t.3)
@@ -281,7 +406,7 @@ fn filter_tahun(tahun: &str) -> PekerjaanFilter {
 }
 
 /// Menjalankan tool yang dipilih model dengan hak akses pengguna. Mengembalikan data dan jumlah baris.
-async fn jalankan_tool(
+pub(crate) async fn jalankan_tool(
     state: &AppState,
     user_id: u64,
     roles: &[(u64, String)],
@@ -741,7 +866,7 @@ pub async fn tanya(
         .iter()
         .any(|t| Some(t.0) == nama.as_deref() && (is_admin || !t.3));
     if !nama_valid {
-        catat(&state.pool, user.user_id, "tanya", None, &Value::Null, Some(&pertanyaan), None, &cfg.model, mulai.elapsed().as_millis(), "tidak_cocok").await;
+        catat(&state.pool, user.user_id, "tanya", None, &Value::Null, Some(&pertanyaan), None, &cfg.model, mulai.elapsed().as_millis(), "tidak_cocok", &Pemakaian::default()).await;
         return Ok(Json(json!({
             "jawaban": "Pertanyaan ini belum bisa dijawab dari data yang tersedia. Coba tanyakan tentang ringkasan dashboard, progres pekerjaan rendah, atau mencari pekerjaan dengan nama tertentu.",
             "sumber": null,
@@ -755,7 +880,7 @@ pub async fn tanya(
     let (data, jumlah) = match jalankan_tool(&state, user.user_id, &roles, &nama, &args, &tahun).await {
         Ok(v) => v,
         Err(e) => {
-            catat(&state.pool, user.user_id, "tanya", Some(&nama), &args, Some(&pertanyaan), None, &cfg.model, mulai.elapsed().as_millis(), "gagal").await;
+            catat(&state.pool, user.user_id, "tanya", Some(&nama), &args, Some(&pertanyaan), None, &cfg.model, mulai.elapsed().as_millis(), "gagal", &Pemakaian::default()).await;
             return Err(e);
         }
     };
@@ -775,7 +900,7 @@ pub async fn tanya(
     )
     .await;
     let status = if jawaban.is_ok() { "ok" } else { "gagal" };
-    catat(&state.pool, user.user_id, "tanya", Some(&nama), &args, Some(&pertanyaan), jumlah, &cfg.model, mulai.elapsed().as_millis(), status).await;
+    catat(&state.pool, user.user_id, "tanya", Some(&nama), &args, Some(&pertanyaan), jumlah, &cfg.model, mulai.elapsed().as_millis(), status, &Pemakaian::default()).await;
 
     Ok(Json(json!({
         "jawaban": jawaban?,
@@ -784,105 +909,11 @@ pub async fn tanya(
     })))
 }
 
-/// Batas giliran chat yang dikirim ke model, batas panjang per pesan, dan batas pengambilan data per giliran.
-const CHAT_MAX_TURNS: usize = 10;
+/// Batas panjang pertanyaan chat.
 const CHAT_MAX_CHARS: usize = 2_000;
-const CHAT_MAX_TOOL_STEPS: usize = 3;
 
-/// Riwayat chat dari klien. Hanya `CHAT_MAX_TURNS` pesan terakhir yang dipakai, dan pesan terakhir wajib dari pengguna.
-fn sanitize_riwayat(body: &Value) -> Result<Vec<(String, String)>, ApiError> {
-    let salah = || ApiError::new(StatusCode::BAD_REQUEST, "Riwayat chat tidak valid.");
-    let arr = body["messages"].as_array().ok_or_else(salah)?;
-    let mut out = Vec::new();
-    for m in arr.iter().rev().take(CHAT_MAX_TURNS).rev() {
-        let role = m["role"].as_str().unwrap_or("");
-        if role != "user" && role != "assistant" {
-            return Err(salah());
-        }
-        let content = m["content"].as_str().unwrap_or("").trim();
-        if content.is_empty() || content.chars().count() > CHAT_MAX_CHARS {
-            return Err(ApiError::new(StatusCode::BAD_REQUEST, "Pesan kosong atau terlalu panjang (maksimal 2.000 karakter)."));
-        }
-        out.push((role.to_string(), content.to_string()));
-    }
-    if out.last().map(|(r, _)| r.as_str()) != Some("user") {
-        return Err(ApiError::new(StatusCode::BAD_REQUEST, "Pesan terakhir harus dari pengguna."));
-    }
-    Ok(out)
-}
-
-/// Satu event SSE. Data selalu JSON.
-fn kirim(tx: &tokio::sync::mpsc::Sender<Event>, nama: &str, data: Value) {
-    let _ = tx.try_send(Event::default().event(nama).data(data.to_string()));
-}
-
-/// Loop chat: model boleh mengambil data beberapa kali (maks `CHAT_MAX_TOOL_STEPS`), lalu menjawab.
-/// Model yang tidak mengikuti format JSON, jawabannya dianggap jawaban akhir.
-async fn jalankan_chat(
-    state: &AppState,
-    cfg: &AiConfig,
-    user_id: u64,
-    roles: &[(u64, String)],
-    is_admin: bool,
-    tahun: &str,
-    riwayat: &[(String, String)],
-    tx: &tokio::sync::mpsc::Sender<Event>,
-) -> Result<(Value, Option<String>, Vec<Value>), ApiError> {
-    let system = format!(
-        "Anda asisten data pembangunan air minum dan sanitasi Kabupaten Cianjur di aplikasi Arumanis. \
-         Jawab dalam Bahasa Indonesia. Angka dan fakta hanya boleh berasal dari hasil tool. \
-         Untuk mengambil data, balas HANYA dengan JSON {{\"tool\": \"<nama>\", \"args\": {{...}}}}. \
-         Jika sudah cukup, balas HANYA dengan JSON {{\"jawaban\": \"<teks>\"}}. \
-         Bila data terpotong atau tidak menjawab pertanyaan, katakan itu dengan jujur. Tahun anggaran: {tahun}.\nTools:\n{}",
-        daftar_tool(is_admin)
-    );
-    let mut pesan = vec![json!({ "role": "system", "content": system })];
-    for (role, content) in riwayat {
-        pesan.push(json!({ "role": role, "content": content }));
-    }
-    let pertanyaan = riwayat.last().map(|(_, c)| c.clone());
-    let mut sumber: Vec<Value> = Vec::new();
-
-    for langkah in 0..=CHAT_MAX_TOOL_STEPS {
-        if langkah == CHAT_MAX_TOOL_STEPS {
-            pesan.push(json!({ "role": "user", "content": "Batas pengambilan data tercapai. Jawab sekarang dengan JSON {\"jawaban\": \"...\"}." }));
-        }
-        let balasan = panggil_model(cfg, Value::Array(pesan.clone()), 700).await?;
-        let parsed = parse_json_dari_model(&balasan);
-
-        let nama = parsed.as_ref().and_then(|p| p["tool"].as_str()).map(str::to_string);
-        let nama_valid = nama.as_deref().filter(|n| TOOLS.iter().any(|t| t.0 == *n && (is_admin || !t.3)));
-        let jawaban = parsed
-            .as_ref()
-            .and_then(|p| p["jawaban"].as_str())
-            .map(str::to_string)
-            .or_else(|| parsed.is_none().then(|| balasan.clone()));
-
-        if let (Some(nama), true) = (nama_valid, langkah < CHAT_MAX_TOOL_STEPS) {
-            kirim(tx, "status", json!({ "message": format!("Mengambil data: {nama}") }));
-            let args = parsed.as_ref().and_then(|p| p.get("args")).cloned().unwrap_or(json!({}));
-            let hasil = jalankan_tool(state, user_id, roles, nama, &args, tahun).await;
-            let (data, jumlah) = match hasil {
-                Ok((d, j)) => (d, j),
-                Err(e) => (json!({ "error": e.message }), None),
-            };
-            sumber.push(json!({ "tool": nama, "args": args, "jumlah_baris": jumlah }));
-            pesan.push(json!({ "role": "assistant", "content": balasan }));
-            let data_text: String = data.to_string().chars().take(DATA_MAX_CHARS).collect();
-            pesan.push(json!({ "role": "user", "content": format!("Hasil tool {nama}: {data_text}") }));
-            continue;
-        }
-
-        let teks = jawaban.filter(|t| !t.trim().is_empty()).unwrap_or_else(|| {
-            "Maaf, saya belum bisa menjawab dengan data yang tersedia. Coba ulangi pertanyaannya dengan lebih spesifik.".to_string()
-        });
-        return Ok((json!({ "jawaban": teks, "sumber": sumber, "model": cfg.model }), pertanyaan, sumber.clone()));
-    }
-    Err(ApiError::new(StatusCode::BAD_GATEWAY, "Chat tidak menghasilkan jawaban."))
-}
-
-/// `POST /api/ai/chat`: chat multi-giliran dengan event SSE: `status` (saat mengambil data), `done` (jawaban), `error`.
-/// Klien mengirim riwayat sendiri. Server tidak menyimpan percakapan, hanya mencatat tiap giliran di `ai_logs`.
+/// `POST /api/ai/chat`: satu giliran chat. Riwayat disimpan server (`ai_memory`), klien hanya mengirim pertanyaan.
+/// Event SSE: `status` (saat mengambil data), `done` (jawaban dan sumber), `error`.
 pub async fn chat(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -896,7 +927,10 @@ pub async fn chat(
     if tahun.len() != 4 || !tahun.chars().all(|c| c.is_ascii_digit()) {
         return Err(ApiError::new(StatusCode::BAD_REQUEST, "Tahun anggaran tidak valid."));
     }
-    let riwayat = sanitize_riwayat(&body)?;
+    let pertanyaan = body["pertanyaan"].as_str().unwrap_or("").trim().to_string();
+    if pertanyaan.is_empty() || pertanyaan.chars().count() > CHAT_MAX_CHARS {
+        return Err(ApiError::new(StatusCode::BAD_REQUEST, "Pertanyaan wajib diisi, maksimal 2.000 karakter."));
+    }
     let roles = auth::login::roles_of(&state.pool, user.user_id).await.map_err(internal)?;
     let is_admin = crate::notifications::require_admin(&state.pool, user.user_id).await.is_ok();
     let user_id = user.user_id;
@@ -904,30 +938,22 @@ pub async fn chat(
     let (tx, rx) = tokio::sync::mpsc::channel::<Event>(32);
     tokio::spawn(async move {
         let mulai = Instant::now();
-        let hasil = jalankan_chat(&state, &cfg, user_id, &roles, is_admin, &tahun, &riwayat, &tx).await;
+        let hasil = crate::ai_memory::giliran(&state, &cfg, user_id, &roles, is_admin, &tahun, &pertanyaan, &tx).await;
         match hasil {
-            Ok((done, pertanyaan, sumber)) => {
+            Ok((done, sumber, pemakaian)) => {
                 let tool = sumber.last().and_then(|s| s["tool"].as_str()).map(str::to_string);
                 let jumlah: i64 = sumber.iter().filter_map(|s| s["jumlah_baris"].as_i64()).sum();
-                catat(
-                    &state.pool,
-                    user_id,
-                    "chat",
-                    tool.as_deref(),
-                    &json!(sumber),
-                    pertanyaan.as_deref(),
-                    Some(jumlah),
-                    &cfg.model,
-                    mulai.elapsed().as_millis(),
-                    "ok",
-                )
-                .await;
-                kirim(&tx, "done", done);
+                catat(&state.pool, user_id, "chat", tool.as_deref(), &json!(sumber), Some(&pertanyaan), Some(jumlah), &cfg.model, mulai.elapsed().as_millis(), "ok", &pemakaian).await;
+                let _ = tx.try_send(Event::default().event("done").data(done.to_string()));
             }
             Err(e) => {
-                catat(&state.pool, user_id, "chat", None, &Value::Null, riwayat.last().map(|(_, c)| c.as_str()), None, &cfg.model, mulai.elapsed().as_millis(), "gagal").await;
-                kirim(&tx, "error", json!({ "message": e.message }));
+                catat(&state.pool, user_id, "chat", None, &Value::Null, Some(&pertanyaan), None, &cfg.model, mulai.elapsed().as_millis(), "gagal", &Pemakaian::default()).await;
+                let _ = tx.try_send(Event::default().event("error").data(json!({ "message": e.message }).to_string()));
             }
+        }
+        // Ringkasan dibangun setelah jawaban terkirim, supaya tidak menambah waktu tunggu.
+        if let Err(e) = crate::ai_memory::bangun_tertunda(&state.pool, &cfg, user_id).await {
+            eprintln!("[AI] gagal membangun memori chat: {}", e.message);
         }
     });
 
@@ -935,6 +961,13 @@ pub async fn chat(
         rx.recv().await.map(|ev| (Ok::<Event, Infallible>(ev), rx))
     });
     Ok(Sse::new(stream).keep_alive(KeepAlive::default()))
+}
+
+/// `GET /api/ai/chat/history`: pesan pengguna dan jawaban asisten, untuk ditampilkan saat halaman dibuka.
+pub async fn history(State(state): State<AppState>, headers: HeaderMap) -> Result<Json<Value>, ApiError> {
+    let user = require_auth(&state, &headers).await?;
+    let data = crate::ai_memory::riwayat(&state.pool, user.user_id, 60).await?;
+    Ok(Json(json!({ "data": data })))
 }
 
 #[cfg(test)]
@@ -970,24 +1003,6 @@ mod tests {
         assert_eq!(s["statistik"].as_object().unwrap().len(), 1);
         assert_eq!(s["pekerjaanPerluPerhatian"][0]["nama"].as_str().unwrap().chars().count(), 200);
         assert_eq!(s["pekerjaanPerluPerhatian"][0]["keuangan"], 0.0);
-    }
-
-    #[test]
-    fn sanitize_riwayat_ambil_sepuluh_terakhir_dan_wajib_diakhiri_pengguna() {
-        let msgs: Vec<Value> = (0..15)
-            .map(|i| json!({ "role": if i % 2 == 0 { "user" } else { "assistant" }, "content": format!("p{i}") }))
-            .collect();
-        let r = sanitize_riwayat(&json!({ "messages": msgs })).unwrap();
-        assert_eq!(r.len(), CHAT_MAX_TURNS);
-        assert_eq!(r.last().unwrap().0, "user");
-        assert_eq!(r[0].1, "p5");
-
-        let salah_akhir = json!({ "messages": [{ "role": "user", "content": "a" }, { "role": "assistant", "content": "b" }] });
-        assert!(sanitize_riwayat(&salah_akhir).is_err());
-        let role_asing = json!({ "messages": [{ "role": "system", "content": "x" }] });
-        assert!(sanitize_riwayat(&role_asing).is_err());
-        let kosong = json!({ "messages": [{ "role": "user", "content": "   " }] });
-        assert!(sanitize_riwayat(&kosong).is_err());
     }
 
     #[test]

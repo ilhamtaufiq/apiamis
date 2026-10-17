@@ -115,6 +115,7 @@ pub mod sk;
 pub mod skp_atasan;
 pub mod skp_bukti;
 pub mod ai;
+pub mod ai_memory;
 pub mod surat;
 pub mod informasi;
 pub mod skp_jurnal;
@@ -404,6 +405,7 @@ pub fn app(config: &Config, state: AppState) -> Router {
         .route("/api/ai/analyze", post(ai::analyze))
         .route("/api/ai/tanya", post(ai::tanya))
         .route("/api/ai/chat", post(ai::chat))
+        .route("/api/ai/chat/history", get(ai::history))
         .route("/api/surat", get(surat::index).post(surat::store))
         .route("/api/informasi", get(informasi::index).post(informasi::store))
         .route(
