@@ -26,6 +26,6 @@ CREATE TABLE IF NOT EXISTS ai_chat_nodes (
 
 CREATE TABLE IF NOT EXISTS ai_chat_state (
   user_id BIGINT UNSIGNED NOT NULL,
-  lines TEXT NOT NULL,
+  tampilan TEXT NOT NULL,
   PRIMARY KEY (user_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

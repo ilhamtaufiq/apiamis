@@ -189,7 +189,7 @@ async fn nodes_for(pool: &MySqlPool, user_id: u64, lines: &[Line]) -> Result<Has
 
 /// View yang tersimpan. Kosong bila belum pernah dibuat.
 async fn muat_view(pool: &MySqlPool, user_id: u64) -> Result<Vec<Line>, ApiError> {
-    let teks: Option<String> = sqlx::query_scalar("SELECT lines FROM ai_chat_state WHERE user_id = ?")
+    let teks: Option<String> = sqlx::query_scalar("SELECT tampilan FROM ai_chat_state WHERE user_id = ?")
         .bind(user_id)
         .fetch_optional(pool)
         .await
@@ -202,7 +202,7 @@ async fn muat_view(pool: &MySqlPool, user_id: u64) -> Result<Vec<Line>, ApiError
 async fn simpan_view(pool: &MySqlPool, user_id: u64, view: &[Line]) -> Result<(), ApiError> {
     let teks = serde_json::to_string(view).map_err(internal)?;
     sqlx::query(
-        "INSERT INTO ai_chat_state (user_id, lines) VALUES (?, ?) ON DUPLICATE KEY UPDATE lines = VALUES(lines)",
+        "INSERT INTO ai_chat_state (user_id, tampilan) VALUES (?, ?) ON DUPLICATE KEY UPDATE tampilan = VALUES(tampilan)",
     )
     .bind(user_id)
     .bind(teks)
