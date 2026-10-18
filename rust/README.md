@@ -1,30 +1,31 @@
 # APIAMIS (Rust)
 
-Workspace backend APIAMIS yang sedang dimigrasikan dari Laravel ke Rust (Axum).
-Rencana lengkap ada di dokumen migrasi; folder ini masih tahap awal.
+Backend APIAMIS, ditulis dengan Axum, SQLx (MySQL), dan Tokio. Penjelasan lengkap ada di [README utama](../README.md).
 
 ## Struktur
 
 ```
 rust/
   Cargo.toml          workspace
+  migrations/         SQL schema, dijalankan oleh `apiamis-api migrate`
   crates/
-    api/              binary server Axum (router, middleware)
-    shared/           konfigurasi dan error API
+    api/              binary server Axum: router, handler, migrator, fitur
+    auth/             login dan sesi
+    shared/           konfigurasi dan tipe error API
 ```
-
-Crate lain dari rencana (`db`, `auth`, `storage`, `documents`, `jobs`, `realtime`)
-ditambahkan saat modulnya mulai dikerjakan.
 
 ## Menjalankan
 
 ```bash
-cd rust
-cargo run -p api          # default port 8000, atau APP_PORT dari .env
+cargo run -p api -- migrate   # migrasi
+cargo run -p api              # server, default port 8000 (APP_PORT)
 cargo test --workspace
 ```
 
-Endpoint saat ini:
+Endpoint dasar:
 
-- `GET /up` — health (sama dengan `/up` di Laravel)
+- `GET /up` — health check
 - `GET /api/health` — info service
+- `GET /api/...` — seluruh API domain
+
+Konfigurasi lengkap ada di [.env.rust.example](../.env.rust.example).

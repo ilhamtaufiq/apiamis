@@ -1,31 +1,14 @@
-<div align="center">
-
-<img src="public/logo.png" alt="APIAMIS" width="120" />
-
 # APIAMIS
 
 ### API Manajemen Infrastruktur Sanitasi
 
 Backend REST untuk ekosistem **Arumanis** (satu data air minum & sanitasi Kabupaten Cianjur). Sumber kebenaran data, otorisasi, media, dan integrasi untuk portal admin dan panel pengawas.
 
-[![laravel](https://img.shields.io/badge/Laravel-13-ff2d20?style=for-the-badge&labelColor=111111&logo=laravel&logoColor=ff2d20)](https://laravel.com/)
-[![php](https://img.shields.io/badge/PHP-8.2+-777BB4?style=for-the-badge&labelColor=111111&logo=php&logoColor=white)](https://www.php.net/)
-[![swagger](https://img.shields.io/badge/OpenAPI-Swagger-85EA2D?style=for-the-badge&labelColor=111111&logo=swagger&logoColor=black)](#api--dokumentasi)
-[![platform](https://img.shields.io/badge/platform-0.8.0-674bb5?style=for-the-badge&labelColor=111111)](https://github.com/ilhamtaufiq/arumanis)
+Backend ini sepenuhnya ditulis dengan **Rust** (Axum + SQLx + MySQL). Sumber Laravel dan PHP sudah dihapus dari repo.
 
-<p>
-  <a href="https://apiamis.cianjur.space/api/documentation"><strong>Swagger UI</strong></a>
-  ·
-  <a href="https://arumanis.cianjur.space"><strong>Portal Arumanis</strong></a>
-  ·
-  <a href="https://arumanis.cianjur.space/pengawasan"><strong>Panel pengawas</strong></a>
-</p>
-
-| Branch | Framework | Auth | Docs |
-|:------:|:---------:|:----:|:----:|
-| `main` | Laravel 13 | Sanctum + Spatie Permission | `/api/documentation` |
-
-</div>
+| Branch | Bahasa | Framework | Database | Docs |
+|:------:|:------:|:---------:|:--------:|:----:|
+| `main` | Rust 2021 | Axum 0.8 | MySQL 8 (SQLx) | `/api` |
 
 ---
 
@@ -36,24 +19,22 @@ Backend REST untuk ekosistem **Arumanis** (satu data air minum & sanitasi Kabupa
 │  Arumanis (portal)   │     │  Pengawasan (+mobile)│
 │  React + Bun BFF     │     │  React + Bun / Expo  │
 └──────────┬───────────┘     └──────────┬───────────┘
-           │    REST + Sanctum token     │
+           │    REST + token / cookie    │
            └──────────────┬──────────────┘
                           ▼
                  ┌─────────────────┐
                  │     APIAMIS     │  ← repo ini
-                 │  Laravel REST   │
+                 │   Rust (Axum)   │
                  └────────┬────────┘
-              ┌───────────┴───────────┐
-              ▼                       ▼
-           MySQL                    Redis
-                                    (+ queue, cache)
+                          ▼
+                        MySQL
 ```
 
 Frontend **tidak** jadi sumber otorisasi final. Scope role, validasi bisnis, dan audit ditegakkan di sini.
 
 | Repo | Peran |
 |------|--------|
-| [apiamis](https://github.com/ilhamtaufiq/apiamis) | Backend (ini) |
+| [apiamis](https://github.com/ilhamtaufiq/apiamis) | Backend Rust (ini) |
 | [arumanis](https://github.com/ilhamtaufiq/arumanis) | Admin & operasional |
 | [arumanis-pengawasan](https://github.com/ilhamtaufiq/arumanis-pengawasan) | Panel + app lapangan |
 
@@ -63,154 +44,78 @@ Frontend **tidak** jadi sumber otorisasi final. Scope role, validasi bisnis, dan
 
 | Area | Cakupan |
 |------|---------|
-| **Proyek** | Pekerjaan, kegiatan, kontrak, output, penerima, penyedia, RKA, master fase |
-| **Wilayah** | Kecamatan / desa, normalisasi nama |
-| **Media** | Berkas & foto (MediaLibrary), geo-fence, ZIP unduhan, konversi LibreOffice |
-| **Pengawas** | `user-pekerjaan`, endpoint KPI, progress, checklist, PUSPEN |
-| **Analitik** | Dashboard, storage stats, RAB Analyzer (Python), export Excel/PDF |
-| **Akses** | Sanctum, Google OAuth, Spatie roles, menu/route permission, impersonate |
-| **Ops** | Audit log, client error report, notifikasi, blog/publikasi, WhatsApp bridge, AI (OpenRouter) |
-
-Alur request:
-
-```text
-HTTP → routes/api.php → middleware (auth, role, throttle)
-     → controller → service / model / scope
-     → API Resource → JSON { status, data } (atau resource Laravel)
-```
-
----
-
-## Stack
-
-| Lapisan | Teknologi |
-|---------|-----------|
-| App | Laravel 13 · PHP 8.2+ |
-| Data | MySQL 8 (prod), SQLite (dev opsional) |
-| Cache / queue | Redis, database queue |
-| Authz | Sanctum · Socialite (Google) · Spatie Permission |
-| Media | Spatie MediaLibrary |
-| Docs | L5-Swagger (OpenAPI) |
-| Export | Maatwebsite Excel · DomPDF · PHPWord |
-| RAB | Python 3 (pandas, pdfplumber) |
-| Test | PHPUnit |
-
----
-
-## Mulai lokal
-
-**Butuh:** PHP 8.2+ · Composer 2 · MySQL · Redis (disarankan) · Python 3 (RAB) · LibreOffice (konversi di Docker)
-
-```text
-C:\laragon\www\
-  apiamis\    ← repo ini
-  bun\
-  pengawas\
-```
-
-```bash
-git clone https://github.com/ilhamtaufiq/apiamis.git
-cd apiamis
-composer install
-cp .env.example .env
-php artisan key:generate
-php artisan migrate --seed
-php artisan serve
-```
-
-Atau:
-
-```bash
-composer run setup
-```
-
-API: **http://localhost:8000** atau **http://apiamis.test** (Laragon vhost).
-
----
-
-## Konfigurasi (.env)
-
-```env
-APP_NAME=APIAMIS
-APP_URL=http://apiamis.test
-APP_DEBUG=true
-
-DB_CONNECTION=mysql
-DB_HOST=127.0.0.1
-DB_DATABASE=apiamis
-DB_USERNAME=root
-DB_PASSWORD=
-
-FRONTEND_URL=http://arumanis.test
-
-GOOGLE_CLIENT_ID=
-GOOGLE_CLIENT_SECRET=
-GOOGLE_REDIRECT_URI="${APP_URL}/api/auth/google/callback"
-
-REDIS_HOST=127.0.0.1
-OPENROUTER_API_KEY=
-```
-
-| Variabel | Fungsi |
-|----------|--------|
-| `FRONTEND_URL` | CORS + redirect OAuth portal |
-| `GOOGLE_*` | Login sosial |
-| `OPENROUTER_API_KEY` | Fitur AI (opsional) |
-| Reverb / queue | Realtime & job async (lihat `.env.example`) |
-
----
-
-## API & Swagger
-
-### Auth
-
-| Method | Endpoint | Keterangan |
-|--------|----------|------------|
-| `POST` | `/api/auth/login` | Email/password → token |
-| `POST` | `/api/auth/logout` | Butuh Bearer |
-| `GET` | `/api/auth/me` | Profil sesi |
-| `GET` | `/api/auth/google` | Mulai OAuth |
-
-### Prefix resource (contoh)
-
-| Prefix | Domain |
-|--------|--------|
-| `/api/pekerjaan` | Proyek / paket |
-| `/api/kontrak` | Kontrak & addendum |
-| `/api/kegiatan` | Program |
-| `/api/berkas`, `/api/foto` | Dokumentasi |
-| `/api/progress` | Progress fisik |
-| `/api/pengawas`, `/api/user-pekerjaan` | Penugasan lapangan |
-| `/api/dashboard` | Statistik |
-
-Swagger UI:
-
-```text
-/api/documentation
-```
-
-Regenerate setelah ubah anotasi:
-
-```bash
-php artisan l5-swagger:generate
-```
+| **Proyek** | Pekerjaan, kegiatan, kontrak, output, penerima, penyedia, master fase |
+| **Wilayah** | Kecamatan / desa, GeoJSON desa |
+| **Dokumen** | Template kontrak, ekspor PPTX/Excel, ONLYOFFICE, berkas dan foto |
+| **Sanitasi & SPAM** | SPM sanitasi, unit SPAM, capaian, survei lokasi |
+| **Pengawas** | Penugasan, progress, checklist |
+| **Analitik** | Dashboard, pencarian global, analisa tabel (admin) |
+| **Akses** | Sesi berbasis token dan cookie, Google OAuth, hak akses menu dan route |
+| **Ops** | Audit log, notifikasi, WhatsApp, SPSE, backup, asisten AI |
 
 ---
 
 ## Struktur
 
 ```text
-app/
-  Http/Controllers/    REST per domain
-  Http/Middleware/
-  Http/Resources/      Serializer response
-  Models/
-  Services/
-  Notifications/
-routes/api.php
-database/migrations|seeders
-storage/app/           Upload & media
+rust/
+  Cargo.toml              workspace
+  migrations/             SQL schema (0000 baseline dan seterusnya)
+  crates/
+    api/                  binary server Axum: router, handler, migrator, fitur
+    auth/                 login dan sesi
+    shared/               konfigurasi dan tipe error API
+docker/                   konfigurasi Apache (meneruskan ke binary Rust)
+resources/geojson/        GeoJSON desa, dibaca saat runtime
+storage/app/templates/    template dokumen kontrak, dibaca saat runtime
+Dockerfile                build multi-stage: binary Rust lalu image Apache
+docker-entrypoint.sh      migrasi, lalu menjalankan API
 ```
+
+Migrasi dijalankan oleh binary sendiri lewat `apiamis-api migrate`. Daftarnya ada di `rust/crates/api/src/migrate.rs`.
+
+---
+
+## Mulai lokal
+
+**Butuh:** Rust stable · MySQL 8 · `cmake` dan `clang` (dipakai beberapa dependency)
+
+```bash
+cd rust
+cp ../.env.rust.example .env      # isi nilai yang bertanda <...>
+cargo run -p api -- migrate        # jalankan migrasi
+cargo run -p api                   # API di http://localhost:8000
+```
+
+Tes:
+
+```bash
+cd rust
+cargo test --workspace
+cargo clippy --workspace --all-targets -- -D warnings
+cargo fmt --all -- --check
+```
+
+Catatan: di mesin dengan disk terbatas, build bisa gagal karena kehabisan ruang. Bersihkan `rust/target/debug/incremental` atau jalankan `cargo clean -p api`.
+
+---
+
+## Konfigurasi
+
+Salin `.env.rust.example` menjadi `.env` untuk lokal, atau isi sebagai environment variable di Coolify untuk production. Jangan commit file yang berisi nilai asli.
+
+| Grup | Variabel | Keterangan |
+|------|----------|------------|
+| Aplikasi | `APP_PORT`, `APP_URL`, `APP_ENV`, `APP_NAME` | Port bawaan 8000. `APP_NAME` ikut membentuk prefix cache, jadi harus tetap sama. |
+| Database | `DATABASE_URL`, `DB_MAX_CONNECTIONS`, `DB_IDLE_TIMEOUT_SECS` | Format `mysql://user:password@host:3306/db` |
+| Kunci | `APP_KEY` | Dipakai membuka secret terenkripsi (kredensial SPSE, backup Google Drive). Harus sama dengan kunci lama. |
+| Auth | `SANCTUM_TOKEN_EXPIRATION`, `SESSION_COOKIE_NAME`, `SESSION_COOKIE_SECURE`, `SESSION_COOKIE_DOMAIN` | Umur token dalam menit (bawaan 720). `SESSION_COOKIE_DOMAIN` opsional, untuk BFF di host lain. |
+| Frontend | `FRONTEND_URL`, `PENGAWAS_APP_BASE_URL`, `MAINTENANCE_BYPASS_EMAILS` | CORS dan redirect |
+| Google | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REDIRECT_URI` | Login sosial, opsional |
+| Berkas | `PUBLIC_STORAGE_PATH`, `PRIVATE_STORAGE_PATH`, `SPAM_IMPORT_DIR`, `KONTRAK_TEMPLATE_DIR`, `VILLAGE_GEOJSON_PATH` | Diarahkan ke volume di image |
+| ONLYOFFICE | `ONLYOFFICE_DOCUMENT_SERVER_URL`, `ONLYOFFICE_JWT_SECRET`, dll. | Dokumen dan PDF, opsional |
+| SPSE | `SPSE_BASE_URL`, `SPSE_LPSE_SLUG`, data PPK | Kontrak dan procurement |
+| AI | `AI_BASE_URL`, `AI_API_KEY`, `AI_MODEL`, `AI_COMPACT_MODEL`, `AI_NATIVE_TOOLS` | Layanan AI kompatibel OpenAI. `AI_NATIVE_TOOLS=1` memakai function calling, tanpa itu protokol JSON. `AI_COMPACT_MODEL` opsional untuk ringkasan memori. |
 
 ---
 
@@ -218,31 +123,19 @@ storage/app/           Upload & media
 
 ```bash
 docker build -t apiamis .
-docker run -d -p 8000:8000 apiamis
+docker run -d -p 8000:8000 --env-file .env apiamis
 ```
 
-Full stack dari repo frontend:
-
-```bash
-cd ../bun
-docker compose up -d --build
-docker compose --profile tools run --rm migrate
-```
-
-| Service | URL lokal tipikal |
-|---------|-------------------|
-| API | http://localhost:8000/api |
-| Frontend | http://localhost:3000 / :5173 |
-| MySQL (compose) | localhost:3307 |
+Container menjalankan `docker-entrypoint.sh`: migrasi dulu, lalu API sebagai `www-data`. Bila migrasi gagal, API tidak dijalankan. Apache di depan meneruskan `/`, `/up`, dan `/api` ke binary Rust, serta melayani `/storage`.
 
 Production checklist:
 
-- `APP_DEBUG=false`, `APP_ENV=production`
-- `php artisan config:cache` · `route:cache`
-- Queue worker hidup jika ada job async
-- CORS ketat ke origin portal + panel pengawas
+- `APP_ENV=production`, `SESSION_COOKIE_SECURE=true`
+- Volume persisten untuk `storage/app/public` dan `storage/app/private`
+- CORS hanya ke origin portal dan panel pengawas
+- Migrasi baru (`0010`, `0011`) harus berjalan sebelum API dipakai
 
-Coolify / PaaS: set secret DB, `APP_KEY`, OAuth, storage volume, dan URL publik `https://apiamis.cianjur.space`.
+Coolify: set semua variabel dari `.env.rust.example`, pasang volume storage, dan arahkan domain ke `https://apiamis.cianjur.space`.
 
 ---
 
@@ -250,24 +143,18 @@ Coolify / PaaS: set secret DB, `APP_KEY`, OAuth, storage volume, dan URL publik 
 
 Ubah shape request/response, permission, atau relasi data:
 
-1. Controller + Resource + policy/scope di **apiamis**
+1. Handler, query, dan scope akses di **apiamis**
 2. Sesuaikan [arumanis](https://github.com/ilhamtaufiq/arumanis) (`src/features/…`, `api-client`)
-3. Sesuaikan [arumanis-pengawasan](https://github.com/ilhamtaufiq/arumanis-pengawasan) (+ mobile bila kena)
-4. Update Swagger · seed permission bila perlu
-
-Versi platform diselaraskan lewat `platform.version.json` di monorepo frontend (saat ini **0.6.0**).
+3. Sesuaikan [arumanis-pengawasan](https://github.com/ilhamtaufiq/arumanis-pengawasan) bila perlu
+4. Tambahkan migrasi di `rust/migrations` dan daftarkan di `migrate.rs`
 
 ---
 
 ## Lisensi
 
-Ikuti lisensi proyek di repositori (Laravel skeleton + kode domain Arumanis).
+Hak cipta ARUMANIS. Lisensi mengikuti repositori.
 
 <div align="center">
-
-<br />
-
-<img src="public/logo.png" alt="" width="48" />
 
 <sub>API · Air Minum &amp; Sanitasi Kabupaten Cianjur</sub>
 
