@@ -100,6 +100,7 @@ pub mod whatsapp;
 pub mod wa_gateway;
 pub mod wa_inbound;
 pub mod catatan;
+pub mod jadwal_wa;
 pub mod progress_estimasi;
 pub mod progress_metrics;
 pub mod progress_write;

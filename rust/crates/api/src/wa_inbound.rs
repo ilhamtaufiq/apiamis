@@ -24,7 +24,7 @@ use shared::ApiError;
 use tokio::sync::mpsc;
 
 use crate::{
-    ai, ai_memory, ai_model, catatan,
+    ai, ai_memory, ai_model, catatan, jadwal_wa,
     notifications::require_admin,
     whatsapp,
     wa_gateway::{self, WaConfig, TEKS_MAKS},
@@ -207,6 +207,23 @@ async fn proses(state: AppState, cfg: WaConfig, pesan: PesanMasuk) {
                 .await
             }
         }
+        return;
+    }
+
+    if jadwal_wa::perintah_jadwal(&pesan.teks) {
+        let balasan = match jadwal_wa::parse(&pesan.teks, pesan.kutipan.as_deref(), jadwal_wa::hari_ini_wib()) {
+            Ok(j) => match jadwal_wa::simpan(&state.pool, user_id, &j).await {
+                Ok(_) => format!(
+                    "Jadwal dibuat: {} pada {}{}. Lihat di kalender Arumanis.",
+                    j.judul,
+                    j.mulai.format("%d/%m/%Y %H:%M"),
+                    j.lokasi.as_ref().map(|l| format!(" di {l}")).unwrap_or_default()
+                ),
+                Err(e) => e.message,
+            },
+            Err(pesan_galat) => pesan_galat,
+        };
+        balas(&cfg, &tujuan, &balasan).await;
         return;
     }
 
