@@ -156,6 +156,23 @@ pub(crate) fn skema_tools(is_admin: bool) -> Value {
 }
 
 /// Memanggil model dan mengembalikan teks serta panggilan tool native. Pemakaian token ditambahkan ke `pemakaian`.
+/// Body permintaan ke layanan AI. `stream` selalu `false`: gateway tertentu membalas SSE bila kolom ini
+/// tidak ada, dan balasan SSE tidak bisa dibaca sebagai JSON.
+pub(crate) fn bangun_body(cfg: &AiConfig, messages: Value, max_tokens: u32, tools: Option<&Value>) -> Value {
+    let mut body = json!({
+        "model": cfg.model,
+        "temperature": 0.1,
+        "max_tokens": max_tokens,
+        "messages": messages,
+        "stream": false,
+    });
+    if let Some(tools) = tools {
+        body["tools"] = tools.clone();
+        body["tool_choice"] = json!("auto");
+    }
+    body
+}
+
 pub(crate) async fn panggil_model_lengkap(
     cfg: &AiConfig,
     messages: Value,
@@ -167,16 +184,7 @@ pub(crate) async fn panggil_model_lengkap(
         .timeout(Duration::from_secs(60))
         .build()
         .map_err(internal)?;
-    let mut body = json!({
-        "model": cfg.model,
-        "temperature": 0.1,
-        "max_tokens": max_tokens,
-        "messages": messages,
-    });
-    if let Some(tools) = tools {
-        body["tools"] = tools.clone();
-        body["tool_choice"] = json!("auto");
-    }
+    let body = bangun_body(cfg, messages, max_tokens, tools);
     let mut req = client
         .post(format!("{}/chat/completions", cfg.base_url))
         .json(&body);
@@ -1100,6 +1108,18 @@ pub async fn history(State(state): State<AppState>, headers: HeaderMap) -> Resul
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn body_selalu_meminta_balasan_json() {
+        let cfg = AiConfig { base_url: "https://x/v1".into(), api_key: None, model: "m".into() };
+        let body = bangun_body(&cfg, json!([]), 10, None);
+        assert_eq!(body["stream"], json!(false));
+        assert!(body.get("tools").is_none());
+        let tools = json!([{"type": "function"}]);
+        let dengan_tools = bangun_body(&cfg, json!([]), 10, Some(&tools));
+        assert_eq!(dengan_tools["stream"], json!(false));
+        assert_eq!(dengan_tools["tool_choice"], json!("auto"));
+    }
 
     #[test]
     fn valid_base_url_hanya_http_dan_https_tanpa_spasi() {
