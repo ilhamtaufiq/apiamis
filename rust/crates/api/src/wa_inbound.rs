@@ -57,15 +57,9 @@ pub struct MediaKutipan {
     pub mimetype: String,
 }
 
-/// Mengambil media dari `quotedMsg` bila pesan yang dibalas berisi berkas.
+/// Kandidat media dari pesan yang dibalas: cukup punya `id`. Open-wa tidak selalu mengirim tipe atau
+/// MIME di `quotedMessage`, jadi jenisnya dicek saat media diunduh, bukan dari field ini.
 fn media_kutipan(q: &Value, chat_id: &str) -> Option<MediaKutipan> {
-    let tipe = q["type"].as_str().unwrap_or("");
-    let ada_media = q["isMedia"].as_bool() == Some(true)
-        || q["mimetype"].as_str().is_some_and(|t| !t.is_empty())
-        || matches!(tipe, "image" | "video" | "document" | "audio" | "sticker");
-    if !ada_media {
-        return None;
-    }
     let id = q["id"].as_str().or_else(|| q["id"]["_serialized"].as_str())?.to_string();
     let mimetype = q["mimetype"].as_str().filter(|t| !t.is_empty()).unwrap_or("application/octet-stream").to_string();
     Some(MediaKutipan { chat_id: chat_id.to_string(), id, mimetype })
@@ -227,24 +221,21 @@ const PESAN_JAWABAN_KOSONG: &str = "Maaf, Asisten ARUMANIS tidak mendapat jawaba
 
 const PESAN_BELUM_TERDAFTAR: &str = "Nomor ini belum terdaftar di Arumanis. Tambahkan nomor WhatsApp Anda di menu Profil (arumanis.cianjur.space) agar bisa memakai Asisten ARUMANIS.";
 
-/// Mengunduh media dari WhatsApp lalu menyimpannya sebagai lampiran catatan. Mengembalikan teks balasan.
-async fn simpan_catatan_media(
-    state: &AppState,
-    cfg: &WaConfig,
-    user_id: u64,
-    isi: Option<&str>,
-    media: &MediaKutipan,
-) -> String {
+/// Mengunduh media dari pesan yang dibalas. `None` bila pesan itu bukan media atau gagal diunduh
+/// (misalnya pesan teks). Jenis berkas diambil dari isinya bila MIME dari WhatsApp tidak lengkap.
+async fn unduh_lampiran(cfg: &WaConfig, media: &MediaKutipan) -> Option<(crate::media::Upload, String)> {
     let bytes = match wa_gateway::unduh_media(cfg, &media.chat_id, &media.id).await {
         Ok(b) => b,
-        Err(e) => return e.message,
+        Err(e) => {
+            eprintln!("[WA] lampiran tidak bisa diunduh ({}): {}", media.id, e.message);
+            return None;
+        }
     };
-    let upload = crate::media::Upload { original_name: format!("whatsapp.{}", ekstensi(&media.mimetype)), bytes };
-    let isi = isi.unwrap_or("Lampiran dari WhatsApp");
-    match catatan::simpan_dari_wa_media(&state.pool, user_id, isi, &media.chat_id, &upload, &media.mimetype).await {
-        Ok(_) => "Catatan dan lampiran tersimpan. Lihat di menu Catatan Arumanis.".to_string(),
-        Err(e) => e.message,
-    }
+    let mime = crate::media::image_mime(&bytes)
+        .map(str::to_string)
+        .unwrap_or_else(|| media.mimetype.clone());
+    let upload = crate::media::Upload { original_name: format!("whatsapp.{}", ekstensi(&mime)), bytes };
+    Some((upload, mime))
 }
 
 /// Memproses satu pesan. Dijalankan di latar belakang agar webhook langsung dibalas 200.
@@ -285,19 +276,29 @@ async fn proses(state: AppState, cfg: WaConfig, pesan: PesanMasuk) {
     };
 
     if perintah_catat(&pesan.teks) {
-        if pesan.kutipan.is_none() && pesan.media.is_none() {
-            balas(&cfg, &tujuan, "Balas pesan yang ingin dicatat, lalu tulis @arumanis catat.").await;
-            return;
-        }
-        let balasan = match &pesan.media {
-            Some(media) => simpan_catatan_media(&state, &cfg, user_id, pesan.kutipan.as_deref(), media).await,
-            None => {
-                let isi = pesan.kutipan.clone().unwrap_or_default();
-                match catatan::simpan_dari_wa(&state.pool, user_id, &isi, &pesan.chat_id).await {
-                    Ok(_) => "Catatan tersimpan. Lihat di menu Catatan Arumanis.".to_string(),
+        let lampiran = match &pesan.media {
+            Some(media) => unduh_lampiran(&cfg, media).await,
+            None => None,
+        };
+        let balasan = match (&pesan.kutipan, lampiran) {
+            (None, None) if pesan.media.is_some() => {
+                "Lampiran dari pesan yang dibalas tidak bisa diambil dari WhatsApp. Coba lagi, atau balas pesan yang berisi teks.".to_string()
+            }
+            (None, None) => {
+                balas(&cfg, &tujuan, "Balas pesan yang ingin dicatat, lalu tulis @arumanis catat.").await;
+                return;
+            }
+            (kutipan, Some((upload, mime))) => {
+                let isi = kutipan.as_deref().unwrap_or("Lampiran dari WhatsApp");
+                match catatan::simpan_dari_wa_media(&state.pool, user_id, isi, &pesan.chat_id, &upload, &mime).await {
+                    Ok(_) => "Catatan dan lampiran tersimpan. Lihat di menu Catatan Arumanis.".to_string(),
                     Err(e) => e.message,
                 }
             }
+            (Some(isi), None) => match catatan::simpan_dari_wa(&state.pool, user_id, isi, &pesan.chat_id).await {
+                Ok(_) => "Catatan tersimpan. Lihat di menu Catatan Arumanis.".to_string(),
+                Err(e) => e.message,
+            },
         };
         balas(&cfg, &tujuan, &balasan).await;
         return;
@@ -508,9 +509,10 @@ mod media_kutipan_tests {
     }
 
     #[test]
-    fn teks_yang_dibalas_bukan_media() {
+    fn teks_yang_dibalas_tetap_diberi_kandidat_media() {
         let q = json!({"id": "true_120363@g.us_3EB0XYZ", "type": "chat", "body": "Target 80%"});
-        assert!(media_kutipan(&q, "120363@g.us").is_none());
+        let media = media_kutipan(&q, "120363@g.us").expect("kandidat");
+        assert_eq!(media.id, "true_120363@g.us_3EB0XYZ");
     }
 
     #[test]
@@ -532,7 +534,6 @@ mod payload_open_wa_tests {
         let m = baca_pesan(&p, "", "79131265994879@lid").expect("pesan");
         assert!(m.menyebut_bot);
         assert_eq!(m.kutipan.as_deref(), Some("Besok bikin surat ke barjas"));
-        assert!(m.media.is_none());
     }
 
     #[test]
