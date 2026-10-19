@@ -1,4 +1,4 @@
-//! Pesan WhatsApp masuk dari open-wa dijawab oleh Asisten Data, dengan data dan hak akses user yang sama
+//! Pesan WhatsApp masuk dari open-wa dijawab oleh Asisten ARUMANIS, dengan data dan hak akses user yang sama
 //! seperti di aplikasi. Alurnya: webhook `message.received` -> cari user lewat nomor -> `ai_memory::giliran`
 //! -> balasan lewat `wa_gateway`.
 //!
@@ -48,7 +48,7 @@ pub(crate) struct PesanMasuk {
 }
 
 /// Perintah "catat" dari pesan yang menyebut bot. Hanya dikenali bila kalimatnya pendek, supaya
-/// pertanyaan yang kebetulan memuat kata "catat" tetap dijawab oleh Asisten Data.
+/// pertanyaan yang kebetulan memuat kata "catat" tetap dijawab oleh Asisten ARUMANIS.
 pub(crate) fn perintah_catat(teks: &str) -> bool {
     let kata: Vec<String> = teks.split_whitespace().map(|k| k.to_lowercase()).collect();
     kata.len() <= 5 && kata.iter().any(|k| k.starts_with("catat"))
@@ -170,10 +170,10 @@ async fn balas(cfg: &WaConfig, chat_id: &str, teks: &str) {
 /// Nama tampil bot di WhatsApp. Dipakai untuk mengenali mention "@arumanis" di grup.
 const NAMA_BOT: &str = "arumanis";
 
-const PESAN_GAGAL: &str = "Maaf, Asisten Data sedang tidak bisa diakses. Coba lagi beberapa saat.";
-const PESAN_JAWABAN_KOSONG: &str = "Maaf, Asisten Data tidak mendapat jawaban. Coba ulangi pertanyaannya.";
+const PESAN_GAGAL: &str = "Maaf, Asisten ARUMANIS sedang tidak bisa diakses. Coba lagi beberapa saat.";
+const PESAN_JAWABAN_KOSONG: &str = "Maaf, Asisten ARUMANIS tidak mendapat jawaban. Coba ulangi pertanyaannya.";
 
-const PESAN_BELUM_TERDAFTAR: &str = "Nomor ini belum terdaftar di Arumanis. Tambahkan nomor WhatsApp Anda di menu Profil (arumanis.cianjur.space) agar bisa memakai Asisten Data.";
+const PESAN_BELUM_TERDAFTAR: &str = "Nomor ini belum terdaftar di Arumanis. Tambahkan nomor WhatsApp Anda di menu Profil (arumanis.cianjur.space) agar bisa memakai Asisten ARUMANIS.";
 
 /// Memproses satu pesan. Dijalankan di latar belakang agar webhook langsung dibalas 200.
 async fn proses(state: AppState, cfg: WaConfig, pesan: PesanMasuk) {
@@ -290,7 +290,7 @@ async fn proses(state: AppState, cfg: WaConfig, pesan: PesanMasuk) {
         }
         Err(e) => {
             eprintln!("[WA] asisten gagal menjawab: {}", e.message);
-            balas(&cfg, &tujuan, &format!("Maaf, Asisten Data belum bisa menjawab: {}", e.message)).await;
+            balas(&cfg, &tujuan, &format!("Maaf, Asisten ARUMANIS belum bisa menjawab: {}", e.message)).await;
         }
     }
 
