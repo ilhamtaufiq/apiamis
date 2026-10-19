@@ -411,6 +411,8 @@ pub(crate) const TOOLS: &[(&str, &str, &str, bool)] = &[
     ("pengawas_paket", "Pengawas dan jumlah paket pekerjaan aktif yang diawasinya pada tahun anggaran (maksimal 20). Bisa dipersempit dengan nama pengawas.", "{\"kata\": nama pengawas opsional}", false),
     ("katalog_data", "Daftar tabel yang bisa dianalisis lewat analisa_tabel beserta kolomnya. Panggil dulu bila belum tahu nama kolomnya. Hanya admin.", "{}", true),
     ("analisa_tabel", "Agregasi satu tabel: jumlah baris (count), total (sum), atau rata-rata (avg) kolom angka, opsional dikelompokkan per kolom teks. Tahun anggaran diterapkan bila tabel punya tahun, kecuali semua=true. Maksimal 20 kelompok, urut dari nilai terbesar. Hanya admin.", "{\"tabel\": kode dari katalog_data, \"agregasi\": count|sum|avg, \"kolom\": kolom angka untuk sum atau avg, \"group_by\": kolom teks opsional, \"semua\": true opsional}", true),
+    ("cari_foto", "Jumlah foto lapangan pada tahun anggaran per keterangan progres (0%, 25%, 50%, 75%, 100%), serta 10 pekerjaan dengan foto terbanyak. Bisa dipersempit dengan kata dalam nama paket dan satu keterangan. Koordinat dan isi foto tidak ditampilkan.", "{\"kata\": teks opsional, \"keterangan\": 0%|25%|50%|75%|100% opsional}", false),
+    ("cari_berkas", "Cari berkas pekerjaan di tahun anggaran berdasarkan jenis dokumen atau nama paket (maksimal 10 terbaru), beserta jumlah berkas yang cocok. Isi berkas tidak ditampilkan.", "{\"kata\": teks}", false),
     ("kualitas_data", "Ringkasan temuan kualitas data pekerjaan. Hanya untuk admin.", "{}", true),
 ];
 
@@ -920,6 +922,103 @@ pub(crate) async fn jalankan_tool(
             }
             let jumlah: i64 = rows.iter().map(|r| r.try_get::<i64, _>("jumlah").unwrap_or(0)).sum();
             Ok((json!({ "jumlahInfrastruktur": jumlah, "perJenis": per_jenis }), Some(jumlah)))
+        }
+        "cari_foto" => {
+            const KETERANGAN: [&str; 5] = ["0%", "25%", "50%", "75%", "100%"];
+            let kata = args.get("kata").and_then(Value::as_str).unwrap_or("").trim().chars().take(100).collect::<String>();
+            let keterangan = args.get("keterangan").and_then(Value::as_str).map(str::trim).filter(|k| KETERANGAN.contains(k));
+            let scope = access::restriction(user_id, roles, "p");
+            let (mut where_sql, mut binds) = f.where_clause();
+            where_sql.push_str(&scope.sql);
+            binds.extend(scope.binds.iter().map(u64::to_string));
+            if !kata.is_empty() {
+                where_sql.push_str(" AND p.nama_paket LIKE ?");
+                binds.push(format!("%{kata}%"));
+            }
+            if let Some(k) = keterangan {
+                where_sql.push_str(" AND fo.keterangan = ?");
+                binds.push(k.to_string());
+            }
+            let per_ket_sql = format!(
+                "SELECT fo.keterangan AS keterangan, CAST(COUNT(*) AS SIGNED) AS jumlah \
+                 FROM tbl_foto fo INNER JOIN tbl_pekerjaan p ON p.id = fo.pekerjaan_id{where_sql} \
+                 GROUP BY fo.keterangan"
+            );
+            let mut q = sqlx::query(&per_ket_sql);
+            for b in &binds {
+                q = q.bind(b);
+            }
+            let rows = q.fetch_all(pool).await.map_err(internal)?;
+            let mut per_keterangan = Vec::with_capacity(rows.len());
+            let mut total: i64 = 0;
+            for r in &rows {
+                let jumlah: i64 = r.try_get("jumlah").map_err(internal)?;
+                total += jumlah;
+                per_keterangan.push(json!({ "keterangan": r.try_get::<String, _>("keterangan").map_err(internal)?, "jumlahFoto": jumlah }));
+            }
+            let per_pekerjaan_sql = format!(
+                "SELECT CAST(p.id AS SIGNED) AS id, p.nama_paket AS nama, CAST(COUNT(*) AS SIGNED) AS jumlah \
+                 FROM tbl_foto fo INNER JOIN tbl_pekerjaan p ON p.id = fo.pekerjaan_id{where_sql} \
+                 GROUP BY p.id, p.nama_paket ORDER BY jumlah DESC, p.nama_paket LIMIT 10"
+            );
+            let mut q = sqlx::query(&per_pekerjaan_sql);
+            for b in &binds {
+                q = q.bind(b);
+            }
+            let rows = q.fetch_all(pool).await.map_err(internal)?;
+            let mut pekerjaan = Vec::with_capacity(rows.len());
+            for r in &rows {
+                pekerjaan.push(json!({
+                    "id": r.try_get::<i64, _>("id").map_err(internal)?,
+                    "nama": r.try_get::<Option<String>, _>("nama").map_err(internal)?,
+                    "jumlahFoto": r.try_get::<i64, _>("jumlah").map_err(internal)?,
+                }));
+            }
+            Ok((json!({ "jumlahFoto": total, "perKeterangan": per_keterangan, "pekerjaan": pekerjaan }), Some(total)))
+        }
+        "cari_berkas" => {
+            let kata = args.get("kata").and_then(Value::as_str).unwrap_or("").trim().chars().take(100).collect::<String>();
+            if kata.is_empty() {
+                return Ok((json!({ "jumlahBerkas": 0, "berkas": [] }), Some(0)));
+            }
+            let scope = access::restriction(user_id, roles, "p");
+            let (mut where_sql, mut binds) = f.where_clause();
+            where_sql.push_str(&scope.sql);
+            binds.extend(scope.binds.iter().map(u64::to_string));
+            where_sql.push_str(" AND (bk.jenis_dokumen LIKE ? OR p.nama_paket LIKE ?)");
+            let like = format!("%{kata}%");
+            binds.push(like.clone());
+            binds.push(like);
+            let count_sql = format!(
+                "SELECT CAST(COUNT(*) AS SIGNED) AS jumlah FROM tbl_berkas bk INNER JOIN tbl_pekerjaan p ON p.id = bk.pekerjaan_id{where_sql}"
+            );
+            let mut q = sqlx::query(&count_sql);
+            for b in &binds {
+                q = q.bind(b);
+            }
+            let total: i64 = q.fetch_one(pool).await.map_err(internal)?.try_get("jumlah").map_err(internal)?;
+            let list_sql = format!(
+                "SELECT CAST(bk.id AS SIGNED) AS id, bk.jenis_dokumen AS jenis, CAST(p.id AS SIGNED) AS pekerjaan_id, \
+                 p.nama_paket AS nama, DATE_FORMAT(bk.created_at, '%Y-%m-%d') AS tanggal \
+                 FROM tbl_berkas bk INNER JOIN tbl_pekerjaan p ON p.id = bk.pekerjaan_id{where_sql} \
+                 ORDER BY bk.created_at DESC, bk.id DESC LIMIT 10"
+            );
+            let mut q = sqlx::query(&list_sql);
+            for b in &binds {
+                q = q.bind(b);
+            }
+            let rows = q.fetch_all(pool).await.map_err(internal)?;
+            let mut berkas = Vec::with_capacity(rows.len());
+            for r in &rows {
+                berkas.push(json!({
+                    "id": r.try_get::<i64, _>("id").map_err(internal)?,
+                    "jenisDokumen": r.try_get::<String, _>("jenis").map_err(internal)?,
+                    "pekerjaanId": r.try_get::<i64, _>("pekerjaan_id").map_err(internal)?,
+                    "nama": r.try_get::<Option<String>, _>("nama").map_err(internal)?,
+                    "tanggal": r.try_get::<Option<String>, _>("tanggal").map_err(internal)?,
+                }));
+            }
+            Ok((json!({ "jumlahBerkas": total, "berkas": berkas }), Some(total)))
         }
         "pengawas_paket" => {
             let kata = args.get("kata").and_then(Value::as_str).unwrap_or("").trim().chars().take(100).collect::<String>();
