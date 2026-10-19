@@ -134,20 +134,24 @@ pub(crate) fn baca_pesan(payload: &Value, bot_nomor: &str, bot_lid: &str) -> Opt
     let mention_list = m["mentionedJidList"]
         .as_array()
         .or_else(|| m["mentions"].as_array())
+        .or_else(|| m["mentionedIds"].as_array())
         .map(|l| l.iter().filter_map(|x| x.as_str()).any(|x| bot_ids.iter().any(|b| b == x)))
         .unwrap_or(false);
     let lid_digit = angka(bot_lid);
     let mention_teks = (!bot_nomor.is_empty() && teks_mentah.contains(&format!("@{bot_nomor}")))
         || (!lid_digit.is_empty() && teks_mentah.contains(&format!("@{lid_digit}")));
-    let balas_bot = m["quotedMsg"]["fromMe"].as_bool() == Some(true)
+    // Open-wa mengirim pesan yang dibalas di `quotedMessage`; `quotedMsg` dibaca bila ada.
+    let quoted = if m["quotedMsg"].is_object() { &m["quotedMsg"] } else { &m["quotedMessage"] };
+    let balas_bot = quoted["fromMe"].as_bool() == Some(true)
         || m["quotedMsgObj"]["fromMe"].as_bool() == Some(true);
     // Mention yang terlihat di teks memakai nama tampil bot (pushName sesi), misalnya "@arumanis".
     let mention_nama = teks_mentah.to_lowercase().contains(&format!("@{NAMA_BOT}"));
     let menyebut_bot = mention_list || mention_teks || mention_nama || balas_bot;
 
-    let kutipan = m["quotedMsg"]["body"]
+    let kutipan = quoted["body"]
         .as_str()
-        .or_else(|| m["quotedMsg"]["content"].as_str())
+        .or_else(|| quoted["content"].as_str())
+        .or_else(|| quoted["caption"].as_str())
         .or_else(|| m["quotedMsgObj"]["body"].as_str())
         .or_else(|| m["quotedMsgObj"]["content"].as_str())
         .map(str::to_string)
@@ -155,9 +159,9 @@ pub(crate) fn baca_pesan(payload: &Value, bot_nomor: &str, bot_lid: &str) -> Opt
     if kutipan.is_none() && perintah_catat(&teks_mentah) {
         // Diagnostik: perintah catat tanpa kutipan. Dicatat kunci payload dan bentuk quotedMsg agar field balasan terlihat.
         eprintln!(
-            "[WA] catat tanpa kutipan: kunci={:?} quotedMsg={} quotedMsgObj={}",
+            "[WA] catat tanpa kutipan: kunci={:?} quoted={} quotedMsgObj={}",
             m.as_object().map(|o| o.keys().collect::<Vec<_>>()),
-            m["quotedMsg"],
+            quoted,
             m["quotedMsgObj"]
         );
     }
@@ -173,9 +177,9 @@ pub(crate) fn baca_pesan(payload: &Value, bot_nomor: &str, bot_lid: &str) -> Opt
 
     if is_grup && !menyebut_bot {
         // Diagnostik: lihat bentuk mention dari open-wa untuk menemukan LID bot yang sebenarnya.
-        eprintln!("[WA] diagnostik grup: body={teks_mentah:?} mentionedJidList={}", m["mentionedJidList"]);
+        eprintln!("[WA] diagnostik grup: body={teks_mentah:?} mentionedJidList={} mentionedIds={}", m["mentionedJidList"], m["mentionedIds"]);
     }
-    let media = media_kutipan(&m["quotedMsg"], &chat_id);
+    let media = media_kutipan(quoted, &chat_id);
     Some(PesanMasuk { chat_id, pengirim, is_grup, teks, menyebut_bot, kutipan, media })
 }
 
@@ -515,5 +519,28 @@ mod media_kutipan_tests {
         let media = media_kutipan(&q, "1@c.us").expect("media");
         assert_eq!(media.id, "true_1@c.us_X");
         assert_eq!(ekstensi(&media.mimetype), "ogg");
+    }
+}
+
+#[cfg(test)]
+mod payload_open_wa_tests {
+    use super::*;
+
+    #[test]
+    fn quoted_message_dan_mentioned_ids_dibaca() {
+        let p = json!({"event":"message.received","data":{"chatId":"120363@g.us","author":"177125105643571@lid","body":"@79131265994879 catat","mentionedIds":["79131265994879@lid"],"quotedMessage":{"id":"true_120363@g.us_3EB0A","type":"chat","body":"Besok bikin surat ke barjas","fromMe":false}}});
+        let m = baca_pesan(&p, "", "79131265994879@lid").expect("pesan");
+        assert!(m.menyebut_bot);
+        assert_eq!(m.kutipan.as_deref(), Some("Besok bikin surat ke barjas"));
+        assert!(m.media.is_none());
+    }
+
+    #[test]
+    fn quoted_message_berisi_foto_dikenali() {
+        let p = json!({"event":"message.received","data":{"chatId":"120363@g.us","author":"177125105643571@lid","body":"@79131265994879 catat","mentionedIds":["79131265994879@lid"],"quotedMessage":{"id":"true_120363@g.us_3EB0B","type":"image","mimetype":"image/jpeg","caption":"Pagar rusak"}}});
+        let m = baca_pesan(&p, "", "79131265994879@lid").expect("pesan");
+        let media = m.media.expect("media");
+        assert_eq!(media.id, "true_120363@g.us_3EB0B");
+        assert_eq!(media.mimetype, "image/jpeg");
     }
 }
