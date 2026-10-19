@@ -408,6 +408,8 @@ pub(crate) const TOOLS: &[(&str, &str, &str, bool)] = &[
     ("cari_surat", "Cari surat di tahun anggaran berdasarkan nomor atau perihal (maksimal 10), beserta jumlah surat tahun itu.", "{\"kata\": teks}", false),
     ("spam_ringkasan", "Ringkasan SPAM perdesaan pada tahun anggaran: jumlah unit SPAM, desa yang sudah punya unit, sambungan rumah (SR), jiwa terlayani, jiwa BJP, serta jumlah dan nilai paket budget SPAM.", "{}", false),
     ("sanitasi_capaian", "Ringkasan sanitasi air limbah per jenis (spaldt, spalds, iplt, mck_individu, mck_komunal): jumlah infrastruktur, pemanfaat KK, jiwa, dan pembiayaan. Tidak difilter tahun karena data sanitasi tidak punya tahun anggaran.", "{}", false),
+    ("daftar_tag", "Tag pekerjaan yang dipakai pada tahun anggaran, beserta jumlah paket aktif dengan tiap tag (maksimal 50).", "{}", false),
+    ("pekerjaan_bertag", "Paket pekerjaan aktif pada tahun anggaran yang diberi tag tertentu, berdasarkan nama atau slug tag (maksimal 20).", "{\"tag\": nama atau slug tag}", false),
     ("pengawas_paket", "Pengawas dan jumlah paket pekerjaan aktif yang diawasinya pada tahun anggaran (maksimal 20). Bisa dipersempit dengan nama pengawas.", "{\"kata\": nama pengawas opsional}", false),
     ("katalog_data", "Daftar tabel yang bisa dianalisis lewat analisa_tabel beserta kolomnya. Panggil dulu bila belum tahu nama kolomnya. Hanya admin.", "{}", true),
     ("analisa_tabel", "Agregasi satu tabel: jumlah baris (count), total (sum), atau rata-rata (avg) kolom angka, opsional dikelompokkan per kolom teks. Tahun anggaran diterapkan bila tabel punya tahun, kecuali semua=true. Maksimal 20 kelompok, urut dari nilai terbesar. Hanya admin.", "{\"tabel\": kode dari katalog_data, \"agregasi\": count|sum|avg, \"kolom\": kolom angka untuk sum atau avg, \"group_by\": kolom teks opsional, \"semua\": true opsional}", true),
@@ -920,6 +922,66 @@ pub(crate) async fn jalankan_tool(
             }
             let jumlah: i64 = rows.iter().map(|r| r.try_get::<i64, _>("jumlah").unwrap_or(0)).sum();
             Ok((json!({ "jumlahInfrastruktur": jumlah, "perJenis": per_jenis }), Some(jumlah)))
+        }
+        "daftar_tag" => {
+            let scope = access::restriction(user_id, roles, "p");
+            let (mut where_sql, mut binds) = f.where_clause();
+            where_sql.push_str(&scope.sql);
+            binds.extend(scope.binds.iter().map(u64::to_string));
+            let sql = format!(
+                "SELECT t.name AS nama, t.slug AS slug, CAST(COUNT(DISTINCT p.id) AS SIGNED) AS jumlah \
+                 FROM tbl_tags t INNER JOIN pekerjaan_tag pt ON pt.tag_id = t.id \
+                 INNER JOIN tbl_pekerjaan p ON p.id = pt.pekerjaan_id{where_sql} \
+                 GROUP BY t.id, t.name, t.slug ORDER BY jumlah DESC, t.name LIMIT 50"
+            );
+            let mut q = sqlx::query(&sql);
+            for b in &binds {
+                q = q.bind(b);
+            }
+            let rows = q.fetch_all(pool).await.map_err(internal)?;
+            let mut hasil = Vec::with_capacity(rows.len());
+            for r in &rows {
+                hasil.push(json!({
+                    "tag": r.try_get::<String, _>("nama").map_err(internal)?,
+                    "slug": r.try_get::<String, _>("slug").map_err(internal)?,
+                    "jumlahPaket": r.try_get::<i64, _>("jumlah").map_err(internal)?,
+                }));
+            }
+            let jumlah = hasil.len() as i64;
+            Ok((json!({ "tahun": tahun, "tag": hasil }), Some(jumlah)))
+        }
+        "pekerjaan_bertag" => {
+            let tag = args.get("tag").and_then(Value::as_str).unwrap_or("").trim().chars().take(100).collect::<String>();
+            if tag.is_empty() {
+                return Err(ApiError::new(StatusCode::BAD_REQUEST, "Sebutkan nama atau slug tag."));
+            }
+            let scope = access::restriction(user_id, roles, "p");
+            let (mut where_sql, mut binds) = f.where_clause();
+            where_sql.push_str(&scope.sql);
+            binds.extend(scope.binds.iter().map(u64::to_string));
+            binds.push(tag.clone());
+            binds.push(tag.clone());
+            let sql = format!(
+                "SELECT CAST(p.id AS SIGNED) AS id, p.nama_paket AS nama, CAST(COALESCE(p.pagu, 0) AS DOUBLE) AS pagu \
+                 FROM tbl_pekerjaan p INNER JOIN pekerjaan_tag pt ON pt.pekerjaan_id = p.id \
+                 INNER JOIN tbl_tags t ON t.id = pt.tag_id{where_sql} \
+                 AND (LOWER(t.name) = LOWER(?) OR LOWER(t.slug) = LOWER(?)) ORDER BY p.id LIMIT 20"
+            );
+            let mut q = sqlx::query(&sql);
+            for b in &binds {
+                q = q.bind(b);
+            }
+            let rows = q.fetch_all(pool).await.map_err(internal)?;
+            let mut hasil = Vec::with_capacity(rows.len());
+            for r in &rows {
+                hasil.push(json!({
+                    "id": r.try_get::<i64, _>("id").map_err(internal)?,
+                    "nama": r.try_get::<Option<String>, _>("nama").map_err(internal)?,
+                    "pagu": r.try_get::<f64, _>("pagu").map_err(internal)?,
+                }));
+            }
+            let jumlah = hasil.len() as i64;
+            Ok((json!({ "tag": tag, "tahun": tahun, "hasil": hasil }), Some(jumlah)))
         }
         "pengawas_paket" => {
             let kata = args.get("kata").and_then(Value::as_str).unwrap_or("").trim().chars().take(100).collect::<String>();
