@@ -50,7 +50,8 @@ fn angka(s: &str) -> String {
 }
 
 /// Membaca payload `message.received`. `None` bila bukan pesan masuk yang perlu diproses.
-pub(crate) fn baca_pesan(payload: &Value, bot_nomor: &str) -> Option<PesanMasuk> {
+/// `bot_lid` adalah ID LID bot (`...@lid`), dipakai karena WhatsApp sering memakai LID untuk mention di grup.
+pub(crate) fn baca_pesan(payload: &Value, bot_nomor: &str, bot_lid: &str) -> Option<PesanMasuk> {
     if let Some(event) = payload["event"].as_str().or_else(|| payload["type"].as_str()) {
         if event != "message.received" {
             return None;
@@ -79,22 +80,29 @@ pub(crate) fn baca_pesan(payload: &Value, bot_nomor: &str) -> Option<PesanMasuk>
         .or_else(|| m["text"].as_str())?
         .to_string();
 
-    let bot_id = format!("{bot_nomor}@c.us");
+    let bot_ids: Vec<String> = [format!("{bot_nomor}@c.us"), bot_lid.to_string()]
+        .into_iter()
+        .filter(|id| !id.starts_with('@') && id.contains('@'))
+        .collect();
     let mention_list = m["mentionedJidList"]
         .as_array()
         .or_else(|| m["mentions"].as_array())
-        .map(|l| l.iter().any(|x| x.as_str() == Some(bot_id.as_str())))
+        .map(|l| l.iter().filter_map(|x| x.as_str()).any(|x| bot_ids.iter().any(|b| b == x)))
         .unwrap_or(false);
-    let mention_teks = !bot_nomor.is_empty() && teks_mentah.contains(&format!("@{bot_nomor}"));
+    let lid_digit = angka(bot_lid);
+    let mention_teks = (!bot_nomor.is_empty() && teks_mentah.contains(&format!("@{bot_nomor}")))
+        || (!lid_digit.is_empty() && teks_mentah.contains(&format!("@{lid_digit}")));
     let balas_bot = m["quotedMsg"]["fromMe"].as_bool() == Some(true)
         || m["quotedMsgObj"]["fromMe"].as_bool() == Some(true);
     let menyebut_bot = mention_list || mention_teks || balas_bot;
 
-    let teks = if bot_nomor.is_empty() {
-        teks_mentah.trim().to_string()
-    } else {
-        teks_mentah.replace(&format!("@{bot_nomor}"), " ").trim().to_string()
-    };
+    let mut teks = teks_mentah.clone();
+    for token in [bot_nomor.to_string(), lid_digit.clone()] {
+        if !token.is_empty() {
+            teks = teks.replace(&format!("@{token}"), " ");
+        }
+    }
+    let teks = teks.trim().to_string();
 
     Some(PesanMasuk { chat_id, pengirim, is_grup, teks, menyebut_bot })
 }
@@ -140,6 +148,7 @@ const PESAN_BELUM_TERDAFTAR: &str = "Nomor ini belum terdaftar di Arumanis. Tamb
 /// Memproses satu pesan. Dijalankan di latar belakang agar webhook langsung dibalas 200.
 async fn proses(state: AppState, cfg: WaConfig, pesan: PesanMasuk) {
     if pesan.is_grup && !pesan.menyebut_bot {
+        eprintln!("[WA] pesan grup diabaikan: bot tidak disebut (chat {}, pengirim {})", pesan.chat_id, pesan.pengirim);
         return;
     }
     let tujuan = if pesan.is_grup {
@@ -237,8 +246,9 @@ pub async fn webhook(
         return Err(ApiError::new(StatusCode::SERVICE_UNAVAILABLE, "WA belum dikonfigurasi."));
     };
     let bot_nomor = std::env::var("WA_BOT_NUMBER").unwrap_or_default().trim().to_string();
+    let bot_lid = std::env::var("WA_BOT_LID").unwrap_or_default().trim().to_string();
 
-    match baca_pesan(&payload, &bot_nomor) {
+    match baca_pesan(&payload, &bot_nomor, &bot_lid) {
         Some(pesan) => {
             tokio::spawn(proses(state, cfg, pesan));
         }
@@ -260,7 +270,7 @@ mod tests {
     #[test]
     fn pesan_pribadi_dibaca() {
         let p = json!({"event":"message.received","data":{"chatId":"628553333200@c.us","from":"628553333200@c.us","body":"berapa pekerjaan?","fromMe":false}});
-        let m = baca_pesan(&p, BOT).unwrap();
+        let m = baca_pesan(&p, BOT, "").unwrap();
         assert_eq!(m.teks, "berapa pekerjaan?");
         assert!(!m.is_grup);
         assert!(!m.menyebut_bot);
@@ -269,19 +279,19 @@ mod tests {
     #[test]
     fn pesan_sendiri_diabaikan() {
         let p = json!({"event":"message.received","data":{"chatId":"628553333200@c.us","body":"x","fromMe":true}});
-        assert!(baca_pesan(&p, BOT).is_none());
+        assert!(baca_pesan(&p, BOT, "").is_none());
     }
 
     #[test]
     fn event_lain_diabaikan() {
         let p = json!({"event":"session.status","data":{"status":"ready"}});
-        assert!(baca_pesan(&p, BOT).is_none());
+        assert!(baca_pesan(&p, BOT, "").is_none());
     }
 
     #[test]
     fn grup_dengan_mention_dibaca_dan_mention_dibuang() {
         let p = json!({"event":"message.received","data":{"chatId":"120363@g.us","author":"628553333200@c.us","body":"@6289510000707 berapa paket?","mentionedJidList":["6289510000707@c.us"]}});
-        let m = baca_pesan(&p, BOT).unwrap();
+        let m = baca_pesan(&p, BOT, "").unwrap();
         assert!(m.is_grup);
         assert!(m.menyebut_bot);
         assert_eq!(m.teks, "berapa paket?");
@@ -290,7 +300,7 @@ mod tests {
     #[test]
     fn grup_tanpa_mention_terbaca_tapi_tidak_disebut() {
         let p = json!({"event":"message.received","data":{"chatId":"120363@g.us","author":"628553333200@c.us","body":"halo semua"}});
-        let m = baca_pesan(&p, BOT).unwrap();
+        let m = baca_pesan(&p, BOT, "").unwrap();
         assert!(m.is_grup);
         assert!(!m.menyebut_bot);
     }
@@ -298,13 +308,21 @@ mod tests {
     #[test]
     fn balas_pesan_bot_dihitung_sebagai_sebutan() {
         let p = json!({"event":"message.received","data":{"chatId":"120363@g.us","author":"628553333200@c.us","body":"lanjut","quotedMsg":{"fromMe":true}}});
-        assert!(baca_pesan(&p, BOT).unwrap().menyebut_bot);
+        assert!(baca_pesan(&p, BOT, "").unwrap().menyebut_bot);
+    }
+
+    #[test]
+    fn mention_di_grup_dengan_lid_bot_dikenali() {
+        let p = json!({"event":"message.received","data":{"chatId":"120363@g.us","author":"628553333200@c.us","body":"@177125105643571 berapa paket?","mentionedJidList":["177125105643571@lid"]}});
+        let m = baca_pesan(&p, BOT, "177125105643571@lid").unwrap();
+        assert!(m.menyebut_bot);
+        assert_eq!(m.teks, "berapa paket?");
     }
 
     #[test]
     fn lid_dikenali_sebagai_pengirim() {
         let p = json!({"event":"message.received","data":{"chatId":"177125@lid","from":"177125@lid","body":"halo"}});
-        let m = baca_pesan(&p, BOT).unwrap();
+        let m = baca_pesan(&p, BOT, "").unwrap();
         assert_eq!(m.pengirim, "177125@lid");
     }
 }
