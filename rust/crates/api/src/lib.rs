@@ -97,6 +97,7 @@ pub mod penyedia;
 pub mod penyedia_write;
 pub mod penyedia_whatsapp;
 pub mod whatsapp;
+pub mod wa_gateway;
 pub mod progress_estimasi;
 pub mod progress_metrics;
 pub mod progress_write;
@@ -288,6 +289,10 @@ pub fn app(config: &Config, state: AppState) -> Router {
         .route(
             "/api/users",
             get(users_write::index).post(users_write::store),
+        )
+        .route(
+            "/api/users/{id}/whatsapp/kirim",
+            post(wa_gateway::kirim_ke_user),
         )
         .route(
             "/api/users/{id}",
