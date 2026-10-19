@@ -1086,7 +1086,7 @@ pub async fn chat(
     let (tx, rx) = tokio::sync::mpsc::channel::<Event>(32);
     tokio::spawn(async move {
         let mulai = Instant::now();
-        let hasil = crate::ai_memory::giliran(&state, &cfg, user_id, &roles, is_admin, &tahun, &pertanyaan, &tx).await;
+        let hasil = crate::ai_memory::giliran(&state, &cfg, user_id, &roles, is_admin, &tahun, &pertanyaan, crate::ai_memory::Kanal::Web, &tx).await;
         match hasil {
             Ok((done, sumber, pemakaian)) => {
                 let tool = sumber.last().and_then(|s| s["tool"].as_str()).map(str::to_string);
