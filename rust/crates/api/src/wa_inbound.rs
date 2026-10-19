@@ -1,4 +1,4 @@
-//! Pesan WhatsApp masuk dari open-wa dijawab oleh Asisten Data, dengan data dan hak akses user yang sama
+//! Pesan WhatsApp masuk dari open-wa dijawab oleh Asisten ARUMANIS, dengan data dan hak akses user yang sama
 //! seperti di aplikasi. Alurnya: webhook `message.received` -> cari user lewat nomor -> `ai_memory::giliran`
 //! -> balasan lewat `wa_gateway`.
 //!
@@ -48,7 +48,7 @@ pub(crate) struct PesanMasuk {
 }
 
 /// Perintah "catat" dari pesan yang menyebut bot. Hanya dikenali bila kalimatnya pendek, supaya
-/// pertanyaan yang kebetulan memuat kata "catat" tetap dijawab oleh Asisten Data.
+/// pertanyaan yang kebetulan memuat kata "catat" tetap dijawab oleh Asisten ARUMANIS.
 pub(crate) fn perintah_catat(teks: &str) -> bool {
     let kata: Vec<String> = teks.split_whitespace().map(|k| k.to_lowercase()).collect();
     kata.len() <= 5 && kata.iter().any(|k| k.starts_with("catat"))
@@ -114,6 +114,15 @@ pub(crate) fn baca_pesan(payload: &Value, bot_nomor: &str, bot_lid: &str) -> Opt
         .or_else(|| m["quotedMsgObj"]["content"].as_str())
         .map(str::to_string)
         .filter(|k| !k.trim().is_empty());
+    if kutipan.is_none() && perintah_catat(&teks_mentah) {
+        // Diagnostik: perintah catat tanpa kutipan. Dicatat kunci payload dan bentuk quotedMsg agar field balasan terlihat.
+        eprintln!(
+            "[WA] catat tanpa kutipan: kunci={:?} quotedMsg={} quotedMsgObj={}",
+            m.as_object().map(|o| o.keys().collect::<Vec<_>>()),
+            m["quotedMsg"],
+            m["quotedMsgObj"]
+        );
+    }
 
     let mut teks = teks_mentah.clone();
     for token in [bot_nomor.to_string(), lid_digit.clone()] {
@@ -170,7 +179,10 @@ async fn balas(cfg: &WaConfig, chat_id: &str, teks: &str) {
 /// Nama tampil bot di WhatsApp. Dipakai untuk mengenali mention "@arumanis" di grup.
 const NAMA_BOT: &str = "arumanis";
 
-const PESAN_BELUM_TERDAFTAR: &str = "Nomor ini belum terdaftar di Arumanis. Tambahkan nomor WhatsApp Anda di menu Profil (arumanis.cianjur.space) agar bisa memakai Asisten Data.";
+const PESAN_GAGAL: &str = "Maaf, Asisten ARUMANIS sedang tidak bisa diakses. Coba lagi beberapa saat.";
+const PESAN_JAWABAN_KOSONG: &str = "Maaf, Asisten ARUMANIS tidak mendapat jawaban. Coba ulangi pertanyaannya.";
+
+const PESAN_BELUM_TERDAFTAR: &str = "Nomor ini belum terdaftar di Arumanis. Tambahkan nomor WhatsApp Anda di menu Profil (arumanis.cianjur.space) agar bisa memakai Asisten ARUMANIS.";
 
 /// Memproses satu pesan. Dijalankan di latar belakang agar webhook langsung dibalas 200.
 async fn proses(state: AppState, cfg: WaConfig, pesan: PesanMasuk) {
@@ -200,6 +212,7 @@ async fn proses(state: AppState, cfg: WaConfig, pesan: PesanMasuk) {
         Ok(None) => None,
         Err(e) => {
             eprintln!("[WA] gagal mencari user: {e}");
+            balas(&cfg, &tujuan, PESAN_GAGAL).await;
             return;
         }
     };
@@ -259,6 +272,7 @@ async fn proses(state: AppState, cfg: WaConfig, pesan: PesanMasuk) {
         Ok(r) => r,
         Err(e) => {
             eprintln!("[WA] gagal membaca peran: {e}");
+            balas(&cfg, &tujuan, PESAN_GAGAL).await;
             return;
         }
     };
@@ -280,10 +294,13 @@ async fn proses(state: AppState, cfg: WaConfig, pesan: PesanMasuk) {
 
     match hasil {
         Ok((done, _, _)) => {
-            let jawaban = done["jawaban"].as_str().unwrap_or("").to_string();
-            balas(&cfg, &tujuan, &jawaban).await;
+            let jawaban = done["jawaban"].as_str().map(str::trim).filter(|j| !j.is_empty());
+            balas(&cfg, &tujuan, jawaban.unwrap_or(PESAN_JAWABAN_KOSONG)).await;
         }
-        Err(e) => balas(&cfg, &tujuan, &format!("Maaf, Asisten Data belum bisa menjawab: {}", e.message)).await,
+        Err(e) => {
+            eprintln!("[WA] asisten gagal menjawab: {}", e.message);
+            balas(&cfg, &tujuan, &format!("Maaf, Asisten ARUMANIS belum bisa menjawab: {}", e.message)).await;
+        }
     }
 
     let pool = state.pool.clone();
