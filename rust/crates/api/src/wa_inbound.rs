@@ -124,6 +124,10 @@ pub(crate) fn baca_pesan(payload: &Value, bot_nomor: &str, bot_lid: &str) -> Opt
     let teks = teks.replace(&format!("@{NAMA_BOT}"), " ").replace(&format!("@{}", NAMA_BOT.to_uppercase()), " ");
     let teks = teks.trim().to_string();
 
+    if is_grup && !menyebut_bot {
+        // Diagnostik: lihat bentuk mention dari open-wa untuk menemukan LID bot yang sebenarnya.
+        eprintln!("[WA] diagnostik grup: body={teks_mentah:?} mentionedJidList={}", m["mentionedJidList"]);
+    }
     Some(PesanMasuk { chat_id, pengirim, is_grup, teks, menyebut_bot, kutipan })
 }
 
