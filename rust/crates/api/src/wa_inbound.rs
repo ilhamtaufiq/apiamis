@@ -210,7 +210,7 @@ async fn proses(state: AppState, cfg: WaConfig, pesan: PesanMasuk) {
     // Hasil status tidak dipakai di jalur WhatsApp, jadi penerimanya dibuang.
     let (tx, mut rx) = mpsc::channel(32);
     tokio::spawn(async move { while rx.recv().await.is_some() {} });
-    let hasil = ai_memory::giliran(&state, &ai_cfg, user_id, &roles, is_admin, &tahun, &pesan.teks, &tx).await;
+    let hasil = ai_memory::giliran(&state, &ai_cfg, user_id, &roles, is_admin, &tahun, &pesan.teks, ai_memory::Kanal::WhatsApp, &tx).await;
     drop(tx);
 
     match hasil {
