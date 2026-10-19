@@ -58,6 +58,38 @@ pub(crate) async fn simpan_dari_wa(
     Ok(hasil.last_insert_id())
 }
 
+/// Model media untuk lampiran catatan (morph type seperti di Laravel).
+const CATATAN_MODEL: &str = "App\\Models\\Catatan";
+
+/// Simpan catatan dari WhatsApp beserta satu lampiran media (foto, dokumen, dll).
+pub(crate) async fn simpan_dari_wa_media(
+    pool: &MySqlPool,
+    user_id: u64,
+    isi: &str,
+    chat_id: &str,
+    upload: &crate::media::Upload,
+    mime: &str,
+) -> Result<u64, ApiError> {
+    let isi = cek_isi(isi)?;
+    let mut tx = pool.begin().await.map_err(internal)?;
+    let hasil = sqlx::query(
+        "INSERT INTO catatan (user_id, isi, sumber, chat_id, created_at, updated_at) VALUES (?, ?, 'whatsapp', ?, NOW(), NOW())",
+    )
+    .bind(user_id)
+    .bind(isi)
+    .bind(chat_id)
+    .execute(&mut *tx)
+    .await
+    .map_err(internal)?;
+    let id = hasil.last_insert_id();
+    let stored = crate::media::attach(&mut tx, CATATAN_MODEL, id, "lampiran", upload, mime, mime.starts_with("image/")).await?;
+    if let Err(e) = tx.commit().await {
+        crate::media::remove_dirs(&[stored.dir]).await;
+        return Err(internal(e));
+    }
+    Ok(id)
+}
+
 fn catatan_json(r: &sqlx::mysql::MySqlRow) -> Result<Value, sqlx::Error> {
     Ok(json!({
         "id": r.try_get::<u64, _>("id")?,

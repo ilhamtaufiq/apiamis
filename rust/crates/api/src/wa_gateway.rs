@@ -52,6 +52,49 @@ pub async fn kirim_teks(cfg: &WaConfig, nomor_62: &str, teks: &str) -> Result<()
     kirim_ke_chat(cfg, &chat_id(nomor_62), teks).await
 }
 
+/// Mengunduh media sebuah pesan dari open-wa (`GET .../messages/{chatId}/{messageId}/media`).
+/// Menolak berkas lebih besar dari batas media, supaya memori tidak habis oleh satu pesan.
+pub async fn unduh_media(cfg: &WaConfig, chat_id: &str, message_id: &str) -> Result<Vec<u8>, ApiError> {
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(60))
+        .build()
+        .map_err(internal)?;
+    let url = format!(
+        "{}/api/sessions/{}/messages/{}/{}/media",
+        cfg.base_url,
+        cfg.session_id,
+        encode_segmen(chat_id),
+        encode_segmen(message_id)
+    );
+    let response = client
+        .get(url)
+        .header("X-API-Key", &cfg.api_key)
+        .send()
+        .await
+        .map_err(|e| ApiError::new(StatusCode::BAD_GATEWAY, format!("Gagal terhubung ke layanan WhatsApp: {e}")))?;
+    if !response.status().is_success() {
+        return Err(ApiError::new(StatusCode::BAD_GATEWAY, format!("Media tidak bisa diunduh (status {}).", response.status())));
+    }
+    if response.content_length().is_some_and(|n| n as usize > crate::media::MAX_FILE_BYTES) {
+        return Err(ApiError::new(StatusCode::PAYLOAD_TOO_LARGE, "Media terlalu besar untuk disimpan."));
+    }
+    let bytes = response.bytes().await.map_err(internal)?;
+    if bytes.is_empty() || bytes.len() > crate::media::MAX_FILE_BYTES {
+        return Err(ApiError::new(StatusCode::BAD_GATEWAY, "Media kosong atau terlalu besar."));
+    }
+    Ok(bytes.to_vec())
+}
+
+/// Mengkodekan satu segmen path URL. Karakter selain huruf, angka, dan `-_.~` diubah ke persen-kode.
+fn encode_segmen(s: &str) -> String {
+    s.bytes()
+        .map(|b| match b {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => (b as char).to_string(),
+            _ => format!("%{b:02X}"),
+        })
+        .collect()
+}
+
 /// Mengirim satu pesan teks ke chat ID apa pun: perorangan (`@c.us`) atau grup (`@g.us`).
 pub async fn kirim_ke_chat(cfg: &WaConfig, chat_id: &str, teks: &str) -> Result<(), ApiError> {
     let client = reqwest::Client::builder()

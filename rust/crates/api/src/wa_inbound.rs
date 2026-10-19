@@ -45,6 +45,44 @@ pub(crate) struct PesanMasuk {
     pub menyebut_bot: bool,
     /// Teks pesan yang dibalas, bila ada.
     pub kutipan: Option<String>,
+    /// Media dari pesan yang dibalas (foto, dokumen, dll), bila ada.
+    pub media: Option<MediaKutipan>,
+}
+
+/// Media dari pesan yang dibalas. `id` dipakai untuk mengunduh lewat open-wa.
+#[derive(Debug, Clone, PartialEq)]
+pub struct MediaKutipan {
+    pub chat_id: String,
+    pub id: String,
+    pub mimetype: String,
+}
+
+/// Mengambil media dari `quotedMsg` bila pesan yang dibalas berisi berkas.
+fn media_kutipan(q: &Value, chat_id: &str) -> Option<MediaKutipan> {
+    let tipe = q["type"].as_str().unwrap_or("");
+    let ada_media = q["isMedia"].as_bool() == Some(true)
+        || q["mimetype"].as_str().is_some_and(|t| !t.is_empty())
+        || matches!(tipe, "image" | "video" | "document" | "audio" | "sticker");
+    if !ada_media {
+        return None;
+    }
+    let id = q["id"].as_str().or_else(|| q["id"]["_serialized"].as_str())?.to_string();
+    let mimetype = q["mimetype"].as_str().filter(|t| !t.is_empty()).unwrap_or("application/octet-stream").to_string();
+    Some(MediaKutipan { chat_id: chat_id.to_string(), id, mimetype })
+}
+
+/// Ekstensi berkas dari tipe MIME. Tipe yang tidak dikenal disimpan sebagai `.bin`.
+fn ekstensi(mime: &str) -> &'static str {
+    match mime.split(';').next().unwrap_or("").trim() {
+        "image/jpeg" => "jpg",
+        "image/png" => "png",
+        "image/webp" => "webp",
+        "image/gif" => "gif",
+        "video/mp4" => "mp4",
+        "audio/ogg" => "ogg",
+        "application/pdf" => "pdf",
+        _ => "bin",
+    }
 }
 
 /// Perintah "catat" dari pesan yang menyebut bot. Hanya dikenali bila kalimatnya pendek, supaya
@@ -137,7 +175,8 @@ pub(crate) fn baca_pesan(payload: &Value, bot_nomor: &str, bot_lid: &str) -> Opt
         // Diagnostik: lihat bentuk mention dari open-wa untuk menemukan LID bot yang sebenarnya.
         eprintln!("[WA] diagnostik grup: body={teks_mentah:?} mentionedJidList={}", m["mentionedJidList"]);
     }
-    Some(PesanMasuk { chat_id, pengirim, is_grup, teks, menyebut_bot, kutipan })
+    let media = media_kutipan(&m["quotedMsg"], &chat_id);
+    Some(PesanMasuk { chat_id, pengirim, is_grup, teks, menyebut_bot, kutipan, media })
 }
 
 /// Mengubah pengirim menjadi nomor `62...`. LID diterjemahkan lewat open-wa (best-effort).
@@ -184,6 +223,26 @@ const PESAN_JAWABAN_KOSONG: &str = "Maaf, Asisten ARUMANIS tidak mendapat jawaba
 
 const PESAN_BELUM_TERDAFTAR: &str = "Nomor ini belum terdaftar di Arumanis. Tambahkan nomor WhatsApp Anda di menu Profil (arumanis.cianjur.space) agar bisa memakai Asisten ARUMANIS.";
 
+/// Mengunduh media dari WhatsApp lalu menyimpannya sebagai lampiran catatan. Mengembalikan teks balasan.
+async fn simpan_catatan_media(
+    state: &AppState,
+    cfg: &WaConfig,
+    user_id: u64,
+    isi: Option<&str>,
+    media: &MediaKutipan,
+) -> String {
+    let bytes = match wa_gateway::unduh_media(cfg, &media.chat_id, &media.id).await {
+        Ok(b) => b,
+        Err(e) => return e.message,
+    };
+    let upload = crate::media::Upload { original_name: format!("whatsapp.{}", ekstensi(&media.mimetype)), bytes };
+    let isi = isi.unwrap_or("Lampiran dari WhatsApp");
+    match catatan::simpan_dari_wa_media(&state.pool, user_id, isi, &media.chat_id, &upload, &media.mimetype).await {
+        Ok(_) => "Catatan dan lampiran tersimpan. Lihat di menu Catatan Arumanis.".to_string(),
+        Err(e) => e.message,
+    }
+}
+
 /// Memproses satu pesan. Dijalankan di latar belakang agar webhook langsung dibalas 200.
 async fn proses(state: AppState, cfg: WaConfig, pesan: PesanMasuk) {
     if pesan.is_grup && !pesan.menyebut_bot {
@@ -222,23 +281,21 @@ async fn proses(state: AppState, cfg: WaConfig, pesan: PesanMasuk) {
     };
 
     if perintah_catat(&pesan.teks) {
-        match &pesan.kutipan {
-            Some(isi) => {
-                let balasan = match catatan::simpan_dari_wa(&state.pool, user_id, isi, &pesan.chat_id).await {
+        if pesan.kutipan.is_none() && pesan.media.is_none() {
+            balas(&cfg, &tujuan, "Balas pesan yang ingin dicatat, lalu tulis @arumanis catat.").await;
+            return;
+        }
+        let balasan = match &pesan.media {
+            Some(media) => simpan_catatan_media(&state, &cfg, user_id, pesan.kutipan.as_deref(), media).await,
+            None => {
+                let isi = pesan.kutipan.clone().unwrap_or_default();
+                match catatan::simpan_dari_wa(&state.pool, user_id, &isi, &pesan.chat_id).await {
                     Ok(_) => "Catatan tersimpan. Lihat di menu Catatan Arumanis.".to_string(),
                     Err(e) => e.message,
-                };
-                balas(&cfg, &tujuan, &balasan).await;
+                }
             }
-            None => {
-                balas(
-                    &cfg,
-                    &tujuan,
-                    "Balas pesan yang ingin dicatat, lalu tulis @arumanis catat.",
-                )
-                .await
-            }
-        }
+        };
+        balas(&cfg, &tujuan, &balasan).await;
         return;
     }
 
@@ -430,5 +487,33 @@ mod tests {
         let p = json!({"event":"message.received","data":{"chatId":"177125@lid","from":"177125@lid","body":"halo"}});
         let m = baca_pesan(&p, BOT, "").unwrap();
         assert_eq!(m.pengirim, "177125@lid");
+    }
+}
+
+#[cfg(test)]
+mod media_kutipan_tests {
+    use super::*;
+
+    #[test]
+    fn foto_yang_dibalas_dikenali_sebagai_media() {
+        let q = json!({"id": "true_120363@g.us_3EB0ABC", "type": "image", "mimetype": "image/jpeg", "body": "Pagar rusak"});
+        let media = media_kutipan(&q, "120363@g.us").expect("media");
+        assert_eq!(media.id, "true_120363@g.us_3EB0ABC");
+        assert_eq!(media.mimetype, "image/jpeg");
+        assert_eq!(ekstensi(&media.mimetype), "jpg");
+    }
+
+    #[test]
+    fn teks_yang_dibalas_bukan_media() {
+        let q = json!({"id": "true_120363@g.us_3EB0XYZ", "type": "chat", "body": "Target 80%"});
+        assert!(media_kutipan(&q, "120363@g.us").is_none());
+    }
+
+    #[test]
+    fn id_serialized_dan_mime_dengan_parameter() {
+        let q = json!({"id": {"_serialized": "true_1@c.us_X"}, "mimetype": "audio/ogg; codecs=opus"});
+        let media = media_kutipan(&q, "1@c.us").expect("media");
+        assert_eq!(media.id, "true_1@c.us_X");
+        assert_eq!(ekstensi(&media.mimetype), "ogg");
     }
 }
