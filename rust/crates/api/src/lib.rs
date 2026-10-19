@@ -98,6 +98,7 @@ pub mod penyedia_write;
 pub mod penyedia_whatsapp;
 pub mod whatsapp;
 pub mod wa_gateway;
+pub mod wa_inbound;
 pub mod progress_estimasi;
 pub mod progress_metrics;
 pub mod progress_write;
@@ -411,6 +412,7 @@ pub fn app(config: &Config, state: AppState) -> Router {
         .route("/api/skp/rhk", get(skp_rhk::index).put(skp_rhk::update))
         .route("/api/ai/status", get(ai::status))
         .route("/api/ai/models", get(ai_model::list))
+        .route("/api/wa/webhook", post(wa_inbound::webhook))
         .route("/api/ai/model", put(ai_model::set))
         .route("/api/ai/analyze", post(ai::analyze))
         .route("/api/ai/tanya", post(ai::tanya))
