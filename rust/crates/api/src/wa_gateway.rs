@@ -47,8 +47,13 @@ pub fn chat_id(nomor_62: &str) -> String {
     format!("{nomor_62}@c.us")
 }
 
-/// Mengirim satu pesan teks. Mengembalikan galat yang bisa ditampilkan bila open-wa menolak.
+/// Mengirim satu pesan teks ke nomor perorangan (`62...`).
 pub async fn kirim_teks(cfg: &WaConfig, nomor_62: &str, teks: &str) -> Result<(), ApiError> {
+    kirim_ke_chat(cfg, &chat_id(nomor_62), teks).await
+}
+
+/// Mengirim satu pesan teks ke chat ID apa pun: perorangan (`@c.us`) atau grup (`@g.us`).
+pub async fn kirim_ke_chat(cfg: &WaConfig, chat_id: &str, teks: &str) -> Result<(), ApiError> {
     let client = reqwest::Client::builder()
         .timeout(Duration::from_secs(20))
         .build()
@@ -57,7 +62,7 @@ pub async fn kirim_teks(cfg: &WaConfig, nomor_62: &str, teks: &str) -> Result<()
     let response = client
         .post(url)
         .header("X-API-Key", &cfg.api_key)
-        .json(&json!({ "chatId": chat_id(nomor_62), "text": teks }))
+        .json(&json!({ "chatId": chat_id, "text": teks }))
         .send()
         .await
         .map_err(|e| ApiError::new(StatusCode::BAD_GATEWAY, format!("Gagal terhubung ke layanan WhatsApp: {e}")))?;
@@ -70,6 +75,12 @@ pub async fn kirim_teks(cfg: &WaConfig, nomor_62: &str, teks: &str) -> Result<()
     let pesan = payload["message"].as_str().unwrap_or("permintaan gagal");
     let pesan: String = pesan.chars().take(200).collect();
     Err(ApiError::new(StatusCode::BAD_GATEWAY, format!("Layanan WhatsApp menolak pesan ({status}): {pesan}")))
+}
+
+/// Memecah teks panjang menjadi beberapa pesan, masing-masing paling banyak `maks` karakter.
+pub fn potong_pesan(teks: &str, maks: usize) -> Vec<String> {
+    let kar: Vec<char> = teks.chars().collect();
+    kar.chunks(maks.max(1)).map(|c| c.iter().collect()).collect()
 }
 
 /// Teks broadcast untuk WhatsApp: judul tebal, isi polos (tag HTML dibuang), lalu tautan bila ada.

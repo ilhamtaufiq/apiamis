@@ -83,7 +83,7 @@ pub(crate) fn ai_config_dasar(model: String) -> Result<AiConfig, ApiError> {
 }
 
 
-fn cek_batas(state: &AppState, user_id: u64) -> Result<(), ApiError> {
+pub(crate) fn cek_batas(state: &AppState, user_id: u64) -> Result<(), ApiError> {
     state
         .limiter
         .hit(&format!("ai:{user_id}"), AI_MAX_PER_HOUR, Duration::from_secs(3600))
