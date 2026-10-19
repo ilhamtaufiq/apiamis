@@ -118,6 +118,7 @@ pub mod sk;
 pub mod skp_atasan;
 pub mod skp_bukti;
 pub mod ai;
+pub mod ai_model;
 pub mod ai_memory;
 pub mod surat;
 pub mod informasi;
@@ -409,6 +410,8 @@ pub fn app(config: &Config, state: AppState) -> Router {
         )
         .route("/api/skp/rhk", get(skp_rhk::index).put(skp_rhk::update))
         .route("/api/ai/status", get(ai::status))
+        .route("/api/ai/models", get(ai_model::list))
+        .route("/api/ai/model", put(ai_model::set))
         .route("/api/ai/analyze", post(ai::analyze))
         .route("/api/ai/tanya", post(ai::tanya))
         .route("/api/ai/chat", post(ai::chat))

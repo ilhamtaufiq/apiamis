@@ -53,22 +53,35 @@ fn valid_base_url(v: &str) -> bool {
     (v.starts_with("https://") || v.starts_with("http://")) && !v.contains(char::is_whitespace)
 }
 
-/// Membaca konfigurasi dari env setiap permintaan, supaya perubahan env tidak perlu restart.
-pub(crate) fn ai_config() -> Result<AiConfig, ApiError> {
+/// URL dan key layanan AI dari env. Model tidak diambil di sini, karena bisa dipilih dari pengaturan.
+pub(crate) fn ai_endpoint() -> Result<(String, Option<String>), ApiError> {
     let base_url = std::env::var("AI_BASE_URL").unwrap_or_default().trim().trim_end_matches('/').to_string();
-    let model = std::env::var("AI_MODEL").unwrap_or_default().trim().to_string();
     let api_key = std::env::var("AI_API_KEY")
         .ok()
         .map(|v| v.trim().to_string())
         .filter(|v| !v.is_empty());
-    if base_url.is_empty() || model.is_empty() || !valid_base_url(&base_url) {
+    if base_url.is_empty() || !valid_base_url(&base_url) {
         return Err(ApiError::new(
             StatusCode::SERVICE_UNAVAILABLE,
-            "Fitur AI belum dikonfigurasi. Set AI_BASE_URL dan AI_MODEL di server.",
+            "Fitur AI belum dikonfigurasi. Set AI_BASE_URL di server.",
+        ));
+    }
+    Ok((base_url, api_key))
+}
+
+/// Konfigurasi lengkap dengan model yang diberikan. Model kosong ditolak.
+pub(crate) fn ai_config_dasar(model: String) -> Result<AiConfig, ApiError> {
+    let (base_url, api_key) = ai_endpoint()?;
+    let model = model.trim().to_string();
+    if model.is_empty() {
+        return Err(ApiError::new(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "Fitur AI belum dikonfigurasi. Pilih model di Pengaturan atau set AI_MODEL di server.",
         ));
     }
     Ok(AiConfig { base_url, api_key, model })
 }
+
 
 fn cek_batas(state: &AppState, user_id: u64) -> Result<(), ApiError> {
     state
@@ -156,6 +169,23 @@ pub(crate) fn skema_tools(is_admin: bool) -> Value {
 }
 
 /// Memanggil model dan mengembalikan teks serta panggilan tool native. Pemakaian token ditambahkan ke `pemakaian`.
+/// Body permintaan ke layanan AI. `stream` selalu `false`: gateway tertentu membalas SSE bila kolom ini
+/// tidak ada, dan balasan SSE tidak bisa dibaca sebagai JSON.
+pub(crate) fn bangun_body(cfg: &AiConfig, messages: Value, max_tokens: u32, tools: Option<&Value>) -> Value {
+    let mut body = json!({
+        "model": cfg.model,
+        "temperature": 0.1,
+        "max_tokens": max_tokens,
+        "messages": messages,
+        "stream": false,
+    });
+    if let Some(tools) = tools {
+        body["tools"] = tools.clone();
+        body["tool_choice"] = json!("auto");
+    }
+    body
+}
+
 pub(crate) async fn panggil_model_lengkap(
     cfg: &AiConfig,
     messages: Value,
@@ -167,16 +197,7 @@ pub(crate) async fn panggil_model_lengkap(
         .timeout(Duration::from_secs(60))
         .build()
         .map_err(internal)?;
-    let mut body = json!({
-        "model": cfg.model,
-        "temperature": 0.1,
-        "max_tokens": max_tokens,
-        "messages": messages,
-    });
-    if let Some(tools) = tools {
-        body["tools"] = tools.clone();
-        body["tool_choice"] = json!("auto");
-    }
+    let body = bangun_body(cfg, messages, max_tokens, tools);
     let mut req = client
         .post(format!("{}/chat/completions", cfg.base_url))
         .json(&body);
@@ -325,7 +346,7 @@ pub(crate) async fn catat(
 /// `GET /api/ai/status`: konfigurasi AI tanpa membuka key.
 pub async fn status(State(state): State<AppState>, headers: HeaderMap) -> Result<Json<Value>, ApiError> {
     require_auth(&state, &headers).await?;
-    match ai_config() {
+    match crate::ai_model::ai_config_untuk(&state.pool).await {
         Ok(cfg) => Ok(Json(json!({ "configured": true, "model": cfg.model }))),
         Err(_) => Ok(Json(json!({ "configured": false, "model": null }))),
     }
@@ -338,7 +359,7 @@ pub async fn analyze(
     Json(body): Json<Value>,
 ) -> Result<Json<Value>, ApiError> {
     let user = require_auth(&state, &headers).await?;
-    let cfg = ai_config()?;
+    let cfg = crate::ai_model::ai_config_untuk(&state.pool).await?;
     cek_batas(&state, user.user_id)?;
 
     let ringkasan = sanitize_ringkasan(&body["ringkasan"])
@@ -954,7 +975,7 @@ pub async fn tanya(
     Json(body): Json<Value>,
 ) -> Result<Json<Value>, ApiError> {
     let user = require_auth(&state, &headers).await?;
-    let cfg = ai_config()?;
+    let cfg = crate::ai_model::ai_config_untuk(&state.pool).await?;
     cek_batas(&state, user.user_id)?;
 
     let pertanyaan = body["pertanyaan"].as_str().unwrap_or("").trim().to_string();
@@ -1047,7 +1068,7 @@ pub async fn chat(
     Json(body): Json<Value>,
 ) -> Result<Sse<impl futures_util::Stream<Item = Result<Event, Infallible>>>, ApiError> {
     let user = require_auth(&state, &headers).await?;
-    let cfg = ai_config()?;
+    let cfg = crate::ai_model::ai_config_untuk(&state.pool).await?;
     cek_batas(&state, user.user_id)?;
 
     let tahun = body["tahun"].as_str().unwrap_or("").trim().to_string();
@@ -1100,6 +1121,18 @@ pub async fn history(State(state): State<AppState>, headers: HeaderMap) -> Resul
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn body_selalu_meminta_balasan_json() {
+        let cfg = AiConfig { base_url: "https://x/v1".into(), api_key: None, model: "m".into() };
+        let body = bangun_body(&cfg, json!([]), 10, None);
+        assert_eq!(body["stream"], json!(false));
+        assert!(body.get("tools").is_none());
+        let tools = json!([{"type": "function"}]);
+        let dengan_tools = bangun_body(&cfg, json!([]), 10, Some(&tools));
+        assert_eq!(dengan_tools["stream"], json!(false));
+        assert_eq!(dengan_tools["tool_choice"], json!("auto"));
+    }
 
     #[test]
     fn valid_base_url_hanya_http_dan_https_tanpa_spasi() {
