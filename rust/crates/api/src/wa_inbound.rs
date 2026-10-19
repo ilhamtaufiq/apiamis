@@ -114,6 +114,15 @@ pub(crate) fn baca_pesan(payload: &Value, bot_nomor: &str, bot_lid: &str) -> Opt
         .or_else(|| m["quotedMsgObj"]["content"].as_str())
         .map(str::to_string)
         .filter(|k| !k.trim().is_empty());
+    if kutipan.is_none() && perintah_catat(&teks_mentah) {
+        // Diagnostik: perintah catat tanpa kutipan. Dicatat kunci payload dan bentuk quotedMsg agar field balasan terlihat.
+        eprintln!(
+            "[WA] catat tanpa kutipan: kunci={:?} quotedMsg={} quotedMsgObj={}",
+            m.as_object().map(|o| o.keys().collect::<Vec<_>>()),
+            m["quotedMsg"],
+            m["quotedMsgObj"]
+        );
+    }
 
     let mut teks = teks_mentah.clone();
     for token in [bot_nomor.to_string(), lid_digit.clone()] {

@@ -85,12 +85,13 @@ pub async fn total(pool: &MySqlPool, user_id: u64) -> Result<u64, ApiError> {
 }
 
 /// Menyimpan jawaban asisten beserta sumber datanya, agar tetap tampil setelah halaman dibuka ulang.
-async fn simpan_unii(pool: &MySqlPool, user_id: u64, text: &str, sumber: &[Value]) -> Result<u64, ApiError> {
+async fn simpan_unii(pool: &MySqlPool, user_id: u64, kanal: Kanal, text: &str, sumber: &[Value]) -> Result<u64, ApiError> {
     let seq = total(pool, user_id).await?;
     let sumber_json = (!sumber.is_empty()).then(|| Value::Array(sumber.to_vec()).to_string());
-    sqlx::query("INSERT INTO ai_chat_messages (user_id, seq, kind, text, sumber, created_at) VALUES (?, ?, 'unii', ?, ?, NOW())")
+    sqlx::query("INSERT INTO ai_chat_messages (user_id, seq, kind, kanal, text, sumber, created_at) VALUES (?, ?, 'unii', ?, ?, ?, NOW())")
         .bind(user_id)
         .bind(seq)
+        .bind(kanal.nama())
         .bind(text)
         .bind(sumber_json)
         .execute(pool)
@@ -100,17 +101,44 @@ async fn simpan_unii(pool: &MySqlPool, user_id: u64, text: &str, sumber: &[Value
 }
 
 /// Menambahkan pesan ke log. Mengembalikan nomor urutnya.
-pub async fn append(pool: &MySqlPool, user_id: u64, kind: &str, text: &str) -> Result<u64, ApiError> {
+pub(crate) async fn append(pool: &MySqlPool, user_id: u64, kanal: Kanal, kind: &str, text: &str) -> Result<u64, ApiError> {
     let seq = total(pool, user_id).await?;
-    sqlx::query("INSERT INTO ai_chat_messages (user_id, seq, kind, text, created_at) VALUES (?, ?, ?, ?, NOW())")
+    sqlx::query("INSERT INTO ai_chat_messages (user_id, seq, kind, kanal, text, created_at) VALUES (?, ?, ?, ?, ?, NOW())")
         .bind(user_id)
         .bind(seq)
         .bind(kind)
+        .bind(kanal.nama())
         .bind(text)
         .execute(pool)
         .await
         .map_err(internal)?;
     Ok(seq)
+}
+
+/// Jumlah pesan WhatsApp terakhir yang dibawa sebagai konteks.
+const RIWAYAT_WA_MAKS: i64 = 6;
+
+/// Riwayat percakapan WhatsApp saja, tanpa memori chat web. Dipakai sebagai konteks giliran WhatsApp.
+async fn riwayat_whatsapp(pool: &MySqlPool, user_id: u64) -> Result<String, ApiError> {
+    let rows = sqlx::query(
+        "SELECT kind, text FROM ai_chat_messages WHERE user_id = ? AND kanal = 'whatsapp' AND kind IN ('user', 'unii') ORDER BY seq DESC LIMIT ?",
+    )
+    .bind(user_id)
+    .bind(RIWAYAT_WA_MAKS)
+    .fetch_all(pool)
+    .await
+    .map_err(internal)?;
+    if rows.is_empty() {
+        return Ok(String::new());
+    }
+    let mut baris = Vec::with_capacity(rows.len());
+    for r in rows.iter().rev() {
+        let kind: String = r.try_get("kind").map_err(internal)?;
+        let text: String = r.try_get("text").map_err(internal)?;
+        let peran = if kind == "user" { "Pengguna" } else { "Asisten" };
+        baris.push(format!("{peran}: {}", potong_char(&text, 500)));
+    }
+    Ok(format!("Riwayat percakapan WhatsApp terakhir:\n{}", baris.join("\n")))
 }
 
 async fn pesan(pool: &MySqlPool, user_id: u64, seq: u64) -> Result<Option<(String, String)>, ApiError> {
@@ -468,6 +496,16 @@ pub(crate) enum Kanal {
     WhatsApp,
 }
 
+impl Kanal {
+    /// Nilai kolom `ai_chat_messages.kanal`.
+    fn nama(self) -> &'static str {
+        match self {
+            Kanal::Web => "web",
+            Kanal::WhatsApp => "whatsapp",
+        }
+    }
+}
+
 /// Instruksi sistem untuk kanal WhatsApp. `{peran}` dan `{tahun}` diisi per giliran.
 /// Bagian memori dan protokol balasan ditambahkan di `system_whatsapp`.
 const PROMPT_WA: &str = "Kamu adalah **Asisten ARUMANIS**, asisten AI untuk platform ARUMANIS: satu data air minum \
@@ -521,7 +559,9 @@ eksplisit dulu. Data keuangan, kontrak, dan addendum tidak boleh diubah tanpa ko
 - Untuk daftar data panjang, tampilkan ringkasan dan tawarkan detail atau ekspor Excel/PDF lewat fitur Laporan.
 - Saat menjelaskan langkah di portal, sebut nama menu/halaman yang sebenarnya, urut dan singkat.
 - **Kanal WhatsApp** (ini kanalmu sekarang): jawaban pendek, tanpa tabel markdown, gunakan format WhatsApp \
-  (*tebal*, daftar bernomor sederhana). Hanya untuk tim internal/admin.
+  (*tebal*, daftar bernomor sederhana). Hanya untuk tim internal/admin. \
+  Untuk sapaan atau tes singkat (misalnya 'tes' atau 'halo'), balas satu-dua kalimat lalu tawarkan bantuan. Jangan \
+  mendaftar semua kemampuan kecuali diminta, dan jangan mengungkit kesalahan atau percakapan dari kanal lain.
 
 # Batasan
 - Di luar cakupan (politik, nasihat hukum/pengadaan yang mengikat, topik tak terkait): jelaskan bahwa kamu fokus pada \
@@ -659,11 +699,16 @@ pub(crate) async fn giliran(
     } else {
         roles.iter().map(|(_, n)| n.as_str()).collect::<Vec<_>>().join(", ")
     };
-    let view = sinkron(pool, user_id).await?;
-    let teks_view = render(pool, user_id, &view).await?;
-
-    // Pertanyaan dicatat setelah view dibaca: view tidak memuat pesan terbaru secara utuh.
-    append(pool, user_id, "user", &potong_char(pertanyaan, 2_000)).await?;
+    // Kanal WhatsApp hanya memakai riwayat WhatsApp, tidak memori chat web. Dibaca sebelum pertanyaan dicatat.
+    let teks_view = match kanal {
+        Kanal::WhatsApp => riwayat_whatsapp(pool, user_id).await?,
+        Kanal::Web => {
+            // Pertanyaan dicatat setelah view dibaca: view tidak memuat pesan terbaru secara utuh.
+            let view = sinkron(pool, user_id).await?;
+            render(pool, user_id, &view).await?
+        }
+    };
+    append(pool, user_id, kanal, "user", &potong_char(pertanyaan, 2_000)).await?;
 
     // Function calling native bila diaktifkan. Bila tidak, model memakai protokol JSON.
     let native = ai::native_tools_enabled();
@@ -726,8 +771,8 @@ pub(crate) async fn giliran(
                         status(tx, &format!("Mengambil data: {nama}"));
                     }
                     let (teks, jumlah) = jalankan_langkah(state, user_id, roles, is_admin, nama, &p.args, tahun).await;
-                    append(pool, user_id, "tool", &kunci).await?;
-                    append(pool, user_id, "echo", &teks).await?;
+                    append(pool, user_id, kanal, "tool", &kunci).await?;
+                    append(pool, user_id, kanal, "echo", &teks).await?;
                     if nama != "zoom" && nama != "date" {
                         sumber.push(json!({ "tool": nama, "args": p.args, "jumlah_baris": jumlah }));
                     }
@@ -749,7 +794,7 @@ pub(crate) async fn giliran(
             .or_else(|| parsed.is_none().then(|| balas.teks.clone()))
             .filter(|t| !t.trim().is_empty())
             .unwrap_or_else(|| "Maaf, saya belum bisa menjawab dengan data yang tersedia. Coba ulangi pertanyaannya dengan lebih spesifik.".to_string());
-        simpan_unii(pool, user_id, &jawaban, &sumber).await?;
+        simpan_unii(pool, user_id, kanal, &jawaban, &sumber).await?;
         let done = json!({ "jawaban": jawaban, "sumber": sumber, "model": cfg.model });
         return Ok((done, sumber, pemakaian));
     }
