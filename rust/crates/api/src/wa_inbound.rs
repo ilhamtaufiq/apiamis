@@ -103,7 +103,9 @@ pub(crate) fn baca_pesan(payload: &Value, bot_nomor: &str, bot_lid: &str) -> Opt
         || (!lid_digit.is_empty() && teks_mentah.contains(&format!("@{lid_digit}")));
     let balas_bot = m["quotedMsg"]["fromMe"].as_bool() == Some(true)
         || m["quotedMsgObj"]["fromMe"].as_bool() == Some(true);
-    let menyebut_bot = mention_list || mention_teks || balas_bot;
+    // Mention yang terlihat di teks memakai nama tampil bot (pushName sesi), misalnya "@arumanis".
+    let mention_nama = teks_mentah.to_lowercase().contains(&format!("@{NAMA_BOT}"));
+    let menyebut_bot = mention_list || mention_teks || mention_nama || balas_bot;
 
     let kutipan = m["quotedMsg"]["body"]
         .as_str()
@@ -119,6 +121,7 @@ pub(crate) fn baca_pesan(payload: &Value, bot_nomor: &str, bot_lid: &str) -> Opt
             teks = teks.replace(&format!("@{token}"), " ");
         }
     }
+    let teks = teks.replace(&format!("@{NAMA_BOT}"), " ").replace(&format!("@{}", NAMA_BOT.to_uppercase()), " ");
     let teks = teks.trim().to_string();
 
     Some(PesanMasuk { chat_id, pengirim, is_grup, teks, menyebut_bot, kutipan })
@@ -159,6 +162,9 @@ async fn balas(cfg: &WaConfig, chat_id: &str, teks: &str) {
         }
     }
 }
+
+/// Nama tampil bot di WhatsApp. Dipakai untuk mengenali mention "@arumanis" di grup.
+const NAMA_BOT: &str = "arumanis";
 
 const PESAN_BELUM_TERDAFTAR: &str = "Nomor ini belum terdaftar di Arumanis. Tambahkan nomor WhatsApp Anda di menu Profil (arumanis.cianjur.space) agar bisa memakai Asisten Data.";
 
@@ -364,6 +370,14 @@ mod tests {
     fn balas_pesan_bot_dihitung_sebagai_sebutan() {
         let p = json!({"event":"message.received","data":{"chatId":"120363@g.us","author":"628553333200@c.us","body":"lanjut","quotedMsg":{"fromMe":true}}});
         assert!(baca_pesan(&p, BOT, "").unwrap().menyebut_bot);
+    }
+
+    #[test]
+    fn mention_nama_bot_di_grup_dikenali() {
+        let p = json!({"event":"message.received","data":{"chatId":"120363@g.us","author":"177125105643571@lid","body":"@arumanis berapa paket?"}});
+        let m = baca_pesan(&p, BOT, "").unwrap();
+        assert!(m.menyebut_bot);
+        assert_eq!(m.teks, "berapa paket?");
     }
 
     #[test]
