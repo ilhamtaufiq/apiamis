@@ -53,22 +53,35 @@ fn valid_base_url(v: &str) -> bool {
     (v.starts_with("https://") || v.starts_with("http://")) && !v.contains(char::is_whitespace)
 }
 
-/// Membaca konfigurasi dari env setiap permintaan, supaya perubahan env tidak perlu restart.
-pub(crate) fn ai_config() -> Result<AiConfig, ApiError> {
+/// URL dan key layanan AI dari env. Model tidak diambil di sini, karena bisa dipilih dari pengaturan.
+pub(crate) fn ai_endpoint() -> Result<(String, Option<String>), ApiError> {
     let base_url = std::env::var("AI_BASE_URL").unwrap_or_default().trim().trim_end_matches('/').to_string();
-    let model = std::env::var("AI_MODEL").unwrap_or_default().trim().to_string();
     let api_key = std::env::var("AI_API_KEY")
         .ok()
         .map(|v| v.trim().to_string())
         .filter(|v| !v.is_empty());
-    if base_url.is_empty() || model.is_empty() || !valid_base_url(&base_url) {
+    if base_url.is_empty() || !valid_base_url(&base_url) {
         return Err(ApiError::new(
             StatusCode::SERVICE_UNAVAILABLE,
-            "Fitur AI belum dikonfigurasi. Set AI_BASE_URL dan AI_MODEL di server.",
+            "Fitur AI belum dikonfigurasi. Set AI_BASE_URL di server.",
+        ));
+    }
+    Ok((base_url, api_key))
+}
+
+/// Konfigurasi lengkap dengan model yang diberikan. Model kosong ditolak.
+pub(crate) fn ai_config_dasar(model: String) -> Result<AiConfig, ApiError> {
+    let (base_url, api_key) = ai_endpoint()?;
+    let model = model.trim().to_string();
+    if model.is_empty() {
+        return Err(ApiError::new(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "Fitur AI belum dikonfigurasi. Pilih model di Pengaturan atau set AI_MODEL di server.",
         ));
     }
     Ok(AiConfig { base_url, api_key, model })
 }
+
 
 fn cek_batas(state: &AppState, user_id: u64) -> Result<(), ApiError> {
     state
@@ -325,7 +338,7 @@ pub(crate) async fn catat(
 /// `GET /api/ai/status`: konfigurasi AI tanpa membuka key.
 pub async fn status(State(state): State<AppState>, headers: HeaderMap) -> Result<Json<Value>, ApiError> {
     require_auth(&state, &headers).await?;
-    match ai_config() {
+    match crate::ai_model::ai_config_untuk(&state.pool).await {
         Ok(cfg) => Ok(Json(json!({ "configured": true, "model": cfg.model }))),
         Err(_) => Ok(Json(json!({ "configured": false, "model": null }))),
     }
@@ -338,7 +351,7 @@ pub async fn analyze(
     Json(body): Json<Value>,
 ) -> Result<Json<Value>, ApiError> {
     let user = require_auth(&state, &headers).await?;
-    let cfg = ai_config()?;
+    let cfg = crate::ai_model::ai_config_untuk(&state.pool).await?;
     cek_batas(&state, user.user_id)?;
 
     let ringkasan = sanitize_ringkasan(&body["ringkasan"])
@@ -954,7 +967,7 @@ pub async fn tanya(
     Json(body): Json<Value>,
 ) -> Result<Json<Value>, ApiError> {
     let user = require_auth(&state, &headers).await?;
-    let cfg = ai_config()?;
+    let cfg = crate::ai_model::ai_config_untuk(&state.pool).await?;
     cek_batas(&state, user.user_id)?;
 
     let pertanyaan = body["pertanyaan"].as_str().unwrap_or("").trim().to_string();
@@ -1047,7 +1060,7 @@ pub async fn chat(
     Json(body): Json<Value>,
 ) -> Result<Sse<impl futures_util::Stream<Item = Result<Event, Infallible>>>, ApiError> {
     let user = require_auth(&state, &headers).await?;
-    let cfg = ai_config()?;
+    let cfg = crate::ai_model::ai_config_untuk(&state.pool).await?;
     cek_batas(&state, user.user_id)?;
 
     let tahun = body["tahun"].as_str().unwrap_or("").trim().to_string();
