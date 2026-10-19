@@ -21,8 +21,9 @@ use axum::{
 use shared::ApiError;
 
 use crate::{
-    checklist::require_full_access, pekerjaan_checklist_write::checklist_table,
-    pekerjaan_checklist_write::ChecklistTable, require_auth, AppState,
+    checklist::require_full_access,
+    pekerjaan_checklist_write::{checklist_table, ChecklistTable, Konteks},
+    require_auth, AppState,
 };
 
 const PAGE_W: f64 = 841.89;
@@ -408,15 +409,35 @@ pub(crate) fn render(title: &str, meta: &str, table: &ChecklistTable) -> Vec<u8>
 }
 
 /// `GET /api/pekerjaan-checklist/export/pdf`: filter dan gate sama dengan ekspor Excel.
-/// Judul, baris meta, dan nama berkas mengikuti `exportPdf` di Laravel.
 pub async fn export_pdf(
     State(state): State<AppState>,
     headers: HeaderMap,
     Query(query): Query<HashMap<String, String>>,
 ) -> Result<Response, ApiError> {
-    require_auth(&state, &headers).await?;
-    require_full_access(&state, &headers).await?;
-    let table = checklist_table(&state.pool, &query).await?;
+    unduh_pdf(&state, &headers, &query, Konteks::Pekerjaan, "Checklist Pekerjaan", "checklist_pekerjaan").await
+}
+
+/// `GET /api/post-pekerjaan-checklist/export/pdf`: sama seperti ekspor pekerjaan, untuk post pekerjaan.
+pub async fn export_post_pdf(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(query): Query<HashMap<String, String>>,
+) -> Result<Response, ApiError> {
+    unduh_pdf(&state, &headers, &query, Konteks::PostPekerjaan, "Post Pekerjaan", "post_pekerjaan").await
+}
+
+/// Judul, baris meta, dan nama berkas mengikuti `exportPdf` di Laravel.
+async fn unduh_pdf(
+    state: &AppState,
+    headers: &HeaderMap,
+    query: &HashMap<String, String>,
+    konteks: Konteks,
+    judul: &str,
+    prefix: &str,
+) -> Result<Response, ApiError> {
+    require_auth(state, headers).await?;
+    require_full_access(state, headers).await?;
+    let table = checklist_table(&state.pool, query, konteks).await?;
 
     let now = chrono::Utc::now();
     let tahun = query
@@ -433,8 +454,8 @@ pub async fn export_pdf(
         table.rows.len()
     ));
 
-    let bytes = render("Checklist Pekerjaan", &meta, &table);
-    let filename = format!("checklist_pekerjaan_{}.pdf", now.format("%Y%m%d_%H%M%S"));
+    let bytes = render(judul, &meta, &table);
+    let filename = format!("{prefix}_{}.pdf", now.format("%Y%m%d_%H%M%S"));
     Ok((
         [
             (header::CONTENT_TYPE, "application/pdf".to_string()),

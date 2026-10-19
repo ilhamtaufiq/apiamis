@@ -889,6 +889,14 @@ pub fn app(config: &Config, state: AppState) -> Router {
             get(checklist::history_index),
         )
         .route("/api/post-pekerjaan-checklist", get(checklist::post_index))
+        .route(
+            "/api/post-pekerjaan-checklist/export/pdf",
+            get(pekerjaan_checklist_pdf::export_post_pdf),
+        )
+        .route(
+            "/api/post-pekerjaan-checklist/export/excel",
+            get(pekerjaan_checklist_write::export_post_excel),
+        )
         // Blog. `comments` (statis) didaftarkan sebelum `{id}`; `upload-video` sebelum `{id}` juga.
         .route("/api/blog", get(blog::index).post(blog_write::store))
         .route("/api/blog/comments", get(blog_comments::admin_index))
