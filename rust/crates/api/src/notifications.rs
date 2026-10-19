@@ -225,6 +225,8 @@ pub struct Broadcast {
     pub notification_type: String,
     pub url: Option<String>,
     pub is_banner: bool,
+    /// Kirim juga ke nomor WhatsApp penerima lewat open-wa.
+    pub whatsapp: bool,
 }
 
 fn push_error(errors: &mut Errors, field: &str, message: String) {
@@ -447,6 +449,11 @@ pub fn parse_broadcast(input: &Value) -> Result<Broadcast, Errors> {
         // Setiap `None` di atas sudah mencatat error, jadi jalur ini tidak tercapai.
         return Err(errors);
     };
+    let whatsapp = match input.get("whatsapp") {
+        None | Some(Value::Null) => false,
+        Some(v) => parse_bool(v).unwrap_or(false),
+    };
+
     Ok(Broadcast {
         title,
         message,
@@ -455,6 +462,7 @@ pub fn parse_broadcast(input: &Value) -> Result<Broadcast, Errors> {
         notification_type,
         url,
         is_banner,
+        whatsapp,
     })
 }
 
@@ -511,6 +519,17 @@ pub async fn send_broadcast_for(pool: &MySqlPool, input: &Value) -> Result<Value
     if recipients.is_empty() {
         return Err(ApiError::new(StatusCode::NOT_FOUND, "No recipients found"));
     }
+    // Konfigurasi WhatsApp diperiksa sebelum apa pun disimpan, supaya tidak ada broadcast setengah jadi.
+    let wa_cfg = if b.whatsapp {
+        Some(crate::wa_gateway::config().ok_or_else(|| {
+            ApiError::new(
+                StatusCode::SERVICE_UNAVAILABLE,
+                "Pengiriman WhatsApp belum dikonfigurasi. Set WA_API_URL, WA_API_KEY, dan WA_SESSION_ID.",
+            )
+        })?)
+    } else {
+        None
+    };
 
     // Laravel menulis history lalu mengirim notifikasi tanpa transaksi. Di sini keduanya
     // dalam satu transaksi supaya tidak ada history yatim bila salah satu insert gagal.
@@ -558,10 +577,24 @@ pub async fn send_broadcast_for(pool: &MySqlPool, input: &Value) -> Result<Value
     }
     tx.commit().await.map_err(internal)?;
 
-    Ok(json!({
+    let mut body = json!({
         "message": "Notification broadcasted successfully",
         "recipient_count": recipients.len(),
-    }))
+    });
+    if let Some(cfg) = wa_cfg {
+        let (antrean, tanpa_nomor) = crate::wa_gateway::antre_broadcast(
+            pool,
+            cfg,
+            recipients.clone(),
+            b.title.clone(),
+            b.message.clone(),
+            b.url.clone(),
+        )
+        .await
+        .map_err(internal)?;
+        body["whatsapp"] = json!({ "antrean": antrean, "tanpa_nomor": tanpa_nomor });
+    }
+    Ok(body)
 }
 
 fn history_json(r: &sqlx::mysql::MySqlRow) -> Result<Value, sqlx::Error> {
