@@ -135,7 +135,7 @@ pub async fn index(
 
     let list_sql = format!(
         "SELECT CAST(c.id AS UNSIGNED) AS id, c.isi, c.sumber, CAST(c.user_id AS UNSIGNED) AS user_id, \
-         u.name AS user_nama, c.created_at, c.updated_at \
+         u.name AS user_nama, CAST(c.created_at AS DATETIME) AS created_at, CAST(c.updated_at AS DATETIME) AS updated_at \
          FROM catatan c LEFT JOIN users u ON u.id = c.user_id{where_sql} ORDER BY c.created_at DESC, c.id DESC LIMIT ? OFFSET ?"
     );
     let mut lq = sqlx::query(&list_sql);
