@@ -24,7 +24,7 @@ use shared::ApiError;
 use tokio::sync::mpsc;
 
 use crate::{
-    ai, ai_memory, ai_model,
+    ai, ai_memory, ai_model, catatan,
     notifications::require_admin,
     whatsapp,
     wa_gateway::{self, WaConfig, TEKS_MAKS},
@@ -43,6 +43,15 @@ pub(crate) struct PesanMasuk {
     pub teks: String,
     /// Bot di-mention atau pesan membalas bot.
     pub menyebut_bot: bool,
+    /// Teks pesan yang dibalas, bila ada.
+    pub kutipan: Option<String>,
+}
+
+/// Perintah "catat" dari pesan yang menyebut bot. Hanya dikenali bila kalimatnya pendek, supaya
+/// pertanyaan yang kebetulan memuat kata "catat" tetap dijawab oleh Asisten Data.
+pub(crate) fn perintah_catat(teks: &str) -> bool {
+    let kata: Vec<String> = teks.split_whitespace().map(|k| k.to_lowercase()).collect();
+    kata.len() <= 5 && kata.iter().any(|k| k.starts_with("catat"))
 }
 
 fn angka(s: &str) -> String {
@@ -96,6 +105,14 @@ pub(crate) fn baca_pesan(payload: &Value, bot_nomor: &str, bot_lid: &str) -> Opt
         || m["quotedMsgObj"]["fromMe"].as_bool() == Some(true);
     let menyebut_bot = mention_list || mention_teks || balas_bot;
 
+    let kutipan = m["quotedMsg"]["body"]
+        .as_str()
+        .or_else(|| m["quotedMsg"]["content"].as_str())
+        .or_else(|| m["quotedMsgObj"]["body"].as_str())
+        .or_else(|| m["quotedMsgObj"]["content"].as_str())
+        .map(str::to_string)
+        .filter(|k| !k.trim().is_empty());
+
     let mut teks = teks_mentah.clone();
     for token in [bot_nomor.to_string(), lid_digit.clone()] {
         if !token.is_empty() {
@@ -104,7 +121,7 @@ pub(crate) fn baca_pesan(payload: &Value, bot_nomor: &str, bot_lid: &str) -> Opt
     }
     let teks = teks.trim().to_string();
 
-    Some(PesanMasuk { chat_id, pengirim, is_grup, teks, menyebut_bot })
+    Some(PesanMasuk { chat_id, pengirim, is_grup, teks, menyebut_bot, kutipan })
 }
 
 /// Mengubah pengirim menjadi nomor `62...`. LID diterjemahkan lewat open-wa (best-effort).
@@ -180,6 +197,27 @@ async fn proses(state: AppState, cfg: WaConfig, pesan: PesanMasuk) {
         balas(&cfg, &tujuan, PESAN_BELUM_TERDAFTAR).await;
         return;
     };
+
+    if perintah_catat(&pesan.teks) {
+        match &pesan.kutipan {
+            Some(isi) => {
+                let balasan = match catatan::simpan_dari_wa(&state.pool, user_id, isi, &pesan.chat_id).await {
+                    Ok(_) => "Catatan tersimpan. Lihat di menu Catatan Arumanis.".to_string(),
+                    Err(e) => e.message,
+                };
+                balas(&cfg, &tujuan, &balasan).await;
+            }
+            None => {
+                balas(
+                    &cfg,
+                    &tujuan,
+                    "Balas pesan yang ingin dicatat, lalu tulis @arumanis catat.",
+                )
+                .await
+            }
+        }
+        return;
+    }
 
     if pesan.teks.trim().is_empty() {
         balas(&cfg, &tujuan, "Silakan tulis pertanyaan Anda.").await;
@@ -317,6 +355,22 @@ mod tests {
         let m = baca_pesan(&p, BOT, "177125105643571@lid").unwrap();
         assert!(m.menyebut_bot);
         assert_eq!(m.teks, "berapa paket?");
+    }
+
+    #[test]
+    fn perintah_catat_dikenali_dan_pertanyaan_tidak() {
+        assert!(perintah_catat("tolong catat ini"));
+        assert!(perintah_catat("catat"));
+        assert!(perintah_catat("Catatkan ini ya"));
+        assert!(!perintah_catat("berapa pekerjaan yang dicatat di SP2D bulan ini ya kan?"));
+    }
+
+    #[test]
+    fn kutipan_dibaca_dari_pesan_yang_dibalas() {
+        let p = json!({"event":"message.received","data":{"chatId":"120363@g.us","author":"628553333200@c.us","body":"@6289510000707 tolong catat ini","mentionedJidList":["6289510000707@c.us"],"quotedMsg":{"body":"Target realisasi 80% di Desa Sukamaju"}}});
+        let m = baca_pesan(&p, BOT, "").unwrap();
+        assert_eq!(m.kutipan.as_deref(), Some("Target realisasi 80% di Desa Sukamaju"));
+        assert!(perintah_catat(&m.teks));
     }
 
     #[test]
