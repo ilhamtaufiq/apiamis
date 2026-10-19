@@ -16,7 +16,7 @@ use chrono::NaiveDateTime;
 use rust_xlsxwriter::{Format, Workbook};
 use serde_json::{json, Map, Value};
 use shared::ApiError;
-use sqlx::MySqlPool;
+use sqlx::{MySql, MySqlPool, QueryBuilder, Row};
 
 use crate::{
     checklist::{checks_for, items_in_context, pekerjaan_page, require_full_access, user_name, PekerjaanFilter},
@@ -229,46 +229,139 @@ pub(crate) struct ChecklistTable {
     pub rows: Vec<Vec<String>>,
 }
 
-/// Susun tabel checklist dengan filter sama dengan daftar (`tahun`, `kegiatan_id`, `search`).
-pub(crate) async fn checklist_table(
+/// Konteks checklist: pekerjaan biasa, atau post pekerjaan (hanya pekerjaan yang sudah berkontrak).
+#[derive(Clone, Copy, PartialEq)]
+pub(crate) enum Konteks {
+    Pekerjaan,
+    PostPekerjaan,
+}
+
+impl Konteks {
+    /// Nilai `context` pada `checklist_items`.
+    pub(crate) fn nama(self) -> &'static str {
+        match self {
+            Konteks::Pekerjaan => "pekerjaan",
+            Konteks::PostPekerjaan => "post_pekerjaan",
+        }
+    }
+}
+
+/// Satu baris pekerjaan untuk tabel ekspor.
+struct BarisEkspor {
+    id: u64,
+    nama_paket: String,
+    kegiatan: String,
+}
+
+/// Pekerjaan post pekerjaan yang cocok dengan filter, tanpa paginasi. Filter sama dengan `post_index`.
+async fn post_pekerjaan_rows(
     pool: &MySqlPool,
     query: &HashMap<String, String>,
-) -> Result<ChecklistTable, ApiError> {
-    let filter = PekerjaanFilter::from_query(query);
-    let columns = items_in_context(pool, "pekerjaan").await.map_err(internal)?;
+) -> Result<Vec<BarisEkspor>, ApiError> {
+    let filter_tahun = query.get("tahun").filter(|v| !v.is_empty()).cloned();
+    let filter_keg = query.get("kegiatan_id").filter(|v| !v.is_empty()).cloned();
+    let filter_search = query.get("search").filter(|v| !v.is_empty()).cloned();
 
-    // Semua pekerjaan yang cocok, dibaca per halaman besar.
-    let mut pekerjaan = Vec::new();
+    let mut qb = QueryBuilder::<MySql>::new(
+        "SELECT p.id, p.nama_paket, k.nama_sub_kegiatan FROM tbl_pekerjaan p \
+         LEFT JOIN tbl_kegiatan k ON k.id = p.kegiatan_id \
+         WHERE EXISTS (SELECT 1 FROM kontrak_pekerjaan kp WHERE kp.pekerjaan_id = p.id)",
+    );
+    if let Some(t) = &filter_tahun {
+        qb.push(" AND k.tahun_anggaran = ").push_bind(t.clone());
+    }
+    if let Some(g) = &filter_keg {
+        qb.push(" AND p.kegiatan_id = ").push_bind(g.clone());
+    }
+    if let Some(s) = &filter_search {
+        let like = format!("%{s}%");
+        qb.push(" AND (p.nama_paket LIKE ")
+            .push_bind(like.clone())
+            .push(" OR EXISTS (SELECT 1 FROM kontrak_pekerjaan kp2 JOIN tbl_kontrak kt ON kt.id = kp2.kontrak_id WHERE kp2.pekerjaan_id = p.id AND (kt.nomor_penawaran LIKE ")
+            .push_bind(like.clone())
+            .push(" OR kt.spk LIKE ")
+            .push_bind(like.clone())
+            .push(" OR kt.kode_paket LIKE ")
+            .push_bind(like)
+            .push(")))");
+    }
+    qb.push(" ORDER BY p.id");
+
+    let rows = qb.build().fetch_all(pool).await.map_err(internal)?;
+    rows.iter()
+        .map(|r| {
+            Ok(BarisEkspor {
+                id: r.try_get("id").map_err(internal)?,
+                nama_paket: r
+                    .try_get::<Option<String>, _>("nama_paket")
+                    .map_err(internal)?
+                    .unwrap_or_default(),
+                kegiatan: r
+                    .try_get::<Option<String>, _>("nama_sub_kegiatan")
+                    .map_err(internal)?
+                    .unwrap_or_else(|| "-".into()),
+            })
+        })
+        .collect()
+}
+
+/// Pekerjaan pekerjaan biasa yang cocok dengan filter, dibaca per halaman besar.
+async fn pekerjaan_rows(
+    pool: &MySqlPool,
+    query: &HashMap<String, String>,
+) -> Result<Vec<BarisEkspor>, ApiError> {
+    let filter = PekerjaanFilter::from_query(query);
+    let mut hasil = Vec::new();
     let mut page = 1u64;
     loop {
         let (rows, total) = pekerjaan_page(pool, &filter, page, 1000)
             .await
             .map_err(internal)?;
         let got = rows.len() as u64;
-        pekerjaan.extend(rows);
-        if got == 0 || pekerjaan.len() as u64 >= total {
+        hasil.extend(rows.into_iter().map(|p| BarisEkspor {
+            id: p.id,
+            nama_paket: p.nama_paket.unwrap_or_default(),
+            kegiatan: p
+                .kegiatan
+                .and_then(|(_, n)| n)
+                .unwrap_or_else(|| "-".into()),
+        }));
+        if got == 0 || hasil.len() as u64 >= total {
             break;
         }
         page += 1;
     }
+    Ok(hasil)
+}
+
+/// Susun tabel checklist dengan filter sama dengan daftar (`tahun`, `kegiatan_id`, `search`).
+pub(crate) async fn checklist_table(
+    pool: &MySqlPool,
+    query: &HashMap<String, String>,
+    konteks: Konteks,
+) -> Result<ChecklistTable, ApiError> {
+    let columns = items_in_context(pool, konteks.nama()).await.map_err(internal)?;
+    let baris = match konteks {
+        Konteks::Pekerjaan => pekerjaan_rows(pool, query).await?,
+        Konteks::PostPekerjaan => post_pekerjaan_rows(pool, query).await?,
+    };
 
     let mut headings: Vec<String> = vec!["No".into(), "Nama Paket".into(), "Kegiatan".into()];
     headings.extend(columns.iter().map(|c| c.name.clone()));
     headings.push("Tanggal Update Terakhir".into());
     headings.push("Diubah Oleh".into());
 
-    let mut rows = Vec::with_capacity(pekerjaan.len());
-    for (i, p) in pekerjaan.iter().enumerate() {
+    let mut rows = Vec::with_capacity(baris.len());
+    for (i, p) in baris.iter().enumerate() {
         let checks = checks_for(pool, p.id).await.map_err(internal)?;
         // Baris terbaru: `sortByDesc(updated_at ?? checked_at)->first()`.
         let latest = checks
             .iter()
             .max_by_key(|c| c.updated_at.clone().or_else(|| c.checked_at.clone()));
-        let kegiatan = p.kegiatan.as_ref().and_then(|(_, n)| n.clone()).unwrap_or_else(|| "-".into());
         let mut row = vec![
             (i + 1).to_string(),
-            p.nama_paket.clone().unwrap_or_default(),
-            kegiatan,
+            p.nama_paket.clone(),
+            p.kegiatan.clone(),
         ];
 
         for item in &columns {
@@ -306,16 +399,8 @@ pub(crate) async fn checklist_table(
     Ok(ChecklistTable { headings, rows })
 }
 
-/// `GET /api/pekerjaan-checklist/export/excel`: filter sama dengan daftar (`tahun`, `kegiatan_id`, `search`).
-pub async fn export_excel(
-    State(state): State<AppState>,
-    headers: HeaderMap,
-    Query(query): Query<HashMap<String, String>>,
-) -> Result<Response, ApiError> {
-    require_auth(&state, &headers).await?;
-    require_full_access(&state, &headers).await?;
-    let table = checklist_table(&state.pool, &query).await?;
-
+/// Berkas Excel dari tabel checklist: baris judul di baris pertama, lalu data.
+pub(crate) fn excel_bytes(table: &ChecklistTable) -> Result<Vec<u8>, ApiError> {
     let bold = Format::new().set_bold();
     let mut wb = Workbook::new();
     let ws = wb.add_worksheet();
@@ -333,18 +418,42 @@ pub async fn export_excel(
             }
         }
     }
+    wb.save_to_buffer().map_err(internal)
+}
 
-    let bytes = wb.save_to_buffer().map_err(internal)?;
-    let filename = format!(
-        "checklist_pekerjaan_{}.xlsx",
-        chrono::Utc::now().format("%Y%m%d_%H%M%S")
-    );
-    Ok((
+/// Respons unduhan Excel dengan nama berkas `{prefix}_{waktu}.xlsx`.
+fn lampiran_excel(prefix: &str, bytes: Vec<u8>) -> Response {
+    let filename = format!("{prefix}_{}.xlsx", chrono::Utc::now().format("%Y%m%d_%H%M%S"));
+    (
         [
             (header::CONTENT_TYPE, XLSX_MIME.to_string()),
             (header::CONTENT_DISPOSITION, format!("attachment; filename=\"{filename}\"")),
         ],
         bytes,
     )
-        .into_response())
+        .into_response()
+}
+
+/// `GET /api/pekerjaan-checklist/export/excel`: filter sama dengan daftar (`tahun`, `kegiatan_id`, `search`).
+pub async fn export_excel(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(query): Query<HashMap<String, String>>,
+) -> Result<Response, ApiError> {
+    require_auth(&state, &headers).await?;
+    require_full_access(&state, &headers).await?;
+    let table = checklist_table(&state.pool, &query, Konteks::Pekerjaan).await?;
+    Ok(lampiran_excel("checklist_pekerjaan", excel_bytes(&table)?))
+}
+
+/// `GET /api/post-pekerjaan-checklist/export/excel`: sama seperti ekspor pekerjaan, untuk post pekerjaan.
+pub async fn export_post_excel(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(query): Query<HashMap<String, String>>,
+) -> Result<Response, ApiError> {
+    require_auth(&state, &headers).await?;
+    require_full_access(&state, &headers).await?;
+    let table = checklist_table(&state.pool, &query, Konteks::PostPekerjaan).await?;
+    Ok(lampiran_excel("post_pekerjaan", excel_bytes(&table)?))
 }
