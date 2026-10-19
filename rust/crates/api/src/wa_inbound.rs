@@ -170,6 +170,9 @@ async fn balas(cfg: &WaConfig, chat_id: &str, teks: &str) {
 /// Nama tampil bot di WhatsApp. Dipakai untuk mengenali mention "@arumanis" di grup.
 const NAMA_BOT: &str = "arumanis";
 
+const PESAN_GAGAL: &str = "Maaf, Asisten Data sedang tidak bisa diakses. Coba lagi beberapa saat.";
+const PESAN_JAWABAN_KOSONG: &str = "Maaf, Asisten Data tidak mendapat jawaban. Coba ulangi pertanyaannya.";
+
 const PESAN_BELUM_TERDAFTAR: &str = "Nomor ini belum terdaftar di Arumanis. Tambahkan nomor WhatsApp Anda di menu Profil (arumanis.cianjur.space) agar bisa memakai Asisten Data.";
 
 /// Memproses satu pesan. Dijalankan di latar belakang agar webhook langsung dibalas 200.
@@ -200,6 +203,7 @@ async fn proses(state: AppState, cfg: WaConfig, pesan: PesanMasuk) {
         Ok(None) => None,
         Err(e) => {
             eprintln!("[WA] gagal mencari user: {e}");
+            balas(&cfg, &tujuan, PESAN_GAGAL).await;
             return;
         }
     };
@@ -259,6 +263,7 @@ async fn proses(state: AppState, cfg: WaConfig, pesan: PesanMasuk) {
         Ok(r) => r,
         Err(e) => {
             eprintln!("[WA] gagal membaca peran: {e}");
+            balas(&cfg, &tujuan, PESAN_GAGAL).await;
             return;
         }
     };
@@ -280,10 +285,13 @@ async fn proses(state: AppState, cfg: WaConfig, pesan: PesanMasuk) {
 
     match hasil {
         Ok((done, _, _)) => {
-            let jawaban = done["jawaban"].as_str().unwrap_or("").to_string();
-            balas(&cfg, &tujuan, &jawaban).await;
+            let jawaban = done["jawaban"].as_str().map(str::trim).filter(|j| !j.is_empty());
+            balas(&cfg, &tujuan, jawaban.unwrap_or(PESAN_JAWABAN_KOSONG)).await;
         }
-        Err(e) => balas(&cfg, &tujuan, &format!("Maaf, Asisten Data belum bisa menjawab: {}", e.message)).await,
+        Err(e) => {
+            eprintln!("[WA] asisten gagal menjawab: {}", e.message);
+            balas(&cfg, &tujuan, &format!("Maaf, Asisten Data belum bisa menjawab: {}", e.message)).await;
+        }
     }
 
     let pool = state.pool.clone();
