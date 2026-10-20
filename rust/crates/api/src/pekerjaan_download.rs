@@ -348,10 +348,22 @@ fn write_entries(
         } else {
             format!(".{extension}")
         };
-        let mut inner = format!("{label}_{}{ext_part}", item.media.id);
+        // Nama entri memakai nama asli saat upload (tanpa ekstensi, ekstensi dari berkas yang dibaca).
+        // Berkas lama tanpa nama asli memakai nama jenis dokumen dan id media.
+        let stem = match item.media.name.rsplit_once('.') {
+            Some((stem, _)) if !stem.is_empty() => stem,
+            _ => item.media.name.as_str(),
+        };
+        let nama_asli = sanitize(stem, &job.unsafe_chars);
+        let base_name = if nama_asli.is_empty() {
+            format!("{label}_{}", item.media.id)
+        } else {
+            nama_asli
+        };
+        let mut inner = format!("{base_name}{ext_part}");
         let mut n = 2;
         while used.contains(&inner) {
-            inner = format!("{label}_{}_{n}{ext_part}", item.media.id);
+            inner = format!("{base_name}_{n}{ext_part}");
             n += 1;
         }
         used.insert(inner.clone());
