@@ -410,6 +410,7 @@ pub(crate) const TOOLS: &[(&str, &str, &str, bool)] = &[
     ("sanitasi_capaian", "Ringkasan sanitasi air limbah per jenis (spaldt, spalds, iplt, mck_individu, mck_komunal): jumlah infrastruktur, pemanfaat KK, jiwa, dan pembiayaan. Tidak difilter tahun karena data sanitasi tidak punya tahun anggaran.", "{}", false),
     ("daftar_tag", "Tag pekerjaan yang dipakai pada tahun anggaran, beserta jumlah paket aktif dengan tiap tag (maksimal 50).", "{}", false),
     ("catatan_pekerjaan", "Catatan (kolom catatan) dari paket pekerjaan aktif pada tahun anggaran, dicari dengan kata dalam nama paket, kode rekening, penyedia, atau lokasi (maksimal 5 paket).", "{\"kata\": teks}", false),
+    ("usulan_penyedia", "Paket pekerjaan aktif pada tahun anggaran beserta usulan penyedianya, dicari dengan kata dalam nama paket atau nama penyedia (maksimal 10 paket).", "{\"kata\": nama paket atau nama penyedia}", false),
     ("pekerjaan_bertag", "Paket pekerjaan aktif pada tahun anggaran yang diberi tag tertentu, berdasarkan nama atau slug tag (maksimal 20).", "{\"tag\": nama atau slug tag}", false),
     ("pengawas_paket", "Pengawas dan jumlah paket pekerjaan aktif yang diawasinya pada tahun anggaran (maksimal 20). Bisa dipersempit dengan nama pengawas.", "{\"kata\": nama pengawas opsional}", false),
     ("katalog_data", "Daftar tabel yang bisa dianalisis lewat analisa_tabel beserta kolomnya. Panggil dulu bila belum tahu nama kolomnya. Hanya admin.", "{}", true),
@@ -1066,6 +1067,47 @@ pub(crate) async fn jalankan_tool(
                 })
                 .collect();
             Ok((json!({ "hasil": hasil, "jumlahTotal": total }), Some(hasil.len() as i64)))
+        }
+        "usulan_penyedia" => {
+            let kata = args.get("kata").and_then(Value::as_str).unwrap_or("").trim().chars().take(100).collect::<String>();
+            if kata.is_empty() {
+                return Ok((json!({ "hasil": [], "jumlahTotal": 0 }), Some(0)));
+            }
+            let scope = access::restriction(user_id, roles, "p");
+            let (mut where_sql, mut binds) = f.where_clause();
+            where_sql.push_str(&scope.sql);
+            binds.extend(scope.binds.iter().map(u64::to_string));
+            where_sql.push_str(" AND (p.nama_paket LIKE ? OR py.nama LIKE ?)");
+            let like = format!("%{kata}%");
+            binds.push(like.clone());
+            binds.push(like);
+            let count_sql = format!(
+                "SELECT CAST(COUNT(*) AS SIGNED) AS jumlah FROM tbl_pekerjaan p INNER JOIN tbl_penyedia py ON py.id = p.usulan_penyedia_id{where_sql}"
+            );
+            let mut q = sqlx::query(&count_sql);
+            for b in &binds {
+                q = q.bind(b);
+            }
+            let total: i64 = q.fetch_one(pool).await.map_err(internal)?.try_get("jumlah").map_err(internal)?;
+            let list_sql = format!(
+                "SELECT CAST(p.id AS SIGNED) AS id, p.nama_paket AS nama, py.nama AS usulan \
+                 FROM tbl_pekerjaan p INNER JOIN tbl_penyedia py ON py.id = p.usulan_penyedia_id{where_sql} \
+                 ORDER BY p.nama_paket LIMIT 10"
+            );
+            let mut q = sqlx::query(&list_sql);
+            for b in &binds {
+                q = q.bind(b);
+            }
+            let rows = q.fetch_all(pool).await.map_err(internal)?;
+            let mut hasil = Vec::with_capacity(rows.len());
+            for r in &rows {
+                hasil.push(json!({
+                    "id": r.try_get::<i64, _>("id").map_err(internal)?,
+                    "nama": r.try_get::<Option<String>, _>("nama").map_err(internal)?,
+                    "usulanPenyedia": r.try_get::<String, _>("usulan").map_err(internal)?,
+                }));
+            }
+            Ok((json!({ "jumlahTotal": total, "hasil": hasil }), Some(total)))
         }
         "pekerjaan_bertag" => {
             let tag = args.get("tag").and_then(Value::as_str).unwrap_or("").trim().chars().take(100).collect::<String>();
