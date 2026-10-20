@@ -60,12 +60,13 @@ pub struct PekerjaanRow {
     pub kegiatan_id: Option<i64>,
     pub pengawas_id: Option<u64>,
     pub pendamping_id: Option<u64>,
+    pub usulan_penyedia_id: Option<u64>,
     pub created_at: Option<DateTime<Utc>>,
     pub updated_at: Option<DateTime<Utc>>,
 }
 
 const COLS: &str = "p.id, p.kode_rekening, p.nama_paket, p.pagu, p.is_konsultan, p.status, p.catatan, \
-    p.kecamatan_id, p.desa_id, p.kegiatan_id, p.pengawas_id, p.pendamping_id, p.created_at, p.updated_at";
+    p.kecamatan_id, p.desa_id, p.kegiatan_id, p.pengawas_id, p.pendamping_id, p.usulan_penyedia_id, p.created_at, p.updated_at";
 
 fn map_row(r: &sqlx::mysql::MySqlRow) -> Result<PekerjaanRow, sqlx::Error> {
     let is_konsultan: Option<i64> = r.try_get("is_konsultan")?;
@@ -82,6 +83,7 @@ fn map_row(r: &sqlx::mysql::MySqlRow) -> Result<PekerjaanRow, sqlx::Error> {
         kegiatan_id: r.try_get("kegiatan_id")?,
         pengawas_id: r.try_get("pengawas_id")?,
         pendamping_id: r.try_get("pendamping_id")?,
+        usulan_penyedia_id: r.try_get("usulan_penyedia_id")?,
         created_at: r.try_get("created_at")?,
         updated_at: r.try_get("updated_at")?,
     })
@@ -711,6 +713,7 @@ pub fn to_resource(p: &PekerjaanRow, rel: &Loaded) -> Value {
         "kegiatan_id": p.kegiatan_id,
         "pengawas_id": p.pengawas_id,
         "pendamping_id": p.pendamping_id,
+        "usulan_penyedia_id": p.usulan_penyedia_id,
         "assignment_sources": rel.sources.get(&p.id).cloned().unwrap_or_default(),
         "kecamatan": kec_key,
         "desa": desa_key,
@@ -1070,6 +1073,7 @@ mod tests {
             kegiatan_id: None,
             pengawas_id: None,
             pendamping_id: None,
+            usulan_penyedia_id: None,
             created_at: None,
             updated_at: None,
         };
