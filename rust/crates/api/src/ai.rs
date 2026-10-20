@@ -409,6 +409,7 @@ pub(crate) const TOOLS: &[(&str, &str, &str, bool)] = &[
     ("spam_ringkasan", "Ringkasan SPAM perdesaan pada tahun anggaran: jumlah unit SPAM, desa yang sudah punya unit, sambungan rumah (SR), jiwa terlayani, jiwa BJP, serta jumlah dan nilai paket budget SPAM.", "{}", false),
     ("sanitasi_capaian", "Ringkasan sanitasi air limbah per jenis (spaldt, spalds, iplt, mck_individu, mck_komunal): jumlah infrastruktur, pemanfaat KK, jiwa, dan pembiayaan. Tidak difilter tahun karena data sanitasi tidak punya tahun anggaran.", "{}", false),
     ("daftar_tag", "Tag pekerjaan yang dipakai pada tahun anggaran, beserta jumlah paket aktif dengan tiap tag (maksimal 50).", "{}", false),
+    ("catatan_pekerjaan", "Catatan (kolom catatan) dari paket pekerjaan aktif pada tahun anggaran, dicari dengan kata dalam nama paket, kode rekening, penyedia, atau lokasi (maksimal 5 paket).", "{\"kata\": teks}", false),
     ("pekerjaan_bertag", "Paket pekerjaan aktif pada tahun anggaran yang diberi tag tertentu, berdasarkan nama atau slug tag (maksimal 20).", "{\"tag\": nama atau slug tag}", false),
     ("pengawas_paket", "Pengawas dan jumlah paket pekerjaan aktif yang diawasinya pada tahun anggaran (maksimal 20). Bisa dipersempit dengan nama pengawas.", "{\"kata\": nama pengawas opsional}", false),
     ("katalog_data", "Daftar tabel yang bisa dianalisis lewat analisa_tabel beserta kolomnya. Panggil dulu bila belum tahu nama kolomnya. Hanya admin.", "{}", true),
@@ -1048,6 +1049,23 @@ pub(crate) async fn jalankan_tool(
             }
             let jumlah = hasil.len() as i64;
             Ok((json!({ "tahun": tahun, "tag": hasil }), Some(jumlah)))
+        }
+        "catatan_pekerjaan" => {
+            let kata = args.get("kata").and_then(Value::as_str).unwrap_or("").trim().chars().take(100).collect::<String>();
+            if kata.is_empty() {
+                return Ok((json!({ "hasil": [], "jumlahTotal": 0 }), Some(0)));
+            }
+            let scope = access::restriction(user_id, roles, "p");
+            f.search = Some(kata);
+            let (rows, total) = pekerjaan::list(pool, &f, &scope, None, Some(5)).await.map_err(internal)?;
+            let hasil: Vec<Value> = rows
+                .iter()
+                .map(|r| {
+                    let catatan: String = r.catatan.clone().unwrap_or_default().chars().take(500).collect();
+                    json!({ "id": r.id, "nama": r.nama_paket, "catatan": catatan })
+                })
+                .collect();
+            Ok((json!({ "hasil": hasil, "jumlahTotal": total }), Some(hasil.len() as i64)))
         }
         "pekerjaan_bertag" => {
             let tag = args.get("tag").and_then(Value::as_str).unwrap_or("").trim().chars().take(100).collect::<String>();
