@@ -37,6 +37,7 @@ pub mod desa;
 pub mod desa_profile;
 pub mod raw_model;
 pub mod desa_population;
+pub mod rab_analisa;
 pub mod desa_write;
 pub mod docx_template;
 pub mod document_registers;
@@ -236,6 +237,7 @@ pub fn app(config: &Config, state: AppState) -> Router {
                 .delete(kecamatan_write::destroy),
         )
         .route("/api/desa", get(desa::index))
+        .route("/api/rab/analisa", post(rab_analisa::analisa_rab).layer(rab_analisa::body_limit()))
         .route("/api/desa", post(desa_write::store))
         .route(
             "/api/desa/{id}",
