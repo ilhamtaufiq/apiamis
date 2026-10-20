@@ -30,6 +30,9 @@ use crate::{
 
 /// Batas ukuran satu ringkasan, dalam byte.
 pub const NODE_MAX: usize = 512;
+/// Batas ringkasan model per pemanggilan `bangun_tertunda`. Sisanya dikerjakan giliran berikutnya,
+/// supaya riwayat panjang tidak memicu puluhan panggilan model berurutan.
+const MAKS_RINGKAS_PER_RUN: u32 = 10;
 /// View dipadatkan sekaligus bila melewati batas atas, sampai batas bawah.
 pub const VIEW_HI: usize = 128_000;
 pub const VIEW_LO: usize = 64_000;
@@ -382,16 +385,30 @@ async fn ringkas_gabungan(cfg: &AiConfig, mulai_a: u64, a: &str, mulai_b: u64, b
 }
 
 /// Membangun node daun dari satu pesan. Pesan pendek menjadi ringkasan dirinya sendiri, tanpa model.
-async fn bangun_daun(pool: &MySqlPool, cfg: &AiConfig, user_id: u64, seq: u64, pemakaian: &mut Pemakaian) -> Result<(), ApiError> {
+async fn bangun_daun(
+    pool: &MySqlPool,
+    cfg: &AiConfig,
+    user_id: u64,
+    seq: u64,
+    budget: &mut u32,
+    pemakaian: &mut Pemakaian,
+) -> Result<(), ApiError> {
     if node(pool, user_id, 0, seq).await?.is_some() {
         return Ok(());
     }
     let Some((kind, text)) = pesan(pool, user_id, seq).await? else {
         return Ok(());
     };
+    // Hasil tool dan echo cukup dipotong. Isi lengkapnya tetap bisa dibaca lewat zoom.
     let ringkas = if text.len() <= NODE_MAX {
         text.replace('\n', " ")
+    } else if kind == "tool" || kind == "echo" {
+        potong_byte(&text.replace('\n', " "), NODE_MAX)
+    } else if *budget == 0 {
+        // Kuota giliran ini habis. Pesan ini diringkas pada giliran berikutnya.
+        return Ok(());
     } else {
+        *budget -= 1;
         ringkas_pesan(&cfg_ringkas(cfg), seq, &kind, &text, pemakaian).await?
     };
     simpan_node(pool, user_id, 0, seq, &ringkas).await
@@ -441,9 +458,10 @@ pub(crate) async fn bangun_tertunda(pool: &MySqlPool, cfg: &AiConfig, user_id: u
 
 async fn bangun_semua(pool: &MySqlPool, cfg: &AiConfig, user_id: u64, pemakaian: &mut Pemakaian) -> Result<(), ApiError> {
     let t = total(pool, user_id).await?;
+    let mut budget = MAKS_RINGKAS_PER_RUN;
     for seq in 0..t {
         if node(pool, user_id, 0, seq).await?.is_none() {
-            bangun_daun(pool, cfg, user_id, seq, pemakaian).await?;
+            bangun_daun(pool, cfg, user_id, seq, &mut budget, pemakaian).await?;
         }
         rambat_ke_atas(pool, cfg, user_id, 0, seq, pemakaian).await?;
     }
