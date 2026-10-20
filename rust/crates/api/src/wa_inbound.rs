@@ -393,11 +393,13 @@ async fn proses(state: AppState, cfg: WaConfig, pesan: PesanMasuk) {
     }
 
     let pool = state.pool.clone();
-    tokio::spawn(async move {
-        if let Err(e) = ai_memory::bangun_tertunda(&pool, &ai_cfg, user_id).await {
-            eprintln!("[WA] gagal membangun memori: {}", e.message);
-        }
-    });
+    if ai_memory::ringkas_otomatis() {
+        tokio::spawn(async move {
+            if let Err(e) = ai_memory::bangun_tertunda(&pool, &ai_cfg, user_id).await {
+                eprintln!("[WA] gagal membangun memori: {}", e.message);
+            }
+        });
+    }
 }
 
 /// `POST /api/wa/webhook?secret=...`: webhook `message.received` dari open-wa.

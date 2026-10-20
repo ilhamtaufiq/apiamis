@@ -1321,8 +1321,10 @@ pub async fn chat(
             }
         }
         // Ringkasan dibangun setelah jawaban terkirim, supaya tidak menambah waktu tunggu.
-        if let Err(e) = crate::ai_memory::bangun_tertunda(&state.pool, &cfg, user_id).await {
-            eprintln!("[AI] gagal membangun memori chat: {}", e.message);
+        if crate::ai_memory::ringkas_otomatis() {
+            if let Err(e) = crate::ai_memory::bangun_tertunda(&state.pool, &cfg, user_id).await {
+                eprintln!("[AI] gagal membangun memori chat: {}", e.message);
+            }
         }
     });
 
@@ -1330,6 +1332,21 @@ pub async fn chat(
         rx.recv().await.map(|ev| (Ok::<Event, Infallible>(ev), rx))
     });
     Ok(Sse::new(stream).keep_alive(KeepAlive::default()))
+}
+
+/// `POST /api/ai/ringkas`: membangun ringkasan memori secara manual (admin). Berjalan di latar belakang.
+pub async fn ringkas_manual(State(state): State<AppState>, headers: HeaderMap) -> Result<Json<Value>, ApiError> {
+    let user = require_auth(&state, &headers).await?;
+    crate::notifications::require_admin(&state.pool, user.user_id).await?;
+    let cfg = crate::ai_model::ai_config_untuk(&state.pool).await?;
+    let pool = state.pool.clone();
+    let user_id = user.user_id;
+    tokio::spawn(async move {
+        if let Err(e) = crate::ai_memory::bangun_manual(&pool, &cfg, user_id).await {
+            eprintln!("[AI] ringkas manual gagal: {}", e.message);
+        }
+    });
+    Ok(Json(json!({ "status": "dimulai", "batas": crate::ai_memory::MAKS_RINGKAS_MANUAL })))
 }
 
 /// `GET /api/ai/chat/history`: pesan pengguna dan jawaban asisten, untuk ditampilkan saat halaman dibuka.
