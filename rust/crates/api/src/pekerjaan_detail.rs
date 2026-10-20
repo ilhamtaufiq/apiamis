@@ -35,6 +35,7 @@ const SHARED_KEYS: &[&str] = &[
     "kegiatan_id",
     "pengawas_id",
     "pendamping_id",
+    "usulan_penyedia_id",
 ];
 
 /// Susun resource detail untuk satu pekerjaan yang sudah lolos pemeriksaan akses.
@@ -119,6 +120,20 @@ pub async fn build(
             None => Value::Null,
         },
     );
+
+    let usulan_penyedia: Value = match row.usulan_penyedia_id {
+        Some(id) => {
+            let nama: Option<String> = sqlx::query_scalar("SELECT nama FROM tbl_penyedia WHERE id = ?")
+                .bind(id)
+                .fetch_optional(pool)
+                .await
+                .map_err(internal)?
+                .flatten();
+            nama.map_or(Value::Null, |nama| json!({ "id": id, "nama": nama }))
+        }
+        None => Value::Null,
+    };
+    out.insert("usulan_penyedia".into(), usulan_penyedia);
 
     let mut fotos = Vec::new();
     for f in foto::rows_for_pekerjaan(pool, row.id as i64).await? {

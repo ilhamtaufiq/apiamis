@@ -77,6 +77,7 @@ const FK_TABLES: &[(&str, &str)] = &[
     ("kegiatan_id", "tbl_kegiatan"),
     ("pengawas_id", "pengawas"),
     ("pendamping_id", "pengawas"),
+    ("usulan_penyedia_id", "tbl_penyedia"),
 ];
 
 /// `boolean` di Laravel: menerima true/false, 1/0, "1"/"0", "on"/"off", "yes"/"no", "true"/"false".
@@ -330,6 +331,7 @@ fn plan(current: &pekerjaan::PekerjaanRow, p: &Parsed) -> Result<Vec<Change>, Ap
             "kegiatan_id" => current.kegiatan_id,
             "pengawas_id" => current.pengawas_id.map(|i| i as i64),
             "pendamping_id" => current.pendamping_id.map(|i| i as i64),
+            "usulan_penyedia_id" => current.usulan_penyedia_id.map(|i| i as i64),
             _ => None,
         };
         candidates.push((col, opt_int(old), opt_int(*v)));
@@ -690,7 +692,7 @@ fn parse_store(body: &Value) -> Result<NewPekerjaan, Errors> {
         }
     }
 
-    for key in ["kegiatan_id", "pengawas_id", "pendamping_id"] {
+    for key in ["kegiatan_id", "pengawas_id", "pendamping_id", "usulan_penyedia_id"] {
         let attr = key.replace('_', " ");
         match obj.get(key) {
             None | Some(Value::Null) => {
@@ -797,6 +799,7 @@ fn row_attributes(p: &pekerjaan::PekerjaanRow) -> Map<String, Value> {
     m.insert("catatan".into(), json!(p.catatan));
     m.insert("pengawas_id".into(), json!(p.pengawas_id));
     m.insert("pendamping_id".into(), json!(p.pendamping_id));
+    m.insert("usulan_penyedia_id".into(), json!(p.usulan_penyedia_id));
     m.insert("created_at".into(), carbon_json(p.created_at));
     m.insert("updated_at".into(), carbon_json(p.updated_at));
     m
@@ -827,6 +830,7 @@ async fn insert_pekerjaan(
     cols.push(("kegiatan_id", opt_int(fk("kegiatan_id"))));
     cols.push(("pengawas_id", opt_int(fk("pengawas_id"))));
     cols.push(("pendamping_id", opt_int(fk("pendamping_id"))));
+    cols.push(("usulan_penyedia_id", opt_int(fk("usulan_penyedia_id"))));
     cols.push(("catatan", opt_text(n.catatan.clone())));
 
     let names: Vec<&str> = cols.iter().map(|(c, _)| *c).collect();
