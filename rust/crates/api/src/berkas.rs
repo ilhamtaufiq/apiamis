@@ -404,8 +404,16 @@ pub async fn index(
         binds.push(pid.clone());
     }
     if let Some(search) = query.get("search").filter(|v| !v.is_empty()) {
-        clauses.push("jenis_dokumen LIKE ?".into());
-        binds.push(format!("%{search}%"));
+        // Cocokkan jenis dokumen atau nama berkas yang diunggah (tabel media).
+        clauses.push(
+            "(jenis_dokumen LIKE ? OR id IN (SELECT model_id FROM media WHERE model_type = ? AND (name LIKE ? OR file_name LIKE ?)))"
+                .into(),
+        );
+        let like = format!("%{search}%");
+        binds.push(like.clone());
+        binds.push(MODEL.to_string());
+        binds.push(like.clone());
+        binds.push(like);
     }
     let wants_own = query
         .get("mine")
