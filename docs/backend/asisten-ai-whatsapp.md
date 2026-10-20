@@ -145,7 +145,7 @@ Tool yang tersedia untuk pengguna biasa dan admin ditentukan di `TOOLS` (`ai.rs`
 
 ### Pemakaian dan log
 
-- Setiap giliran dicatat ke `ai_logs` dengan token prompt dan completion.
+- Pemakaian tool dan token model dicatat ke `ai_logs` (lihat `ai::catat`).
 - Setelah giliran selesai, memori dibangun di latar belakang (`bangun_tertunda`).
 
 ## Error dan balasan
