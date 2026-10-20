@@ -90,9 +90,44 @@ pub(crate) async fn simpan_dari_wa_media(
     Ok(id)
 }
 
-fn catatan_json(r: &sqlx::mysql::MySqlRow) -> Result<Value, sqlx::Error> {
+/// Lampiran per catatan: URL asli dan thumbnail, hanya untuk media di disk `public`.
+async fn lampiran_untuk(pool: &MySqlPool, app_url: &str, ids: &[u64]) -> Result<HashMap<u64, Vec<Value>>, ApiError> {
+    let mut hasil: HashMap<u64, Vec<Value>> = HashMap::new();
+    if ids.is_empty() {
+        return Ok(hasil);
+    }
+    let daftar = vec!["?"; ids.len()].join(",");
+    let sql = format!(
+        "SELECT CAST(model_id AS UNSIGNED) AS model_id, disk, file_name, CAST(id AS UNSIGNED) AS id, \
+         COALESCE(mime_type, '') AS mime_type, CAST(generated_conversions AS CHAR) AS generated_conversions \
+         FROM media WHERE model_type = ? AND collection_name = 'lampiran' AND model_id IN ({daftar}) ORDER BY order_column, id"
+    );
+    let mut q = sqlx::query(&sql).bind(CATATAN_MODEL);
+    for id in ids {
+        q = q.bind(id);
+    }
+    let rows = q.fetch_all(pool).await.map_err(internal)?;
+    for r in &rows {
+        let disk: String = r.try_get("disk").map_err(internal)?;
+        if disk != "public" {
+            continue;
+        }
+        let model_id: u64 = r.try_get("model_id").map_err(internal)?;
+        let media_id: u64 = r.try_get("id").map_err(internal)?;
+        let file_name: String = r.try_get("file_name").map_err(internal)?;
+        let mime: String = r.try_get("mime_type").map_err(internal)?;
+        let generated: String = r.try_get("generated_conversions").map_err(internal)?;
+        let (url, thumb) = crate::media::public_urls(app_url, media_id, &file_name, &generated);
+        hasil.entry(model_id).or_default().push(json!({ "url": url, "thumb": thumb, "mime_type": mime }));
+    }
+    Ok(hasil)
+}
+
+fn catatan_json(r: &sqlx::mysql::MySqlRow, lampiran: &HashMap<u64, Vec<Value>>) -> Result<Value, sqlx::Error> {
+    let id: u64 = r.try_get("id")?;
     Ok(json!({
-        "id": r.try_get::<u64, _>("id")?,
+        "id": id,
+        "lampiran": lampiran.get(&id).cloned().unwrap_or_default(),
         "isi": r.try_get::<String, _>("isi")?,
         "sumber": r.try_get::<String, _>("sumber")?,
         "user_id": r.try_get::<u64, _>("user_id")?,
@@ -151,7 +186,9 @@ pub async fn index(
         .fetch_all(&state.pool)
         .await
         .map_err(internal)?;
-    let data = rows.iter().map(catatan_json).collect::<Result<Vec<_>, _>>().map_err(internal)?;
+    let ids: Vec<u64> = rows.iter().map(|r| r.try_get::<u64, _>("id")).collect::<Result<_, _>>().map_err(internal)?;
+    let lampiran = lampiran_untuk(&state.pool, &state.app_url, &ids).await?;
+    let data = rows.iter().map(|r| catatan_json(r, &lampiran)).collect::<Result<Vec<_>, _>>().map_err(internal)?;
 
     let base = format!("{}/api/catatan", state.app_url.trim_end_matches('/'));
     Ok(Json(json!({
