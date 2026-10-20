@@ -55,6 +55,8 @@ pub struct MediaKutipan {
     pub chat_id: String,
     pub id: String,
     pub mimetype: String,
+    /// Nama berkas asli dari WhatsApp, bila dikirim (dokumen biasanya punya nama).
+    pub filename: Option<String>,
 }
 
 /// Kandidat media dari pesan yang dibalas: cukup punya `id`. Open-wa tidak selalu mengirim tipe atau
@@ -62,7 +64,8 @@ pub struct MediaKutipan {
 fn media_kutipan(q: &Value, chat_id: &str) -> Option<MediaKutipan> {
     let id = q["id"].as_str().or_else(|| q["id"]["_serialized"].as_str())?.to_string();
     let mimetype = q["mimetype"].as_str().filter(|t| !t.is_empty()).unwrap_or("application/octet-stream").to_string();
-    Some(MediaKutipan { chat_id: chat_id.to_string(), id, mimetype })
+    let filename = q["filename"].as_str().map(str::trim).filter(|n| !n.is_empty()).map(str::to_string);
+    Some(MediaKutipan { chat_id: chat_id.to_string(), id, mimetype, filename })
 }
 
 /// Ekstensi berkas dari tipe MIME. Tipe yang tidak dikenal disimpan sebagai `.bin`.
@@ -75,7 +78,24 @@ fn ekstensi(mime: &str) -> &'static str {
         "video/mp4" => "mp4",
         "audio/ogg" => "ogg",
         "application/pdf" => "pdf",
+        "application/msword" => "doc",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document" => "docx",
+        "application/vnd.ms-excel" => "xls",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" => "xlsx",
+        "application/zip" => "zip",
         _ => "bin",
+    }
+}
+
+/// Tipe berkas dari awal isinya (magic bytes), untuk dokumen yang dikirim tanpa MIME.
+/// Dokumen Office berbentuk ZIP tidak bisa dibedakan dari isinya saja, jadi `None`.
+fn sniff_dokumen(bytes: &[u8]) -> Option<&'static str> {
+    if bytes.starts_with(b"%PDF") {
+        Some("application/pdf")
+    } else if bytes.starts_with(b"\xD0\xCF\x11\xE0") {
+        Some("application/msword")
+    } else {
+        None
     }
 }
 
@@ -231,10 +251,17 @@ async fn unduh_lampiran(cfg: &WaConfig, media: &MediaKutipan) -> Option<(crate::
             return None;
         }
     };
+    // Tipe dari isi berkas lebih dapat dipercaya daripada MIME dari WhatsApp, yang sering kosong.
     let mime = crate::media::image_mime(&bytes)
+        .or_else(|| sniff_dokumen(&bytes))
         .map(str::to_string)
         .unwrap_or_else(|| media.mimetype.clone());
-    let upload = crate::media::Upload { original_name: format!("whatsapp.{}", ekstensi(&mime)), bytes };
+    let nama = match &media.filename {
+        Some(nama) if nama.contains('.') => nama.clone(),
+        Some(nama) => format!("{nama}.{}", ekstensi(&mime)),
+        None => format!("whatsapp.{}", ekstensi(&mime)),
+    };
+    let upload = crate::media::Upload { original_name: nama, bytes };
     Some((upload, mime))
 }
 
