@@ -1338,6 +1338,9 @@ pub async fn chat(
 pub async fn ringkas_manual(State(state): State<AppState>, headers: HeaderMap) -> Result<Json<Value>, ApiError> {
     let user = require_auth(&state, &headers).await?;
     crate::notifications::require_admin(&state.pool, user.user_id).await?;
+    if crate::ai_memory::sedang_berjalan(user.user_id) {
+        return Ok(Json(json!({ "status": "sudah_berjalan" })));
+    }
     let cfg = crate::ai_model::ai_config_untuk(&state.pool).await?;
     let pool = state.pool.clone();
     let user_id = user.user_id;
