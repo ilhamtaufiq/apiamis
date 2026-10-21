@@ -33,6 +33,8 @@ pub const NODE_MAX: usize = 512;
 /// Batas ringkasan model per pemanggilan `bangun_tertunda`. Sisanya dikerjakan giliran berikutnya,
 /// supaya riwayat panjang tidak memicu puluhan panggilan model berurutan.
 const MAKS_RINGKAS_PER_RUN: u32 = 10;
+/// Batas ringkasan per klik tombol manual (admin). Lebih besar dari batas otomatis.
+pub const MAKS_RINGKAS_MANUAL: u32 = 100;
 /// View dipadatkan sekaligus bila melewati batas atas, sampai batas bawah.
 pub const VIEW_HI: usize = 128_000;
 pub const VIEW_LO: usize = 64_000;
@@ -444,10 +446,28 @@ async fn rambat_ke_atas(pool: &MySqlPool, cfg: &AiConfig, user_id: u64, mut leve
 }
 
 /// Membangun semua ringkasan yang belum ada, lalu menyelaraskan view. Dijalankan di latar belakang setelah giliran.
+/// Pembangunan memori otomatis setelah giliran. Mati kecuali `AI_RINGKAS_OTOMATIS=1`.
+pub(crate) fn ringkas_otomatis() -> bool {
+    nilai_ringkas_otomatis(std::env::var("AI_RINGKAS_OTOMATIS").ok().as_deref())
+}
+
+fn nilai_ringkas_otomatis(nilai: Option<&str>) -> bool {
+    matches!(nilai.map(|v| v.trim().to_ascii_lowercase()).as_deref(), Some("1") | Some("true") | Some("ya"))
+}
+
 pub(crate) async fn bangun_tertunda(pool: &MySqlPool, cfg: &AiConfig, user_id: u64) -> Result<(), ApiError> {
+    bangun_dengan_batas(pool, cfg, user_id, MAKS_RINGKAS_PER_RUN).await
+}
+
+/// Pembangunan manual dari admin: batas ringkasan lebih besar, tetap dijalankan satu per satu.
+pub(crate) async fn bangun_manual(pool: &MySqlPool, cfg: &AiConfig, user_id: u64) -> Result<(), ApiError> {
+    bangun_dengan_batas(pool, cfg, user_id, MAKS_RINGKAS_MANUAL).await
+}
+
+async fn bangun_dengan_batas(pool: &MySqlPool, cfg: &AiConfig, user_id: u64, batas: u32) -> Result<(), ApiError> {
     let _kunci = build_lock().lock().await;
     let mut pemakaian = Pemakaian::default();
-    let hasil = bangun_semua(pool, cfg, user_id, &mut pemakaian).await;
+    let hasil = bangun_semua(pool, cfg, user_id, &mut pemakaian, batas).await;
     // Biaya ringkasan dicatat terpisah dari giliran chat, agar pemakaian token terlihat utuh.
     if pemakaian.prompt + pemakaian.completion > 0 {
         let status = if hasil.is_ok() { "ok" } else { "gagal" };
@@ -456,9 +476,9 @@ pub(crate) async fn bangun_tertunda(pool: &MySqlPool, cfg: &AiConfig, user_id: u
     hasil
 }
 
-async fn bangun_semua(pool: &MySqlPool, cfg: &AiConfig, user_id: u64, pemakaian: &mut Pemakaian) -> Result<(), ApiError> {
+async fn bangun_semua(pool: &MySqlPool, cfg: &AiConfig, user_id: u64, pemakaian: &mut Pemakaian, batas: u32) -> Result<(), ApiError> {
     let t = total(pool, user_id).await?;
-    let mut budget = MAKS_RINGKAS_PER_RUN;
+    let mut budget = batas;
     for seq in 0..t {
         if node(pool, user_id, 0, seq).await?.is_none() {
             bangun_daun(pool, cfg, user_id, seq, &mut budget, pemakaian).await?;
@@ -867,5 +887,24 @@ mod tests {
         let p = potong_byte(&s, 5);
         assert!(p.len() <= 5);
         assert!(s.starts_with(&p));
+    }
+}
+
+#[cfg(test)]
+mod ringkas_otomatis_tests {
+    use super::nilai_ringkas_otomatis;
+
+    #[test]
+    fn mati_secara_default() {
+        assert!(!nilai_ringkas_otomatis(None));
+        assert!(!nilai_ringkas_otomatis(Some("0")));
+        assert!(!nilai_ringkas_otomatis(Some("")));
+    }
+
+    #[test]
+    fn nyala_hanya_bila_diminta() {
+        assert!(nilai_ringkas_otomatis(Some("1")));
+        assert!(nilai_ringkas_otomatis(Some("true")));
+        assert!(nilai_ringkas_otomatis(Some(" TRUE ")));
     }
 }
