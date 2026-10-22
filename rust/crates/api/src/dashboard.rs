@@ -141,7 +141,7 @@ pub struct Scope {
 }
 
 const NOT_CANCELED: &str = "(tbl_pekerjaan.status IS NULL OR tbl_pekerjaan.status <> 'canceled')";
-const WITH_KONTRAK: &str = "(EXISTS (SELECT * FROM tbl_kontrak WHERE tbl_kontrak.id_pekerjaan = tbl_pekerjaan.id) \
+pub(crate) const WITH_KONTRAK: &str = "(EXISTS (SELECT * FROM tbl_kontrak WHERE tbl_kontrak.id_pekerjaan = tbl_pekerjaan.id) \
      OR EXISTS (SELECT * FROM kontrak_pekerjaan WHERE kontrak_pekerjaan.pekerjaan_id = tbl_pekerjaan.id))";
 
 impl Scope {
