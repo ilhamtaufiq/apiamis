@@ -284,6 +284,21 @@ fn grid_dari_berkas(bytes: Vec<u8>) -> Result<Vec<Vec<Sel>>, String> {
     Ok(grid_dari_excel(range))
 }
 
+/// Total pada rekap di atas rincian: baris `JUMLAH` atau `SUB JUMLAH`, nilainya di kolom jumlah.
+/// `None` bila file tidak punya rekap seperti itu (mis. teks tempel).
+pub fn jumlah_rekap(rows: &[Vec<Sel>]) -> Option<f64> {
+    let kolom = cari_kolom(rows)?;
+    let sel = |row: &Vec<Sel>, i: usize| row.get(i).cloned().unwrap_or(Sel::Kosong);
+    rows.iter().take(kolom.header).find_map(|row| {
+        let uraian = teks(&sel(row, kolom.uraian)).to_uppercase();
+        if uraian == "JUMLAH" || uraian == "SUB JUMLAH" {
+            angka(row.get(kolom.jumlah))
+        } else {
+            None
+        }
+    })
+}
+
 fn analisa(rincian: &Rincian) -> Value {
     let mut dpp = 0.0;
     let mut ppn_total = 0.0;
@@ -376,7 +391,13 @@ pub async fn analisa_rab(
             "Tidak ada item RAB yang terbaca. Pastikan formatnya rincian RAB (sumur bor atau MCK).",
         ));
     }
-    Ok(Json(analisa(&rincian)))
+    let mut hasil = analisa(&rincian);
+    let dpp = hasil["summary"]["subtotalDpp"].as_f64().unwrap_or(0.0);
+    hasil["rekap"] = match jumlah_rekap(&grid) {
+        Some(jumlah) => json!({ "jumlah": jumlah, "selisih": dpp - jumlah }),
+        None => Value::Null,
+    };
+    Ok(Json(hasil))
 }
 
 /// Pembatas ukuran body untuk rute analisa RAB.
@@ -451,6 +472,15 @@ mod tests {
         grid.retain(|r| !teks(&r[2]).starts_with("SUB TOTAL I"));
         let hasil = baca_rincian(&grid);
         assert!(!hasil.lengkap);
+    }
+
+    #[test]
+    fn jumlah_rekap_diambil_dari_baris_jumlah_sebelum_rincian() {
+        let mut grid = vec![baris(&[(1, s("No")), (2, s("Item Pekerjaan")), (7, s("Satuan")), (8, s("Volume")), (9, s("Harga Satuan")), (10, s("Jumlah Harga Satuan"))])];
+        grid.push(baris(&[(2, s("Pekerjaan Persiapan")), (7, s("paket")), (8, n(1.0)), (9, n(300.0)), (10, n(300.0))]));
+        grid.push(baris(&[(2, s("Jumlah")), (10, n(300.0))]));
+        grid.extend(contoh());
+        assert_eq!(jumlah_rekap(&grid), Some(300.0));
     }
 
     #[test]
