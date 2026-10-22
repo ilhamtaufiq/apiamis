@@ -180,6 +180,10 @@ pub fn baca_rincian(rows: &[Vec<Sel>]) -> Rincian {
         let volume = angka(row.get(kolom.volume));
         let harga = angka(row.get(kolom.harga));
         let (Some(volume), Some(harga)) = (volume, harga) else { continue };
+        // Volume 0 tidak ikut dalam rincian: jumlahnya 0 dan tidak perlu tampil atau diunduh.
+        if volume == 0.0 {
+            continue;
+        }
         if satuan.is_empty() {
             continue;
         }
@@ -504,6 +508,14 @@ mod tests {
         let rincian = baca_rincian(&grid_dari_teks(teks));
         let uraian: Vec<&str> = rincian.items.iter().map(|i| i.uraian.as_str()).collect();
         assert_eq!(uraian, vec!["Pembatas Area", "Topi"]);
+    }
+
+    #[test]
+    fn volume_nol_tidak_masuk_rincian() {
+        let teks = "NO\tURAIAN PEKERJAAN\t\t\tSATUAN\tVOLUME\tHARGA\tJUMLAH\nI\tPEKERJAAN PERSIAPAN\n1\tPoster\t\t\tLbr\t0\t14000\t0\n2\tTopi\t\t\tBh\t2\t10000\t20000";
+        let rincian = baca_rincian(&grid_dari_teks(teks));
+        let uraian: Vec<&str> = rincian.items.iter().map(|i| i.uraian.as_str()).collect();
+        assert_eq!(uraian, vec!["Topi"]);
     }
 
     #[test]
