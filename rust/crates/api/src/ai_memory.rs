@@ -35,6 +35,8 @@ pub const NODE_MAX: usize = 512;
 const MAKS_RINGKAS_PER_RUN: u32 = 10;
 /// Batas ringkasan per klik tombol manual (admin). Lebih besar dari batas otomatis.
 pub const MAKS_RINGKAS_MANUAL: u32 = 100;
+/// Pembangunan otomatis hanya untuk pesan terbaru. Backlog lama dibangun lewat tombol manual.
+const JENDELA_OTOMATIS: u64 = 20;
 /// View dipadatkan sekaligus bila melewati batas atas, sampai batas bawah.
 pub const VIEW_HI: usize = 128_000;
 pub const VIEW_LO: usize = 64_000;
@@ -417,7 +419,15 @@ async fn bangun_daun(
 }
 
 /// Setelah satu node dibangun, bangun induknya selama saudaranya sudah ada.
-async fn rambat_ke_atas(pool: &MySqlPool, cfg: &AiConfig, user_id: u64, mut level: u8, mut idx: u64, pemakaian: &mut Pemakaian) -> Result<(), ApiError> {
+async fn rambat_ke_atas(
+    pool: &MySqlPool,
+    cfg: &AiConfig,
+    user_id: u64,
+    mut level: u8,
+    mut idx: u64,
+    budget: &mut u32,
+    pemakaian: &mut Pemakaian,
+) -> Result<(), ApiError> {
     loop {
         let saudara = if idx % 2 == 0 { idx + 1 } else { idx - 1 };
         let Some(teks_saudara) = node(pool, user_id, level, saudara).await? else {
@@ -436,6 +446,11 @@ async fn rambat_ke_atas(pool: &MySqlPool, cfg: &AiConfig, user_id: u64, mut leve
             let ringkas = if gabung.len() <= NODE_MAX {
                 gabung.replace('\n', " ")
             } else {
+                // Simpul induk juga memakai model, jadi ikut dibatasi oleh kuota putaran.
+                if *budget == 0 {
+                    return Ok(());
+                }
+                *budget -= 1;
                 ringkas_gabungan(&cfg_ringkas(cfg), mulai_kiri, &kiri, mulai_kanan, &kanan, pemakaian).await?
             };
             simpan_node(pool, user_id, induk_level, induk_idx, &ringkas).await?;
@@ -456,18 +471,53 @@ fn nilai_ringkas_otomatis(nilai: Option<&str>) -> bool {
 }
 
 pub(crate) async fn bangun_tertunda(pool: &MySqlPool, cfg: &AiConfig, user_id: u64) -> Result<(), ApiError> {
-    bangun_dengan_batas(pool, cfg, user_id, MAKS_RINGKAS_PER_RUN).await
+    bangun_dengan_batas(pool, cfg, user_id, MAKS_RINGKAS_PER_RUN, Some(JENDELA_OTOMATIS)).await
 }
 
 /// Pembangunan manual dari admin: batas ringkasan lebih besar, tetap dijalankan satu per satu.
 pub(crate) async fn bangun_manual(pool: &MySqlPool, cfg: &AiConfig, user_id: u64) -> Result<(), ApiError> {
-    bangun_dengan_batas(pool, cfg, user_id, MAKS_RINGKAS_MANUAL).await
+    bangun_dengan_batas(pool, cfg, user_id, MAKS_RINGKAS_MANUAL, None).await
 }
 
-async fn bangun_dengan_batas(pool: &MySqlPool, cfg: &AiConfig, user_id: u64, batas: u32) -> Result<(), ApiError> {
+/// Penanda putaran yang sedang berjalan per pengguna. Pemicu baru selama putaran berjalan dibuang.
+fn aktif() -> &'static std::sync::Mutex<std::collections::HashSet<u64>> {
+    static AKTIF: std::sync::OnceLock<std::sync::Mutex<std::collections::HashSet<u64>>> = std::sync::OnceLock::new();
+    AKTIF.get_or_init(Default::default)
+}
+
+struct PenandaRingkas(u64);
+
+impl PenandaRingkas {
+    fn ambil(user_id: u64) -> Option<Self> {
+        let mut set = aktif().lock().unwrap_or_else(|e| e.into_inner());
+        set.insert(user_id).then_some(Self(user_id))
+    }
+}
+
+impl Drop for PenandaRingkas {
+    fn drop(&mut self) {
+        aktif().lock().unwrap_or_else(|e| e.into_inner()).remove(&self.0);
+    }
+}
+
+/// Apakah pembangunan ringkasan untuk pengguna ini sedang berjalan.
+pub(crate) fn sedang_berjalan(user_id: u64) -> bool {
+    aktif().lock().unwrap_or_else(|e| e.into_inner()).contains(&user_id)
+}
+
+async fn bangun_dengan_batas(
+    pool: &MySqlPool,
+    cfg: &AiConfig,
+    user_id: u64,
+    batas: u32,
+    jendela: Option<u64>,
+) -> Result<(), ApiError> {
+    let Some(_penanda) = PenandaRingkas::ambil(user_id) else {
+        return Ok(());
+    };
     let _kunci = build_lock().lock().await;
     let mut pemakaian = Pemakaian::default();
-    let hasil = bangun_semua(pool, cfg, user_id, &mut pemakaian, batas).await;
+    let hasil = bangun_semua(pool, cfg, user_id, &mut pemakaian, batas, jendela).await;
     // Biaya ringkasan dicatat terpisah dari giliran chat, agar pemakaian token terlihat utuh.
     if pemakaian.prompt + pemakaian.completion > 0 {
         let status = if hasil.is_ok() { "ok" } else { "gagal" };
@@ -476,14 +526,22 @@ async fn bangun_dengan_batas(pool: &MySqlPool, cfg: &AiConfig, user_id: u64, bat
     hasil
 }
 
-async fn bangun_semua(pool: &MySqlPool, cfg: &AiConfig, user_id: u64, pemakaian: &mut Pemakaian, batas: u32) -> Result<(), ApiError> {
+async fn bangun_semua(
+    pool: &MySqlPool,
+    cfg: &AiConfig,
+    user_id: u64,
+    pemakaian: &mut Pemakaian,
+    batas: u32,
+    jendela: Option<u64>,
+) -> Result<(), ApiError> {
     let t = total(pool, user_id).await?;
+    let mulai = jendela.map_or(0, |j| t.saturating_sub(j));
     let mut budget = batas;
-    for seq in 0..t {
+    for seq in mulai..t {
         if node(pool, user_id, 0, seq).await?.is_none() {
             bangun_daun(pool, cfg, user_id, seq, &mut budget, pemakaian).await?;
         }
-        rambat_ke_atas(pool, cfg, user_id, 0, seq, pemakaian).await?;
+        rambat_ke_atas(pool, cfg, user_id, 0, seq, &mut budget, pemakaian).await?;
     }
     sinkron(pool, user_id).await?;
     Ok(())
