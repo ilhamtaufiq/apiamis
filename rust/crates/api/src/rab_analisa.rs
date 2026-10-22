@@ -158,7 +158,6 @@ pub fn baca_rincian(rows: &[Vec<Sel>]) -> Rincian {
     for row in rows.iter().skip(kolom.header + 1) {
         let no = teks(&sel(row, kolom.no));
         let uraian_c = teks(&sel(row, kolom.uraian));
-        let uraian_d = teks(&sel(row, kolom.uraian + 1));
         let atas = uraian_c.to_uppercase();
 
         if atas.starts_with("SUB TOTAL") || atas == "JUMLAH" {
@@ -184,7 +183,7 @@ pub fn baca_rincian(rows: &[Vec<Sel>]) -> Rincian {
         if satuan.is_empty() {
             continue;
         }
-        let uraian = if uraian_d.is_empty() { uraian_c } else { uraian_d };
+        let uraian = uraian_dari_baris(row, &kolom, uraian_c);
         if uraian.is_empty() {
             continue;
         }
@@ -194,6 +193,22 @@ pub fn baca_rincian(rows: &[Vec<Sel>]) -> Rincian {
         tutup_bagian(&mut hasil, judul, items, None);
     }
     hasil
+}
+
+/// Nama item dari baris: sel teks pertama di antara kolom uraian dan satuan yang bukan angka.
+/// Nomor urut bisa berpindah kolom (mis. blok APD: nomor di kolom D, nama di kolom E), jadi angka dilewati.
+fn uraian_dari_baris(row: &[Sel], kolom: &Kolom, uraian_c: String) -> String {
+    let mut kandidat: Vec<String> = (kolom.uraian + 1..kolom.sat)
+        .map(|i| teks(&row.get(i).cloned().unwrap_or(Sel::Kosong)))
+        .collect();
+    kandidat.push(uraian_c);
+    let bukan_angka = |t: &String| !t.is_empty() && !t.chars().all(|c| c.is_ascii_digit() || c == '.' || c == ',');
+    kandidat
+        .iter()
+        .find(|t| bukan_angka(t))
+        .or_else(|| kandidat.iter().find(|t| !t.is_empty()))
+        .cloned()
+        .unwrap_or_default()
 }
 
 fn tutup_bagian(hasil: &mut Rincian, judul: String, items: Vec<Item>, subtotal: Option<f64>) {
@@ -481,6 +496,14 @@ mod tests {
         grid.push(baris(&[(2, s("Jumlah")), (10, n(300.0))]));
         grid.extend(contoh());
         assert_eq!(jumlah_rekap(&grid), Some(300.0));
+    }
+
+    #[test]
+    fn uraian_angka_pindah_ke_kolom_teks() {
+        let teks = "NO\tURAIAN PEKERJAAN\t\t\tSATUAN\tVOLUME\tHARGA\tJUMLAH\nI\tPEKERJAAN PERSIAPAN\n\t\t1\tPembatas Area\tBh\t2\t10000\t20000\n1\tTopi\t\t\tBh\t2\t10000\t20000";
+        let rincian = baca_rincian(&grid_dari_teks(teks));
+        let uraian: Vec<&str> = rincian.items.iter().map(|i| i.uraian.as_str()).collect();
+        assert_eq!(uraian, vec!["Pembatas Area", "Topi"]);
     }
 
     #[test]
