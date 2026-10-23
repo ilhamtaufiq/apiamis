@@ -15,6 +15,7 @@ pub mod app_settings;
 pub mod app_settings_mail;
 pub mod app_settings_backup;
 pub mod analytics;
+pub mod capaian_bidang;
 pub mod audit;
 pub mod audit_logs;
 pub mod auth_oauth;
@@ -1076,6 +1077,7 @@ pub fn app(config: &Config, state: AppState) -> Router {
             delete(notifications::delete_broadcast),
         )
         .route("/api/dashboard/stats", get(dashboard::stats))
+        .route("/api/dashboard/capaian-bidang", get(capaian_bidang::capaian_bidang))
         .route("/api/dashboard/analytics", get(analytics::stats))
         .route("/api/dashboard/progres-mvp", get(dashboard_progres::progres_mvp))
         .route("/api/dashboard/penilaian-pengawas", get(penilaian_pengawas::penilaian))
