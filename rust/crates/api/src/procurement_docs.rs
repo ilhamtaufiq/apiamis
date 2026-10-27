@@ -586,7 +586,13 @@ fn resolve_filename(
     }
     let name = basename(&url_path(url));
     if !name.is_empty() && name != "/" {
-        return sanitize_filename(&url_decode(&name));
+        let mut from_url = sanitize_filename(&url_decode(&name));
+        if !from_url.is_empty() && !has_extension(&from_url) {
+            from_url.push_str(extension_for_mime(mime));
+        }
+        if !from_url.is_empty() {
+            return from_url;
+        }
     }
     format!("dokumen-spse{}", extension_for_mime(mime))
 }
@@ -1042,4 +1048,21 @@ pub async fn download_zip(
         .body(Body::from(archive))
         .map_err(internal)?;
     Ok(res)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::resolve_filename;
+
+    #[test]
+    fn nama_dari_url_tanpa_ekstensi_diberi_ekstensi_mime() {
+        let name = resolve_filename(None, "https://spse.example/dl/media-libraryJCGdWg", None, "application/pdf");
+        assert_eq!(name, "media-libraryJCGdWg.pdf");
+    }
+
+    #[test]
+    fn nama_dari_url_yang_sudah_berekstensi_dibiarkan() {
+        let name = resolve_filename(None, "https://spse.example/dl/surat.pdf", None, "application/pdf");
+        assert_eq!(name, "surat.pdf");
+    }
 }
