@@ -500,9 +500,11 @@ pub async fn jenis_dokumen(
     headers: HeaderMap,
 ) -> Result<Response, ApiError> {
     require_auth(&state, &headers).await?;
+    // MySQL 8 menolak ORDER BY pada kolom yang tidak ada di SELECT saat DISTINCT (error 3065),
+    // jadi urutannya memakai alias dari SELECT.
     let values: Vec<String> = sqlx::query_scalar::<_, String>(
-        "SELECT DISTINCT CAST(jenis_dokumen AS CHAR) FROM tbl_berkas \
-         WHERE jenis_dokumen IS NOT NULL AND jenis_dokumen <> '' ORDER BY jenis_dokumen",
+        "SELECT DISTINCT CAST(jenis_dokumen AS CHAR) AS jenis FROM tbl_berkas \
+         WHERE jenis_dokumen IS NOT NULL AND jenis_dokumen <> '' ORDER BY jenis",
     )
     .fetch_all(&state.pool)
     .await
