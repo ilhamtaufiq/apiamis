@@ -33,8 +33,6 @@ pub const NODE_MAX: usize = 512;
 /// Batas ringkasan model per pemanggilan `bangun_tertunda`. Sisanya dikerjakan giliran berikutnya,
 /// supaya riwayat panjang tidak memicu puluhan panggilan model berurutan.
 const MAKS_RINGKAS_PER_RUN: u32 = 10;
-/// Batas ringkasan per klik tombol manual (admin). Lebih besar dari batas otomatis.
-pub const MAKS_RINGKAS_MANUAL: u32 = 100;
 /// Pembangunan otomatis hanya untuk pesan terbaru. Backlog lama dibangun lewat tombol manual.
 const JENDELA_OTOMATIS: u64 = 20;
 /// View dipadatkan sekaligus bila melewati batas atas, sampai batas bawah.
@@ -474,11 +472,6 @@ pub(crate) async fn bangun_tertunda(pool: &MySqlPool, cfg: &AiConfig, user_id: u
     bangun_dengan_batas(pool, cfg, user_id, MAKS_RINGKAS_PER_RUN, Some(JENDELA_OTOMATIS)).await
 }
 
-/// Pembangunan manual dari admin: batas ringkasan lebih besar, tetap dijalankan satu per satu.
-pub(crate) async fn bangun_manual(pool: &MySqlPool, cfg: &AiConfig, user_id: u64) -> Result<(), ApiError> {
-    bangun_dengan_batas(pool, cfg, user_id, MAKS_RINGKAS_MANUAL, None).await
-}
-
 /// Penanda putaran yang sedang berjalan per pengguna. Pemicu baru selama putaran berjalan dibuang.
 fn aktif() -> &'static std::sync::Mutex<std::collections::HashSet<u64>> {
     static AKTIF: std::sync::OnceLock<std::sync::Mutex<std::collections::HashSet<u64>>> = std::sync::OnceLock::new();
@@ -498,11 +491,6 @@ impl Drop for PenandaRingkas {
     fn drop(&mut self) {
         aktif().lock().unwrap_or_else(|e| e.into_inner()).remove(&self.0);
     }
-}
-
-/// Apakah pembangunan ringkasan untuk pengguna ini sedang berjalan.
-pub(crate) fn sedang_berjalan(user_id: u64) -> bool {
-    aktif().lock().unwrap_or_else(|e| e.into_inner()).contains(&user_id)
 }
 
 async fn bangun_dengan_batas(
@@ -588,7 +576,6 @@ const TOOL_MEMORI: &str = "- zoom: {\"id\": nomor, \"n\": pangkat 2}. Membuka ga
 /// Kanal tempat pertanyaan datang. Menentukan instruksi sistem yang dipakai.
 #[derive(Clone, Copy, PartialEq)]
 pub(crate) enum Kanal {
-    Web,
     WhatsApp,
 }
 
@@ -596,7 +583,6 @@ impl Kanal {
     /// Nilai kolom `ai_chat_messages.kanal`.
     fn nama(self) -> &'static str {
         match self {
-            Kanal::Web => "web",
             Kanal::WhatsApp => "whatsapp",
         }
     }
@@ -796,14 +782,7 @@ pub(crate) async fn giliran(
         roles.iter().map(|(_, n)| n.as_str()).collect::<Vec<_>>().join(", ")
     };
     // Kanal WhatsApp hanya memakai riwayat WhatsApp, tidak memori chat web. Dibaca sebelum pertanyaan dicatat.
-    let teks_view = match kanal {
-        Kanal::WhatsApp => riwayat_whatsapp(pool, user_id).await?,
-        Kanal::Web => {
-            // Pertanyaan dicatat setelah view dibaca: view tidak memuat pesan terbaru secara utuh.
-            let view = sinkron(pool, user_id).await?;
-            render(pool, user_id, &view).await?
-        }
-    };
+    let teks_view = riwayat_whatsapp(pool, user_id).await?;
     append(pool, user_id, kanal, "user", &potong_char(pertanyaan, 2_000)).await?;
 
     // Function calling native bila diaktifkan. Bila tidak, model memakai protokol JSON.
@@ -895,28 +874,6 @@ pub(crate) async fn giliran(
         return Ok((done, sumber, pemakaian));
     }
     Err(ApiError::new(StatusCode::BAD_GATEWAY, "Chat tidak menghasilkan jawaban."))
-}
-
-/// Riwayat untuk ditampilkan di layar: pesan pengguna dan jawaban asisten, terbaru di akhir.
-pub async fn riwayat(pool: &MySqlPool, user_id: u64, limit: u64) -> Result<Vec<Value>, ApiError> {
-    let rows = sqlx::query(
-        "SELECT kind, text, sumber FROM ai_chat_messages WHERE user_id = ? AND kind IN ('user', 'unii') ORDER BY seq DESC LIMIT ?",
-    )
-    .bind(user_id)
-    .bind(limit)
-    .fetch_all(pool)
-    .await
-    .map_err(internal)?;
-    let mut out = Vec::with_capacity(rows.len());
-    for r in rows.iter().rev() {
-        let kind: String = r.try_get("kind").map_err(internal)?;
-        let text: String = r.try_get("text").map_err(internal)?;
-        let role = if kind == "user" { "user" } else { "assistant" };
-        let sumber: Option<String> = r.try_get("sumber").map_err(internal)?;
-        let sumber = sumber.and_then(|s| serde_json::from_str::<Value>(&s).ok()).unwrap_or(Value::Null);
-        out.push(json!({ "role": role, "content": text, "sumber": sumber }));
-    }
-    Ok(out)
 }
 
 #[cfg(test)]
