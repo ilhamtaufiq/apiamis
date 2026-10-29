@@ -10,16 +10,9 @@
 //! Setiap pemanggilan dicatat di `ai_logs`, termasuk pertanyaannya. Batas 20 permintaan per jam per pengguna
 //! (per proses, memakai `state.limiter`).
 
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
-use std::convert::Infallible;
-
-use axum::{
-    extract::State,
-    http::{HeaderMap, StatusCode},
-    response::sse::{Event, KeepAlive, Sse},
-    Json,
-};
+use axum::http::StatusCode;
 use serde_json::{json, Value};
 use shared::ApiError;
 use sqlx::{MySqlPool, Row};
@@ -28,15 +21,11 @@ use crate::{
     access,
     media::internal,
     pekerjaan::{self, PekerjaanFilter},
-    analisa_tabel, require_auth, search_index, AppState,
+    analisa_tabel, search_index, AppState,
 };
 
 /// Batas permintaan AI per pengguna per jam.
 const AI_MAX_PER_HOUR: usize = 20;
-/// Batas ukuran ringkasan dashboard yang dikirim ke model.
-const RINGKASAN_MAX_CHARS: usize = 12_000;
-/// Batas data hasil tool yang dikirim ke model.
-const DATA_MAX_CHARS: usize = 8_000;
 /// Jumlah baris maksimum yang dipindai tool progres. Bila terlampaui, jawaban menyebutkannya.
 const PINDAI_MAX: u64 = 500;
 /// Jumlah hasil maksimum yang ditampilkan tool pencarian dan progres.
@@ -248,20 +237,6 @@ pub(crate) async fn panggil_model_lengkap(
     Ok(Balasan { teks, panggilan })
 }
 
-pub(crate) async fn panggil_model(cfg: &AiConfig, messages: Value, max_tokens: u32) -> Result<String, ApiError> {
-    let mut abaikan = Pemakaian::default();
-    panggil_model_lengkap(cfg, messages, max_tokens, None, &mut abaikan)
-        .await
-        .map(|b| b.teks)
-        .and_then(|t| {
-            if t.is_empty() {
-                Err(ApiError::new(StatusCode::BAD_GATEWAY, "Model tidak mengembalikan jawaban."))
-            } else {
-                Ok(t)
-            }
-        })
-}
-
 /// Ambil JSON dari balasan model, termasuk bila dibungkus pagar kode.
 pub(crate) fn parse_json_dari_model(text: &str) -> Option<Value> {
     let bersih = text
@@ -271,39 +246,6 @@ pub(crate) fn parse_json_dari_model(text: &str) -> Option<Value> {
         .trim_end_matches("```")
         .trim();
     serde_json::from_str::<Value>(bersih).ok().filter(|v| v.is_object())
-}
-
-/// Hanya angka dan teks pendek dari ringkasan yang dikirim ke model.
-pub fn sanitize_ringkasan(raw: &Value) -> Option<Value> {
-    let obj = raw.as_object()?;
-    let statistik: serde_json::Map<String, Value> = obj
-        .get("statistik")
-        .and_then(Value::as_object)
-        .map(|m| {
-            m.iter()
-                .filter(|(_, v)| v.as_f64().is_some_and(f64::is_finite))
-                .take(20)
-                .map(|(k, v)| (k.chars().take(64).collect(), v.clone()))
-                .collect()
-        })
-        .unwrap_or_default();
-    let perhatian: Vec<Value> = obj
-        .get("pekerjaanPerluPerhatian")
-        .and_then(Value::as_array)
-        .map(|arr| {
-            arr.iter()
-                .take(10)
-                .filter_map(|item| {
-                    let p = item.as_object()?;
-                    let angka = |k: &str| p.get(k).and_then(Value::as_f64).filter(|f| f.is_finite()).unwrap_or(0.0);
-                    let nama: String = p.get("nama").and_then(Value::as_str).unwrap_or("").chars().take(200).collect();
-                    Some(json!({ "nama": nama, "fisik": angka("fisik"), "keuangan": angka("keuangan") }))
-                })
-                .collect()
-        })
-        .unwrap_or_default();
-    let tahun: String = obj.get("tahun").and_then(Value::as_str).unwrap_or("").chars().take(4).collect();
-    Some(json!({ "tahun": tahun, "statistik": statistik, "pekerjaanPerluPerhatian": perhatian }))
 }
 
 /// Catat pemanggilan AI. Kegagalan mencatat tidak menggagalkan permintaan pengguna.
@@ -341,51 +283,6 @@ pub(crate) async fn catat(
     if let Err(e) = res {
         eprintln!("[AI] gagal mencatat ai_logs: {e}");
     }
-}
-
-/// `GET /api/ai/status`: konfigurasi AI tanpa membuka key.
-pub async fn status(State(state): State<AppState>, headers: HeaderMap) -> Result<Json<Value>, ApiError> {
-    require_auth(&state, &headers).await?;
-    match crate::ai_model::ai_config_untuk(&state.pool).await {
-        Ok(cfg) => Ok(Json(json!({ "configured": true, "model": cfg.model }))),
-        Err(_) => Ok(Json(json!({ "configured": false, "model": null }))),
-    }
-}
-
-/// `POST /api/ai/analyze`: analisa dari ringkasan dashboard.
-pub async fn analyze(
-    State(state): State<AppState>,
-    headers: HeaderMap,
-    Json(body): Json<Value>,
-) -> Result<Json<Value>, ApiError> {
-    let user = require_auth(&state, &headers).await?;
-    let cfg = crate::ai_model::ai_config_untuk(&state.pool).await?;
-    cek_batas(&state, user.user_id)?;
-
-    let ringkasan = sanitize_ringkasan(&body["ringkasan"])
-        .ok_or_else(|| ApiError::new(StatusCode::BAD_REQUEST, "Ringkasan dashboard tidak valid."))?;
-    let serialized = ringkasan.to_string();
-    if serialized.len() > RINGKASAN_MAX_CHARS {
-        return Err(ApiError::new(StatusCode::PAYLOAD_TOO_LARGE, "Ringkasan dashboard terlalu besar."));
-    }
-
-    let mulai = Instant::now();
-    let hasil = panggil_model(
-        &cfg,
-        json!([
-            {
-                "role": "system",
-                "content": "Anda analis progres pembangunan infrastruktur air minum dan sanitasi. Tulis analisa singkat dalam Bahasa Indonesia berisi: (1) kondisi umum, (2) 2-3 temuan utama, (3) 2-3 rekomendasi tindakan. Gunakan hanya angka dari data yang diberikan dan jangan mengarang data. Jika data tidak cukup untuk suatu kesimpulan, katakan demikian."
-            },
-            { "role": "user", "content": format!("Data dashboard (JSON):\n{serialized}") }
-        ]),
-        900,
-    )
-    .await;
-    let status = if hasil.is_ok() { "ok" } else { "gagal" };
-    catat(&state.pool, user.user_id, "analisa", None, &Value::Null, None, None, &cfg.model, mulai.elapsed().as_millis(), status, &Pemakaian::default()).await;
-
-    Ok(Json(json!({ "analisa": hasil?, "model": cfg.model })))
 }
 
 /// Daftar tool yang boleh dipilih model: (nama, deskripsi untuk prompt, parameter, hanya admin).
@@ -1189,176 +1086,6 @@ pub(crate) async fn jalankan_tool(
     }
 }
 
-/// `POST /api/ai/tanya`: tanya-jawab data dengan tool baca yang sudah ditentukan.
-pub async fn tanya(
-    State(state): State<AppState>,
-    headers: HeaderMap,
-    Json(body): Json<Value>,
-) -> Result<Json<Value>, ApiError> {
-    let user = require_auth(&state, &headers).await?;
-    let cfg = crate::ai_model::ai_config_untuk(&state.pool).await?;
-    cek_batas(&state, user.user_id)?;
-
-    let pertanyaan = body["pertanyaan"].as_str().unwrap_or("").trim().to_string();
-    if pertanyaan.is_empty() || pertanyaan.chars().count() > 500 {
-        return Err(ApiError::new(StatusCode::BAD_REQUEST, "Pertanyaan wajib diisi, maksimal 500 karakter."));
-    }
-    let tahun = body["tahun"].as_str().unwrap_or("").trim().to_string();
-    if tahun.len() != 4 || !tahun.chars().all(|c| c.is_ascii_digit()) {
-        return Err(ApiError::new(StatusCode::BAD_REQUEST, "Tahun anggaran tidak valid."));
-    }
-
-    let roles = auth::login::roles_of(&state.pool, user.user_id).await.map_err(internal)?;
-    let is_admin = crate::notifications::require_admin(&state.pool, user.user_id).await.is_ok();
-    let mulai = Instant::now();
-
-    // Langkah 1: model memilih tool. Nama yang tidak ada di daftar ditolak.
-    let pilihan_text = panggil_model(
-        &cfg,
-        json!([
-            {
-                "role": "system",
-                "content": format!(
-                    "Pilih satu tool untuk menjawab pertanyaan tentang data pembangunan air minum dan sanitasi. \
-                     Balas HANYA dengan JSON: {{\"tool\": \"<nama>\", \"args\": {{...}}}} atau {{\"tool\": null, \"alasan\": \"<singkat>\"}} bila tidak ada yang cocok.\nTools:\n{daftar}", daftar = daftar_tool(is_admin)
-                )
-            },
-            { "role": "user", "content": pertanyaan }
-        ]),
-        200,
-    )
-    .await?;
-
-    let pilihan = parse_json_dari_model(&pilihan_text);
-    let nama = pilihan.as_ref().and_then(|p| p["tool"].as_str()).map(str::to_string);
-    let nama_valid = TOOLS
-        .iter()
-        .any(|t| Some(t.0) == nama.as_deref() && (is_admin || !t.3));
-    if !nama_valid {
-        catat(&state.pool, user.user_id, "tanya", None, &Value::Null, Some(&pertanyaan), None, &cfg.model, mulai.elapsed().as_millis(), "tidak_cocok", &Pemakaian::default()).await;
-        return Ok(Json(json!({
-            "jawaban": "Pertanyaan ini belum bisa dijawab dari data yang tersedia. Coba tanyakan tentang ringkasan dashboard, progres pekerjaan rendah, atau mencari pekerjaan dengan nama tertentu.",
-            "sumber": null,
-            "model": cfg.model,
-        })));
-    }
-    let nama = nama.unwrap_or_default();
-    let args = pilihan.as_ref().and_then(|p| p.get("args")).cloned().unwrap_or(json!({}));
-
-    // Langkah 2: jalankan tool dengan hak akses pengguna, lalu model merangkum hasilnya.
-    let (data, jumlah) = match jalankan_tool(&state, user.user_id, &roles, &nama, &args, &tahun).await {
-        Ok(v) => v,
-        Err(e) => {
-            catat(&state.pool, user.user_id, "tanya", Some(&nama), &args, Some(&pertanyaan), None, &cfg.model, mulai.elapsed().as_millis(), "gagal", &Pemakaian::default()).await;
-            return Err(e);
-        }
-    };
-    let data_text = data.to_string();
-    let data_text: String = data_text.chars().take(DATA_MAX_CHARS).collect();
-
-    let jawaban = panggil_model(
-        &cfg,
-        json!([
-            {
-                "role": "system",
-                "content": format!("{GLOSARIUM}\n\nJawab pertanyaan dalam Bahasa Indonesia HANYA berdasarkan data JSON yang diberikan. Sebut angka persis seperti di data. Bila data bersifat terpotong (terpotong: true) atau tidak menjawab pertanyaan, katakan itu. Jangan mengarang.")
-            },
-            { "role": "user", "content": format!("Pertanyaan: {pertanyaan}\n\nData ({nama}):\n{data_text}") }
-        ]),
-        700,
-    )
-    .await;
-    let status = if jawaban.is_ok() { "ok" } else { "gagal" };
-    catat(&state.pool, user.user_id, "tanya", Some(&nama), &args, Some(&pertanyaan), jumlah, &cfg.model, mulai.elapsed().as_millis(), status, &Pemakaian::default()).await;
-
-    Ok(Json(json!({
-        "jawaban": jawaban?,
-        "sumber": { "tool": nama, "args": args, "jumlah_baris": jumlah },
-        "model": cfg.model,
-    })))
-}
-
-/// Batas panjang pertanyaan chat.
-const CHAT_MAX_CHARS: usize = 2_000;
-
-/// `POST /api/ai/chat`: satu giliran chat. Riwayat disimpan server (`ai_memory`), klien hanya mengirim pertanyaan.
-/// Event SSE: `status` (saat mengambil data), `done` (jawaban dan sumber), `error`.
-pub async fn chat(
-    State(state): State<AppState>,
-    headers: HeaderMap,
-    Json(body): Json<Value>,
-) -> Result<Sse<impl futures_util::Stream<Item = Result<Event, Infallible>>>, ApiError> {
-    let user = require_auth(&state, &headers).await?;
-    let cfg = crate::ai_model::ai_config_untuk(&state.pool).await?;
-    cek_batas(&state, user.user_id)?;
-
-    let tahun = body["tahun"].as_str().unwrap_or("").trim().to_string();
-    if tahun.len() != 4 || !tahun.chars().all(|c| c.is_ascii_digit()) {
-        return Err(ApiError::new(StatusCode::BAD_REQUEST, "Tahun anggaran tidak valid."));
-    }
-    let pertanyaan = body["pertanyaan"].as_str().unwrap_or("").trim().to_string();
-    if pertanyaan.is_empty() || pertanyaan.chars().count() > CHAT_MAX_CHARS {
-        return Err(ApiError::new(StatusCode::BAD_REQUEST, "Pertanyaan wajib diisi, maksimal 2.000 karakter."));
-    }
-    let roles = auth::login::roles_of(&state.pool, user.user_id).await.map_err(internal)?;
-    let is_admin = crate::notifications::require_admin(&state.pool, user.user_id).await.is_ok();
-    let user_id = user.user_id;
-
-    let (tx, rx) = tokio::sync::mpsc::channel::<Event>(32);
-    tokio::spawn(async move {
-        let mulai = Instant::now();
-        let hasil = crate::ai_memory::giliran(&state, &cfg, user_id, &roles, is_admin, &tahun, &pertanyaan, crate::ai_memory::Kanal::Web, &tx).await;
-        match hasil {
-            Ok((done, sumber, pemakaian)) => {
-                let tool = sumber.last().and_then(|s| s["tool"].as_str()).map(str::to_string);
-                let jumlah: i64 = sumber.iter().filter_map(|s| s["jumlah_baris"].as_i64()).sum();
-                catat(&state.pool, user_id, "chat", tool.as_deref(), &json!(sumber), Some(&pertanyaan), Some(jumlah), &cfg.model, mulai.elapsed().as_millis(), "ok", &pemakaian).await;
-                let _ = tx.try_send(Event::default().event("done").data(done.to_string()));
-            }
-            Err(e) => {
-                catat(&state.pool, user_id, "chat", None, &Value::Null, Some(&pertanyaan), None, &cfg.model, mulai.elapsed().as_millis(), "gagal", &Pemakaian::default()).await;
-                let _ = tx.try_send(Event::default().event("error").data(json!({ "message": e.message }).to_string()));
-            }
-        }
-        // Ringkasan dibangun setelah jawaban terkirim, supaya tidak menambah waktu tunggu.
-        if crate::ai_memory::ringkas_otomatis() {
-            if let Err(e) = crate::ai_memory::bangun_tertunda(&state.pool, &cfg, user_id).await {
-                eprintln!("[AI] gagal membangun memori chat: {}", e.message);
-            }
-        }
-    });
-
-    let stream = futures_util::stream::unfold(rx, |mut rx| async move {
-        rx.recv().await.map(|ev| (Ok::<Event, Infallible>(ev), rx))
-    });
-    Ok(Sse::new(stream).keep_alive(KeepAlive::default()))
-}
-
-/// `POST /api/ai/ringkas`: membangun ringkasan memori secara manual (admin). Berjalan di latar belakang.
-pub async fn ringkas_manual(State(state): State<AppState>, headers: HeaderMap) -> Result<Json<Value>, ApiError> {
-    let user = require_auth(&state, &headers).await?;
-    crate::notifications::require_admin(&state.pool, user.user_id).await?;
-    if crate::ai_memory::sedang_berjalan(user.user_id) {
-        return Ok(Json(json!({ "status": "sudah_berjalan" })));
-    }
-    let cfg = crate::ai_model::ai_config_untuk(&state.pool).await?;
-    let pool = state.pool.clone();
-    let user_id = user.user_id;
-    tokio::spawn(async move {
-        if let Err(e) = crate::ai_memory::bangun_manual(&pool, &cfg, user_id).await {
-            eprintln!("[AI] ringkas manual gagal: {}", e.message);
-        }
-    });
-    Ok(Json(json!({ "status": "dimulai", "batas": crate::ai_memory::MAKS_RINGKAS_MANUAL })))
-}
-
-/// `GET /api/ai/chat/history`: pesan pengguna dan jawaban asisten, untuk ditampilkan saat halaman dibuka.
-pub async fn history(State(state): State<AppState>, headers: HeaderMap) -> Result<Json<Value>, ApiError> {
-    let user = require_auth(&state, &headers).await?;
-    let data = crate::ai_memory::riwayat(&state.pool, user.user_id, 60).await?;
-    Ok(Json(json!({ "data": data })))
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1390,25 +1117,5 @@ mod tests {
         assert_eq!(v["tool"], "pekerjaan_cari");
         assert!(parse_json_dari_model("bukan json").is_none());
         assert!(parse_json_dari_model("[1,2]").is_none());
-    }
-
-    #[test]
-    fn sanitize_ringkasan_membuang_nilai_tak_valid_dan_memotong_teks() {
-        let raw = json!({
-            "tahun": "2026xxxx",
-            "statistik": { "totalPagu": 1000.5, "rusak": "abc", "nan": null },
-            "pekerjaanPerluPerhatian": [{ "nama": "A".repeat(300), "fisik": 12, "keuangan": "x" }],
-        });
-        let s = sanitize_ringkasan(&raw).unwrap();
-        assert_eq!(s["tahun"], "2026");
-        assert_eq!(s["statistik"].as_object().unwrap().len(), 1);
-        assert_eq!(s["pekerjaanPerluPerhatian"][0]["nama"].as_str().unwrap().chars().count(), 200);
-        assert_eq!(s["pekerjaanPerluPerhatian"][0]["keuangan"], 0.0);
-    }
-
-    #[test]
-    fn sanitize_ringkasan_menolak_bukan_objek() {
-        assert!(sanitize_ringkasan(&json!("teks")).is_none());
-        assert!(sanitize_ringkasan(&Value::Null).is_none());
     }
 }

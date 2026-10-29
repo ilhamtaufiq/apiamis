@@ -415,17 +415,9 @@ pub fn app(config: &Config, state: AppState) -> Router {
             delete(skp_jurnal::delete_foto),
         )
         .route("/api/skp/rhk", get(skp_rhk::index).put(skp_rhk::update))
-        .route("/api/ai/status", get(ai::status))
-        .route("/api/ai/models", get(ai_model::list))
         .route("/api/wa/webhook", post(wa_inbound::webhook))
         .route("/api/catatan", get(catatan::index).post(catatan::store))
         .route("/api/catatan/{id}", axum::routing::put(catatan::update).delete(catatan::destroy))
-        .route("/api/ai/model", put(ai_model::set))
-        .route("/api/ai/analyze", post(ai::analyze))
-        .route("/api/ai/tanya", post(ai::tanya))
-        .route("/api/ai/chat", post(ai::chat))
-        .route("/api/ai/chat/history", get(ai::history))
-        .route("/api/ai/ringkas", post(ai::ringkas_manual))
         .route("/api/surat", get(surat::index).post(surat::store))
         .route("/api/informasi", get(informasi::index).post(informasi::store))
         .route(
