@@ -188,6 +188,8 @@ pub struct PekerjaanFilter {
     pub status: Option<String>,
     /// Ada di query (`has`): nilai dibaca dengan `boolean()`.
     pub is_konsultan: Option<bool>,
+    /// `has_kontrak=1` hanya paket yang punya kontrak (pivot atau legacy); `0` hanya yang belum.
+    pub has_kontrak: Option<bool>,
     pub pengawas_id: Option<String>,
     pub pendamping_id: Option<String>,
     pub tag_id: Option<String>,
@@ -216,6 +218,7 @@ impl PekerjaanFilter {
                 .filter(|s| !s.is_empty()),
             status: filled("status").filter(|s| s != "all"),
             is_konsultan: q.get("is_konsultan").map(|v| php_bool(v)),
+            has_kontrak: q.get("has_kontrak").map(|v| php_bool(v)),
             pengawas_id: nonempty("pengawas_id"),
             pendamping_id: nonempty("pendamping_id"),
             tag_id: nonempty("tag_id"),
@@ -285,6 +288,13 @@ impl PekerjaanFilter {
         if let Some(v) = self.is_konsultan {
             sql.push_str(" AND p.is_konsultan = ?");
             b.push(if v { "1" } else { "0" }.to_string());
+        }
+        // Sama dengan `Counts::has_kontrak`: ada baris di pivot atau di kolom legacy.
+        if let Some(v) = self.has_kontrak {
+            const ADA_KONTRAK: &str = "(EXISTS (SELECT 1 FROM kontrak_pekerjaan kp WHERE kp.pekerjaan_id = p.id) \
+                 OR EXISTS (SELECT 1 FROM tbl_kontrak k WHERE k.id_pekerjaan = p.id))";
+            sql.push_str(if v { " AND " } else { " AND NOT " });
+            sql.push_str(ADA_KONTRAK);
         }
         // notCanceled(): status NULL dihitung aktif.
         match self.status.as_deref() {
@@ -1056,6 +1066,21 @@ mod tests {
         assert!(f.sub_bidang.is_none());
         assert!(f.status.is_none());
         assert_eq!(f.is_konsultan, Some(false));
+    }
+
+    #[test]
+    fn has_kontrak_filter_memakai_pivot_atau_legacy() {
+        let mut q = HashMap::new();
+        q.insert("has_kontrak".to_string(), "1".to_string());
+        let (sql, binds) = PekerjaanFilter::from_query(&q).where_clause();
+        assert!(sql.contains(" AND (EXISTS (SELECT 1 FROM kontrak_pekerjaan"));
+        assert!(sql.contains("tbl_kontrak k WHERE k.id_pekerjaan = p.id"));
+        assert!(!sql.contains("AND NOT"));
+        assert!(binds.is_empty());
+
+        q.insert("has_kontrak".to_string(), "0".to_string());
+        let (sql, _) = PekerjaanFilter::from_query(&q).where_clause();
+        assert!(sql.contains(" AND NOT (EXISTS (SELECT 1 FROM kontrak_pekerjaan"));
     }
 
     #[test]
