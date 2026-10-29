@@ -143,3 +143,7 @@ Jika mengubah bentuk request atau response, permission, atau relasi data, urutan
 2. Sesuaikan pemanggil di [arumanis](https://github.com/ilhamtaufiq/arumanis) (`src/features/…`, `api-client`).
 3. Sesuaikan [arumanis-pengawasan](https://github.com/ilhamtaufiq/arumanis-pengawasan) bila perlu.
 4. Tambahkan migrasi di `rust/migrations` dan daftarkan di `migrate.rs`.
+
+## Lisensi dan atribusi
+
+APIAMIS dibangun di atas crate open source pihak ketiga. Daftar dependensi langsung beserta versi dan lisensinya ada di [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). Terima kasih kepada para pengembang dan komunitas Rust yang membuatnya.
