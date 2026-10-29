@@ -41,6 +41,7 @@ const SPK_KEY: &str = "kontrak_template_spk";
 const BAP_KEY: &str = "kontrak_template_bap";
 const COVER_AM_KEY: &str = "kontrak_template_cover_am";
 const COVER_SAN_KEY: &str = "kontrak_template_cover_san";
+pub(crate) const NPHD_KEY: &str = "kontrak_template_nphd";
 const STATUS_DISETUJUI: &str = "disetujui";
 
 fn internal(e: impl std::fmt::Display) -> ApiError {
@@ -54,6 +55,7 @@ fn template_default(key: &str) -> Option<&'static str> {
         BAP_KEY => Some("bap_template.docx"),
         COVER_AM_KEY => Some("cover_kontrak_am.docx"),
         COVER_SAN_KEY => Some("cover_kontrak_san.docx"),
+        NPHD_KEY => Some("nphd_template.docx"),
         _ => None,
     }
 }
@@ -320,7 +322,7 @@ async fn load_settings(pool: &MySqlPool) -> Result<DocSettings, ApiError> {
 }
 
 /// Template dari media `app-settings` bila diunggah, selain itu berkas default (`resolvePath`).
-async fn resolve_template(pool: &MySqlPool, key: &str) -> Result<PathBuf, ApiError> {
+pub(crate) async fn resolve_template(pool: &MySqlPool, key: &str) -> Result<PathBuf, ApiError> {
     let default = template_default(key).ok_or_else(|| {
         ApiError::new(
             StatusCode::INTERNAL_SERVER_ERROR,

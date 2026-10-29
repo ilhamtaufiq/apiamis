@@ -20,7 +20,6 @@ use crate::{
     require_auth, AppState,
 };
 
-const TEMPLATE: &str = "nphd_template.docx";
 const DOCX_MIME: &str = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
 const BULAN: [&str; 12] = [
     "Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober",
@@ -75,9 +74,8 @@ pub async fn export(
 
     let data = data_dasar(&ctx);
     let values = nilai_dari(&data, &q, tanggal);
-    let bytes = tokio::fs::read(kontrak_document::template_dir().join(TEMPLATE))
-        .await
-        .map_err(internal)?;
+    let path = kontrak_document::resolve_template(&state.pool, kontrak_document::NPHD_KEY).await?;
+    let bytes = tokio::fs::read(path).await.map_err(internal)?;
     let filled = docx_template::fill(&bytes, &values).map_err(internal)?;
     let nama = ctx.pekerjaan.as_ref().and_then(|p| p.nama_paket.clone()).unwrap_or_default();
     let name = format!("NPHD_{}_{}.docx", slug(&nama), tanggal.format("%Y%m%d"));
