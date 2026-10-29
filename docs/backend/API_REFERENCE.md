@@ -449,6 +449,4 @@ koordinat_lng: 110.12345
 
 ## 📚 Related Documentation
 
-- [Architecture](./ARCHITECTURE.md)
 - [Database Schema](./DATABASE.md)
-- [Installation Guide](./INSTALLATION.md)

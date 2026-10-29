@@ -11,10 +11,8 @@ Dokumentasi lengkap untuk sistem ARUMANIS yang terdiri dari backend API (APIAMIS
 ### Backend (APIAMIS)
 | Dokumen | Deskripsi |
 |---------|-----------|
-| [Arsitektur](./backend/ARCHITECTURE.md) | Struktur dan arsitektur backend Laravel |
 | [API Reference](./backend/API_REFERENCE.md) | Dokumentasi lengkap API endpoints |
 | [Database](./backend/DATABASE.md) | Skema database dan relasi tabel |
-| [Instalasi](./backend/INSTALLATION.md) | Panduan instalasi dan konfigurasi |
 
 ### Frontend (ARUMANIS)
 | Dokumen | Deskripsi |
