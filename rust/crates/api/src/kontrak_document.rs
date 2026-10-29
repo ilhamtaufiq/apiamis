@@ -396,7 +396,7 @@ fn cover_key(sub_bidang: &str) -> Result<&'static str, ApiError> {
     }
 }
 
-fn file_response(bytes: Vec<u8>, name: &str, content_type: &str) -> Response {
+pub(crate) fn file_response(bytes: Vec<u8>, name: &str, content_type: &str) -> Response {
     let safe: String = name
         .chars()
         .filter(|c| !matches!(c, '"' | '\r' | '\n'))
@@ -426,7 +426,7 @@ async fn find_kontrak(pool: &MySqlPool, id: i64) -> Result<KontrakRow, ApiError>
 }
 
 /// `Kontrak::whereHas('pekerjaans', whereKey(id))->latest()`: kontrak terbaru untuk satu pekerjaan.
-async fn kontrak_of_pekerjaan(
+pub(crate) async fn kontrak_of_pekerjaan(
     pool: &MySqlPool,
     pekerjaan_id: i64,
 ) -> Result<Option<KontrakRow>, ApiError> {

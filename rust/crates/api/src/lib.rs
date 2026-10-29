@@ -59,6 +59,7 @@ pub mod kegiatan_write;
 pub mod kontrak;
 pub mod kontrak_addendum;
 pub mod kontrak_document;
+pub mod nphd;
 pub mod kontrak_document_data;
 pub mod kontrak_register_gap;
 pub mod kontrak_xlsx;
@@ -990,6 +991,7 @@ pub fn app(config: &Config, state: AppState) -> Router {
             get(kontrak_document::export_all_covers),
         )
         .route("/api/kontrak/{id}/export", get(kontrak_document::export))
+        .route("/api/pekerjaan/{id}/nphd", get(nphd::export))
         .route(
             "/api/kontrak/{id}/export-cover",
             get(kontrak_document::export_cover),
