@@ -11,6 +11,7 @@ Backend REST untuk ekosistem **Arumanis**, satu data air minum dan sanitasi Kabu
 [![rust](https://img.shields.io/badge/Rust-2021-b7410e?style=for-the-badge&labelColor=111111&logo=rust&logoColor=white)](https://www.rust-lang.org/)
 [![axum](https://img.shields.io/badge/Axum-0.8-674bb5?style=for-the-badge&labelColor=111111)](https://github.com/tokio-rs/axum)
 [![mysql](https://img.shields.io/badge/MySQL-8-4479a1?style=for-the-badge&labelColor=111111&logo=mysql&logoColor=white)](https://www.mysql.com/)
+[![license](https://img.shields.io/badge/license-MIT-22c55e?style=for-the-badge&labelColor=111111)](LICENSE)
 
 </div>
 
@@ -145,5 +146,7 @@ Jika mengubah bentuk request atau response, permission, atau relasi data, urutan
 4. Tambahkan migrasi di `rust/migrations` dan daftarkan di `migrate.rs`.
 
 ## Lisensi dan atribusi
+
+Kode APIAMIS berlisensi [MIT](LICENSE) · Copyright (c) 2025 ARUMANIS.
 
 APIAMIS dibangun di atas crate open source pihak ketiga. Daftar dependensi langsung beserta versi dan lisensinya ada di [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). Terima kasih kepada para pengembang dan komunitas Rust yang membuatnya.
