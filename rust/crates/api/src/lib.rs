@@ -999,6 +999,10 @@ pub fn app(config: &Config, state: AppState) -> Router {
         )
         .route("/api/nphd-data", get(nphd_data::index))
         .route(
+            "/api/kontrak/{id}/cover",
+            post(kontrak_document::store_cover),
+        )
+        .route(
             "/api/kontrak/{id}/export-cover",
             get(kontrak_document::export_cover),
         )

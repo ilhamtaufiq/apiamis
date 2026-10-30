@@ -674,6 +674,84 @@ pub async fn update(
     update_impl(state, headers, id, multipart, false).await
 }
 
+/// Jenis dokumen berkas untuk cover kontrak yang dibuat dari halaman kontrak.
+pub(crate) const JENIS_COVER_KONTRAK: &str = "Cover Kontrak";
+
+/// Simpan cover kontrak sebagai berkas di setiap pekerjaan kontrak. Cover `Cover Kontrak` sebelumnya di
+/// pekerjaan yang sama diganti, sehingga tab Berkas hanya memuat versi terakhir.
+pub(crate) async fn simpan_cover_kontrak(
+    state: &AppState,
+    headers: &HeaderMap,
+    actor: u64,
+    pekerjaan_ids: &[i64],
+    nama_berkas: &str,
+    bytes: Vec<u8>,
+) -> Result<(), ApiError> {
+    for &pekerjaan_id in pekerjaan_ids {
+        ensure_scope(state, actor, pekerjaan_id).await?;
+    }
+    let mime = media::mime_for_name(nama_berkas);
+    let url = format!("{}/api/kontrak/cover", state.app_url.trim_end_matches('/'));
+    for &pekerjaan_id in pekerjaan_ids {
+        let lama: Vec<i64> = sqlx::query_scalar(
+            "SELECT CAST(id AS SIGNED) FROM tbl_berkas WHERE pekerjaan_id = ? AND jenis_dokumen = ?",
+        )
+        .bind(pekerjaan_id)
+        .bind(JENIS_COVER_KONTRAK)
+        .fetch_all(&state.pool)
+        .await
+        .map_err(internal)?;
+
+        let mut tx = state.pool.begin().await.map_err(internal)?;
+        let mut dirs: Vec<PathBuf> = Vec::new();
+        for id in lama {
+            let row = find_row(&mut *tx, id)
+                .await
+                .map_err(internal)?
+                .ok_or_else(ApiError::not_found)?;
+            dirs.extend(delete_in_tx(&mut tx, headers, actor, &row, &url).await?);
+        }
+        let id = sqlx::query(
+            "INSERT INTO tbl_berkas (pekerjaan_id, jenis_dokumen, uploaded_by, created_at, updated_at) VALUES (?, ?, ?, NOW(), NOW())",
+        )
+        .bind(pekerjaan_id)
+        .bind(JENIS_COVER_KONTRAK)
+        .bind(actor)
+        .execute(&mut *tx)
+        .await
+        .map_err(internal)?
+        .last_insert_id() as i64;
+        let row = find_row(&mut *tx, id)
+            .await
+            .map_err(internal)?
+            .ok_or_else(|| internal("berkas baru tidak terbaca"))?;
+        changes::log(
+            &mut tx,
+            headers,
+            actor,
+            &changes::BERKAS,
+            "created",
+            id,
+            None,
+            Some(attributes(&row)),
+            Some(pekerjaan_id),
+            &url,
+        )
+        .await?;
+        let upload = media::Upload {
+            original_name: nama_berkas.to_string(),
+            bytes: bytes.clone(),
+        };
+        let stored = media::attach(&mut tx, MODEL, id as u64, COLLECTION, &upload, mime, false).await?;
+        if let Err(e) = tx.commit().await {
+            media::remove_dirs(&[stored.dir]).await;
+            return Err(internal(e));
+        }
+        media::remove_dirs(&dirs).await;
+    }
+    Ok(())
+}
+
 /// `POST /api/berkas/{id}` dengan `_method=PUT` (method spoofing Laravel).
 pub async fn update_post(
     State(state): State<AppState>,

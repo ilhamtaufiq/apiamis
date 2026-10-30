@@ -31,7 +31,7 @@ use crate::{
         self as data, DocCtx, DocSettings, KegiatanDoc, Overrides, PekerjaanDoc, PenyediaDoc,
         RawDocSettings, RegisterDoc,
     },
-    kontrak_register_gap, mailer, media, onlyoffice, require_auth, AppState,
+    berkas, kontrak_register_gap, mailer, media, onlyoffice, require_auth, AppState,
 };
 
 const APP_SETTING_MODEL: &str = "App\\Models\\AppSetting";
@@ -490,6 +490,38 @@ pub async fn export(
             format!("Export failed: {}", e.message),
         )),
     }
+}
+
+/// `POST /api/kontrak/{id}/cover`: buat cover sesuai sub bidang, lalu simpan sebagai berkas `Cover Kontrak`
+/// di setiap pekerjaan kontrak. Respons berupa berkas .docx untuk diunduh.
+pub async fn store_cover(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+) -> Result<Response, ApiError> {
+    let user = require_auth(&state, &headers).await?;
+    let kontrak = find_kontrak(&state.pool, parse_id(&id)?).await?;
+    let pekerjaan_ids = pekerjaan_ids_kontrak(&state.pool, kontrak.id).await?;
+    let ctx = load_ctx(&state.pool, kontrak).await?;
+    let key = cover_key(&ctx.sub_bidang())?;
+    let (bytes, name) = render_docx(&state.pool, &ctx, key, &Overrides::default()).await?;
+    if !pekerjaan_ids.is_empty() {
+        berkas::simpan_cover_kontrak(&state, &headers, user.user_id, &pekerjaan_ids, &name, bytes.clone()).await?;
+    }
+    Ok(file_response(bytes, &name, DOCX_MIME))
+}
+
+/// Pekerjaan yang terhubung ke kontrak: pivot `kontrak_pekerjaan` dan kolom legacy `id_pekerjaan`.
+async fn pekerjaan_ids_kontrak(pool: &MySqlPool, kontrak_id: i64) -> Result<Vec<i64>, ApiError> {
+    sqlx::query_scalar(
+        "SELECT CAST(pekerjaan_id AS SIGNED) FROM kontrak_pekerjaan WHERE kontrak_id = ? \
+         UNION SELECT CAST(id_pekerjaan AS SIGNED) FROM tbl_kontrak WHERE id = ? AND id_pekerjaan IS NOT NULL",
+    )
+    .bind(kontrak_id)
+    .bind(kontrak_id)
+    .fetch_all(pool)
+    .await
+    .map_err(|e| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))
 }
 
 /// `GET /api/kontrak/{id}/export-cover`: cover kontrak sesuai sub bidang.
