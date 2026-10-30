@@ -35,6 +35,8 @@ fn xml_escape(value: &str) -> String {
         .replace('&', "&amp;")
         .replace('<', "&lt;")
         .replace('>', "&gt;")
+        // Baris baru menjadi pemutus baris Word: teks ditutup, `w:br`, lalu teks dibuka lagi.
+        .replace('\n', "</w:t><w:br/><w:t xml:space=\"preserve\">")
 }
 
 /// Pola pencarian satu kunci: `{{key}}` lalu `{key}`, dengan spasi di dalam kurung diabaikan.
@@ -177,5 +179,13 @@ mod tests {
         let data = vec![("nama".to_string(), "Rp $1 \\0".to_string())];
         let out = fill(&sample_docx(), &data).unwrap();
         assert!(read_entry(&out, "word/document.xml").contains("Rp $1 \\0"));
+    }
+
+    #[test]
+    fn baris_baru_menjadi_pemutus_baris_word() {
+        let data = vec![("nama".to_string(), "a. satu\nb. dua".to_string())];
+        let out = fill(&sample_docx(), &data).unwrap();
+        let xml = read_entry(&out, "word/document.xml");
+        assert!(xml.contains("a. satu</w:t><w:br/><w:t xml:space=\"preserve\">b. dua"));
     }
 }

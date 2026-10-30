@@ -96,6 +96,22 @@ fn validasi(q: &NphdQuery) -> Result<NaiveDate, ApiError> {
     NaiveDate::parse_from_str(&q.tanggal, "%Y-%m-%d").map_err(|_| salah("Tanggal NPHD tidak valid."))
 }
 
+/// Objek hibah sebagai daftar bernomor huruf: `a. ...`, `b. ...`, setiap item di baris sendiri.
+/// Item dipisah `;` atau baris baru.
+pub(crate) fn format_objek(objek: &str) -> String {
+    objek
+        .split(|c| c == ';' || c == '\n')
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .enumerate()
+        .map(|(i, item)| {
+            let label = if i < 26 { ((b'a' + i as u8) as char).to_string() } else { (i + 1).to_string() };
+            format!("{label}. {item}")
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
 /// Mengambil data dasar dari konteks kontrak dan pekerjaan.
 fn data_dasar(ctx: &DocCtx) -> DataDasar {
     let kegiatan = ctx.kegiatan.as_ref();
@@ -137,7 +153,7 @@ pub(crate) fn nilai_dari(data: &DataDasar, q: &NphdQuery, tanggal: NaiveDate) ->
         ("NAMA PENYEDIA", data.penyedia.trim().to_string()),
         ("NOMOR SPK", data.nomor_spk.trim().to_string()),
         ("Nilaikontrak", format!("Rp.{},00", number_format(q.nilai))),
-        ("OUTPUT PEKERJAAN", q.objek.trim().to_string()),
+        ("OUTPUT PEKERJAAN", format_objek(&q.objek)),
     ];
     pairs.into_iter().map(|(k, v)| (k.to_string(), v)).collect()
 }
@@ -225,6 +241,20 @@ mod tests {
     fn hari_tanggal_sesuai_naskah_contoh() {
         let d = NaiveDate::from_ymd_opt(2026, 7, 13).unwrap();
         assert_eq!(hari_tanggal(d), "Senin tanggal Tiga Belas bulan Juli tahun Dua Ribu Dua Puluh Enam");
+    }
+
+    #[test]
+    fn objek_diberi_nomor_huruf_per_baris() {
+        assert_eq!(
+            format_objek("10 Unit Sambungan Rumah; 2520 Meter Pipa; 1 Unit Broncaptering"),
+            "a. 10 Unit Sambungan Rumah\nb. 2520 Meter Pipa\nc. 1 Unit Broncaptering"
+        );
+        assert_eq!(format_objek(" satu \n\n dua ; "), "a. satu\nb. dua");
+        assert_eq!(format_objek("  "), "");
+        let banyak: Vec<String> = (0..27).map(|i| format!("item {i}")).collect();
+        let hasil = format_objek(&banyak.join(";"));
+        assert!(hasil.starts_with("a. item 0\n"));
+        assert!(hasil.ends_with("\n27. item 26"));
     }
 
     #[test]
