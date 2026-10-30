@@ -39,9 +39,20 @@ pub struct NphdQuery {
     /// Sebutan pengelola, misalnya `Pengelola SPAM`. Kosong berarti `Pengelola`.
     #[serde(default)]
     pub pengelola_label: String,
-    /// Nama ketua pengelola.
+    /// Nama penerima manfaat, dipisah `;` atau baris baru. Ditulis sebagai daftar `- nama`.
     #[serde(default)]
-    pub ketua: String,
+    pub penerima: String,
+}
+
+/// Daftar penerima manfaat sebagai baris `- nama`, dipisah baris baru di dokumen.
+pub(crate) fn format_penerima(penerima: &str) -> String {
+    penerima
+        .split(|c| c == ';' || c == '\n')
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(|nama| format!("- {nama}"))
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 /// Data yang berasal dari pekerjaan dan kontrak.
@@ -149,7 +160,7 @@ pub(crate) fn nilai_dari(data: &DataDasar, q: &NphdQuery, tanggal: NaiveDate) ->
         ("NAMA DESA", desa.clone()),
         ("NAMA KECAMATAN", kecamatan.clone()),
         ("NAMAPENGELOLA", format!("{label} Desa {desa} Kecamatan {kecamatan}")),
-        ("NAMAKETUA", q.ketua.trim().to_string()),
+        ("NAMA PENERIMA MANFAAT", format_penerima(&q.penerima)),
         ("NAMA PENYEDIA", data.penyedia.trim().to_string()),
         ("NOMOR SPK", data.nomor_spk.trim().to_string()),
         ("Nilaikontrak", format!("Rp.{},00", number_format(q.nilai))),
@@ -220,7 +231,7 @@ mod tests {
             objek: "1 Paket Pembangunan (MCK 2 unit/pintu dan Tangki Septik 2 unit)".into(),
             nilai: 49_501_500.0,
             pengelola_label: "Penerima Manfaat MCK Individu".into(),
-            ketua: "Indra Permana".into(),
+            penerima: "Indra Permana; Ani Sutisna".into(),
         }
     }
 

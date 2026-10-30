@@ -996,6 +996,16 @@ const ROUTES: &[RouteEntry] = &[
         name: None,
     },
     RouteEntry {
+        uri: "api/pekerjaan/{id}/nphd-data",
+        methods: &["GET", "HEAD", "PUT"],
+        name: None,
+    },
+    RouteEntry {
+        uri: "api/nphd-data",
+        methods: &["GET", "HEAD"],
+        name: None,
+    },
+    RouteEntry {
         uri: "api/kontrak-addendums/register-gaps",
         methods: &["GET", "HEAD"],
         name: None,

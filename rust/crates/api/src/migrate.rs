@@ -36,6 +36,7 @@ pub const MIGRATIONS: &[(&str, &str)] = &[
     ("0012_catatan", include_str!("../../../migrations/0012_catatan.sql")),
     ("0013_ai_kanal", include_str!("../../../migrations/0013_ai_kanal.sql")),
     ("0014_pekerjaan_usulan_penyedia", include_str!("../../../migrations/0014_pekerjaan_usulan_penyedia.sql")),
+    ("0015_nphd_pekerjaan", include_str!("../../../migrations/0015_nphd_pekerjaan.sql")),
 ];
 
 const LOCK_NAME: &str = "apiamis_migrate";
