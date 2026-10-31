@@ -117,6 +117,25 @@ pub(crate) fn tabel_penerima(nama: &[String]) -> String {
     xml
 }
 
+/// Isi blok penerima di tanda tangan: tabel bila lebih dari satu penerima, jika tidak cukup nama
+/// dalam paragraf dengan ruang tanda tangan di bawahnya.
+pub(crate) fn blok_penerima(nama: &[String]) -> String {
+    if nama.len() > 1 {
+        return tabel_penerima(nama);
+    }
+    let teks = nama.first().map(String::as_str).unwrap_or("");
+    let rpr = r#"<w:rPr><w:rFonts w:ascii="Times New Roman" w:hAnsi="Times New Roman" w:cs="Times New Roman"/><w:b/><w:sz w:val="24"/></w:rPr>"#;
+    let isi = if teks.is_empty() {
+        String::new()
+    } else {
+        format!(r#"<w:r>{rpr}<w:t xml:space="preserve">{}</w:t></w:r>"#, xml_teks(teks))
+    };
+    // Ruang tanda tangan diberikan sebagai jarak di bawah nama, bukan paragraf kosong tambahan.
+    format!(
+        r#"<w:p><w:pPr><w:keepNext/><w:spacing w:after="900"/><w:jc w:val="left"/></w:pPr>{isi}</w:p>"#
+    )
+}
+
 /// Ganti paragraf yang memuat `{{TABEL PENERIMA}}` dengan tabel. Template tanpa placeholder dibiarkan.
 pub(crate) fn sisipkan_tabel(template: &[u8], tabel: &str) -> Result<Vec<u8>, String> {
     use std::io::{Read, Write};
@@ -178,7 +197,7 @@ pub async fn export(
     let values = nilai_dari(&data, &q, tanggal);
     let path = kontrak_document::resolve_template(&state.pool, kontrak_document::NPHD_KEY).await?;
     let bytes = tokio::fs::read(path).await.map_err(internal)?;
-    let bytes = sisipkan_tabel(&bytes, &tabel_penerima(&daftar_penerima(&q.penerima))).map_err(internal)?;
+    let bytes = sisipkan_tabel(&bytes, &blok_penerima(&daftar_penerima(&q.penerima))).map_err(internal)?;
     let filled = docx_template::fill(&bytes, &values).map_err(internal)?;
     let nama = ctx.pekerjaan.as_ref().and_then(|p| p.nama_paket.clone()).unwrap_or_default();
     let name = format!("NPHD_{}_{}.docx", slug(&nama), tanggal.format("%Y%m%d"));
@@ -371,6 +390,16 @@ mod tests {
         let khusus = tabel_penerima(&["Ani & Budi".to_string()]);
         assert!(khusus.contains("Ani &amp; Budi"));
         assert!(khusus.contains(">Tanda Tangan<"));
+    }
+
+    #[test]
+    fn satu_penerima_tanpa_tabel_lebih_dari_satu_pakai_tabel() {
+        let satu = blok_penerima(&["Indra Permana".to_string()]);
+        assert!(!satu.contains("<w:tbl>"));
+        assert!(satu.contains(">Indra Permana<"));
+        let dua = blok_penerima(&["Indra Permana".to_string(), "Ani Sutisna".to_string()]);
+        assert!(dua.contains("<w:tbl>"));
+        assert!(dua.contains("Ani Sutisna"));
     }
 
     #[test]
