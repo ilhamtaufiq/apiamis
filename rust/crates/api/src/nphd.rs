@@ -130,9 +130,10 @@ pub(crate) fn blok_penerima(nama: &[String]) -> String {
     } else {
         format!(r#"<w:r>{rpr}<w:t xml:space="preserve">{}</w:t></w:r>"#, xml_teks(teks))
     };
-    // Ruang tanda tangan diberikan sebagai jarak di bawah nama, bukan paragraf kosong tambahan.
+    // Ruang tanda tangan: jarak di atas garis `(....)`, sama seperti pola di template contoh.
+    let garis = r#"<w:r><w:rPr><w:rFonts w:ascii="Times New Roman" w:hAnsi="Times New Roman" w:cs="Times New Roman"/><w:sz w:val="24"/></w:rPr><w:t>(.................................)</w:t></w:r>"#;
     format!(
-        r#"<w:p><w:pPr><w:keepNext/><w:spacing w:after="900"/><w:jc w:val="left"/></w:pPr>{isi}</w:p>"#
+        r#"<w:p><w:pPr><w:keepNext/><w:spacing w:after="1100"/><w:jc w:val="left"/></w:pPr>{isi}</w:p><w:p><w:pPr><w:jc w:val="left"/></w:pPr>{garis}</w:p>"#
     )
 }
 
