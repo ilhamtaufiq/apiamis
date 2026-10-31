@@ -89,7 +89,7 @@ pub(crate) fn tabel_penerima(nama: &[String]) -> String {
             format!(r#"<w:r>{}<w:t xml:space="preserve">{}</w:t></w:r>"#, rpr(tebal), xml_teks(teks))
         };
         format!(
-            r#"<w:tc><w:tcPr><w:tcW w:w="{lebar}" w:type="dxa"/><w:vAlign w:val="center"/></w:tcPr><w:p><w:pPr><w:spacing w:before="40" w:after="40"/><w:jc w:val="{jc}"/></w:pPr>{isi}</w:p></w:tc>"#
+            r#"<w:tc><w:tcPr><w:tcW w:w="{lebar}" w:type="dxa"/><w:vAlign w:val="center"/></w:tcPr><w:p><w:pPr><w:keepNext/><w:spacing w:before="40" w:after="40"/><w:jc w:val="{jc}"/></w:pPr>{isi}</w:p></w:tc>"#
         )
     };
     let mut xml = String::from(
