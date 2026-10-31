@@ -65,7 +65,6 @@ pub(crate) fn daftar_penerima(penerima: &str) -> Vec<String> {
 
 /// Minimal baris pada tabel tanda tangan penerima, seperti contoh berita acara.
 const MIN_BARIS_TTD: usize = 8;
-const PLACEHOLDER_TABEL: &str = "{{TABEL PENERIMA}}";
 
 fn xml_teks(teks: &str) -> String {
     teks.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;")
@@ -137,11 +136,55 @@ pub(crate) fn blok_penerima(nama: &[String]) -> String {
     )
 }
 
-/// Ganti paragraf yang memuat `{{TABEL PENERIMA}}` dengan tabel. Template tanpa placeholder dibiarkan.
+/// Teks sebuah paragraf XML tanpa tanda. Word sering memecah placeholder ke beberapa run, jadi teks
+/// dikumpulkan dari seluruh `<w:t>` dulu.
+fn teks_paragraf(p: &str) -> String {
+    let mut out = String::new();
+    let mut sisa = p;
+    while let Some(i) = sisa.find("<w:t") {
+        let setelah = &sisa[i + 4..];
+        if !matches!(setelah.chars().next(), Some('>') | Some(' ')) {
+            sisa = setelah;
+            continue;
+        }
+        let Some(gt) = setelah.find('>') else { break };
+        let isi = &setelah[gt + 1..];
+        let Some(akhir) = isi.find("</w:t>") else { break };
+        out.push_str(&isi[..akhir]);
+        sisa = &isi[akhir + "</w:t>".len()..];
+    }
+    out
+}
+
+/// Posisi paragraf (awal, akhir) yang teksnya memuat placeholder tabel penerima.
+fn cari_paragraf_placeholder(xml: &str) -> Option<(usize, usize)> {
+    let mut cari = 0;
+    while let Some(rel) = xml[cari..].find("<w:p") {
+        let mulai = cari + rel;
+        if !matches!(xml[mulai + 4..].chars().next(), Some('>') | Some(' ')) {
+            cari = mulai + 4;
+            continue;
+        }
+        let selesai = mulai + xml[mulai..].find("</w:p>")? + "</w:p>".len();
+        let teks: String = teks_paragraf(&xml[mulai..selesai])
+            .chars()
+            .filter(|c| !c.is_whitespace() && *c != '\u{a0}')
+            .collect();
+        if teks.contains("{{TABELPENERIMA}}") {
+            return Some((mulai, selesai));
+        }
+        cari = selesai;
+    }
+    None
+}
+
+/// Ganti paragraf yang memuat `{{TABEL PENERIMA}}` dengan tabel atau blok penerima. Template tanpa
+/// placeholder ditolak, supaya penerima tidak hilang diam-diam dari dokumen.
 pub(crate) fn sisipkan_tabel(template: &[u8], tabel: &str) -> Result<Vec<u8>, String> {
     use std::io::{Read, Write};
     let mut arsip = zip::ZipArchive::new(std::io::Cursor::new(template)).map_err(|e| e.to_string())?;
     let mut keluaran = zip::ZipWriter::new(std::io::Cursor::new(Vec::new()));
+    let mut ditemukan = false;
     for i in 0..arsip.len() {
         let mut berkas = arsip.by_index(i).map_err(|e| e.to_string())?;
         let nama = berkas.name().to_string();
@@ -150,21 +193,23 @@ pub(crate) fn sisipkan_tabel(template: &[u8], tabel: &str) -> Result<Vec<u8>, St
         drop(berkas);
         if nama == "word/document.xml" {
             let xml = String::from_utf8(isi).map_err(|e| e.to_string())?;
-            if let Some(posisi) = xml.find(PLACEHOLDER_TABEL) {
-                let mulai = xml[..posisi].rfind("<w:p>").or_else(|| xml[..posisi].rfind("<w:p ")).ok_or("paragraf placeholder tidak ditemukan")?;
-                let selesai = xml[posisi..].find("</w:p>").map(|k| posisi + k + "</w:p>".len()).ok_or("paragraf placeholder tidak ditutup")?;
-                let hasil = format!("{}{}{}", &xml[..mulai], tabel, &xml[selesai..]);
-                isi = hasil.into_bytes();
-            } else {
-                isi = xml.into_bytes();
-            }
+            let (mulai, selesai) = cari_paragraf_placeholder(&xml)
+                .ok_or_else(|| PESAN_PLACEHOLDER_HILANG.to_string())?;
+            ditemukan = true;
+            isi = format!("{}{}{}", &xml[..mulai], tabel, &xml[selesai..]).into_bytes();
         }
         let opsi = zip::write::SimpleFileOptions::default();
         keluaran.start_file(nama, opsi).map_err(|e| e.to_string())?;
         keluaran.write_all(&isi).map_err(|e| e.to_string())?;
     }
+    if !ditemukan {
+        return Err(PESAN_PLACEHOLDER_HILANG.to_string());
+    }
     Ok(keluaran.finish().map_err(|e| e.to_string())?.into_inner())
 }
+
+const PESAN_PLACEHOLDER_HILANG: &str =
+    "Template NPHD belum memuat {{TABEL PENERIMA}}. Tambahkan placeholder itu di paragraf tanda tangan Berita Acara.";
 
 /// Data yang berasal dari pekerjaan dan kontrak.
 #[derive(Debug, Default, Clone, PartialEq)]
@@ -198,7 +243,8 @@ pub async fn export(
     let values = nilai_dari(&data, &q, tanggal);
     let path = kontrak_document::resolve_template(&state.pool, kontrak_document::NPHD_KEY).await?;
     let bytes = tokio::fs::read(path).await.map_err(internal)?;
-    let bytes = sisipkan_tabel(&bytes, &blok_penerima(&daftar_penerima(&q.penerima))).map_err(internal)?;
+    let bytes = sisipkan_tabel(&bytes, &blok_penerima(&daftar_penerima(&q.penerima)))
+        .map_err(|pesan| ApiError::new(StatusCode::UNPROCESSABLE_ENTITY, pesan))?;
     let filled = docx_template::fill(&bytes, &values).map_err(internal)?;
     let nama = ctx.pekerjaan.as_ref().and_then(|p| p.nama_paket.clone()).unwrap_or_default();
     let name = format!("NPHD_{}_{}.docx", slug(&nama), tanggal.format("%Y%m%d"));
@@ -466,5 +512,50 @@ mod tests {
         ] {
             assert!(xml.contains(nilai), "tidak ada di dokumen: {nilai}");
         }
+    }
+}
+
+#[cfg(test)]
+mod placeholder_tests {
+    use super::*;
+
+    fn docx_dengan(xml: &str) -> Vec<u8> {
+        use std::io::Write;
+        let mut z = zip::ZipWriter::new(std::io::Cursor::new(Vec::new()));
+        let opsi = zip::write::SimpleFileOptions::default();
+        z.start_file("word/document.xml", opsi).unwrap();
+        z.write_all(xml.as_bytes()).unwrap();
+        z.finish().unwrap().into_inner()
+    }
+
+    fn isi_document(bytes: &[u8]) -> String {
+        use std::io::Read;
+        let mut z = zip::ZipArchive::new(std::io::Cursor::new(bytes)).unwrap();
+        let mut s = String::new();
+        z.by_name("word/document.xml").unwrap().read_to_string(&mut s).unwrap();
+        s
+    }
+
+    #[test]
+    fn placeholder_terpecah_antar_run_tetap_ditemukan() {
+        let xml = r#"<w:body><w:p><w:r><w:t>{{TABEL </w:t></w:r><w:r><w:rPr><w:b/></w:rPr><w:t>PENERIMA}}</w:t></w:r></w:p></w:body>"#;
+        let hasil = sisipkan_tabel(&docx_dengan(xml), "<w:p>GANTI</w:p>").expect("placeholder harus ketemu");
+        let isi = isi_document(&hasil);
+        assert!(isi.contains("GANTI"));
+        assert!(!isi.contains("TABEL"));
+    }
+
+    #[test]
+    fn template_tanpa_placeholder_ditolak_dengan_pesan_jelas() {
+        let xml = r#"<w:body><w:p><w:r><w:t>Tidak ada apa-apa</w:t></w:r></w:p></w:body>"#;
+        let galat = sisipkan_tabel(&docx_dengan(xml), "<w:p>X</w:p>").unwrap_err();
+        assert!(galat.contains("{{TABEL PENERIMA}}"));
+    }
+
+    #[test]
+    fn paragraf_lain_tidak_ikut_terganti() {
+        let xml = r#"<w:body><w:p><w:pPr/><w:r><w:t>Pembuka</w:t></w:r></w:p><w:p><w:r><w:t>{{TABEL PENERIMA}}</w:t></w:r></w:p><w:p><w:r><w:t>Penutup</w:t></w:r></w:p></w:body>"#;
+        let isi = isi_document(&sisipkan_tabel(&docx_dengan(xml), "<w:p>GANTI</w:p>").unwrap());
+        assert!(isi.contains("Pembuka") && isi.contains("Penutup") && isi.contains("GANTI"));
     }
 }
