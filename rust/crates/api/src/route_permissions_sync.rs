@@ -1006,6 +1006,11 @@ const ROUTES: &[RouteEntry] = &[
         name: None,
     },
     RouteEntry {
+        uri: "api/buku-kontrak/konversi",
+        methods: &["POST"],
+        name: None,
+    },
+    RouteEntry {
         uri: "api/kontrak-addendums/register-gaps",
         methods: &["GET", "HEAD"],
         name: None,

@@ -447,24 +447,38 @@ fn random_hex() -> String {
 }
 
 /// Nama berkas sementara yang valid: 32 karakter hex huruf kecil dan ekstensi `.docx`.
+/// Ekstensi dokumen yang boleh dikirim ke ONLYOFFICE lewat berkas sementara.
+const TEMP_EXTENSIONS: [&str; 12] = [
+    "docx", "doc", "odt", "rtf", "txt", "xlsx", "xls", "ods", "csv", "pptx", "ppt", "odp",
+];
+
 fn is_temp_name(name: &str) -> bool {
-    name.strip_suffix(".docx").is_some_and(|stem| {
-        stem.len() == 32 && stem.chars().all(|c| c.is_ascii_digit() || ('a'..='f').contains(&c))
-    })
+    let Some((stem, ext)) = name.rsplit_once('.') else {
+        return false;
+    };
+    TEMP_EXTENSIONS.contains(&ext)
+        && stem.len() == 32
+        && stem.chars().all(|c| c.is_ascii_digit() || ('a'..='f').contains(&c))
 }
 
-/// Konversi `.docx` di memori ke PDF. Berkas ditulis ke `temp_dir`, diunduh Document Server lewat
-/// `{app_url}/api/onlyoffice/temp/{file}`, lalu dihapus. `None` bila ONLYOFFICE tidak aktif atau gagal.
+/// Konversi `.docx` di memori ke PDF. Lihat `convert_upload_to_pdf`.
 pub async fn convert_docx_to_pdf(app_url: &str, docx: &[u8], title: &str) -> Option<Vec<u8>> {
+    convert_upload_to_pdf(app_url, docx, "docx", title).await
+}
+
+/// Konversi dokumen (`ext`: docx, xlsx, pptx, dan sejenisnya) di memori ke PDF. Berkas ditulis ke
+/// `temp_dir`, diunduh Document Server lewat `{app_url}/api/onlyoffice/temp/{file}`, lalu dihapus.
+/// `None` bila ONLYOFFICE tidak aktif, ekstensi tidak didukung, atau konversi gagal.
+pub async fn convert_upload_to_pdf(app_url: &str, bytes: &[u8], ext: &str, title: &str) -> Option<Vec<u8>> {
     let settings = Settings::from_env();
-    if !settings.enabled() {
+    if !settings.enabled() || !TEMP_EXTENSIONS.contains(&ext) {
         return None;
     }
     let dir = temp_dir();
     tokio::fs::create_dir_all(&dir).await.ok()?;
-    let file = format!("{}.docx", random_hex());
+    let file = format!("{}.{ext}", random_hex());
     let path = dir.join(&file);
-    tokio::fs::write(&path, docx).await.ok()?;
+    tokio::fs::write(&path, bytes).await.ok()?;
 
     let expires = now_secs() + 15 * 60;
     let token = temp_token(&file, expires, &settings.download_secret());
@@ -473,7 +487,7 @@ pub async fn convert_docx_to_pdf(app_url: &str, docx: &[u8], title: &str) -> Opt
         app_url.trim_end_matches('/')
     );
     let key = format!("kontrak-{}", random_hex());
-    let pdf = convert_to_pdf(&settings, &url, "docx", &key, title).await;
+    let pdf = convert_to_pdf(&settings, &url, ext, &key, title).await;
     let _ = tokio::fs::remove_file(&path).await;
     pdf
 }

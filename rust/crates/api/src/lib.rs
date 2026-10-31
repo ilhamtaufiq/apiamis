@@ -61,6 +61,7 @@ pub mod kontrak_addendum;
 pub mod kontrak_document;
 pub mod nphd;
 pub mod nphd_data;
+pub mod buku_kontrak;
 pub mod kontrak_document_data;
 pub mod kontrak_register_gap;
 pub mod kontrak_xlsx;
@@ -998,6 +999,10 @@ pub fn app(config: &Config, state: AppState) -> Router {
             get(nphd_data::show).put(nphd_data::update),
         )
         .route("/api/nphd-data", get(nphd_data::index))
+        .route(
+            "/api/buku-kontrak/konversi",
+            post(buku_kontrak::konversi).layer(DefaultBodyLimit::max(foto::BODY_LIMIT)),
+        )
         .route(
             "/api/kontrak/{id}/cover",
             post(kontrak_document::store_cover),
