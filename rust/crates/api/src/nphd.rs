@@ -46,13 +46,104 @@ pub struct NphdQuery {
 
 /// Daftar penerima manfaat sebagai baris `- nama`, dipisah baris baru di dokumen.
 pub(crate) fn format_penerima(penerima: &str) -> String {
+    daftar_penerima(penerima)
+        .iter()
+        .map(|nama| format!("- {nama}"))
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+/// Nama penerima manfaat, dipisah `;` atau baris baru, tanpa baris kosong.
+pub(crate) fn daftar_penerima(penerima: &str) -> Vec<String> {
     penerima
         .split(|c| c == ';' || c == '\n')
         .map(str::trim)
         .filter(|s| !s.is_empty())
-        .map(|nama| format!("- {nama}"))
-        .collect::<Vec<_>>()
-        .join("\n")
+        .map(str::to_string)
+        .collect()
+}
+
+/// Minimal baris pada tabel tanda tangan penerima, seperti contoh berita acara.
+const MIN_BARIS_TTD: usize = 8;
+const PLACEHOLDER_TABEL: &str = "{{TABEL PENERIMA}}";
+
+fn xml_teks(teks: &str) -> String {
+    teks.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;")
+}
+
+/// Tabel tanda tangan penerima: No, Nama, Tanda Tangan. Jumlah baris mengikuti jumlah penerima,
+/// dengan minimal `MIN_BARIS_TTD` baris.
+pub(crate) fn tabel_penerima(nama: &[String]) -> String {
+    let baris = nama.len().max(MIN_BARIS_TTD);
+    let garis = |sisi: &str| format!(r#"<w:{sisi} w:val="single" w:sz="4" w:space="0" w:color="000000"/>"#);
+    let rpr = |tebal: bool| {
+        format!(
+            r#"<w:rPr><w:rFonts w:ascii="Times New Roman" w:hAnsi="Times New Roman" w:cs="Times New Roman"/>{}<w:sz w:val="22"/></w:rPr>"#,
+            if tebal { "<w:b/>" } else { "" }
+        )
+    };
+    let sel = |lebar: u32, jc: &str, teks: &str, tebal: bool| {
+        let isi = if teks.is_empty() {
+            String::new()
+        } else {
+            format!(r#"<w:r>{}<w:t xml:space="preserve">{}</w:t></w:r>"#, rpr(tebal), xml_teks(teks))
+        };
+        format!(
+            r#"<w:tc><w:tcPr><w:tcW w:w="{lebar}" w:type="dxa"/><w:vAlign w:val="center"/></w:tcPr><w:p><w:pPr><w:spacing w:before="40" w:after="40"/><w:jc w:val="{jc}"/></w:pPr>{isi}</w:p></w:tc>"#
+        )
+    };
+    let mut xml = String::from(
+        r#"<w:tbl><w:tblPr><w:tblW w:w="8700" w:type="dxa"/><w:tblLayout w:type="fixed"/><w:tblBorders>"#,
+    );
+    for sisi in ["top", "left", "bottom", "right", "insideH", "insideV"] {
+        xml.push_str(&garis(sisi));
+    }
+    xml.push_str(r#"</w:tblBorders></w:tblPr><w:tblGrid><w:gridCol w:w="700"/><w:gridCol w:w="4700"/><w:gridCol w:w="3300"/></w:tblGrid>"#);
+    xml.push_str(r#"<w:tr><w:trPr><w:tblHeader/></w:trPr>"#);
+    xml.push_str(&sel(700, "center", "No", true));
+    xml.push_str(&sel(4700, "center", "Nama", true));
+    xml.push_str(&sel(3300, "center", "Tanda Tangan", true));
+    xml.push_str("</w:tr>");
+    for i in 0..baris {
+        let nomor = (i + 1).to_string();
+        let isi_nama = nama.get(i).map(String::as_str).unwrap_or("");
+        xml.push_str(r#"<w:tr><w:trPr><w:cantSplit/><w:trHeight w:val="560"/></w:trPr>"#);
+        xml.push_str(&sel(700, "center", &nomor, false));
+        xml.push_str(&sel(4700, "left", isi_nama, false));
+        xml.push_str(&sel(3300, "left", "", false));
+        xml.push_str("</w:tr>");
+    }
+    xml.push_str("</w:tbl>");
+    xml
+}
+
+/// Ganti paragraf yang memuat `{{TABEL PENERIMA}}` dengan tabel. Template tanpa placeholder dibiarkan.
+pub(crate) fn sisipkan_tabel(template: &[u8], tabel: &str) -> Result<Vec<u8>, String> {
+    use std::io::{Read, Write};
+    let mut arsip = zip::ZipArchive::new(std::io::Cursor::new(template)).map_err(|e| e.to_string())?;
+    let mut keluaran = zip::ZipWriter::new(std::io::Cursor::new(Vec::new()));
+    for i in 0..arsip.len() {
+        let mut berkas = arsip.by_index(i).map_err(|e| e.to_string())?;
+        let nama = berkas.name().to_string();
+        let mut isi = Vec::new();
+        berkas.read_to_end(&mut isi).map_err(|e| e.to_string())?;
+        drop(berkas);
+        if nama == "word/document.xml" {
+            let xml = String::from_utf8(isi).map_err(|e| e.to_string())?;
+            if let Some(posisi) = xml.find(PLACEHOLDER_TABEL) {
+                let mulai = xml[..posisi].rfind("<w:p>").or_else(|| xml[..posisi].rfind("<w:p ")).ok_or("paragraf placeholder tidak ditemukan")?;
+                let selesai = xml[posisi..].find("</w:p>").map(|k| posisi + k + "</w:p>".len()).ok_or("paragraf placeholder tidak ditutup")?;
+                let hasil = format!("{}{}{}", &xml[..mulai], tabel, &xml[selesai..]);
+                isi = hasil.into_bytes();
+            } else {
+                isi = xml.into_bytes();
+            }
+        }
+        let opsi = zip::write::SimpleFileOptions::default();
+        keluaran.start_file(nama, opsi).map_err(|e| e.to_string())?;
+        keluaran.write_all(&isi).map_err(|e| e.to_string())?;
+    }
+    Ok(keluaran.finish().map_err(|e| e.to_string())?.into_inner())
 }
 
 /// Data yang berasal dari pekerjaan dan kontrak.
@@ -87,6 +178,7 @@ pub async fn export(
     let values = nilai_dari(&data, &q, tanggal);
     let path = kontrak_document::resolve_template(&state.pool, kontrak_document::NPHD_KEY).await?;
     let bytes = tokio::fs::read(path).await.map_err(internal)?;
+    let bytes = sisipkan_tabel(&bytes, &tabel_penerima(&daftar_penerima(&q.penerima))).map_err(internal)?;
     let filled = docx_template::fill(&bytes, &values).map_err(internal)?;
     let nama = ctx.pekerjaan.as_ref().and_then(|p| p.nama_paket.clone()).unwrap_or_default();
     let name = format!("NPHD_{}_{}.docx", slug(&nama), tanggal.format("%Y%m%d"));
@@ -269,6 +361,39 @@ mod tests {
     }
 
     #[test]
+    fn tabel_ttd_penerima_minimal_delapan_baris() {
+        let tiga: Vec<String> = ["Indra", "Ani", "Budi"].iter().map(|s| s.to_string()).collect();
+        let tabel = tabel_penerima(&tiga);
+        assert_eq!(tabel.matches("<w:tr>").count(), 9);
+        let sepuluh: Vec<String> = (0..10).map(|i| format!("Nama {i}")).collect();
+        let tabel = tabel_penerima(&sepuluh);
+        assert_eq!(tabel.matches("<w:tr>").count(), 11);
+        let khusus = tabel_penerima(&["Ani & Budi".to_string()]);
+        assert!(khusus.contains("Ani &amp; Budi"));
+        assert!(khusus.contains(">Tanda Tangan<"));
+    }
+
+    #[test]
+    fn tabel_penerima_disisipkan_ke_template_dan_terisi() {
+        let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../../../storage/app/templates/nphd_template.docx");
+        let template = std::fs::read(path).expect("template NPHD");
+        let nama = vec!["Indra Permana".to_string(), "Ani Sutisna".to_string()];
+        let disisipkan = sisipkan_tabel(&template, &tabel_penerima(&nama)).expect("sisipkan tabel");
+        let mut arsip = zip::ZipArchive::new(std::io::Cursor::new(&disisipkan)).unwrap();
+        let mut xml = String::new();
+        std::io::Read::read_to_string(&mut arsip.by_name("word/document.xml").unwrap(), &mut xml).unwrap();
+        assert!(!xml.contains("{{TABEL PENERIMA}}"));
+        assert!(xml.contains("Tanda Tangan"));
+
+        let isi = docx_template::fill(&disisipkan, &[("NAMA PENERIMA MANFAAT".into(), format_penerima("Indra Permana;Ani Sutisna"))]).unwrap();
+        let mut arsip = zip::ZipArchive::new(std::io::Cursor::new(isi)).unwrap();
+        let mut hasil = String::new();
+        std::io::Read::read_to_string(&mut arsip.by_name("word/document.xml").unwrap(), &mut hasil).unwrap();
+        assert!(!hasil.contains("{{TABEL"));
+        assert!(hasil.contains("Ani Sutisna"));
+    }
+
+    #[test]
     fn judul_mengecilkan_huruf_selain_awal_kata() {
         assert_eq!(judul("CILOTO"), "Ciloto");
         assert_eq!(judul("kp. pasirkuntul  rt"), "Kp. Pasirkuntul Rt");
@@ -292,6 +417,7 @@ mod tests {
         let values = nilai_dari(&data(), &q, tanggal);
         let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../../../storage/app/templates/nphd_template.docx");
         let bytes = std::fs::read(path).expect("template NPHD");
+        let bytes = sisipkan_tabel(&bytes, &tabel_penerima(&daftar_penerima(&q.penerima))).expect("sisipkan tabel");
         let filled = docx_template::fill(&bytes, &values).expect("isi template");
         let mut zip = zip::ZipArchive::new(std::io::Cursor::new(filled)).expect("docx valid");
         let mut xml = String::new();
