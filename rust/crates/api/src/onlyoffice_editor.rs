@@ -588,8 +588,8 @@ pub async fn config(
         ));
     }
 
-    // PDF selalu view-only, seperti `buildEditorPayload`.
-    let can_edit_doc = extension != "pdf" && can_edit(&actor, &media, accessible);
+    // PDF juga boleh edit (anotasi dan form di editor ONLYOFFICE), mengikuti hak akses biasa.
+    let can_edit_doc = can_edit(&actor, &media, accessible);
     let mode = match requested_mode.as_deref() {
         Some("edit") => {
             if !can_edit_doc {
