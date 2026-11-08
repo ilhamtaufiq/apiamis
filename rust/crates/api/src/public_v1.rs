@@ -5,6 +5,9 @@
 //! - `GET /api/public/v1/peripaan` (scope `peripaan:read`): daftar peta perpipaan per pekerjaan, ditambah
 //!   `unit_spam_ids` (unit SPAM yang tertaut ke pekerjaannya). Nama pengunggah dibuang.
 //!
+//! - `GET /api/public/v1/pekerjaan` (scope `pekerjaan:read`): daftar pekerjaan ringkas (id, nama paket, kode
+//!   rekening, kecamatan dan desa, status). Tanpa pagu, catatan, dan data pengawas.
+//!
 //! Berkas KMZ/KML diambil lewat `file_url` pada daftar (alamat `/storage/...` dengan nama UUID).
 
 use std::collections::{BTreeSet, HashMap};
@@ -69,6 +72,65 @@ pub async fn peripaan_index(
     let mut body = peripaan::index_data(&state, &query).await?;
     enrich(&state, &mut body).await?;
     Ok(Json(body).into_response())
+}
+
+/// `GET /api/public/v1/pekerjaan?status=&page=&per_page=`: daftar pekerjaan ringkas.
+pub async fn pekerjaan_index(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(query): Query<HashMap<String, String>>,
+) -> Result<Response, ApiError> {
+    public_key::authenticate(&state.pool, &headers, "pekerjaan:read").await?;
+    let per = clamp_per_page(query.get("per_page").map(String::as_str), 50, MAX_PER_PAGE);
+    let page = query
+        .get("page")
+        .and_then(|v| v.trim().parse::<i64>().ok())
+        .filter(|p| *p >= 1)
+        .unwrap_or(1);
+    let status = query
+        .get("status")
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty());
+
+    let (total,): (i64,) = sqlx::query_as(
+        "SELECT COUNT(*) FROM tbl_pekerjaan WHERE (? IS NULL OR status = ?)",
+    )
+    .bind(status.as_deref())
+    .bind(status.as_deref())
+    .fetch_one(&state.pool)
+    .await
+    .map_err(internal)?;
+
+    let rows = sqlx::query(
+        "SELECT CAST(id AS SIGNED) AS id, nama_paket, kode_rekening, \
+         CAST(kecamatan_id AS SIGNED) AS kecamatan_id, CAST(desa_id AS SIGNED) AS desa_id, status \
+         FROM tbl_pekerjaan WHERE (? IS NULL OR status = ?) ORDER BY id LIMIT ? OFFSET ?",
+    )
+    .bind(status.as_deref())
+    .bind(status.as_deref())
+    .bind(per)
+    .bind((page - 1) * per)
+    .fetch_all(&state.pool)
+    .await
+    .map_err(internal)?;
+
+    let mut data = Vec::with_capacity(rows.len());
+    for r in &rows {
+        data.push(json!({
+            "id": r.try_get::<i64, _>("id").map_err(internal)?,
+            "nama_paket": r.try_get::<Option<String>, _>("nama_paket").map_err(internal)?,
+            "kode_rekening": r.try_get::<Option<String>, _>("kode_rekening").map_err(internal)?,
+            "kecamatan_id": r.try_get::<Option<i64>, _>("kecamatan_id").map_err(internal)?,
+            "desa_id": r.try_get::<Option<i64>, _>("desa_id").map_err(internal)?,
+            "status": r.try_get::<Option<String>, _>("status").map_err(internal)?,
+        }));
+    }
+    let last_page = (total.max(1) + per - 1) / per;
+    Ok(Json(json!({
+        "data": data,
+        "meta": { "page": page, "per_page": per, "total": total, "last_page": last_page },
+    }))
+    .into_response())
 }
 
 /// Membuang bidang pengunggah dan menambahkan `unit_spam_ids` pada tiap baris `data`.

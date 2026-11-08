@@ -14,7 +14,7 @@ use sqlx::{MySqlPool, Row};
 
 pub const KEY_PREFIX: &str = "amis_live_";
 /// Scope yang dikenal. Tambahkan di sini bila ada endpoint publik baru.
-pub const SCOPES: &[&str] = &["spam-units:read", "peripaan:read"];
+pub const SCOPES: &[&str] = &["spam-units:read", "peripaan:read", "pekerjaan:read"];
 /// Jumlah karakter awal yang disimpan terang, untuk mengenali kunci di daftar (bukan untuk autentikasi).
 const DISPLAY_PREFIX_LEN: usize = KEY_PREFIX.len() + 6;
 /// `last_used_at` hanya diperbarui bila sudah lebih lama dari ini, supaya tiap permintaan tidak menulis.
@@ -231,5 +231,6 @@ mod tests {
     #[test]
     fn known_scopes_are_listed() {
         assert!(SCOPES.contains(&"spam-units:read") && SCOPES.contains(&"peripaan:read"));
+        assert!(SCOPES.contains(&"pekerjaan:read"));
     }
 }

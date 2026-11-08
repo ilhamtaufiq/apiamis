@@ -459,6 +459,7 @@ pub fn app(config: &Config, state: AppState) -> Router {
         .route("/api/admin/api-keys/{id}/revoke", post(api_keys_admin::revoke))
         .route("/api/public/v1/spam-units", get(public_v1::spam_units_index))
         .route("/api/public/v1/peripaan", get(public_v1::peripaan_index))
+        .route("/api/public/v1/pekerjaan", get(public_v1::pekerjaan_index))
         .route("/api/spam-units/stats", get(spam_units::stats))
         .route("/api/spam-units/stats/series", get(spam_units::stats_series))
         .route(
