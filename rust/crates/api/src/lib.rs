@@ -88,6 +88,9 @@ pub mod pekerjaan_import;
 pub mod menu_permissions;
 pub mod peripaan;
 pub mod peripaan_kml;
+pub mod api_keys_admin;
+pub mod public_key;
+pub mod public_v1;
 pub mod permissions;
 pub mod pekerjaan_detail;
 pub mod pekerjaan_doc_register;
@@ -451,6 +454,11 @@ pub fn app(config: &Config, state: AppState) -> Router {
             "/api/public/spam-units/map-stats/series",
             get(spam_units::public_map_stats_series),
         )
+        // Layanan lain (mis. arsgis) dengan kunci API `X-API-Key`; bukan untuk pengguna. Lihat `public_v1`.
+        .route("/api/admin/api-keys", get(api_keys_admin::index).post(api_keys_admin::store))
+        .route("/api/admin/api-keys/{id}/revoke", post(api_keys_admin::revoke))
+        .route("/api/public/v1/spam-units", get(public_v1::spam_units_index))
+        .route("/api/public/v1/peripaan", get(public_v1::peripaan_index))
         .route("/api/spam-units/stats", get(spam_units::stats))
         .route("/api/spam-units/stats/series", get(spam_units::stats_series))
         .route(

@@ -131,6 +131,14 @@ pub async fn index(
     Query(query): Query<HashMap<String, String>>,
 ) -> Result<Response, ApiError> {
     require_auth(&state, &headers).await?;
+    Ok(Json(index_data(&state, &query).await?).into_response())
+}
+
+/// Isi `GET /api/peripaan` sesudah autentikasi, sebagai JSON. Dipakai juga oleh `GET /api/public/v1/peripaan`.
+pub(crate) async fn index_data(
+    state: &AppState,
+    query: &HashMap<String, String>,
+) -> Result<Value, ApiError> {
     // `$request->filled('pekerjaan_id')`. Nilai yang bukan angka ditolak (422), bukan diam-diam jadi 0.
     let filter: Option<i64> = match query.get("pekerjaan_id").filter(|v| !v.is_empty()) {
         None => None,
@@ -185,14 +193,14 @@ pub async fn index(
         data.push(resource(&state.pool, &state.app_url, &r, with_geojson).await?);
     }
     if all {
-        return Ok(Json(json!({ "data": data })).into_response());
+        return Ok(json!({ "data": data }));
     }
     let base = format!("{}/api/peripaan", state.app_url.trim_end_matches('/'));
     let params = PageParams {
         page: params.page,
         per_page,
     };
-    Ok(Json(pagination::paginate(data, total as u64, params, &base)).into_response())
+    Ok(pagination::paginate(data, total as u64, params, &base))
 }
 
 /// Validasi `store` (diurutkan seperti Laravel). Mengembalikan `(pekerjaan_id, nama, file)`.

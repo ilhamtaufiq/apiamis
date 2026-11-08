@@ -37,6 +37,18 @@ async fn main() {
             run_regenerate_thumbs(&args[1..]).await;
             return;
         }
+        Some("create-api-key") => {
+            run_create_api_key(&args[1..]).await;
+            return;
+        }
+        Some("list-api-keys") => {
+            run_list_api_keys().await;
+            return;
+        }
+        Some("revoke-api-key") => {
+            run_revoke_api_key(&args[1..]).await;
+            return;
+        }
         _ => {}
     }
 
@@ -71,6 +83,66 @@ async fn run_migrate() {
             tracing::error!(error = %e, "migrasi gagal");
             std::process::exit(1);
         }
+    }
+}
+
+/// `apiamis-api create-api-key --name=arsgis --scopes=spam-units:read,peripaan:read [--expires-days=365]`.
+/// Kunci asli hanya dicetak sekali di sini; di basis data hanya tersimpan hash-nya.
+async fn run_create_api_key(args: &[String]) {
+    let name = flag_value(args, "name").unwrap_or_else(|| fail("--name wajib, mis. --name=arsgis"));
+    let scopes: Vec<String> = flag_value(args, "scopes")
+        .unwrap_or_default()
+        .split(',')
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .collect();
+    let expires_days = flag_value(args, "expires-days")
+        .map(|v| v.trim().parse::<i64>().unwrap_or_else(|_| fail("--expires-days harus angka")));
+    let pool = connect_db().await;
+    match api::public_key::create(&pool, &name, &scopes, expires_days).await {
+        Ok((id, key)) => {
+            println!("Kunci API dibuat (id {id}). Simpan sekarang, kunci ini tidak bisa ditampilkan lagi:\n\n{key}\n");
+        }
+        Err(e) => fail(&e),
+    }
+}
+
+/// `apiamis-api list-api-keys`: daftar kunci tanpa nilai kuncinya.
+async fn run_list_api_keys() {
+    fn when(t: Option<chrono::DateTime<chrono::Utc>>) -> String {
+        t.map_or_else(|| "-".to_string(), |t| t.format("%Y-%m-%d %H:%M UTC").to_string())
+    }
+    let pool = connect_db().await;
+    match api::public_key::list(&pool).await {
+        Ok(rows) if rows.is_empty() => println!("Belum ada kunci API."),
+        Ok(rows) => {
+            for r in rows {
+                println!(
+                    "id={} nama={} awalan={}… scope={} kedaluwarsa={} dicabut={} terakhir_dipakai={}",
+                    r.id,
+                    r.name,
+                    r.prefix,
+                    r.scopes,
+                    when(r.expires_at),
+                    when(r.revoked_at),
+                    when(r.last_used_at)
+                );
+            }
+        }
+        Err(e) => fail(&format!("gagal membaca kunci: {e}")),
+    }
+}
+
+/// `apiamis-api revoke-api-key --id=3`: kunci langsung berhenti berlaku.
+async fn run_revoke_api_key(args: &[String]) {
+    let id: i64 = flag_value(args, "id")
+        .and_then(|v| v.trim().parse().ok())
+        .unwrap_or_else(|| fail("--id wajib berupa angka, lihat list-api-keys"));
+    let pool = connect_db().await;
+    match api::public_key::revoke(&pool, id).await {
+        Ok(true) => println!("Kunci {id} dicabut."),
+        Ok(false) => fail("kunci tidak ditemukan atau sudah dicabut"),
+        Err(e) => fail(&format!("gagal mencabut kunci: {e}")),
     }
 }
 

@@ -765,7 +765,15 @@ pub async fn index(
     Query(query): Query<HashMap<String, String>>,
 ) -> Result<Response, ApiError> {
     require_auth(&state, &headers).await?;
+    index_impl(&state, &query).await
+}
 
+/// Isi `GET /api/spam-units` sesudah autentikasi. Dipakai juga oleh `GET /api/public/v1/spam-units` (kunci API),
+/// jadi bentuk respons keduanya selalu sama.
+pub(crate) async fn index_impl(
+    state: &AppState,
+    query: &HashMap<String, String>,
+) -> Result<Response, ApiError> {
     let mut where_sql = String::from(" WHERE 1 = 1");
     let mut binds: Vec<B> = Vec::new();
     if let Some(kec) = truthy_param(query.get("kecamatan_id")) {
