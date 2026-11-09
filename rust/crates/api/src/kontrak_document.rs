@@ -12,6 +12,7 @@ use std::{
 };
 
 use axum::{
+    body::Bytes,
     extract::{Path, Query, RawQuery, State},
     http::{header, HeaderMap, StatusCode},
     response::{IntoResponse, Response},
@@ -25,7 +26,7 @@ use sqlx::{MySqlPool, Row};
 use zip::{write::SimpleFileOptions, CompressionMethod, ZipWriter};
 
 use crate::{
-    docx_template, kontrak,
+    docx_template, kontrak, ringkasan_overrides, xlsx_template,
     kontrak::{KontrakRow, SELECT_ADDENDUM},
     kontrak_document_data::{
         self as data, DocCtx, DocSettings, KegiatanDoc, Overrides, PekerjaanDoc, PenyediaDoc,
@@ -37,11 +38,15 @@ use crate::{
 const APP_SETTING_MODEL: &str = "App\\Models\\AppSetting";
 const TEMPLATE_COLLECTION: &str = "app-settings";
 const DOCX_MIME: &str = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+const XLSX_MIME: &str = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+const KONTRAK_MODEL: &str = "App\\Models\\Kontrak";
+const RINGKASAN_PREVIEW_COLLECTION: &str = "kontrak/ringkasan-preview";
 const SPK_KEY: &str = "kontrak_template_spk";
 const BAP_KEY: &str = "kontrak_template_bap";
 const COVER_AM_KEY: &str = "kontrak_template_cover_am";
 const COVER_SAN_KEY: &str = "kontrak_template_cover_san";
 pub(crate) const NPHD_KEY: &str = "kontrak_template_nphd";
+pub(crate) const RINGKASAN_KEY: &str = "kontrak_template_ringkasan";
 const STATUS_DISETUJUI: &str = "disetujui";
 
 fn internal(e: impl std::fmt::Display) -> ApiError {
@@ -56,6 +61,7 @@ fn template_default(key: &str) -> Option<&'static str> {
         COVER_AM_KEY => Some("cover_kontrak_am.docx"),
         COVER_SAN_KEY => Some("cover_kontrak_san.docx"),
         NPHD_KEY => Some("nphd_template.docx"),
+        RINGKASAN_KEY => Some("ringkasan_kontrak_template.xlsx"),
         _ => None,
     }
 }
@@ -765,6 +771,124 @@ pub async fn export_bap(
     Ok(file_response(bytes, &name, DOCX_MIME))
 }
 
+// ---------------------------------------------------------------------------
+// Ringkasan kontrak (.xlsx)
+// ---------------------------------------------------------------------------
+
+/// Body JSON opsional berisi override. Body kosong sama dengan tanpa override.
+fn ringkasan_overrides(body: &Bytes) -> Result<Overrides, ApiError> {
+    let input: Value = if body.iter().all(u8::is_ascii_whitespace) {
+        json!({})
+    } else {
+        serde_json::from_slice(body).map_err(|_| {
+            ApiError::new(StatusCode::UNPROCESSABLE_ENTITY, "Body permintaan harus berupa JSON.")
+        })?
+    };
+    if !input.is_object() {
+        return Err(ApiError::new(
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "Body permintaan harus berupa objek JSON.",
+        ));
+    }
+    ringkasan_overrides::validate(&input)
+}
+
+/// `ExcelDocumentExportService::exportRingkasan`. Mengembalikan isi `.xlsx`, nama unduhan
+/// (`Ringkasan_<slug nama paket>.xlsx`), dan judul pratinjau.
+async fn render_ringkasan(
+    pool: &MySqlPool,
+    ctx: &DocCtx,
+    overrides: &Overrides,
+) -> Result<(Vec<u8>, String, String), ApiError> {
+    let Some(pekerjaan) = ctx.pekerjaan.as_ref() else {
+        return Err(ApiError::new(
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "Kontrak tidak memiliki pekerjaan terkait.",
+        ));
+    };
+    let template = resolve_template(pool, RINGKASAN_KEY).await?;
+    let is_xlsx = template
+        .extension()
+        .and_then(|e| e.to_str())
+        .is_some_and(|e| e.eq_ignore_ascii_case("xlsx"));
+    if !is_xlsx {
+        return Err(internal("Template ringkasan kontrak harus berformat .xlsx."));
+    }
+    let settings = load_settings(pool).await?;
+    let values = data::build(ctx, &settings, overrides)
+        .map_err(|m| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, m))?;
+    let template_bytes = tokio::fs::read(&template).await.map_err(internal)?;
+    let filled = xlsx_template::fill(&template_bytes, &values).map_err(internal)?;
+    let nama_paket = pekerjaan
+        .nama_paket
+        .clone()
+        .filter(|n| !n.is_empty())
+        .unwrap_or_else(|| "Kontrak".to_string());
+    let file_name = format!("Ringkasan_{}.xlsx", slug(&nama_paket));
+    let title = format!("Ringkasan Kontrak - {nama_paket}");
+    Ok((filled, file_name, title))
+}
+
+/// `POST /api/kontrak/{id}/export-ringkasan`: unduh ringkasan kontrak (.xlsx) dari template.
+pub async fn export_ringkasan(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+    body: Bytes,
+) -> Result<Response, ApiError> {
+    require_auth(&state, &headers).await?;
+    let kontrak = find_kontrak(&state.pool, parse_id(&id)?).await?;
+    let overrides = ringkasan_overrides(&body)?;
+    let ctx = load_ctx(&state.pool, kontrak).await?;
+    let (bytes, name, _) = render_ringkasan(&state.pool, &ctx, &overrides).await?;
+    Ok(file_response(bytes, &name, XLSX_MIME))
+}
+
+/// `POST /api/kontrak/{id}/preview-ringkasan`: sama dengan export, hasilnya disimpan sebagai media
+/// koleksi `kontrak/ringkasan-preview` untuk dibuka di editor ONLYOFFICE.
+pub async fn preview_ringkasan(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+    body: Bytes,
+) -> Result<Response, ApiError> {
+    require_auth(&state, &headers).await?;
+    let kontrak = find_kontrak(&state.pool, parse_id(&id)?).await?;
+    let kontrak_id = kontrak.id as u64;
+    let overrides = ringkasan_overrides(&body)?;
+    let ctx = load_ctx(&state.pool, kontrak).await?;
+    let (bytes, name, title) = render_ringkasan(&state.pool, &ctx, &overrides).await?;
+
+    let upload = media::Upload {
+        original_name: name.clone(),
+        bytes,
+    };
+    let mut tx = state.pool.begin().await.map_err(internal)?;
+    let stored = media::attach_named(
+        &mut tx,
+        KONTRAK_MODEL,
+        kontrak_id,
+        RINGKASAN_PREVIEW_COLLECTION,
+        &upload,
+        XLSX_MIME,
+        false,
+        Some(name),
+    )
+    .await?;
+    if let Err(e) = tx.commit().await {
+        let _ = tokio::fs::remove_dir_all(&stored.dir).await;
+        return Err(internal(e));
+    }
+    Ok(Json(json!({
+        "data": {
+            "media_id": stored.media_id,
+            "file_name": stored.file_name,
+            "title": title,
+        }
+    }))
+    .into_response())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -780,6 +904,23 @@ mod tests {
         assert_eq!(cover_key("Air Minum").unwrap(), COVER_AM_KEY);
         assert_eq!(cover_key("Sanitasi Lingkungan").unwrap(), COVER_SAN_KEY);
         assert!(cover_key("Lainnya").is_err());
+    }
+
+    #[test]
+    fn ringkasan_template_default_is_xlsx() {
+        assert_eq!(
+            template_default(RINGKASAN_KEY),
+            Some("ringkasan_kontrak_template.xlsx")
+        );
+        assert!(template_dir().join("ringkasan_kontrak_template.xlsx").exists());
+    }
+
+    #[test]
+    fn ringkasan_body_parsing() {
+        assert!(ringkasan_overrides(&Bytes::new()).is_ok());
+        assert!(ringkasan_overrides(&Bytes::from_static(b"{\"persen_tagih\":95}")).is_ok());
+        assert!(ringkasan_overrides(&Bytes::from_static(b"{\"persen_tagih\":7}")).is_err());
+        assert!(ringkasan_overrides(&Bytes::from_static(b"bukan json")).is_err());
     }
 
     #[test]
