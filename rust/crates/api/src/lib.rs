@@ -63,6 +63,8 @@ pub mod nphd;
 pub mod nphd_data;
 pub mod buku_kontrak;
 pub mod kontrak_document_data;
+pub mod ringkasan_overrides;
+pub mod xlsx_template;
 pub mod kontrak_register_gap;
 pub mod kontrak_xlsx;
 pub mod koordinat;
@@ -812,6 +814,7 @@ pub fn app(config: &Config, state: AppState) -> Router {
         .route("/api/penerima", get(penerima::index).post(penerima::store))
         .route("/api/penerima/summary", get(penerima::summary))
         .route("/api/penerima/rekap", get(penerima::rekap))
+        .route("/api/penerima/verify-pin", post(penerima::verify_pin))
         .route(
             "/api/penerima/pekerjaan/{pekerjaan_id}",
             get(penerima::by_pekerjaan),
@@ -1027,6 +1030,14 @@ pub fn app(config: &Config, state: AppState) -> Router {
         .route(
             "/api/kontrak/{id}/export-bap",
             get(kontrak_document::export_bap),
+        )
+        .route(
+            "/api/kontrak/{id}/export-ringkasan",
+            post(kontrak_document::export_ringkasan),
+        )
+        .route(
+            "/api/kontrak/{id}/preview-ringkasan",
+            post(kontrak_document::preview_ringkasan),
         )
         .route(
             "/api/kontrak/import/template",

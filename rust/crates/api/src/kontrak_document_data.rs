@@ -1214,6 +1214,51 @@ mod tests {
         assert_eq!(value(&data, "nilai_lain"), "Rp. 5.000");
     }
 
+    /// Verifikasi nyata: isi template ringkasan asli dengan data dummy lalu baca ulang dengan calamine.
+    #[test]
+    fn ringkasan_template_is_filled_with_dummy_data() {
+        use calamine::{open_workbook_auto_from_rs, Reader};
+        let template_path = crate::kontrak_document::template_dir()
+            .join("ringkasan_kontrak_template.xlsx");
+        let template = std::fs::read(&template_path).unwrap();
+        let overrides = Overrides::from_pairs(vec![
+            ("persen_tagih".into(), "95".into()),
+            ("pembayaran_lalu[0][jenis]".into(), "Uang Muka".into()),
+            ("pembayaran_lalu[0][nominal]".into(), "100000".into()),
+        ]);
+        let data = build(&sample_ctx(), &sample_settings(), &overrides).unwrap();
+        let out = crate::xlsx_template::fill(&template, &data).unwrap();
+        if let Some(dir) = std::env::var_os("RINGKASAN_SAMPLE_OUT") {
+            std::fs::write(std::path::PathBuf::from(dir), &out).unwrap();
+        }
+
+        let mut wb = open_workbook_auto_from_rs(std::io::Cursor::new(out)).unwrap();
+        let mut texts = Vec::new();
+        for name in wb.sheet_names().to_vec() {
+            let range = wb.worksheet_range(&name).unwrap();
+            for row in range.rows() {
+                for cell in row {
+                    let text = cell.to_string();
+                    if !text.is_empty() {
+                        texts.push(text);
+                    }
+                }
+            }
+        }
+        let all = texts.join("\n");
+        // Semua kunci yang dikenal builder sudah terganti: tidak ada `{kunci}` dari data tersisa.
+        for (key, _) in &data {
+            assert!(
+                !all.contains(&format!("{{{key}}}")) && !all.contains(&format!("{{{{{key}}}}}")),
+                "placeholder {key} belum terganti"
+            );
+        }
+        assert!(all.contains("Pembangunan Jalan"), "nama_paket");
+        assert!(all.contains("Rp. 950.000"), "nilai_tagih 95%");
+        assert!(all.contains("Uang Muka"), "pembayaran lalu");
+        assert!(all.contains("10 Januari 2026"), "tgl_spk");
+    }
+
     #[test]
     fn build_needs_a_pekerjaan() {
         let mut ctx = sample_ctx();
