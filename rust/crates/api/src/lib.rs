@@ -59,6 +59,7 @@ pub mod kegiatan_write;
 pub mod kontrak;
 pub mod kontrak_addendum;
 pub mod kontrak_document;
+pub mod laporan_masa_pemeliharaan;
 pub mod nphd;
 pub mod nphd_data;
 pub mod buku_kontrak;
@@ -694,6 +695,10 @@ pub fn app(config: &Config, state: AppState) -> Router {
         .route(
             "/api/document-types",
             get(lookup::document_types_index).post(document_types_write::store_type),
+        )
+        .route(
+            "/api/laporan/masa-pemeliharaan",
+            get(laporan_masa_pemeliharaan::index),
         )
         .route(
             "/api/document-registers",

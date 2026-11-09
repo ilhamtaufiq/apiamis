@@ -301,7 +301,7 @@ pub(crate) async fn load_ctx(pool: &MySqlPool, kontrak: KontrakRow) -> Result<Do
 }
 
 /// `GetOrCreate` pengaturan dokumen: nilai `app_settings` lalu default SPSE dari environment.
-async fn load_settings(pool: &MySqlPool) -> Result<DocSettings, ApiError> {
+pub(crate) async fn load_settings(pool: &MySqlPool) -> Result<DocSettings, ApiError> {
     let read =
         |key: &'static str| async move { mailer::setting(pool, key).await.map_err(internal) };
     let raw = RawDocSettings {
