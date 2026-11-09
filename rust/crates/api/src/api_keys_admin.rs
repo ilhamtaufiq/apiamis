@@ -4,6 +4,7 @@
 //! - `GET    /api/admin/api-keys`             daftar (tanpa nilai kunci)
 //! - `POST   /api/admin/api-keys`             buat; kunci asli hanya ada di respons ini
 //! - `POST   /api/admin/api-keys/{id}/revoke` cabut
+//! - `PATCH  /api/admin/api-keys/{id}`        ubah scope (kunci yang sudah dicabut ditolak)
 
 use axum::{
     extract::{Path, State},
@@ -16,6 +17,11 @@ use serde_json::{json, Value};
 use shared::ApiError;
 
 use crate::{notifications::require_admin, public_key, require_auth, AppState};
+
+#[derive(Deserialize)]
+pub struct ScopeBody {
+    pub scopes: Vec<String>,
+}
 
 #[derive(Deserialize)]
 pub struct NewKeyBody {
@@ -100,4 +106,26 @@ pub async fn revoke(
     }
     tracing::info!(admin_user_id = user.user_id, id, "kunci API dicabut");
     Ok(Json(json!({ "id": id, "ok": true })).into_response())
+}
+
+/// `PATCH /api/admin/api-keys/{id}`. Mengganti daftar scope. 200 dengan scope baru.
+pub async fn update_scopes(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<i64>,
+    Json(body): Json<ScopeBody>,
+) -> Result<Response, ApiError> {
+    let user = require_auth(&state, &headers).await?;
+    require_admin(&state.pool, user.user_id).await?;
+    public_key::validasi_scopes(&body.scopes).map_err(|m| ApiError::new(StatusCode::UNPROCESSABLE_ENTITY, m))?;
+    match public_key::ubah_scope(&state.pool, id, &body.scopes).await.map_err(internal)? {
+        public_key::UbahScopeHasil::Berhasil => {
+            tracing::info!(admin_user_id = user.user_id, id, scopes = ?body.scopes, "scope kunci API diubah");
+            Ok(Json(json!({ "data": { "id": id, "scopes": body.scopes } })).into_response())
+        }
+        public_key::UbahScopeHasil::TidakAda => Err(ApiError::new(StatusCode::NOT_FOUND, "kunci tidak ditemukan")),
+        public_key::UbahScopeHasil::SudahDicabut => {
+            Err(ApiError::new(StatusCode::CONFLICT, "kunci sudah dicabut, scope tidak bisa diubah"))
+        }
+    }
 }
