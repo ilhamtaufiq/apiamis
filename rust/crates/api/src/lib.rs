@@ -812,6 +812,7 @@ pub fn app(config: &Config, state: AppState) -> Router {
         .route("/api/penerima", get(penerima::index).post(penerima::store))
         .route("/api/penerima/summary", get(penerima::summary))
         .route("/api/penerima/rekap", get(penerima::rekap))
+        .route("/api/penerima/verify-pin", post(penerima::verify_pin))
         .route(
             "/api/penerima/pekerjaan/{pekerjaan_id}",
             get(penerima::by_pekerjaan),

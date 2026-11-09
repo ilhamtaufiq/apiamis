@@ -540,6 +540,33 @@ pub(crate) async fn unmasked_for(
     pin_matches(pool, pin_from(headers, pin_query(query)).as_deref()).await
 }
 
+/// PIN dari body `verify-pin`: hanya string non-kosong yang dianggap diisi.
+fn pin_from_body(body: &Value) -> Option<&str> {
+    body.get("pin")
+        .and_then(Value::as_str)
+        .filter(|p| !php_empty(Some(*p)))
+}
+
+/// Bentuk respons `verify-pin`; tidak pernah memuat PIN yang benar.
+fn verify_pin_response(valid: bool) -> Value {
+    json!({ "data": { "valid": valid } })
+}
+
+/// `POST /api/penerima/verify-pin` dengan body `{ pin }`. Memakai `pin_matches` yang sama dengan
+/// penyensoran daftar penerima, sehingga hasilnya konsisten dengan header `X-PIN`.
+pub async fn verify_pin(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(body): Json<Value>,
+) -> Result<Response, ApiError> {
+    require_auth(&state, &headers).await?;
+    let valid = match pin_from_body(&body) {
+        Some(pin) => pin_matches(&state.pool, Some(pin)).await?,
+        None => false,
+    };
+    Ok(Json(verify_pin_response(valid)).into_response())
+}
+
 /// `GET /api/penerima`.
 pub async fn index(
     State(state): State<AppState>,
@@ -1098,6 +1125,16 @@ mod tests {
         assert_eq!(mask(Some("abc"), 4).unwrap(), "***");
         assert_eq!(mask(Some(""), 4).unwrap(), "");
         assert_eq!(mask(None, 4), None);
+    }
+
+    #[test]
+    fn verify_pin_body_and_response_shape() {
+        assert_eq!(pin_from_body(&json!({"pin": "123456"})), Some("123456"));
+        assert_eq!(pin_from_body(&json!({"pin": ""})), None);
+        assert_eq!(pin_from_body(&json!({"pin": 123456})), None);
+        assert_eq!(pin_from_body(&json!({})), None);
+        assert_eq!(verify_pin_response(true), json!({"data": {"valid": true}}));
+        assert_eq!(verify_pin_response(false), json!({"data": {"valid": false}}));
     }
 
     #[test]
