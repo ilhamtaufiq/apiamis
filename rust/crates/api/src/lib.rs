@@ -459,6 +459,7 @@ pub fn app(config: &Config, state: AppState) -> Router {
         // Layanan lain (mis. arsgis) dengan kunci API `X-API-Key`; bukan untuk pengguna. Lihat `public_v1`.
         .route("/api/admin/api-keys", get(api_keys_admin::index).post(api_keys_admin::store))
         .route("/api/admin/api-keys/{id}/revoke", post(api_keys_admin::revoke))
+        .route("/api/admin/api-keys/{id}", patch(api_keys_admin::update_scopes))
         .route("/api/public/v1/spam-units", get(public_v1::spam_units_index))
         .route("/api/public/v1/peripaan", get(public_v1::peripaan_index))
         .route("/api/public/v1/pekerjaan", get(public_v1::pekerjaan_index))

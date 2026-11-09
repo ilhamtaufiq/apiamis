@@ -150,6 +150,47 @@ pub async fn list(pool: &MySqlPool) -> Result<Vec<KeyRow>, sqlx::Error> {
         .collect()
 }
 
+/// Memeriksa daftar scope: tidak kosong, dan setiap nilai ada di `SCOPES`.
+pub fn validasi_scopes(scopes: &[String]) -> Result<(), String> {
+    if scopes.is_empty() {
+        return Err(format!("scope wajib dipilih, pilihan: {}", SCOPES.join(", ")));
+    }
+    if let Some(bad) = scopes.iter().find(|s| !SCOPES.contains(&s.as_str())) {
+        return Err(format!("scope {bad:?} tidak dikenal, pilihan: {}", SCOPES.join(", ")));
+    }
+    Ok(())
+}
+
+/// Hasil mengubah scope kunci.
+pub enum UbahScopeHasil {
+    Berhasil,
+    TidakAda,
+    SudahDicabut,
+}
+
+/// Mengganti scope kunci yang belum dicabut. Kunci dan nilainya tidak berubah; hanya daftar scope.
+pub async fn ubah_scope(pool: &MySqlPool, id: i64, scopes: &[String]) -> Result<UbahScopeHasil, sqlx::Error> {
+    let baris = sqlx::query("SELECT revoked_at FROM api_keys WHERE id = ?")
+        .bind(id)
+        .fetch_optional(pool)
+        .await?;
+    let Some(baris) = baris else {
+        return Ok(UbahScopeHasil::TidakAda);
+    };
+    let revoked: Option<DateTime<Utc>> = baris.try_get("revoked_at")?;
+    if revoked.is_some() {
+        return Ok(UbahScopeHasil::SudahDicabut);
+    }
+    // Scope disimpan sebagai JSON, sama seperti saat membuat kunci.
+    let scopes_json = serde_json::to_string(scopes).unwrap_or_else(|_| "[]".into());
+    sqlx::query("UPDATE api_keys SET scopes = CAST(? AS JSON) WHERE id = ?")
+        .bind(scopes_json)
+        .bind(id)
+        .execute(pool)
+        .await?;
+    Ok(UbahScopeHasil::Berhasil)
+}
+
 /// Mencabut kunci. `false` bila id tidak ada atau sudah dicabut.
 pub async fn revoke(pool: &MySqlPool, id: i64) -> Result<bool, sqlx::Error> {
     let r = sqlx::query("UPDATE api_keys SET revoked_at = UTC_TIMESTAMP() WHERE id = ? AND revoked_at IS NULL")
@@ -162,6 +203,14 @@ pub async fn revoke(pool: &MySqlPool, id: i64) -> Result<bool, sqlx::Error> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn validasi_scopes_menolak_kosong_dan_tidak_dikenal() {
+        assert!(validasi_scopes(&[]).is_err());
+        assert!(validasi_scopes(&["tidak-ada:read".into()]).is_err());
+        assert!(validasi_scopes(&["pekerjaan:read".into(), "spam-units:read".into()]).is_ok());
+    }
+
     use axum::http::HeaderValue;
 
     fn headers(value: &str) -> HeaderMap {
