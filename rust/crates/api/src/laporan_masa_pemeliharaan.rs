@@ -6,25 +6,34 @@
 //! default dan validasinya ikut yang sudah dipakai dokumen.
 
 use axum::{
-    extract::State,
+    extract::{Query, State},
     http::HeaderMap,
     response::{IntoResponse, Response},
     Json,
 };
 use chrono::{Duration, NaiveDate, Utc};
+use serde::Deserialize;
 use serde_json::{json, Value};
 use shared::ApiError;
 use sqlx::{MySqlPool, Row};
 
 use crate::{kontrak_document, require_auth, AppState};
 
+/// Filter tahun anggaran. Tahun dari header aplikasi dikirim sebagai `tahun`; tanpa nilai, semua tahun.
+#[derive(Deserialize)]
+pub struct FilterTahun {
+    pub tahun: Option<String>,
+}
+
+/// Paket dengan BASTP, dibatasi tahun anggaran kegiatan (sama dengan daftar pekerjaan).
 const SQL_BASTP: &str = "SELECT CAST(p.id AS SIGNED) AS pekerjaan_id, p.nama_paket, r.nomor, r.tanggal \
      FROM tbl_document_registers r \
      JOIN tbl_document_types t ON t.id = r.type_id AND UPPER(t.code) = 'BASTP' \
      JOIN tbl_kontrak k ON k.id = r.kontrak_id \
      JOIN kontrak_pekerjaan kp ON kp.kontrak_id = k.id \
      JOIN tbl_pekerjaan p ON p.id = kp.pekerjaan_id \
-     WHERE r.tanggal IS NOT NULL \
+     JOIN tbl_kegiatan kg ON kg.id = p.kegiatan_id \
+     WHERE r.tanggal IS NOT NULL AND (? IS NULL OR kg.tahun_anggaran = ?) \
      ORDER BY r.tanggal, p.nama_paket, r.id";
 
 /// Akhir masa pemeliharaan dari tanggal BASTP dan lama masa dalam hari.
@@ -46,21 +55,32 @@ fn internal(e: impl std::fmt::Display) -> ApiError {
 }
 
 /// `GET /api/laporan/masa-pemeliharaan`. Tanpa parameter; satu baris per paket yang punya BASTP.
-pub async fn index(State(state): State<AppState>, headers: HeaderMap) -> Result<Response, ApiError> {
+pub async fn index(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(filter): Query<FilterTahun>,
+) -> Result<Response, ApiError> {
     require_auth(&state, &headers).await?;
+    let tahun = filter.tahun.as_deref().map(str::trim).filter(|t| !t.is_empty()).map(str::to_string);
     let settings = kontrak_document::load_settings(&state.pool).await?;
     let masa = settings.masa_pemeliharaan_hari;
     let hari_ini = Utc::now().date_naive();
-    let rows = rekap(&state.pool, masa, hari_ini).await.map_err(internal)?;
+    let rows = rekap(&state.pool, masa, hari_ini, tahun.as_deref()).await.map_err(internal)?;
     Ok(Json(json!({
+        "tahun": tahun,
         "masa_pemeliharaan_hari": masa,
         "data": rows,
     }))
     .into_response())
 }
 
-async fn rekap(pool: &MySqlPool, masa: i64, hari_ini: NaiveDate) -> Result<Vec<Value>, sqlx::Error> {
-    let rows = sqlx::query(SQL_BASTP).fetch_all(pool).await?;
+async fn rekap(
+    pool: &MySqlPool,
+    masa: i64,
+    hari_ini: NaiveDate,
+    tahun: Option<&str>,
+) -> Result<Vec<Value>, sqlx::Error> {
+    let rows = sqlx::query(SQL_BASTP).bind(tahun).bind(tahun).fetch_all(pool).await?;
     rows.iter()
         .map(|r| {
             let tanggal: NaiveDate = r.try_get("tanggal")?;
