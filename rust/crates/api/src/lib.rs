@@ -69,6 +69,7 @@ pub mod ringkasan_overrides;
 pub mod xlsx_template;
 pub mod kontrak_register_gap;
 pub mod kontrak_xlsx;
+pub mod kontrak_surat_bmd;
 pub mod koordinat;
 pub mod lookup;
 pub mod mailer;
@@ -1045,6 +1046,10 @@ pub fn app(config: &Config, state: AppState) -> Router {
         .route(
             "/api/kontrak/{id}/export-bmd",
             post(kontrak_document::export_bmd),
+        )
+        .route(
+            "/api/kontrak/{id}/surat-bmd",
+            post(kontrak_surat_bmd::buat_nomor),
         )
         .route(
             "/api/kontrak/{id}/preview-ringkasan",

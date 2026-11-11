@@ -23,7 +23,7 @@ use axum::{
 use chrono::{Datelike, NaiveDate};
 use serde_json::{json, Value};
 use shared::ApiError;
-use sqlx::{MySqlPool, Row};
+use sqlx::{MySql, MySqlPool, Row, Transaction};
 
 use crate::{
     media::internal,
@@ -382,10 +382,13 @@ pub async fn pratinjau_nomor(
 }
 
 /// Kode dan template jenis dokumen. Jenis yang tidak ada menjadi error validasi di `type_id`.
-async fn jenis_dari_id(pool: &MySqlPool, type_id: i64) -> Result<(String, Option<String>), ApiError> {
+async fn jenis_dari_id<'e, E>(exec: E, type_id: i64) -> Result<(String, Option<String>), ApiError>
+where
+    E: sqlx::Executor<'e, Database = sqlx::MySql>,
+{
     let row = sqlx::query("SELECT code, format_template FROM tbl_document_types WHERE id = ?")
         .bind(type_id)
-        .fetch_optional(pool)
+        .fetch_optional(exec)
         .await
         .map_err(internal)?;
     match row {
@@ -413,25 +416,32 @@ pub async fn show(
     Ok(Json(json!({ "data": baris_json(&baris) })))
 }
 
-/// `POST /api/surat`: membuat surat dan mengambil nomor urut berikutnya dalam satu transaksi.
-pub async fn store(
-    State(state): State<AppState>,
-    headers: HeaderMap,
-    Json(body): Json<Value>,
-) -> Result<Response, ApiError> {
-    let user = require_auth(&state, &headers).await?;
-    let masukan = parse(&body, None)?;
-    let tahun = masukan.tanggal.year() as i64;
-    let (code, template) = jenis_dari_id(&state.pool, masukan.type_id).await?;
+/// Surat yang baru disimpan di dalam transaksi pemanggil.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SuratTersimpan {
+    pub id: i64,
+    pub tahun: i64,
+    pub nomor: String,
+}
 
-    let mut tx = state.pool.begin().await.map_err(internal)?;
+/// Membuat surat dan mengambil nomor urut berikutnya di dalam transaksi `tx`. Commit diserahkan ke
+/// pemanggil. Bila mengembalikan error, pemanggil membuang transaksinya, sehingga nomor urut ikut
+/// dibatalkan. Dipakai `POST /api/surat` dan pembuatan surat BMD per kontrak.
+pub async fn buat_surat_dalam_tx(
+    tx: &mut Transaction<'_, MySql>,
+    user_id: u64,
+    masukan: &Masukan,
+) -> Result<SuratTersimpan, ApiError> {
+    let tahun = masukan.tanggal.year() as i64;
+    let (code, template) = jenis_dari_id(&mut **tx, masukan.type_id).await?;
+
     // Baris deret tahun ini dikunci sampai commit, sama seperti register: tidak ada dua nomor yang sama.
     let terakhir: Option<Option<i64>> = sqlx::query_scalar(
         "SELECT CAST(last_number AS SIGNED) FROM tbl_document_sequences WHERE year = ? AND type = ? FOR UPDATE",
     )
     .bind(tahun)
     .bind(SEQ_TYPE)
-    .fetch_optional(&mut *tx)
+    .fetch_optional(&mut **tx)
     .await
     .map_err(internal)?;
     let seq = terakhir.flatten().map_or(1, |l| l + 1);
@@ -442,7 +452,7 @@ pub async fn store(
     .bind(tahun)
     .bind(SEQ_TYPE)
     .bind(seq)
-    .execute(&mut *tx)
+    .execute(&mut **tx)
     .await
     .map_err(internal)?;
     let seq = seq as u64;
@@ -454,7 +464,7 @@ pub async fn store(
     let dipakai: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM surat WHERE tahun = ? AND nomor = ?")
         .bind(tahun)
         .bind(&nomor)
-        .fetch_one(&mut *tx)
+        .fetch_one(&mut **tx)
         .await
         .map_err(internal)?;
     if dipakai > 0 {
@@ -474,17 +484,33 @@ pub async fn store(
     .bind(&masukan.tujuan)
     .bind(&masukan.keterangan)
     .bind(masukan.pekerjaan_id)
-    .bind(user.user_id)
-    .execute(&mut *tx)
+    .bind(user_id)
+    .execute(&mut **tx)
     .await;
     let id = match hasil {
         Ok(r) => r.last_insert_id() as i64,
         Err(e) if duplikat(&e) => return Err(nomor_dipakai(tahun, &nomor)),
         Err(e) => return Err(internal(e)),
     };
+    Ok(SuratTersimpan { id, tahun, nomor })
+}
+
+/// `POST /api/surat`: membuat surat dan mengambil nomor urut berikutnya dalam satu transaksi.
+pub async fn store(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(body): Json<Value>,
+) -> Result<Response, ApiError> {
+    let user = require_auth(&state, &headers).await?;
+    let masukan = parse(&body, None)?;
+
+    let mut tx = state.pool.begin().await.map_err(internal)?;
+    let tersimpan = buat_surat_dalam_tx(&mut tx, user.user_id, &masukan).await?;
     tx.commit().await.map_err(internal)?;
 
-    let baris = ambil_baris(&state.pool, id).await?.ok_or_else(|| internal("surat hilang setelah simpan"))?;
+    let baris = ambil_baris(&state.pool, tersimpan.id)
+        .await?
+        .ok_or_else(|| internal("surat hilang setelah simpan"))?;
     Ok((StatusCode::CREATED, Json(json!({ "data": baris_json(&baris) }))).into_response())
 }
 

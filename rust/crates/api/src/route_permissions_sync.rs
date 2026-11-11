@@ -1206,6 +1206,16 @@ const ROUTES: &[RouteEntry] = &[
         name: None,
     },
     RouteEntry {
+        uri: "api/kontrak/{kontrak}/export-bmd",
+        methods: &["POST"],
+        name: None,
+    },
+    RouteEntry {
+        uri: "api/kontrak/{kontrak}/surat-bmd",
+        methods: &["POST"],
+        name: None,
+    },
+    RouteEntry {
         uri: "api/kontrak/{kontrak}/preview-ringkasan",
         methods: &["GET", "POST", "HEAD"],
         name: None,

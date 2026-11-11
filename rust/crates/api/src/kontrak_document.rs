@@ -26,7 +26,7 @@ use sqlx::{MySqlPool, Row};
 use zip::{write::SimpleFileOptions, CompressionMethod, ZipWriter};
 
 use crate::{
-    bmd_data, docx_template, kontrak, ringkasan_overrides, xlsx_template,
+    bmd_data, docx_template, kontrak, kontrak_surat_bmd, ringkasan_overrides, xlsx_template,
     kontrak::{KontrakRow, SELECT_ADDENDUM},
     kontrak_document_data::{
         self as data, DocCtx, DocSettings, KegiatanDoc, Overrides, PekerjaanDoc,
@@ -908,6 +908,9 @@ pub async fn export_bmd(
     require_auth(&state, &headers).await?;
     let kontrak = find_kontrak(&state.pool, parse_id(&id)?).await?;
     let form = bmd_data::parse_form(&body)?;
+    // Satu kontrak satu nomor surat BMD: nomor di body harus sama dengan nomor yang sudah tersimpan.
+    let tersimpan = kontrak_surat_bmd::nomor_tersimpan(&state.pool, kontrak.id).await?;
+    kontrak_surat_bmd::cek_nomor_export(&form.nomor_surat, tersimpan.as_deref())?;
     let ctx = load_ctx(&state.pool, kontrak).await?;
     let pejabat = load_bmd_pejabat(&state.pool).await?;
     let (bytes, name) = render_bmd(&state.pool, &ctx, &form, &pejabat).await?;
