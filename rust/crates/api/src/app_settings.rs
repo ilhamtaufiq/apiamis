@@ -92,6 +92,7 @@ const FILE_FIELDS: &[&str] = &[
     "kontrak_template_cover_am",
     "kontrak_template_cover_san",
     "kontrak_template_nphd",
+    "kontrak_template_bmd",
 ];
 
 /// Setting teks di `AppSettingController@store`, dalam urutan penulisan Laravel.
@@ -130,6 +131,12 @@ const TEXT_KEYS: &[&str] = &[
     "kontrak_tanggal_dpa",
     "kontrak_cara_pembayaran",
     "kontrak_masa_pemeliharaan_hari",
+    "bmd_kasubag_nama",
+    "bmd_kasubag_nip",
+    "bmd_pengelola_nama",
+    "bmd_pengelola_nip",
+    "bmd_pengelola_pangkat",
+    "bmd_pengelola_jabatan",
     "s3_backup_enabled",
     "s3_endpoint",
     "s3_region",
@@ -201,6 +208,12 @@ const FILE_SPECS: &[FileSpec] = &[
     },
     FileSpec {
         key: "kontrak_template_nphd",
+        mimes: &["docx"],
+        max_kb: 10240,
+        kontrak: Some("docx"),
+    },
+    FileSpec {
+        key: "kontrak_template_bmd",
         mimes: &["docx"],
         max_kb: 10240,
         kontrak: Some("docx"),
@@ -498,6 +511,12 @@ fn validate(input: &Input) -> Result<(), ApiError> {
     check_max_chars(&mut e, input, "kontrak_nip_pptk", 32);
     check_int(&mut e, input, "kontrak_masa_pemeliharaan_hari", 1, 3650);
     check_max_chars(&mut e, input, "kontrak_skpd", 255);
+    check_max_chars(&mut e, input, "bmd_kasubag_nama", 255);
+    check_max_chars(&mut e, input, "bmd_kasubag_nip", 32);
+    check_max_chars(&mut e, input, "bmd_pengelola_nama", 255);
+    check_max_chars(&mut e, input, "bmd_pengelola_nip", 32);
+    check_max_chars(&mut e, input, "bmd_pengelola_pangkat", 255);
+    check_max_chars(&mut e, input, "bmd_pengelola_jabatan", 255);
     check_max_chars(&mut e, input, "kontrak_nomor_dpa", 255);
     check_max_chars(&mut e, input, "kontrak_tanggal_dpa", 255);
     check_in(
@@ -878,6 +897,13 @@ const KONTRAK_TEMPLATES: &[KontrakTemplate] = &[
         label: "NPHD + BA Serah Terima",
         description: "Naskah perjanjian hibah daerah dan berita acara serah terima dalam satu berkas.",
         default_name: "nphd_template.docx",
+        format: "docx",
+    },
+    KontrakTemplate {
+        key: "kontrak_template_bmd",
+        label: "Surat Pernyataan BMD",
+        description: "Surat pernyataan pencatatan Barang Milik Daerah (BMD) untuk kontrak.",
+        default_name: "surat_pernyataan_bmd_template.docx",
         format: "docx",
     },
 ];
@@ -1278,7 +1304,7 @@ mod tests {
     #[test]
     fn kontrak_templates_follow_laravel_definitions() {
         let keys: Vec<&str> = KONTRAK_TEMPLATES.iter().map(|t| t.key).collect();
-        assert_eq!(keys.len(), 6);
+        assert_eq!(keys.len(), 7);
         let ringkasan = kontrak_template("kontrak_template_ringkasan").unwrap();
         assert_eq!(ringkasan.format, "xlsx");
         assert_eq!(ringkasan.default_name, "ringkasan_kontrak_template.xlsx");
