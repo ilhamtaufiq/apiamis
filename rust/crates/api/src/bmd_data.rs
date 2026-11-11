@@ -250,8 +250,11 @@ pub fn build(ctx: &DocCtx, form: &BmdForm, pej: &BmdPejabat) -> Vec<(String, Str
         ),
         (
             "kode_belanja",
-            pekerjaan
-                .and_then(|p| non_empty(p.kode_rekening.as_deref()))
+            // Kode dari pekerjaan pertama kontrak yang punya kode; bila tidak ada, dari pekerjaan utama.
+            ctx.pekerjaan_kontrak
+                .iter()
+                .find_map(|p| non_empty(p.kode_rekening.as_deref()))
+                .or_else(|| pekerjaan.and_then(|p| non_empty(p.kode_rekening.as_deref())))
                 .unwrap_or_default(),
         ),
         ("nama_barang", nama_barang.join("\n")),
