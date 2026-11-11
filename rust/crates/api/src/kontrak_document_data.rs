@@ -9,7 +9,7 @@ use chrono::{Datelike, Days, NaiveDate};
 
 use crate::kontrak::{AddendumRow, KontrakRow};
 
-const MONTHS: [&str; 12] = [
+pub(crate) const MONTHS: [&str; 12] = [
     "Januari",
     "Februari",
     "Maret",
@@ -55,6 +55,13 @@ pub struct PekerjaanDoc {
     pub nama_desa: Option<String>,
 }
 
+/// Ringkasan satu pekerjaan kontrak (nama paket dan kode rekening) untuk dokumen yang memuat daftar pekerjaan.
+#[derive(Debug, Clone, PartialEq)]
+pub struct PekerjaanKontrakDoc {
+    pub nama_paket: Option<String>,
+    pub kode_rekening: Option<String>,
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct KegiatanDoc {
     pub nama_program: Option<String>,
@@ -96,6 +103,8 @@ pub struct DocCtx {
     pub kontrak: KontrakRow,
     /// Pekerjaan pertama pada pivot `kontrak_pekerjaan`.
     pub pekerjaan: Option<PekerjaanDoc>,
+    /// Semua pekerjaan pada pivot `kontrak_pekerjaan`, urut id pekerjaan.
+    pub pekerjaan_kontrak: Vec<PekerjaanKontrakDoc>,
     /// Kegiatan milik pekerjaan (bukan kegiatan kontrak).
     pub kegiatan: Option<KegiatanDoc>,
     /// `sub_bidang` kegiatan kontrak (`id_kegiatan`), dipakai bila kegiatan pekerjaan tidak punya.
@@ -287,7 +296,7 @@ fn money(value: f64) -> String {
 }
 
 /// `translatedFormat('d F Y')` dengan locale `id`.
-fn tanggal(date: NaiveDate) -> String {
+pub(crate) fn tanggal(date: NaiveDate) -> String {
     format!(
         "{:02} {} {}",
         date.day(),
@@ -995,7 +1004,7 @@ impl DocSettings {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
 
     #[test]
@@ -1062,7 +1071,7 @@ mod tests {
         assert_eq!(override_value("total_nilai", "5000"), "Rp. 5.000");
     }
 
-    fn sample_ctx() -> DocCtx {
+    pub(crate) fn sample_ctx() -> DocCtx {
         let date = |y, m, d| NaiveDate::from_ymd_opt(y, m, d);
         DocCtx {
             kontrak: KontrakRow {
@@ -1089,6 +1098,7 @@ mod tests {
                 created_at: None,
                 updated_at: None,
             },
+            pekerjaan_kontrak: Vec::new(),
             pekerjaan: Some(PekerjaanDoc {
                 id: 7,
                 nama_paket: Some("Pembangunan Jalan".into()),

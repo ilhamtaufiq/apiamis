@@ -26,11 +26,11 @@ use sqlx::{MySqlPool, Row};
 use zip::{write::SimpleFileOptions, CompressionMethod, ZipWriter};
 
 use crate::{
-    docx_template, kontrak, ringkasan_overrides, xlsx_template,
+    bmd_data, docx_template, kontrak, ringkasan_overrides, xlsx_template,
     kontrak::{KontrakRow, SELECT_ADDENDUM},
     kontrak_document_data::{
-        self as data, DocCtx, DocSettings, KegiatanDoc, Overrides, PekerjaanDoc, PenyediaDoc,
-        RawDocSettings, RegisterDoc,
+        self as data, DocCtx, DocSettings, KegiatanDoc, Overrides, PekerjaanDoc,
+        PekerjaanKontrakDoc, PenyediaDoc, RawDocSettings, RegisterDoc,
     },
     berkas, kontrak_register_gap, mailer, media, onlyoffice, require_auth, AppState,
 };
@@ -47,6 +47,7 @@ const COVER_AM_KEY: &str = "kontrak_template_cover_am";
 const COVER_SAN_KEY: &str = "kontrak_template_cover_san";
 pub(crate) const NPHD_KEY: &str = "kontrak_template_nphd";
 pub(crate) const RINGKASAN_KEY: &str = "kontrak_template_ringkasan";
+pub(crate) const BMD_KEY: &str = "kontrak_template_bmd";
 const STATUS_DISETUJUI: &str = "disetujui";
 
 fn internal(e: impl std::fmt::Display) -> ApiError {
@@ -62,6 +63,7 @@ fn template_default(key: &str) -> Option<&'static str> {
         COVER_SAN_KEY => Some("cover_kontrak_san.docx"),
         NPHD_KEY => Some("nphd_template.docx"),
         RINGKASAN_KEY => Some("ringkasan_kontrak_template.xlsx"),
+        BMD_KEY => Some("surat_pernyataan_bmd_template.docx"),
         _ => None,
     }
 }
@@ -289,8 +291,29 @@ pub(crate) async fn load_ctx(pool: &MySqlPool, kontrak: KontrakRow) -> Result<Do
         .collect::<Result<Vec<_>, _>>()
         .map_err(internal)?;
 
+    // Seluruh pekerjaan kontrak (bukan hanya yang pertama) untuk daftar nama barang.
+    let pekerjaan_kontrak = sqlx::query(
+        "SELECT CAST(p.nama_paket AS CHAR) AS nama_paket, CAST(p.kode_rekening AS CHAR) AS kode_rekening \
+         FROM kontrak_pekerjaan kp \
+         JOIN tbl_pekerjaan p ON p.id = kp.pekerjaan_id \
+         WHERE kp.kontrak_id = ? ORDER BY kp.pekerjaan_id",
+    )
+    .bind(kontrak.id)
+    .fetch_all(pool)
+    .await
+    .map_err(internal)?
+    .iter()
+    .map(|row| -> Result<PekerjaanKontrakDoc, ApiError> {
+        Ok(PekerjaanKontrakDoc {
+            nama_paket: str_col(row, "nama_paket")?,
+            kode_rekening: str_col(row, "kode_rekening")?,
+        })
+    })
+    .collect::<Result<Vec<_>, ApiError>>()?;
+
     Ok(DocCtx {
         kontrak,
+        pekerjaan_kontrak,
         pekerjaan,
         kegiatan,
         kontrak_sub_bidang,
@@ -829,6 +852,68 @@ async fn render_ringkasan(
     Ok((filled, file_name, title))
 }
 
+/// Pejabat surat pernyataan BMD dari `app_settings` (kunci `bmd_*`). Dibaca dengan `mailer::setting`,
+/// sama seperti `load_settings`, tetapi tidak memakai default environment.
+async fn load_bmd_pejabat(pool: &MySqlPool) -> Result<bmd_data::BmdPejabat, ApiError> {
+    let mut v = Vec::with_capacity(bmd_data::PEJABAT_KEYS.len());
+    for key in bmd_data::PEJABAT_KEYS {
+        v.push(mailer::setting(pool, key).await.map_err(internal)?);
+    }
+    let mut it = v.into_iter();
+    let mut next = || it.next().flatten();
+    bmd_data::pejabat(bmd_data::RawPejabat {
+        kasubag_nama: next(),
+        kasubag_nip: next(),
+        pengelola_nama: next(),
+        pengelola_nip: next(),
+        pengelola_pangkat: next(),
+        pengelola_jabatan: next(),
+    })
+}
+
+/// Isi `surat_pernyataan_bmd_template.docx` untuk satu kontrak. Mengembalikan isi `.docx` dan nama unduhan.
+async fn render_bmd(
+    pool: &MySqlPool,
+    ctx: &DocCtx,
+    form: &bmd_data::BmdForm,
+    pejabat: &bmd_data::BmdPejabat,
+) -> Result<(Vec<u8>, String), ApiError> {
+    let Some(pekerjaan) = ctx.pekerjaan.as_ref() else {
+        return Err(ApiError::new(
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "Kontrak tidak memiliki pekerjaan terkait.",
+        ));
+    };
+    let template = resolve_template(pool, BMD_KEY).await?;
+    let template_bytes = tokio::fs::read(&template).await.map_err(internal)?;
+    let values = bmd_data::build(ctx, form, pejabat);
+    let filled = docx_template::fill(&template_bytes, &values).map_err(internal)?;
+    let nama_paket = pekerjaan
+        .nama_paket
+        .clone()
+        .filter(|n| !n.is_empty())
+        .unwrap_or_else(|| "Kontrak".to_string());
+    let name = format!("Surat_Pernyataan_BMD_{}.docx", slug(&nama_paket));
+    Ok((filled, name))
+}
+
+/// `POST /api/kontrak/{id}/export-bmd`: unduh surat pernyataan pencatatan BMD (.docx).
+/// Body: `nomor_surat`, `tanggal_surat`, `tanggal_perolehan`. Data pejabat dari pengaturan `bmd_*`.
+pub async fn export_bmd(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+    body: Bytes,
+) -> Result<Response, ApiError> {
+    require_auth(&state, &headers).await?;
+    let kontrak = find_kontrak(&state.pool, parse_id(&id)?).await?;
+    let form = bmd_data::parse_form(&body)?;
+    let ctx = load_ctx(&state.pool, kontrak).await?;
+    let pejabat = load_bmd_pejabat(&state.pool).await?;
+    let (bytes, name) = render_bmd(&state.pool, &ctx, &form, &pejabat).await?;
+    Ok(file_response(bytes, &name, DOCX_MIME))
+}
+
 /// `POST /api/kontrak/{id}/export-ringkasan`: unduh ringkasan kontrak (.xlsx) dari template.
 pub async fn export_ringkasan(
     State(state): State<AppState>,
@@ -904,6 +989,17 @@ mod tests {
         assert_eq!(cover_key("Air Minum").unwrap(), COVER_AM_KEY);
         assert_eq!(cover_key("Sanitasi Lingkungan").unwrap(), COVER_SAN_KEY);
         assert!(cover_key("Lainnya").is_err());
+    }
+
+    #[test]
+    fn bmd_template_default_is_docx() {
+        assert_eq!(
+            template_default(BMD_KEY),
+            Some("surat_pernyataan_bmd_template.docx")
+        );
+        assert!(template_dir()
+            .join("surat_pernyataan_bmd_template.docx")
+            .exists());
     }
 
     #[test]
