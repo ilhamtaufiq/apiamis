@@ -248,7 +248,10 @@ pub async fn export(
     let values = nilai_dari(&data, &q, tanggal);
     let path = kontrak_document::resolve_template(&state.pool, kontrak_document::NPHD_KEY).await?;
     let bytes = tokio::fs::read(path).await.map_err(internal)?;
-    let bytes = sisipkan_tabel(&bytes, &blok_penerima(&daftar_penerima(&q.penerima)))
+    let penerima = daftar_penerima(&q.penerima);
+    let pengelola_ttd = format!("{} Desa {} Kecamatan {}", label_pengelola(&q), judul(&data.desa), judul(&data.kecamatan));
+    let bytes = isi_pihak_kedua(&bytes, &pengelola_ttd, &penerima).map_err(internal)?;
+    let bytes = sisipkan_tabel(&bytes, &blok_penerima(&penerima))
         .map_err(|pesan| ApiError::new(StatusCode::UNPROCESSABLE_ENTITY, pesan))?;
     let filled = docx_template::fill(&bytes, &values).map_err(internal)?;
     let nama = ctx.pekerjaan.as_ref().and_then(|p| p.nama_paket.clone()).unwrap_or_default();
@@ -299,6 +302,82 @@ fn data_dasar(ctx: &DocCtx) -> DataDasar {
         kegiatan: kegiatan.and_then(|k| k.nama_kegiatan.clone()).unwrap_or_default(),
         sub_kegiatan: kegiatan.and_then(|k| k.nama_sub_kegiatan.clone()).unwrap_or_default(),
     }
+}
+
+/// Sebutan pengelola untuk judul dan baris KEPADA: label saja.
+pub(crate) fn label_pengelola(q: &NphdQuery) -> String {
+    match q.pengelola_label.trim() {
+        "" => "Pengelola".to_string(),
+        l => l.to_string(),
+    }
+}
+
+/// Baca dokumen di dalam template, ubah isinya lewat `ubah`, lalu tulis ulang arsipnya.
+fn ubah_document(template: &[u8], ubah: impl FnOnce(String) -> Result<String, String>) -> Result<Vec<u8>, String> {
+    use std::io::{Read, Write};
+    let mut arsip = zip::ZipArchive::new(std::io::Cursor::new(template)).map_err(|e| e.to_string())?;
+    let mut keluaran = zip::ZipWriter::new(std::io::Cursor::new(Vec::new()));
+    let mut ubah = Some(ubah);
+    for i in 0..arsip.len() {
+        let mut berkas = arsip.by_index(i).map_err(|e| e.to_string())?;
+        let nama = berkas.name().to_string();
+        let mut isi = Vec::new();
+        berkas.read_to_end(&mut isi).map_err(|e| e.to_string())?;
+        drop(berkas);
+        if nama == "word/document.xml" {
+            let xml = String::from_utf8(isi).map_err(|e| e.to_string())?;
+            let f = ubah.take().ok_or_else(|| "dokumen dibaca dua kali".to_string())?;
+            isi = f(xml)?.into_bytes();
+        }
+        keluaran.start_file(nama, zip::write::SimpleFileOptions::default()).map_err(|e| e.to_string())?;
+        keluaran.write_all(&isi).map_err(|e| e.to_string())?;
+    }
+    Ok(keluaran.finish().map_err(|e| e.to_string())?.into_inner())
+}
+
+/// Batas paragraf `<w:p>` yang memuat posisi `pos` di XML: (awal, akhir).
+fn batas_paragraf(xml: &str, pos: usize) -> Option<(usize, usize)> {
+    let awal = xml[..pos].rfind("<w:p ").max(xml[..pos].rfind("<w:p>"))?;
+    let akhir = pos + xml[pos..].find("</w:p>")? + "</w:p>".len();
+    Some((awal, akhir))
+}
+
+/// Blok PIHAK KEDUA di tanda tangan untuk lebih dari satu penerima: nama pengelola lengkap, lalu tiap
+/// penerima di baris sendiri dengan strip, nama tebal huruf besar, dan garis titik-titik di kanan.
+pub(crate) fn isi_pihak_kedua(template: &[u8], pengelola: &str, penerima: &[String]) -> Result<Vec<u8>, String> {
+    let rpr = r#"<w:rPr><w:rFonts w:ascii="Times New Roman" w:hAnsi="Times New Roman" w:cs="Times New Roman"/><w:b/><w:sz w:val="24"/></w:rPr>"#;
+    ubah_document(template, |xml| {
+        if penerima.len() <= 1 {
+            return Ok(xml);
+        }
+        let Some(pos_penerima) = xml.rfind("{{NAMA PENERIMA MANFAAT}}") else {
+            return Ok(xml);
+        };
+        let (ps, pe) = batas_paragraf(&xml, pos_penerima).ok_or_else(|| "paragraf penerima tidak ditemukan".to_string())?;
+        let mut blok = String::new();
+        for nama in penerima {
+            blok.push_str(&format!(
+                r#"<w:p><w:pPr><w:tabs><w:tab w:val="right" w:leader="dot" w:pos="4500"/></w:tabs><w:spacing w:before="240" w:after="0"/></w:pPr><w:r>{rpr}<w:t xml:space="preserve">- {}</w:t></w:r><w:r>{rpr}<w:tab/></w:r></w:p>"#,
+                xml_teks(&nama.to_uppercase())
+            ));
+        }
+        // Nama pengelola di atas blok penerima: paragraf yang memuat {{NAMAPENGELOLA}} terakhir sebelum penerima.
+        let pengelola_par = format!(
+            r#"<w:p><w:pPr><w:spacing w:after="0"/></w:pPr><w:r>{rpr}<w:t xml:space="preserve">{}</w:t></w:r></w:p>"#,
+            xml_teks(pengelola)
+        );
+        match xml[..ps].rfind("{{NAMAPENGELOLA}}") {
+            Some(pos_pengelola) => {
+                let (qs, qe) = batas_paragraf(&xml, pos_pengelola)
+                    .ok_or_else(|| "paragraf pengelola tidak ditemukan".to_string())?;
+                if qe > ps {
+                    return Err("urutan paragraf pengelola dan penerima tidak sesuai".to_string());
+                }
+                Ok(format!("{}{}{}{}{}", &xml[..qs], pengelola_par, &xml[qe..ps], blok, &xml[pe..]))
+            }
+            None => Ok(format!("{}{}{}", &xml[..ps], blok, &xml[pe..])),
+        }
+    })
 }
 
 /// Pasangan placeholder `{{NAMA}}` dan nilainya. Dipisah dari akses database supaya bisa diuji.
@@ -453,6 +532,30 @@ mod tests {
         let dua = blok_penerima(&["Indra Permana".to_string(), "Ani Sutisna".to_string()]);
         assert!(dua.contains("<w:tbl>"));
         assert!(dua.contains("Ani Sutisna"));
+    }
+
+    #[test]
+    fn pihak_kedua_banyak_penerima_pakai_garis_titik() {
+        let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../../../storage/app/templates/nphd_template.docx");
+        let bytes = std::fs::read(path).expect("template NPHD");
+        let nama = vec!["Indra Permana".to_string(), "Jajang Suhendar".to_string()];
+        let hasil = isi_pihak_kedua(&bytes, "Penerima Manfaat MCK Individu Desa Ciloto Kecamatan Cipanas", &nama).expect("isi pihak kedua");
+        let mut zip = zip::ZipArchive::new(std::io::Cursor::new(hasil)).expect("docx valid");
+        let mut xml = String::new();
+        std::io::Read::read_to_string(&mut zip.by_name("word/document.xml").expect("document.xml"), &mut xml).unwrap();
+        assert!(xml.contains("- INDRA PERMANA"));
+        assert!(xml.contains("- JAJANG SUHENDAR"));
+        assert!(xml.contains(r#"w:leader="dot""#));
+        assert!(xml.contains("Penerima Manfaat MCK Individu Desa Ciloto Kecamatan Cipanas"));
+        // Hanya kemunculan terakhir (blok PIHAK KEDUA) yang diganti; kemunculan lain diisi `fill` seperti biasa.
+        let sebelum = std::fs::read(path).expect("template NPHD");
+        let mut arsip = zip::ZipArchive::new(std::io::Cursor::new(sebelum)).expect("template valid");
+        let mut xml_asli = String::new();
+        std::io::Read::read_to_string(&mut arsip.by_name("word/document.xml").expect("document.xml"), &mut xml_asli).unwrap();
+        assert_eq!(
+            xml.matches("{{NAMA PENERIMA MANFAAT}}").count() + 1,
+            xml_asli.matches("{{NAMA PENERIMA MANFAAT}}").count()
+        );
     }
 
     #[test]
