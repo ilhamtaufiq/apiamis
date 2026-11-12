@@ -317,7 +317,8 @@ pub(crate) fn nilai_dari(data: &DataDasar, q: &NphdQuery, tanggal: NaiveDate) ->
         ("NAMA DESA - NAMA KECAMATAN", format!("Desa {desa} Kecamatan {kecamatan}")),
         ("NAMA DESA", desa.clone()),
         ("NAMA KECAMATAN", kecamatan.clone()),
-        ("NAMAPENGELOLA", format!("{label} Desa {desa} Kecamatan {kecamatan}")),
+        // Hanya sebutan pengelola; desa dan kecamatan ada di placeholder terpisah.
+        ("NAMAPENGELOLA", label.to_string()),
         ("NAMA PENERIMA MANFAAT", format_penerima(&q.penerima)),
         ("NAMA PENYEDIA", data.penyedia.trim().to_string()),
         ("NOMOR SPK", data.nomor_spk.trim().to_string()),
