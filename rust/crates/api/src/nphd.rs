@@ -342,41 +342,77 @@ fn batas_paragraf(xml: &str, pos: usize) -> Option<(usize, usize)> {
     Some((awal, akhir))
 }
 
-/// Blok PIHAK KEDUA di tanda tangan untuk lebih dari satu penerima: nama pengelola lengkap, lalu tiap
-/// penerima di baris sendiri dengan strip, nama tebal huruf besar, dan garis titik-titik di kanan.
+/// Teks yang terlihat dari potongan XML (tanpa tag).
+fn teks_xml(xml: &str) -> String {
+    let mut out = String::new();
+    let mut sisa = xml;
+    // Hanya elemen <w:t> dan <w:t ...>; <w:tc>, <w:tab>, <w:tbl>, dan sejenisnya dilewati.
+    while let Some(a) = sisa.find("<w:t") {
+        let setelah = sisa[a + 4..].chars().next();
+        if !matches!(setelah, Some('>') | Some(' ')) {
+            sisa = &sisa[a + 4..];
+            continue;
+        }
+        let Some(buka) = sisa[a..].find('>') else { break };
+        let mulai = a + buka + 1;
+        let Some(tutup) = sisa[mulai..].find("</w:t>") else { break };
+        out.push_str(&sisa[mulai..mulai + tutup]);
+        sisa = &sisa[mulai + tutup + "</w:t>".len()..];
+    }
+    out
+}
+
+/// Sel tabel (`<w:tc>`) yang memuat posisi `pos`: (awal, akhir).
+fn batas_sel(xml: &str, pos: usize) -> Option<(usize, usize)> {
+    let awal = xml[..pos].rfind("<w:tc>").max(xml[..pos].rfind("<w:tc "))?;
+    let akhir = pos + xml[pos..].find("</w:tc>")? + "</w:tc>".len();
+    Some((awal, akhir))
+}
+
+/// Blok PIHAK KEDUA di tanda tangan NPHD: hanya sel yang teksnya diawali "PIHAK KEDUA" (bukan pembuka
+/// "2. ..." dan bukan baris "Kami yang bertanda tangan"). Nama pengelola di sel itu diganti dengan nama
+/// lengkap (sebutan, desa, kecamatan). Untuk lebih dari satu penerima, penerima diganti dengan daftar
+/// bergaris titik-titik: nama tebal huruf besar, garis titik-titik di kanan.
 pub(crate) fn isi_pihak_kedua(template: &[u8], pengelola: &str, penerima: &[String]) -> Result<Vec<u8>, String> {
     let rpr = r#"<w:rPr><w:rFonts w:ascii="Times New Roman" w:hAnsi="Times New Roman" w:cs="Times New Roman"/><w:b/><w:sz w:val="24"/></w:rPr>"#;
+    let pengelola_par = format!(
+        r#"<w:p><w:pPr><w:spacing w:after="0"/></w:pPr><w:r>{rpr}<w:t xml:space="preserve">{}</w:t></w:r></w:p>"#,
+        xml_teks(pengelola)
+    );
+    let mut blok = String::new();
+    for nama in penerima {
+        blok.push_str(&format!(
+            r#"<w:p><w:pPr><w:tabs><w:tab w:val="right" w:leader="dot" w:pos="4500"/></w:tabs><w:spacing w:before="240" w:after="0"/></w:pPr><w:r>{rpr}<w:t xml:space="preserve">- {}</w:t></w:r><w:r>{rpr}<w:tab/></w:r></w:p>"#,
+            xml_teks(&nama.to_uppercase())
+        ));
+    }
     ubah_document(template, |xml| {
-        if penerima.len() <= 1 {
-            return Ok(xml);
-        }
-        let Some(pos_penerima) = xml.rfind("{{NAMA PENERIMA MANFAAT}}") else {
-            return Ok(xml);
-        };
-        let (ps, pe) = batas_paragraf(&xml, pos_penerima).ok_or_else(|| "paragraf penerima tidak ditemukan".to_string())?;
-        let mut blok = String::new();
-        for nama in penerima {
-            blok.push_str(&format!(
-                r#"<w:p><w:pPr><w:tabs><w:tab w:val="right" w:leader="dot" w:pos="4500"/></w:tabs><w:spacing w:before="240" w:after="0"/></w:pPr><w:r>{rpr}<w:t xml:space="preserve">- {}</w:t></w:r><w:r>{rpr}<w:tab/></w:r></w:p>"#,
-                xml_teks(&nama.to_uppercase())
-            ));
-        }
-        // Nama pengelola di atas blok penerima: paragraf yang memuat {{NAMAPENGELOLA}} terakhir sebelum penerima.
-        let pengelola_par = format!(
-            r#"<w:p><w:pPr><w:spacing w:after="0"/></w:pPr><w:r>{rpr}<w:t xml:space="preserve">{}</w:t></w:r></w:p>"#,
-            xml_teks(pengelola)
-        );
-        match xml[..ps].rfind("{{NAMAPENGELOLA}}") {
-            Some(pos_pengelola) => {
-                let (qs, qe) = batas_paragraf(&xml, pos_pengelola)
-                    .ok_or_else(|| "paragraf pengelola tidak ditemukan".to_string())?;
-                if qe > ps {
-                    return Err("urutan paragraf pengelola dan penerima tidak sesuai".to_string());
-                }
-                Ok(format!("{}{}{}{}{}", &xml[..qs], pengelola_par, &xml[qe..ps], blok, &xml[pe..]))
+        let mut edits: Vec<(usize, usize, String)> = Vec::new();
+        let posisi: Vec<usize> = xml.match_indices("{{NAMA PENERIMA MANFAAT}}").map(|(i, _)| i).collect();
+        for p in posisi {
+            let Some((a, b)) = batas_sel(&xml, p) else { continue };
+            if !teks_xml(&xml[a..b]).trim_start().starts_with("PIHAK KEDUA") {
+                continue;
             }
-            None => Ok(format!("{}{}{}", &xml[..ps], blok, &xml[pe..])),
+            if let Some(q) = xml[a..p].rfind("{{NAMAPENGELOLA}}").map(|i| a + i) {
+                if let Some((qs, qe)) = batas_paragraf(&xml, q) {
+                    if qe <= p {
+                        edits.push((qs, qe, pengelola_par.clone()));
+                    }
+                }
+            }
+            if penerima.len() > 1 {
+                if let Some((ps, pe)) = batas_paragraf(&xml, p) {
+                    edits.push((ps, pe, blok.clone()));
+                }
+            }
         }
+        edits.sort_by(|x, y| y.0.cmp(&x.0));
+        let mut hasil = xml;
+        for (dari, sampai, isi) in edits {
+            hasil.replace_range(dari..sampai, &isi);
+        }
+        Ok(hasil)
     })
 }
 
