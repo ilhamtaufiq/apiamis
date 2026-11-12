@@ -313,7 +313,8 @@ pub async fn kontrak_items(
 }
 
 /// `registers` dengan `type` (`kontrak.registers.type`), urut id seperti relasi tanpa `orderBy`.
-async fn registers_for(pool: &MySqlPool, kontrak_id: u64) -> Result<Value, sqlx::Error> {
+/// Register dokumen satu kontrak. Dipakai daftar pekerjaan (summary) dan detail pekerjaan.
+pub(crate) async fn registers_for(pool: &MySqlPool, kontrak_id: u64) -> Result<Value, sqlx::Error> {
     let rows = sqlx::query(
         "SELECT r.id, r.type_id, r.nomor, r.tanggal, CAST(r.nilai AS DOUBLE) AS nilai, \
          t.id AS type_row_id, t.code AS type_code, t.name AS type_name \

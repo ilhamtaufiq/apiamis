@@ -287,6 +287,8 @@ async fn kontrak(state: &AppState, pekerjaan_id: u64) -> Result<Vec<Value>, ApiE
             "pekerjaan_ids": ids,
             "id_penyedia": id_penyedia,
             "penyedia": penyedia_json,
+            // Register dokumen dibutuhkan halaman NPHD untuk memakai ulang nomor yang sudah tercatat.
+            "registers": crate::pekerjaan_rel::registers_for(pool, kid as u64).await.map_err(internal)?,
             "is_checklist_complete": complete,
             "created_at": iso8601_utc(created),
             "updated_at": iso8601_utc(updated),
