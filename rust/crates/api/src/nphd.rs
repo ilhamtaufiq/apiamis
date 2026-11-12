@@ -445,7 +445,11 @@ pub(crate) fn nilai_dari(data: &DataDasar, q: &NphdQuery, tanggal: NaiveDate) ->
         ("Nilaikontrak", format!("Rp.{},00", number_format(q.nilai))),
         ("OUTPUT PEKERJAAN", format_objek(&q.objek)),
     ];
-    pairs.into_iter().map(|(k, v)| (k.to_string(), v)).collect()
+    // Setiap placeholder juga punya versi kapital: `{{NAMA X CAPS}}` berisi nilai `NAMA X` dalam huruf besar.
+    let mut hasil: Vec<(String, String)> = pairs.into_iter().map(|(k, v)| (k.to_string(), v)).collect();
+    let kapital: Vec<(String, String)> = hasil.iter().map(|(k, v)| (format!("{k} CAPS"), v.to_uppercase())).collect();
+    hasil.extend(kapital);
+    hasil
 }
 
 /// Contoh: `Senin tanggal Tiga Belas bulan Juli tahun Dua Ribu Dua Puluh Enam`.
@@ -592,6 +596,17 @@ mod tests {
             xml.matches("{{NAMA PENERIMA MANFAAT}}").count() + 1,
             xml_asli.matches("{{NAMA PENERIMA MANFAAT}}").count()
         );
+    }
+
+    #[test]
+    fn setiap_placeholder_punya_versi_kapital() {
+        let tanggal = NaiveDate::from_ymd_opt(2026, 7, 13).unwrap();
+        let values = nilai_dari(&data(), &query(), tanggal);
+        let nilai = |kunci: &str| values.iter().find(|(k, _)| k == kunci).map(|(_, v)| v.clone());
+        let bidang = nilai("NAMA BIDANG").expect("NAMA BIDANG");
+        assert_eq!(nilai("NAMA BIDANG CAPS").expect("NAMA BIDANG CAPS"), bidang.to_uppercase());
+        let desa = nilai("NAMA DESA").expect("NAMA DESA");
+        assert_eq!(nilai("NAMA DESA CAPS").expect("NAMA DESA CAPS"), desa.to_uppercase());
     }
 
     #[test]
