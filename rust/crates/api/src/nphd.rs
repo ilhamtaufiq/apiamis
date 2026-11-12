@@ -46,7 +46,12 @@ pub struct NphdQuery {
 
 /// Daftar penerima manfaat sebagai baris `- nama`, dipisah baris baru di dokumen.
 pub(crate) fn format_penerima(penerima: &str) -> String {
-    daftar_penerima(penerima)
+    let daftar = daftar_penerima(penerima);
+    // Satu penerima ditulis apa adanya, tanpa awalan strip.
+    if daftar.len() == 1 {
+        return daftar[0].clone();
+    }
+    daftar
         .iter()
         .map(|nama| format!("- {nama}"))
         .collect::<Vec<_>>()
@@ -448,6 +453,12 @@ mod tests {
         let dua = blok_penerima(&["Indra Permana".to_string(), "Ani Sutisna".to_string()]);
         assert!(dua.contains("<w:tbl>"));
         assert!(dua.contains("Ani Sutisna"));
+    }
+
+    #[test]
+    fn satu_penerima_tanpa_awalan_strip() {
+        assert_eq!(format_penerima("M. SOPIAN AZHURI"), "M. SOPIAN AZHURI");
+        assert_eq!(format_penerima("Indra Permana;Ani Sutisna"), "- Indra Permana\n- Ani Sutisna");
     }
 
     #[test]
