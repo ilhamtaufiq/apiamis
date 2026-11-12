@@ -41,6 +41,7 @@ pub mod desa_population;
 pub mod rab_analisa;
 pub mod desa_write;
 pub mod bmd_data;
+pub mod suket_data;
 pub mod docx_template;
 pub mod document_registers;
 pub mod document_types_write;
@@ -1045,6 +1046,10 @@ pub fn app(config: &Config, state: AppState) -> Router {
         .route(
             "/api/kontrak/{id}/export-bmd",
             post(kontrak_document::export_bmd),
+        )
+        .route(
+            "/api/kontrak/{id}/export-suket-desa",
+            post(kontrak_document::export_suket_desa),
         )
         .route(
             "/api/kontrak/{id}/preview-ringkasan",

@@ -93,6 +93,7 @@ const FILE_FIELDS: &[&str] = &[
     "kontrak_template_cover_san",
     "kontrak_template_nphd",
     "kontrak_template_bmd",
+    "kontrak_template_suket_desa",
 ];
 
 /// Setting teks di `AppSettingController@store`, dalam urutan penulisan Laravel.
@@ -214,6 +215,12 @@ const FILE_SPECS: &[FileSpec] = &[
     },
     FileSpec {
         key: "kontrak_template_bmd",
+        mimes: &["docx"],
+        max_kb: 10240,
+        kontrak: Some("docx"),
+    },
+    FileSpec {
+        key: "kontrak_template_suket_desa",
         mimes: &["docx"],
         max_kb: 10240,
         kontrak: Some("docx"),
@@ -906,6 +913,13 @@ const KONTRAK_TEMPLATES: &[KontrakTemplate] = &[
         default_name: "surat_pernyataan_bmd_template.docx",
         format: "docx",
     },
+    KontrakTemplate {
+        key: "kontrak_template_suket_desa",
+        label: "Surat Keterangan Kepala Desa",
+        description: "Surat keterangan kepala desa tentang keberadaan hasil pengadaan pekerjaan.",
+        default_name: "suket_desa_template.docx",
+        format: "docx",
+    },
 ];
 
 fn kontrak_template(key: &str) -> Option<&'static KontrakTemplate> {
@@ -1304,7 +1318,7 @@ mod tests {
     #[test]
     fn kontrak_templates_follow_laravel_definitions() {
         let keys: Vec<&str> = KONTRAK_TEMPLATES.iter().map(|t| t.key).collect();
-        assert_eq!(keys.len(), 7);
+        assert_eq!(keys.len(), 8);
         let ringkasan = kontrak_template("kontrak_template_ringkasan").unwrap();
         assert_eq!(ringkasan.format, "xlsx");
         assert_eq!(ringkasan.default_name, "ringkasan_kontrak_template.xlsx");

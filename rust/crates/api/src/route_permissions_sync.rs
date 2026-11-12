@@ -1211,6 +1211,11 @@ const ROUTES: &[RouteEntry] = &[
         name: None,
     },
     RouteEntry {
+        uri: "api/kontrak/{kontrak}/export-suket-desa",
+        methods: &["POST"],
+        name: None,
+    },
+    RouteEntry {
         uri: "api/kontrak/{kontrak}/cover",
         methods: &["POST"],
         name: None,
