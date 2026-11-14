@@ -532,12 +532,17 @@ pub async fn store_cover(
 ) -> Result<Response, ApiError> {
     let user = require_auth(&state, &headers).await?;
     let kontrak = find_kontrak(&state.pool, parse_id(&id)?).await?;
-    let pekerjaan_ids = pekerjaan_ids_kontrak(&state.pool, kontrak.id).await?;
+    let kontrak_id = kontrak.id;
+    let pekerjaan_ids = pekerjaan_ids_kontrak(&state.pool, kontrak_id).await?;
     let ctx = load_ctx(&state.pool, kontrak).await?;
     let key = cover_key(&ctx.sub_bidang())?;
     let (bytes, name) = render_docx(&state.pool, &ctx, key, &Overrides::default()).await?;
     if !pekerjaan_ids.is_empty() {
-        berkas::simpan_cover_kontrak(&state, &headers, user.user_id, &pekerjaan_ids, &name, bytes.clone()).await?;
+        // Salinan di berkas pekerjaan hanya pelengkap. Bila folder storage tidak bisa ditulis,
+        // cover tetap diunduh dan kegagalannya dicatat di log.
+        if let Err(e) = berkas::simpan_cover_kontrak(&state, &headers, user.user_id, &pekerjaan_ids, &name, bytes.clone()).await {
+            tracing::warn!(kontrak_id, error = %e.message, "cover kontrak tidak tersimpan ke berkas pekerjaan");
+        }
     }
     Ok(file_response(bytes, &name, DOCX_MIME))
 }
