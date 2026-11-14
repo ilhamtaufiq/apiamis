@@ -79,7 +79,8 @@ fn column_json(row: &MySqlRow, i: usize, ty: &str, cast: Option<Cast>) -> Result
         return Ok(json!(v.format("%Y-%m-%d").to_string()));
     }
     if ty.contains("JSON") {
-        let v: String = row.try_get(i).map_err(internal)?;
+        // Kolom JSON MySQL tidak cocok dengan String di sqlx; teksnya dibaca langsung seperti DECIMAL.
+        let v: String = row.try_get_unchecked(i).map_err(internal)?;
         return Ok(serde_json::from_str(&v).unwrap_or(json!(v)));
     }
     let v: String = row.try_get(i).map_err(internal)?;
