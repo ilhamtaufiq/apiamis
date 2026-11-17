@@ -1,13 +1,9 @@
-//! Staging SPAM terbangun (`/api/spam-terbangun/staging`). Sumbernya `tbl_spam_terbangun_raw`, tujuannya
-//! `tbl_unit_spam`. Tabel staging ada di migrasi `0017_spam_terbangun_staging.sql`.
+//! Staging SPAM terbangun (`/api/spam-terbangun/staging`). Tujuannya `tbl_unit_spam`. Tabel staging ada di migrasi `0017_spam_terbangun_staging.sql`.
 //!
 //! Alur:
-//! 1. `POST /import`: salin semua baris raw ke batch baru, lalu cocokkan desa (kecamatan + nama desa, tanpa
-//!    huruf besar/kecil dan spasi) dan unit SPAM pertama pada desa itu. Nama desa `#REF!` ditandai `invalid`.
-//!    Baris yang desanya tidak ditemukan tetap `unmatched`.
-//! 2. `POST /{id}/map`: admin memilih unit secara manual untuk baris `unmatched` atau `invalid` (nama desa
+//! 1. `POST /{id}/map`: admin memilih unit secara manual untuk baris `unmatched` atau `invalid` (nama desa
 //!    rusak). Setelah dipetakan, status menjadi `matched`. Baris yang sudah diterapkan tidak bisa diubah.
-//! 3. `POST /apply`: untuk tiap unit, ambil baris `matched` dengan `id` terkecil dalam batch. Hanya field unit
+//! 2. `POST /apply`: untuk tiap unit, ambil baris `matched` dengan `id` terkecil dalam batch. Hanya field unit
 //!    yang masih kosong yang diisi (sistem layanan, sumber dana, tahun pembangunan, sumber mata air).
 //!    Capaian tidak disentuh; itu diisi manual di tabel capaian.
 //!
@@ -151,69 +147,6 @@ pub async fn index(
         "batch_id": batch,
         "ringkasan": hitung_status(pool, &batch).await?,
         "data": data,
-    }))
-    .into_response())
-}
-
-/// `POST /api/spam-terbangun/staging/import`. Membuat batch baru dari seluruh `tbl_spam_terbangun_raw`.
-pub async fn import(State(state): State<AppState>, headers: HeaderMap) -> Result<Response, ApiError> {
-    admin_user(&state, &headers).await?;
-    let pool = &state.pool;
-    let batch: String = sqlx::query_scalar("SELECT UUID()").fetch_one(pool).await.map_err(internal)?;
-
-    let mut tx = pool.begin().await.map_err(internal)?;
-    sqlx::query(
-        "INSERT INTO tbl_spam_terbangun_staging \
-         (batch_id, raw_id, kecamatan, desa_kelurahan, sistem_aliran, sumber_air_baku, sumber_dana_raw, \
-          tahun_pembangunan_awal, kondisi_normalized, created_at, updated_at) \
-         SELECT ?, t.id, TRIM(t.kecamatan), TRIM(t.desa_kelurahan), t.sistem_aliran, t.sumber_air_baku, \
-                t.sumber_dana_raw, t.tahun_pembangunan_awal, t.kondisi_normalized, NOW(), NOW() \
-         FROM tbl_spam_terbangun_raw t",
-    )
-    .bind(&batch)
-    .execute(&mut *tx)
-    .await
-    .map_err(internal)?;
-    sqlx::query(
-        "UPDATE tbl_spam_terbangun_staging s \
-         JOIN tbl_kecamatan k ON LOWER(TRIM(k.n_kec)) = LOWER(s.kecamatan) \
-         JOIN tbl_desa d ON d.kecamatan_id = k.id AND LOWER(TRIM(d.n_desa)) = LOWER(s.desa_kelurahan) \
-         SET s.desa_id = d.id WHERE s.batch_id = ?",
-    )
-    .bind(&batch)
-    .execute(&mut *tx)
-    .await
-    .map_err(internal)?;
-    sqlx::query(
-        "UPDATE tbl_spam_terbangun_staging s \
-         JOIN (SELECT desa_id, MIN(id) AS unit_id FROM tbl_unit_spam GROUP BY desa_id) u ON u.desa_id = s.desa_id \
-         SET s.unit_spam_id = u.unit_id WHERE s.batch_id = ?",
-    )
-    .bind(&batch)
-    .execute(&mut *tx)
-    .await
-    .map_err(internal)?;
-    sqlx::query(
-        "UPDATE tbl_spam_terbangun_staging SET match_status = 'invalid' \
-         WHERE batch_id = ? AND (desa_kelurahan LIKE '%#REF!%' OR desa_kelurahan = '')",
-    )
-    .bind(&batch)
-    .execute(&mut *tx)
-    .await
-    .map_err(internal)?;
-    sqlx::query(
-        "UPDATE tbl_spam_terbangun_staging SET match_status = 'matched' \
-         WHERE batch_id = ? AND match_status = 'unmatched' AND unit_spam_id IS NOT NULL",
-    )
-    .bind(&batch)
-    .execute(&mut *tx)
-    .await
-    .map_err(internal)?;
-    tx.commit().await.map_err(internal)?;
-
-    Ok(Json(json!({
-        "batch_id": batch,
-        "ringkasan": hitung_status(pool, &batch).await?,
     }))
     .into_response())
 }

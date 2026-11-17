@@ -463,7 +463,6 @@ pub fn app(config: &Config, state: AppState) -> Router {
         .route("/api/spam-units/{id}/tender-referensi", get(spam_tender_referensi::index_unit))
         .route("/api/spam-tender-referensi/terapkan-anggaran", post(spam_tender_referensi::terapkan_anggaran))
         .route("/api/spam-terbangun/staging", get(spam_terbangun_staging::index))
-        .route("/api/spam-terbangun/staging/import", post(spam_terbangun_staging::import))
         .route("/api/spam-terbangun/staging/apply", post(spam_terbangun_staging::apply))
         .route("/api/spam-terbangun/staging/{id}/map", post(spam_terbangun_staging::map_row))
         .route("/api/public/spam-units/stats", get(spam_units::public_stats))
