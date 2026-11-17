@@ -286,3 +286,48 @@ mod tests {
         assert_eq!(rows[1].nilai_kontrak, Some(5_000_000.0));
     }
 }
+
+/// `POST /api/spam-tender-referensi/terapkan-anggaran`. Admin.
+///
+/// Baris yang lengkap (cocok ke unit, nilai kontrak > 0, tahun dan sumber dana bisa dibaca dari
+/// `tahun_anggaran` seperti `APBD 2023`) menjadi anggaran unit di `tbl_spam_budgets`. Anggaran yang sudah
+/// ada dengan unit, nama paket, dan tahun yang sama tidak diubah, sehingga aman dijalankan ulang.
+pub async fn terapkan_anggaran(State(state): State<AppState>, headers: HeaderMap) -> Result<Response, ApiError> {
+    let user = require_auth(&state, &headers).await?;
+    require_admin(&state.pool, user.user_id).await?;
+    let pool = &state.pool;
+
+    let kandidat: i64 = sqlx::query_scalar(
+        "SELECT CAST(COUNT(*) AS SIGNED) FROM tbl_spam_tender_referensi r \
+         WHERE r.unit_spam_id IS NOT NULL AND r.nilai_kontrak > 0 AND r.tahun_anggaran REGEXP ' [0-9]{4}$'",
+    )
+    .fetch_one(pool)
+    .await
+    .map_err(internal)?;
+
+    let mut tx = pool.begin().await.map_err(internal)?;
+    let hasil = sqlx::query(
+        "INSERT INTO tbl_spam_budgets (unit_spam_id, nilai_kontrak, tahun, nama_paket, sumber_dana, created_at, updated_at) \
+         SELECT r.unit_spam_id, r.nilai_kontrak, RIGHT(r.tahun_anggaran, 4), r.nama_paket, \
+                SUBSTRING_INDEX(r.tahun_anggaran, ' ', 1), NOW(), NOW() \
+         FROM tbl_spam_tender_referensi r \
+         WHERE r.unit_spam_id IS NOT NULL AND r.nilai_kontrak > 0 AND r.tahun_anggaran REGEXP ' [0-9]{4}$' \
+           AND NOT EXISTS ( \
+             SELECT 1 FROM tbl_spam_budgets b \
+             WHERE b.unit_spam_id = r.unit_spam_id AND b.nama_paket = r.nama_paket \
+               AND b.tahun = RIGHT(r.tahun_anggaran, 4))",
+    )
+    .execute(&mut *tx)
+    .await
+    .map_err(internal)?;
+    tx.commit().await.map_err(internal)?;
+    crate::spam_units::bump_spam_generation();
+
+    let diterapkan = hasil.rows_affected() as i64;
+    Ok(Json(json!({
+        "kandidat": kandidat,
+        "diterapkan": diterapkan,
+        "sudah_ada_atau_tidak_lengkap": kandidat - diterapkan,
+    }))
+    .into_response())
+}
