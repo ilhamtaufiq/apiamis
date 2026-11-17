@@ -144,6 +144,7 @@ pub mod skp_rhk;
 pub mod skp_pptx;
 pub mod spam_import;
 pub mod spam_terbangun_staging;
+pub mod spam_tender_referensi;
 pub mod spam_integration;
 pub mod spam_kelembagaan;
 pub mod spam_units;
@@ -455,6 +456,11 @@ pub fn app(config: &Config, state: AppState) -> Router {
             post(spam_import::import).layer(DefaultBodyLimit::max(spam_import::BODY_LIMIT)),
         )
         // Staging SPAM terbangun (admin): impor dari data raw, pemetaan manual, lalu terapkan ke unit SPAM.
+        .route(
+            "/api/spam-tender-referensi/import",
+            post(spam_tender_referensi::import).layer(DefaultBodyLimit::max(spam_tender_referensi::BODY_LIMIT)),
+        )
+        .route("/api/spam-units/{id}/tender-referensi", get(spam_tender_referensi::index_unit))
         .route("/api/spam-terbangun/staging", get(spam_terbangun_staging::index))
         .route("/api/spam-terbangun/staging/import", post(spam_terbangun_staging::import))
         .route("/api/spam-terbangun/staging/apply", post(spam_terbangun_staging::apply))
