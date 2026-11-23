@@ -145,6 +145,7 @@ pub mod skp_pptx;
 pub mod spam_import;
 pub mod spam_terbangun_staging;
 pub mod spam_tender_referensi;
+pub mod lapangan_post;
 pub mod spam_integration;
 pub mod spam_kelembagaan;
 pub mod spam_units;
@@ -461,6 +462,12 @@ pub fn app(config: &Config, state: AppState) -> Router {
             post(spam_tender_referensi::import).layer(DefaultBodyLimit::max(spam_tender_referensi::BODY_LIMIT)),
         )
         .route("/api/spam-units/{id}/tender-referensi", get(spam_tender_referensi::index_unit))
+        // Posting lapangan (terpisah dari foto pekerjaan).
+        .route(
+            "/api/lapangan-post",
+            get(lapangan_post::index).post(lapangan_post::store).layer(DefaultBodyLimit::max(lapangan_post::BODY_LIMIT)),
+        )
+        .route("/api/lapangan-post/{id}", axum::routing::delete(lapangan_post::destroy))
         .route("/api/spam-tender-referensi/terapkan-anggaran", post(spam_tender_referensi::terapkan_anggaran))
         .route("/api/spam-terbangun/staging", get(spam_terbangun_staging::index))
         .route("/api/spam-terbangun/staging/apply", post(spam_terbangun_staging::apply))
