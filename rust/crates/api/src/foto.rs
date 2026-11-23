@@ -31,7 +31,7 @@ const FORBIDDEN_MESSAGE: &str = "Anda tidak memiliki akses untuk pekerjaan ini";
 pub const BODY_LIMIT: usize = media::MAX_FILE_BYTES + 1024 * 1024;
 
 const SELECT_FOTO: &str = "SELECT CAST(id AS SIGNED) AS id, CAST(pekerjaan_id AS SIGNED) AS pekerjaan_id, \
-     CAST(komponen_id AS SIGNED) AS komponen_id, CAST(penerima_id AS SIGNED) AS penerima_id, keterangan, koordinat, \
+     CAST(komponen_id AS SIGNED) AS komponen_id, CAST(penerima_id AS SIGNED) AS penerima_id, keterangan, caption, koordinat, \
      validasi_koordinat, validasi_koordinat_message, CAST(unit_index AS SIGNED) AS unit_index, created_at, updated_at \
      FROM tbl_foto";
 
@@ -55,6 +55,7 @@ pub struct FotoRow {
     pub komponen_id: i64,
     pub penerima_id: Option<i64>,
     pub keterangan: String,
+    pub caption: Option<String>,
     pub koordinat: String,
     pub validasi_koordinat: bool,
     pub validasi_koordinat_message: Option<String>,
@@ -70,6 +71,7 @@ fn map_row(r: &MySqlRow) -> Result<FotoRow, sqlx::Error> {
         komponen_id: r.try_get("komponen_id")?,
         penerima_id: r.try_get("penerima_id")?,
         keterangan: r.try_get("keterangan")?,
+        caption: r.try_get("caption")?,
         koordinat: r.try_get("koordinat")?,
         validasi_koordinat: r.try_get("validasi_koordinat")?,
         validasi_koordinat_message: r.try_get("validasi_koordinat_message")?,
@@ -151,9 +153,23 @@ struct Form {
     komponen_id: Field<i64>,
     penerima_id: Field<i64>,
     keterangan: Field<String>,
+    caption: Option<String>,
     koordinat: Field<String>,
     unit_index: Field<i64>,
     file: Option<media::Upload>,
+}
+
+const CAPTION_MAKS: usize = 500;
+
+/// Caption opsional: kosong dibuang, dan dipotong ke `CAPTION_MAKS` karakter.
+fn caption_field(raw: &RawForm) -> Option<String> {
+    match raw.presence("caption") {
+        Presence::Value(v) => {
+            let t = v.trim();
+            (!t.is_empty()).then(|| t.chars().take(CAPTION_MAKS).collect())
+        }
+        _ => None,
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -292,6 +308,7 @@ fn parse_form(mut raw: RawForm, mode: Mode) -> Result<Form, ApiError> {
         komponen_id: int_field(&raw, "komponen_id", required, &mut errs),
         penerima_id: int_field(&raw, "penerima_id", false, &mut errs),
         keterangan: keterangan_field(&raw, required, &mut errs),
+        caption: caption_field(&raw),
         koordinat: koordinat_field(&raw, required, &mut errs),
         unit_index: int_field(&raw, "unit_index", false, &mut errs),
         file: file_field(&mut raw, required, &mut errs),
@@ -503,6 +520,7 @@ pub async fn resource(pool: &MySqlPool, app_url: &str, row: &FotoRow) -> Result<
         "komponen_id": row.komponen_id,
         "penerima_id": row.penerima_id,
         "keterangan": row.keterangan,
+        "caption": row.caption,
         "koordinat": row.koordinat,
         "validasi_koordinat": row.validasi_koordinat,
         "validasi_koordinat_message": row.validasi_koordinat_message,
@@ -579,6 +597,7 @@ pub(crate) async fn nested_resource(
         "komponen_id": row.komponen_id,
         "penerima_id": row.penerima_id,
         "keterangan": row.keterangan,
+        "caption": row.caption,
         "koordinat": row.koordinat,
         "validasi_koordinat": row.validasi_koordinat,
         "validasi_koordinat_message": row.validasi_koordinat_message,
@@ -749,6 +768,7 @@ pub async fn store(
     let komponen_id = form.komponen_id.flatten().unwrap_or_default();
     let penerima_id = form.penerima_id.flatten();
     let keterangan = form.keterangan.flatten().unwrap_or_default();
+    let caption = form.caption.clone();
     let koordinat_input = form.koordinat.flatten().unwrap_or_default();
     let unit_index = form.unit_index.flatten();
     let upload = form
@@ -765,13 +785,14 @@ pub async fn store(
     let url = format!("{}/api/foto", base_url(&state));
     let mut tx = state.pool.begin().await.map_err(media::internal)?;
     let res = sqlx::query(
-        "INSERT INTO tbl_foto (pekerjaan_id, komponen_id, penerima_id, keterangan, koordinat, validasi_koordinat, \
-         validasi_koordinat_message, unit_index, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())",
+        "INSERT INTO tbl_foto (pekerjaan_id, komponen_id, penerima_id, keterangan, caption, koordinat, validasi_koordinat, \
+         validasi_koordinat_message, unit_index, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())",
     )
     .bind(pekerjaan_id)
     .bind(komponen_id)
     .bind(penerima_id)
     .bind(&keterangan)
+    .bind(&caption)
     .bind(&koordinat_input)
     .bind(check.valid)
     .bind(&check.message)
@@ -1296,6 +1317,15 @@ mod tests {
     }
 
     #[test]
+    fn caption_dipangkas_dan_dibatasi() {
+        assert_eq!(caption_field(&raw(&[("caption", Some("  Pipa tersambung  "))])), Some("Pipa tersambung".to_string()));
+        assert_eq!(caption_field(&raw(&[("caption", Some("   "))])), None);
+        assert_eq!(caption_field(&raw(&[])), None);
+        let panjang = "a".repeat(600);
+        assert_eq!(caption_field(&raw(&[("caption", Some(panjang.as_str()))])).unwrap().chars().count(), CAPTION_MAKS);
+    }
+
+    #[test]
     fn changed_columns_only_lists_real_differences() {
         let base = FotoRow {
             id: 1,
@@ -1303,6 +1333,7 @@ mod tests {
             komponen_id: 2,
             penerima_id: None,
             keterangan: "0%".into(),
+            caption: None,
             koordinat: "a".into(),
             validasi_koordinat: false,
             validasi_koordinat_message: None,
