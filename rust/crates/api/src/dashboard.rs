@@ -18,7 +18,7 @@
 //!   urutan lain.
 //! - Urutan kunci objek JSON dinormalisasi oleh `serde_json` (abjad), tidak mengikuti urutan PHP.
 
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
 use axum::{
     extract::{RawQuery, State},
@@ -196,6 +196,111 @@ impl Scope {
 
 fn placeholders(n: usize) -> String {
     vec!["?"; n].join(",")
+}
+
+/// Satu entri realisasi keuangan (SP2D) dari riwayat progres.
+#[derive(Debug, Clone, PartialEq)]
+pub struct RealisasiKeuangan {
+    pub rid: i64,
+    pub pid: i64,
+    pub tgl: NaiveDate,
+    pub sp2d: Option<String>,
+    pub nilai: f64,
+    /// Kunci kelompok untuk deduplikasi. Entri paket yang berbagi kontrak memakai kunci kontrak,
+    /// entri lain memakai id riwayatnya sendiri sehingga tidak pernah dianggap ganda.
+    pub group: String,
+}
+
+/// Buang entri ganda dalam kelompok kontrak bersama. Paket konsolidasi kadang mencatat SP2D yang
+/// sama, dan SP2D itu hanya boleh dihitung sekali. Kunci: kelompok, nomor SP2D, tanggal, nilai.
+pub fn dedupe_realisasi_keuangan(entries: Vec<RealisasiKeuangan>) -> Vec<RealisasiKeuangan> {
+    let mut seen: HashSet<(String, String, NaiveDate, i64)> = HashSet::new();
+    entries
+        .into_iter()
+        .filter(|e| {
+            let sp2d = e.sp2d.as_deref().map(|s| s.trim().to_lowercase()).unwrap_or_default();
+            let nilai_sen = (e.nilai * 100.0).round() as i64;
+            seen.insert((e.group.clone(), sp2d, e.tgl, nilai_sen))
+        })
+        .collect()
+}
+
+/// Realisasi keuangan untuk paket `pekerjaan_ids` (opsional tahun), tanpa dihitung dua kali
+/// untuk paket yang berbagi kontrak. Entri pertama (tanggal, id terkecil) yang dipakai.
+pub async fn realisasi_keuangan_unik(
+    pool: &MySqlPool,
+    pekerjaan_ids: &[i64],
+    tahun: Option<i64>,
+) -> Result<Vec<RealisasiKeuangan>, sqlx::Error> {
+    if pekerjaan_ids.is_empty() {
+        return Ok(Vec::new());
+    }
+    let ph = placeholders(pekerjaan_ids.len());
+    let id_binds = || pekerjaan_ids.iter().map(|i| Bind::Int(*i)).collect::<Vec<_>>();
+
+    // Kontrak tiap paket lewat tautan pivot dan tautan legacy.
+    let mut kontrak_binds = id_binds();
+    kontrak_binds.extend(id_binds());
+    let tautan = rows(
+        pool,
+        &format!(
+            "SELECT CAST(kontrak_pekerjaan.pekerjaan_id AS SIGNED) AS pid, CAST(kontrak_pekerjaan.kontrak_id AS SIGNED) AS kid \
+             FROM kontrak_pekerjaan WHERE kontrak_pekerjaan.pekerjaan_id IN ({ph}) \
+             UNION \
+             SELECT CAST(tbl_kontrak.id_pekerjaan AS SIGNED) AS pid, CAST(tbl_kontrak.id AS SIGNED) AS kid \
+             FROM tbl_kontrak WHERE tbl_kontrak.id_pekerjaan IN ({ph})"
+        ),
+        &kontrak_binds,
+    )
+    .await?;
+    let mut kontrak_of: HashMap<i64, BTreeSet<i64>> = HashMap::new();
+    let mut paket_per_kontrak: HashMap<i64, BTreeSet<i64>> = HashMap::new();
+    for r in &tautan {
+        let (Some(pid), Some(kid)) = (r.try_get::<Option<i64>, _>("pid")?, r.try_get::<Option<i64>, _>("kid")?) else {
+            continue;
+        };
+        kontrak_of.entry(pid).or_default().insert(kid);
+        paket_per_kontrak.entry(kid).or_default().insert(pid);
+    }
+
+    let mut binds = id_binds();
+    let mut sql = format!(
+        "SELECT CAST(h.id AS SIGNED) AS rid, CAST(h.pekerjaan_id AS SIGNED) AS pid, h.tanggal AS tgl, \
+                h.nomor_sp2d AS sp2d, CAST(h.nilai AS DOUBLE) AS nilai \
+         FROM pekerjaan_progress_estimasi_history h \
+         WHERE h.tipe = 'realisasi' AND h.jenis = 'keuangan' AND h.pekerjaan_id IN ({ph})"
+    );
+    if let Some(t) = tahun {
+        sql.push_str(" AND YEAR(h.tanggal) = ?");
+        binds.push(Bind::Int(t));
+    }
+    sql.push_str(" ORDER BY h.tanggal, h.id");
+
+    let mut out = Vec::new();
+    for r in rows(pool, &sql, &binds).await? {
+        let rid: i64 = r.try_get("rid")?;
+        let pid: i64 = r.try_get("pid")?;
+        let kontrak_bersama = kontrak_of
+            .get(&pid)
+            .into_iter()
+            .flatten()
+            .filter(|kid| paket_per_kontrak.get(kid).is_some_and(|p| p.len() > 1))
+            .min()
+            .copied();
+        let group = match kontrak_bersama {
+            Some(kid) => format!("k:{kid}"),
+            None => format!("r:{rid}"),
+        };
+        out.push(RealisasiKeuangan {
+            rid,
+            pid,
+            tgl: r.try_get("tgl")?,
+            sp2d: r.try_get("sp2d")?,
+            nilai: r.try_get::<Option<f64>, _>("nilai")?.unwrap_or(0.0),
+            group,
+        });
+    }
+    Ok(dedupe_realisasi_keuangan(out))
 }
 
 /// `$kecamatanIds` untuk `stats` dan `executive-progress`: `(int)` per elemen, elemen `''` dibuang.
@@ -424,22 +529,11 @@ async fn build_stats(pool: &MySqlPool, s: &Scope) -> Result<Value, sqlx::Error> 
             }
         }
 
-        // Total SP2D keuangan per paket.
-        let sp2d_rows = rows(
-            pool,
-            &format!(
-                "SELECT CAST(h.pekerjaan_id AS SIGNED) AS pid, CAST(SUM(h.nilai) AS DOUBLE) AS total \
-                 FROM pekerjaan_progress_estimasi_history h \
-                 WHERE h.tipe = 'realisasi' AND h.jenis = 'keuangan' AND h.pekerjaan_id IN \
-                 (SELECT tbl_pekerjaan.id FROM tbl_pekerjaan WHERE {active_clause}) GROUP BY h.pekerjaan_id"
-            ),
-            &active.binds,
-        )
-        .await?;
+        // Total SP2D keuangan per paket, paket yang berbagi kontrak dihitung sekali.
+        let pids: Vec<i64> = pekerjaan_names.iter().map(|(pid, _)| *pid).collect();
         let mut sp2d_per_pekerjaan: HashMap<i64, f64> = HashMap::new();
-        for r in &sp2d_rows {
-            let pid: i64 = r.try_get("pid")?;
-            sp2d_per_pekerjaan.insert(pid, r.try_get::<Option<f64>, _>("total")?.unwrap_or(0.0));
+        for e in realisasi_keuangan_unik(pool, &pids, None).await? {
+            *sp2d_per_pekerjaan.entry(e.pid).or_insert(0.0) += e.nilai;
         }
 
         for (pid, name) in &pekerjaan_names {
@@ -1084,10 +1178,11 @@ async fn build_executive(
             latest_fisik.entry(pid).or_default().entry(m).or_insert(persen);
         } else if tipe == "rencana" && jenis == "fisik" {
             latest_rencana.entry(pid).or_default().entry(m).or_insert(persen);
-        } else if tipe == "realisasi" && jenis == "keuangan" {
-            let nilai = r.try_get::<Option<f64>, _>("nilai")?.unwrap_or(0.0);
-            *sp2d_by_month.entry(m).or_insert(0.0) += nilai;
         }
+    }
+    // Realisasi keuangan dihitung lewat fungsi yang menghapus entri ganda kontrak bersama.
+    for e in realisasi_keuangan_unik(pool, &ids, Some(tahun)).await? {
+        *sp2d_by_month.entry(e.tgl.month()).or_insert(0.0) += e.nilai;
     }
 
     // Carry forward per paket: bulan tanpa data memakai nilai bulan sebelumnya.
@@ -1147,6 +1242,45 @@ fn carry_forward(per_pekerjaan: &BTreeMap<i64, BTreeMap<u32, f64>>) -> ([f64; 12
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn realisasi(rid: i64, pid: i64, group: &str, sp2d: Option<&str>, nilai: f64) -> RealisasiKeuangan {
+        RealisasiKeuangan {
+            rid,
+            pid,
+            tgl: NaiveDate::from_ymd_opt(2026, 3, 10).unwrap(),
+            sp2d: sp2d.map(str::to_string),
+            nilai,
+            group: group.to_string(),
+        }
+    }
+
+    #[test]
+    fn sp2d_sama_di_kontrak_bersama_dihitung_sekali() {
+        let hasil = dedupe_realisasi_keuangan(vec![
+            realisasi(1, 10, "k:5", Some("SP2D-001"), 1_000_000.0),
+            realisasi(2, 11, "k:5", Some(" sp2d-001 "), 1_000_000.0),
+        ]);
+        assert_eq!(hasil.len(), 1);
+        assert_eq!(hasil[0].pid, 10, "entri pertama yang dipakai");
+    }
+
+    #[test]
+    fn sp2d_berbeda_tetap_dihitung() {
+        let hasil = dedupe_realisasi_keuangan(vec![
+            realisasi(1, 10, "k:5", Some("SP2D-001"), 1_000_000.0),
+            realisasi(2, 11, "k:5", Some("SP2D-002"), 1_000_000.0),
+        ]);
+        assert_eq!(hasil.len(), 2);
+    }
+
+    #[test]
+    fn entri_paket_tunggal_tidak_pernah_digabung() {
+        let hasil = dedupe_realisasi_keuangan(vec![
+            realisasi(1, 10, "r:1", None, 500_000.0),
+            realisasi(2, 10, "r:2", None, 500_000.0),
+        ]);
+        assert_eq!(hasil.len(), 2, "dua pembayaran tanpa nomor di paket tunggal tetap dua");
+    }
 
     #[test]
     fn carry_forward_keeps_previous_month_value() {
